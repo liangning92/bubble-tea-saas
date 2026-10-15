@@ -1217,6 +1217,18 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "GET /api/members/offline-snapshot": {
+    "legacyRoles": [
+      "manager",
+      "cashier"
+    ],
+    "legacyPermission": "members.read",
+    "resource": null,
+    "permission": "members.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "GET /api/members": {
     "legacyRoles": [
       "manager",

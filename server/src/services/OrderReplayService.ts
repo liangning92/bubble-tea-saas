@@ -20,6 +20,7 @@ export function orderRequestFingerprint(data: CreateOrderData): string {
   const request = {
     storeId: data.storeId, staffId: data.staffId, orderNumber: data.orderNumber ?? null,
     channelId: data.channelId ?? null, memberId: data.memberId ?? null,
+    ...(data.offlineMemberToken?{offlineMemberToken:data.offlineMemberToken,offlineMemberPointsBefore:data.offlineMemberPointsBefore,offlineMemberPointsEarned:data.offlineMemberPointsEarned,offlineMemberCouponId:data.offlineMemberCouponId,offlineMemberCouponTemplateId:data.offlineMemberCouponTemplateId,activityCouponId:data.activityCouponId,activityPointsRequested:data.activityPointsRequested}:{}),
     pickupNumber: data.pickupNumber ?? null, channelName: data.channelName ?? null,
     ...(data.offlineAuthorization ? {offlineAuthorization:data.offlineAuthorization,manualDiscountAmount:data.manualDiscountAmount||0} : {}),
     shiftSessionId: data.shiftSessionId ?? null, dineInCount: data.dineInCount ?? null, customerCount: data.customerCount ?? 1,

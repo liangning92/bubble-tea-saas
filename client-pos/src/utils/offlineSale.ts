@@ -1,3 +1,5 @@
+import {offlineMemberEvidence} from './offlineMembers'
+import {offlineMemberCandidates,offlineEarnedPoints} from '../../../shared/utils/offlineMemberPricing'
 import { currentOfflineShift } from './offlineOperations'
 import { POS_OFFLINE_TTL_MS, POS_OFFLINE_DAYS, POS_MANUAL_PAYMENT_METHODS } from '../../../shared/utils/offlinePolicy'
 import { bestActivityPrice } from '../../../shared/utils/activities'
@@ -73,7 +75,8 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
   const backendUrl = localIdentity(request.storeId)
   const auth = readBackendAuth() as ReturnType<typeof readBackendAuth> & {user?:{id?:string;staff?:{id?:string}}}
   if (!auth.user?.id || auth.user.staff?.id !== request.staffId) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
-  if (!(POS_MANUAL_PAYMENT_METHODS as readonly string[]).includes(request.paymentMethod) || (request.paymentMethod === 'qris' && !manualQris) || (!['cash','qris'].includes(request.paymentMethod)&&!externalConfirmed) || request.pointsRedeemed || request.memberId || (request.discountAmount&&!request.activityOfflineToken)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+  if (!(POS_MANUAL_PAYMENT_METHODS as readonly string[]).includes(request.paymentMethod) || (request.paymentMethod === 'qris' && !manualQris) || (!['cash','qris'].includes(request.paymentMethod)&&!externalConfirmed) || (request.discountAmount&&!request.activityOfflineToken)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+  if((request.memberId||request.pointsRedeemed||request.offlineMemberToken)&&(!request.memberId||!request.offlineMemberToken||!request.activityOfflineToken))throw Error('OFFLINE_MEMBER_AUTHORIZATION_REQUIRED')
   const localId = `LOCAL-${crypto.randomUUID()}`
   const occurredAt = new Date()
   const original = JSON.parse(JSON.stringify({...request,orderNumber:posOrderNumber(localId, occurredAt)}))
@@ -99,9 +102,17 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
     }
     if(request.activityOfflineToken){const cached=await readSnapshot('/marketing/activities/offline-snapshot',request.storeId) as any;const snapshot=cached.data
       if(!snapshot||snapshot.token!==request.activityOfflineToken||new Date(request.activityOccurredAt).getTime()>Date.parse(snapshot.expiresAt))throw Error('ACTIVITY_OFFLINE_CACHE_EXPIRED')
-      const price=bestActivityPrice(snapshot.activities,request.items,{now:new Date(request.activityOccurredAt),channel:request.activityChannelCode,paymentMethod:request.paymentMethod})
+      const member=request.memberId?await offlineMemberEvidence(request.memberId):undefined
+      if(member&&(request.offlineMemberToken!==member.token||request.offlineMemberPointsBefore!==member.member.points))throw Error('OFFLINE_MEMBER_LEDGER_CONFLICT')
+      const extras=member?offlineMemberCandidates(member,{...request,pointsRequested:request.activityPointsRequested,couponId:request.activityCouponId},request.items,new Date(request.activityOccurredAt)):[]
+      const price=bestActivityPrice(snapshot.activities,request.items,{now:new Date(request.activityOccurredAt),channel:request.activityChannelCode,paymentMethod:request.paymentMethod},extras)
+      const points=price.applied?.kind==='points'?price.applied.pointsRedeemed||0:0
+      if((request.pointsRedeemed||0)!==points)throw Error('OFFLINE_MEMBER_PRICE_CHANGED')
+      original.offlineMemberPointsEarned=member?offlineEarnedPoints(totals.finalAmount,member.member,member.rule,occurredAt.toISOString()):undefined
+      original.offlineMemberCouponId=price.applied?.kind==='coupon'?price.applied.id:undefined
+      original.offlineMemberCouponTemplateId=price.applied?.kind==='coupon'?member.coupons.find((c:any)=>c.id===price.applied?.id)?.coupon.id:undefined
       const tax=request.taxEnabled===false?0:Math.round((price.finalAmount-(request.manualDiscountAmount||0))*snapshot.taxRate)
-      if(price.finalAmount<(request.manualDiscountAmount||0)||price.discount+(request.manualDiscountAmount||0)!==request.discountAmount||price.subtotal!==totals.subtotal||tax!==totals.ppn||price.finalAmount-(request.manualDiscountAmount||0)+tax!==totals.finalAmount)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
+      if(price.finalAmount<(request.manualDiscountAmount||0)||price.discount-Math.floor(points/100)+(request.manualDiscountAmount||0)!==request.discountAmount||price.subtotal!==totals.subtotal||tax!==totals.ppn||price.finalAmount-(request.manualDiscountAmount||0)+tax!==totals.finalAmount)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
     }
     const catalog = await db.config.get(cacheKey(backendUrl,request.storeId,'/products'))
     if (!catalog?.value.version) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
@@ -112,7 +123,7 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
     }
     original.shiftSessionId = current.data.shift.id
     const activityCache = await db.config.get(cacheKey(backendUrl, request.storeId, '/marketing/activity-prices'))
-    const row: LocalOrder = {localId,backendUrl,cashTender,cacheEvidence:{activityRules:activityCache?.value?.data?.data,activityVersion:activityCache?.value?.version,activityFetchedAt:activityCache?.updatedAt,backendUrl,catalogVersion:catalog.value.version,catalogFetchedAt:catalog.updatedAt,quotedProducts:JSON.parse(JSON.stringify(products.data.list.filter(p=>original.items.some((i:{productId:string})=>i.productId===p.id)))),paymentConfig:configs.data,shiftConfig:current.data},checkoutRequest:original,storeId:original.storeId,staffId:original.staffId,shiftSessionId:original.shiftSessionId,items:original.items,...totals,totalAmount:totals.subtotal,discountAmount:original.discountAmount||0,paymentMethod:original.paymentMethod,taxEnabled:original.taxEnabled,pointsRedeemed:0,orderNumber:original.orderNumber,pickupNumber:original.pickupNumber,customerCount:original.customerCount||1,status:'pending',syncAttempts:0,createdAt:occurredAt,occurredAt,locallyAcceptedAt:occurredAt,
+    const row: LocalOrder = {localId,backendUrl,cashTender,cacheEvidence:{activityRules:activityCache?.value?.data?.data,activityVersion:activityCache?.value?.version,activityFetchedAt:activityCache?.updatedAt,backendUrl,catalogVersion:catalog.value.version,catalogFetchedAt:catalog.updatedAt,quotedProducts:JSON.parse(JSON.stringify(products.data.list.filter(p=>original.items.some((i:{productId:string})=>i.productId===p.id)))),paymentConfig:configs.data,shiftConfig:current.data},checkoutRequest:original,storeId:original.storeId,staffId:original.staffId,memberId:original.memberId,shiftSessionId:original.shiftSessionId,items:original.items,...totals,totalAmount:totals.subtotal,discountAmount:original.discountAmount||0,paymentMethod:original.paymentMethod,taxEnabled:original.taxEnabled,pointsRedeemed:original.pointsRedeemed||0,orderNumber:original.orderNumber,pickupNumber:original.pickupNumber,customerCount:original.customerCount||1,status:'pending',syncAttempts:0,createdAt:occurredAt,occurredAt,locallyAcceptedAt:occurredAt,
       ...(!['cash','qris'].includes(request.paymentMethod)?{manualPayment:{kind:'external_manual' as const,method:request.paymentMethod,actorId:auth.user!.id!,at:occurredAt,evidence:'external_terminal_receipt' as const,bankConfirmed:false as const}}:{}),
       ...(manualQris?{manualPayment:{kind:'qris_manual' as const,actorId:auth.user!.id!,at:occurredAt,evidence:'customer_success_photo' as const,bankConfirmed:false as const}}:{})}
     row.id = await db.orders.add(row) as number

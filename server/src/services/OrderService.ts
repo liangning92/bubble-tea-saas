@@ -1,3 +1,5 @@
+import {verifyOfflineMember} from './MemberOfflineService'
+import {offlineEarnedPoints} from '../utils/offlineMemberPricing'
 import {consumeDiscountApproval} from './StaffActionApprovalService'
 import { quoteOfflineActivity } from './ActivityOfflineService'
 import { quoteActivities, enqueueActivityGrants, runActivityJobs, reverseActivityGrants, ensureMigrated } from './ActivityService'
@@ -30,6 +32,11 @@ export interface CreateOrderData {
   offlineAuthorization?: string
   dineInCount?: number
   staffId: string
+  offlineMemberToken?: string
+  offlineMemberPointsBefore?: number
+  offlineMemberPointsEarned?: number
+  offlineMemberCouponId?: string
+  offlineMemberCouponTemplateId?: string
   memberId?: string
   customerCount?: number
   orderNumber?: string       // 自定义订单号（若未传则由服务端生成安全的非线性流水号）
@@ -450,8 +457,8 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
   let unifiedQuote: Awaited<ReturnType<typeof quoteActivities>> & {offline?:boolean;offlineTaxRate?:number} | undefined
   if(data.activityOfflineToken){
     await ensureMigrated(data.storeId)
-    unifiedQuote=await quoteOfflineActivity(data.storeId,{items:data.items,channelId:channel?.id,channel:data.activityChannelCode,paymentMethod:data.paymentMethod,taxEnabled:data.taxEnabled},data.activityOfflineToken,data.activityOccurredAt||'')
-    if(unifiedQuote.discount!==((data.discountAmount||0)-(data.manualDiscountAmount||0))||data.memberId||(data.pointsRedeemed||0)>0)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
+    unifiedQuote=await quoteOfflineActivity(data.storeId,{items:data.items,channelId:channel?.id,channel:data.activityChannelCode,paymentMethod:data.paymentMethod,taxEnabled:data.taxEnabled,memberId:data.memberId,couponId:data.activityCouponId,pointsRequested:data.activityPointsRequested??data.pointsRedeemed},data.activityOfflineToken,data.activityOccurredAt||'',prisma,data.offlineMemberToken?{token:data.offlineMemberToken,pointsBefore:data.offlineMemberPointsBefore!}:undefined)
+    if(unifiedQuote.discount!==((data.discountAmount||0)-(data.manualDiscountAmount||0))+Math.floor((data.pointsRedeemed||0)/100)||unifiedQuote.pointsRedeemed!==(data.pointsRedeemed||0))throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
   }
   if (data.activityQuoteSignature) {
     await ensureMigrated(data.storeId)
@@ -502,7 +509,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
       where: { id: data.memberId },
       select: { points: true }
     })
-    effectivePointsRedeemed = Math.min(data.pointsRedeemed || 0, Math.max(0, redeemMember?.points || 0))
+    effectivePointsRedeemed = data.offlineMemberToken ? data.pointsRedeemed||0 : Math.min(data.pointsRedeemed || 0, Math.max(0, redeemMember?.points || 0))
   }
   // Points discount: 100 points = 1 IDR (same as client calculation)
   const pointsDiscount = Math.floor(effectivePointsRedeemed / 100)
@@ -568,6 +575,15 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
     })
   }
 
+  if(data.offlineMemberToken){
+    if(!context?.occurredAt||!data.activityOfflineToken||!data.memberId)throw Error('OFFLINE_MEMBER_AUTHORIZATION_REQUIRED')
+    const snapshot=verifyOfflineMember(data.offlineMemberToken,data.storeId,data.memberId,context.occurredAt.toISOString())
+    const couponId=unifiedQuote?.couponId,templateId=couponId?snapshot.coupons.find((c:any)=>c.id===couponId)?.coupon.id:undefined
+    if(data.offlineMemberCouponId!==couponId||data.offlineMemberCouponTemplateId!==templateId)throw Error('OFFLINE_MEMBER_COUPON_CHANGED')
+    calculatedPoints=offlineEarnedPoints(grandTotal,snapshot.member,snapshot.rule,context.occurredAt.toISOString())
+    if(calculatedPoints!==data.offlineMemberPointsEarned)throw Error('OFFLINE_MEMBER_POINTS_CHANGED')
+  }
+
   // Generate order number BEFORE transaction (upsert uses its own transaction, must not be nested)
   let orderNumber = data.orderNumber
   let pickupNumber = data.pickupNumber
@@ -616,6 +632,11 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
       const fresh = await quoteActivities(data.storeId,{items:data.items,channelId:channel?.id,paymentMethod:data.paymentMethod,memberId:data.memberId,couponId:data.activityCouponId,pointsRequested:data.activityPointsRequested ?? data.pointsRedeemed,groupId:data.activityGroupId,giftSelections:data.activityGiftSelections,taxEnabled:data.taxEnabled},tx)
       if(fresh.signature !== unifiedQuote.signature || fresh.pendingSelections.length) throw Error('ACTIVITY_PRICE_CHANGED')
       unifiedQuote=fresh
+    }
+    if(data.offlineMemberToken){
+      if(!Number.isSafeInteger(data.offlineMemberPointsBefore)||data.offlineMemberPointsBefore!<0)throw Error('OFFLINE_MEMBER_LEDGER_CONFLICT')
+      const locked=await tx.member.updateMany({where:{id:data.memberId,storeId:data.storeId,status:'active',points:{gte:data.offlineMemberPointsBefore}},data:{points:{increment:0}}})
+      if(locked.count!==1)throw Error('OFFLINE_MEMBER_LEDGER_CONFLICT')
     }
     // Use pre-generated order number
 
@@ -741,7 +762,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
     }
 
     const activityEntitlements = unifiedQuote ? await enqueueActivityGrants(tx,newOrder,unifiedQuote,calculatedPoints) : []
-    const response = { ...publicOrder(newOrder), lowStockWarnings: inventoryResult.lowStockWarnings, ppnAmount, grandTotal, activityEntitlements }
+    const response = { ...publicOrder(newOrder), lowStockWarnings: inventoryResult.lowStockWarnings, ppnAmount, grandTotal, activityEntitlements,...((data.memberId||unifiedQuote?.couponId)&&data.status!=='suspended'?{memberEffects:{memberId:data.memberId,pointsEarned:calculatedPoints,pointsRedeemed:effectivePointsRedeemed,couponId:unifiedQuote?.couponId,couponTemplateId:unifiedQuote?.couponId?.startsWith('virtual-')?unifiedQuote.couponId.slice(8):unifiedQuote?.couponId?((await tx.memberCoupon.findUnique({where:{id:unifiedQuote.couponId},select:{couponId:true}}))?.couponId):undefined}}:{}) }
     await tx.order.update({ where: { id: newOrder.id }, data: {
       requestFingerprint: orderRequestFingerprint(data), requestReceipt: encodeOrderReceipt(data, response)
     } })

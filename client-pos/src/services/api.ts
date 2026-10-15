@@ -1,3 +1,4 @@
+import {offlineMembers,offlineMemberCoupons,prepareOfflineMembers,pendingOfflineMembers,offlineVerifyCoupon,offlineMemberEvidence} from '../utils/offlineMembers'
 import { offlineRefundQuote, queueRefund } from '../utils/offlineRefunds'
 import { offlineRead } from '../utils/offlineReads'
 import { currentOfflineShift, openOfflineShift, closeOfflineShift, createOfflineCashEvent, createOfflineExpense, offlineHandover, hasOfflineOperations } from '../utils/offlineOperations'
@@ -126,7 +127,10 @@ export const posApi = {
   getProducts: (storeId: string) => api.get(`/products?storeId=${storeId}&status=active`),
   getProductsForPOS: (storeId: string) => api.get(`/products/pos?storeId=${storeId}`),
   getProductsVersion: (storeId: string) => api.get(`/products/pos/version?storeId=${storeId}`),
-  getProductByBarcode: (barcode: string) => api.get(`/products/barcode/${barcode}`),
+  getProductByBarcode: async (barcode:string) => {
+    try{if(!navigator.onLine||!readBackendAuth().token)throw Error('OFFLINE');return await api.get(`/products/barcode/${encodeURIComponent(barcode)}`,{timeout:5000})}
+    catch(error){if(!serverUnavailable(error))throw error;const snapshot=await readSnapshot('/products',readBackendAuth().user!.storeId!) as any;const product=snapshot.data?.list?.find((p:any)=>p.status==='active'&&(p.id===barcode||p.code===barcode));if(!product)throw {response:{status:404,data:{message:'Product not found'}}};return {data:{code:200,data:product,offline:true}}}
+  },
 
   // Channels
   getChannels: (storeId: string) => api.get('/channels', { params: { storeId } }),
@@ -147,12 +151,16 @@ export const posApi = {
     (async()=>{if(!navigator.onLine||!readBackendAuth().token||data.orderId.startsWith('LOCAL-')||await hasOfflineOperations(readBackendAuth().user!.storeId!))return queueRefund(data);try{return await api.post('/orders/refund-request',data,{timeout:10000})}catch(error){if(!serverUnavailable(error))throw error;return queueRefund(data)}})(),
 
   // Members
-  getMembers: (params?: any) => api.get('/members', { params }),
-  getMemberByBarcode: (barcode: string) => api.get(`/members/barcode/${barcode}`),
+  getMembers: async (params?: any) => {try{if(!navigator.onLine||!readBackendAuth().token||await pendingOfflineMembers())return await offlineMembers(params);return await api.get('/members',{params,timeout:5000})}catch(error){if(!serverUnavailable(error))throw error;return offlineMembers(params)}},
+  prepareOfflineMembers:async()=>{await posApi.getCurrentShift();return prepareOfflineMembers(after=>api.get('/members/offline-snapshot',{params:{after},timeout:10000}))},
+  getMemberByBarcode: async (barcode:string) => {
+    try{if(!navigator.onLine||!readBackendAuth().token||await pendingOfflineMembers())throw Error('OFFLINE');return await api.get(`/members/barcode/${encodeURIComponent(barcode)}`,{timeout:5000})}
+    catch(error){if(!serverUnavailable(error))throw error;const members=await offlineMembers({search:barcode,pageSize:200});let member=members.data.data.list.find((m:any)=>m.phone===barcode||m.id===barcode);if(!member){try{member=(await offlineMemberEvidence(barcode)).member}catch{}}if(!member)throw {response:{status:404,data:{message:'Member not found'}}};return {data:{code:200,data:member,offline:true}}}
+  },
   createMember: (data: any) => api.post('/members', data),
-  getMemberCoupons: (memberId: string) => api.get(`/marketing/members/${memberId}/coupons`),
+  getMemberCoupons: async (memberId:string) => {try{if(!navigator.onLine||!readBackendAuth().token||await pendingOfflineMembers())return await offlineMemberCoupons(memberId);return await api.get(`/marketing/members/${memberId}/coupons`,{timeout:5000})}catch(error){if(!serverUnavailable(error))throw error;return offlineMemberCoupons(memberId)}},
   verifyCoupon: (code: string, memberId?: string) =>
-    api.post('/marketing/coupons/verify', { code, memberId }),
+    (async()=>{try{if(!navigator.onLine||!readBackendAuth().token||await pendingOfflineMembers())return await offlineVerifyCoupon(code,memberId);return await api.post('/marketing/coupons/verify',{code,memberId},{timeout:5000})}catch(error){if(!serverUnavailable(error))throw error;return offlineVerifyCoupon(code,memberId)}})(),
   redeemCoupon: (memberCouponId: string, orderId: string) =>
     api.post(`/marketing/coupons/${memberCouponId}/redeem`, { orderId }),
 
@@ -296,7 +304,7 @@ export const activitiesApi={
  heartbeat:(terminalId:string,version:number)=>api.post('/marketing/activities/heartbeat',{terminalId,version}),
  claim:(activityId:string,memberId:string,requestId:string)=>api.post('/marketing/activities/claim',{activityId,memberId,requestId}),referral:(memberId:string,inviterCode:string)=>api.post('/marketing/activities/referral',{memberId,inviterCode}),
  offlineSnapshot:()=>api.get('/marketing/activities/offline-snapshot',{timeout:5000}),
- list:()=>api.get('/marketing/activities',{timeout:5000}),quote:async(data:any)=>{const storeId=readBackendAuth().user?.storeId;if(storeId&&await hasOfflineOperations(storeId))throw Error('OFFLINE_LEDGER_PENDING');return api.post('/marketing/activities/quote',data,{timeout:10000})},
+ list:()=>api.get('/marketing/activities',{timeout:5000}),quote:async(data:any)=>{const storeId=readBackendAuth().user?.storeId;if(storeId&&(await hasOfflineOperations(storeId)||await pendingOfflineMembers()))throw Error('OFFLINE_LEDGER_PENDING');return api.post('/marketing/activities/quote',data,{timeout:10000})},
  entitlements:(orderId?:string)=>api.get('/marketing/activities/entitlements/list',{params:{orderId}}),fulfil:(id:string)=>api.post(`/marketing/activities/entitlements/${id}/fulfil`),
  groups:()=>api.get('/marketing/activities/groups/list'),createGroup:(activityId:string,memberIds:string[])=>api.post('/marketing/activities/groups',{activityId,memberIds}),joinGroup:(id:string,memberId:string)=>api.post(`/marketing/activities/groups/${id}/join`,{memberId}),
 }

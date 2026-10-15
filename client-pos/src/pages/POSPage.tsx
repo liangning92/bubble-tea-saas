@@ -1,3 +1,4 @@
+import { offlineActivityQuote } from '../utils/offlineMembers'
 import { ReprintReceiptButton } from '../components/ReprintReceiptButton'
 import { readOfflineDrafts, suspendOfflineDraft, removeOfflineDraft } from '../utils/offlineDrafts'
 import { OfflineOperationsStatus } from '../components/OfflineOperationsStatus'
@@ -2166,13 +2167,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setQuoteLoading(true);setQuoteError('')
     const timer=setTimeout(()=>{
       const apply=(value:any)=>{if(!live)return;const q={...value,inputKey:quoteInputKey};if(showPaymentModal&&lastActivityPrice.current?.inputKey===quoteInputKey&&lastActivityPrice.current.amount!==q.grandTotal){setActivityPriceNeedsConfirmation(true);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>setActivityPriceNeedsConfirmation(false)})}lastActivityPrice.current={inputKey:quoteInputKey,amount:q.grandTotal};setUnifiedQuote(q);setDiscountAmount(q.discount-Math.floor(q.pointsRedeemed/100));setAppliedPromotion(q.applied?{id:q.applied.id,name:q.applied.name,amount:q.discount,type:q.applied.kind,description:q.applied.name}:null);setIsManualDiscount(false)}
-      activitiesApi.quote(quoteInput).then(r=>apply(r.data.data)).catch(async e=>{try{if(!serverUnavailable(e))throw e;const snapshot=await activitiesApi.offlineSnapshot();apply(cachedActivityQuote(snapshot.data.data,quoteInput))}catch(error:any){if(live){setUnifiedQuote(null);setQuoteError(error.response?.data?.message||error.message)}}}).finally(()=>{if(live)setQuoteLoading(false)})
+      activitiesApi.quote(quoteInput).then(r=>apply(r.data.data)).catch(async e=>{try{if(!serverUnavailable(e))throw e;const snapshot=await activitiesApi.offlineSnapshot();apply(await offlineActivityQuote(snapshot.data.data,quoteInput))}catch(error:any){if(live){setUnifiedQuote(null);setQuoteError(error.message?.startsWith('OFFLINE_MEMBER')?t(error.message==='OFFLINE_MEMBER_LEDGER_CONFLICT'?'offlineMembers.conflict':'offlineMembers.initialize'):(error.response?.data?.message||error.message))}}}).finally(()=>{if(live)setQuoteLoading(false)})
     },200)
     return()=>{live=false;clearTimeout(timer)}
   },[quoteInputKey,activityRevision])
   useEffect(()=>{
     let live=true
-    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
+    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void posApi.prepareOfflineMembers().catch(()=>{});void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
     void refresh();const timer=setInterval(refresh,15000)
     const focus=()=>{if(document.visibilityState==='visible')void refresh()}
     window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus)
@@ -2363,6 +2364,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setIsManualDiscount(false)
     setAppliedPromotion(null)
     setMember(null)
+    setPointsToRedeem(0)
+    setMemberCoupons([])
+    setSelectedCoupon(null)
     setDineInCount(1) // 重置堂食人数
     setCustomerCount(1) // 重置顾客人数
     setOrderSuccess('') // 清除订单成功提示
@@ -2788,6 +2792,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const searchMember = async () => {
     if (!memberPhone || isSearchingMember) return
     setIsSearchingMember(true)
+    setPointsToRedeem(0)
     setMemberCoupons([])
     setSelectedCoupon(null)
     setDiscountAmount(0)
@@ -2925,7 +2930,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     if(isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
     const checkoutStarted=performance.now()
     const checkoutTiming=(phase:string)=>console.info(`[CHECKOUT-TIMING] ${phase}_ms=${Math.round(performance.now()-checkoutStarted)}`)
-    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>cachedActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
+    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>offlineActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
     if(!verifiedQuote||verifiedQuote.signature!==currentQuote.signature){if(verifiedQuote)setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey});setActivityRevision(v=>v+1);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>{}});return}
 
     if (paymentIssue) { showToast(t(`paymentValidation.${paymentIssue}`), 'error'); return }
@@ -2979,6 +2984,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       })),
       activityQuoteSignature:currentQuote?.offline?undefined:currentQuote?.signature,
       activityOfflineToken:currentQuote?.offline?currentQuote.offlineToken:undefined,activityOccurredAt:currentQuote?.offline?verifiedQuote.occurredAt:undefined,activityChannelCode:selectedChannel?.code||'DINE_IN',
+      offlineMemberToken:verifiedQuote.offlineMemberToken,offlineMemberPointsBefore:verifiedQuote.offlineMemberPointsBefore,offlineMemberPointsEarned:verifiedQuote.offlineMemberPointsEarned,offlineMemberCouponId:verifiedQuote.offlineMemberCouponId,offlineMemberCouponTemplateId:verifiedQuote.offlineMemberCouponTemplateId,
       activityCouponId:selectedCoupon?.id,activityPointsRequested:pointsToRedeem||0,activityGroupId:activityGroupId||undefined,activityGiftSelections:giftSelections,
       paymentMethod,
       discountAmount:discountAmount+manualDiscountAmount,
@@ -3020,9 +3026,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if(manualDiscountAmount&&(!navigator.onLine||currentQuote?.offline)&&!access.can('orders.discount'))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if(manualDiscountAmount&&!access.can('orders.discount')&&(!manualDiscountGrant||new Date(manualDiscountGrant.expiresAt)<new Date()))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if (manualQris) orderData.note = [orderData.note,t('manualPayment.customerPaid')].filter(Boolean).join(' ')
-      if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || selectedCoupon || (discountAmount&&!currentQuote?.offline))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+      if ((!navigator.onLine || !useAuthStore.getState().token) && (!currentQuote?.offline&&(member || pointsToRedeem || selectedCoupon || discountAmount))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
-      if ((paymentMethod === 'cash' || manualQris || externalPaymentConfirmed) && !member && !pointsToRedeem && (!discountAmount||currentQuote?.offline) && !selectedCoupon && currentQuote?.offline) {
+      if ((paymentMethod === 'cash' || manualQris || externalPaymentConfirmed) && (!discountAmount||currentQuote?.offline) && currentQuote?.offline) {
         const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,manualQris,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined,externalPaymentConfirmed)
         accepted = true
         settledCartRef.current = cart
@@ -3039,7 +3045,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         const verified = res.data?.data
         if (!verified?.id || verified.orderNumber !== intent.request.orderNumber) throw new Error('CHECKOUT_RESPONSE_UNVERIFIED')
         checkoutTiming('order_saved')
-        await finishCheckout(intent,'accepted',verified.id)
+        await finishCheckout(intent,'accepted',verified.id,verified)
         accepted = true
         settledCartRef.current = cart
         Object.assign(orderData,intent.request)
@@ -4361,6 +4367,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <p className="font-medium">{member.name}</p>
                 <p className="text-sm text-gray-500">{member.phone}</p>
                 <p className="text-sm text-green-600">{t('pos.points')}: {member.points || 0}</p>
+                {currentQuote?.offline&&<p className="text-xs text-gray-600 mt-2 break-words">{t('offlineMembers.policy')}</p>}
                 {maxRedeemablePoints > 0 && (
                   <div className="mt-2 pt-2 border-t border-green-200">
                     <p className="text-xs text-gray-600 mb-1">{t('pos.redeemPoints')}: {pointsToRedeem}</p>

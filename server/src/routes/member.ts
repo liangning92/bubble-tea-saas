@@ -1,3 +1,4 @@
+import { memberOfflineSnapshot } from '../services/MemberOfflineService'
 import { publicOrder } from '../services/OrderReplayService'
 import { redeemPoints, adjustPoints } from '../services/MemberService'
 import { requireResourceStore } from '../middlewares/resourceStore'
@@ -33,10 +34,16 @@ const redeemPointsSchema = z.object({
   points: z.number().int().positive()
 })
 
+// Complete bounded pages; clients publish the cache only after every page is durable.
+router.get('/offline-snapshot', authenticate, authorize('admin','manager','cashier'), async(req:AuthRequest,res)=>{
+ try{res.json({code:200,data:await memberOfflineSnapshot(req.user!.storeId,typeof req.query.after==='string'?req.query.after:undefined)})}
+ catch(error){console.error('Offline member snapshot failed',error);res.status(500).json({code:500,message:'OFFLINE_MEMBERS_UNAVAILABLE'})}
+})
+
 // GET /api/members
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { storeId: requestedStoreId, level, search } = req.query
+    const { storeId: requestedStoreId, level, search, phone } = req.query
     const storeId = req.user!.storeId
     if (requestedStoreId && requestedStoreId !== storeId) return res.status(403).json({ code: 403, message: 'Store access denied' })
     const page = parseInt(req.query.page as string) || 1
@@ -45,6 +52,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     const where: any = {}
     where.storeId = storeId
     if (level) where.level = level as string
+    if (phone) where.phone = phone as string
     if (search) {
       where.OR = [
         { name: { contains: search as string } },

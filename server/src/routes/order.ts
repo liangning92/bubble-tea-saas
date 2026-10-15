@@ -37,6 +37,11 @@ const createOrderSchema = z.object({
   shiftSessionId: z.string().optional(),
   offlineAuthorization: z.string().max(10000).optional(),
   staffId: z.string(),
+  offlineMemberToken:z.string().max(200000).optional(),
+  offlineMemberPointsBefore:z.number().int().nonnegative().max(2147483647).optional(),
+  offlineMemberPointsEarned:z.number().int().nonnegative().max(2147483647).optional(),
+  offlineMemberCouponId:z.string().optional(),
+  offlineMemberCouponTemplateId:z.string().optional(),
   memberId: z.string().optional(),
   items: z.array(z.object({
     productId: z.string(),

@@ -208,8 +208,8 @@ export async function enqueueActivityGrants(tx:any,order:any,quote:Awaited<Retur
  const memberCoupon=bearer?null:await tx.memberCoupon.findUnique({where:{id:quote.couponId},include:{coupon:true}})
  const c=bearer?await tx.coupon.findFirst({where:{id:quote.couponId.slice(8),storeId:order.storeId}}):memberCoupon?.coupon
  if(!c||c.storeId!==order.storeId)throw Error('ACTIVITY_COUPON_UNAVAILABLE')
- if(!bearer){const changed=await tx.memberCoupon.updateMany({where:{id:quote.couponId,memberId:order.memberId,status:'unused'},data:{status:'used',usedAt:new Date(),orderId:order.id}});if(changed.count!==1)throw Error('ACTIVITY_COUPON_UNAVAILABLE')}
- const now=new Date()
+ if(!bearer){const changed=await tx.memberCoupon.updateMany({where:{id:quote.couponId,memberId:order.memberId,status:'unused'},data:{status:'used',usedAt:(quote as any).offline?quote.context.now:new Date(),orderId:order.id}});if(changed.count!==1)throw Error('ACTIVITY_COUPON_UNAVAILABLE')}
+ const now=(quote as any).offline?quote.context.now:new Date()
  const claimed=await tx.coupon.updateMany({where:{id:c.id,storeId:order.storeId,status:'active',validFrom:{lte:now},validUntil:{gt:now},...(c.usageLimit?{usedCount:{lt:c.usageLimit}}:{})},data:{usedCount:{increment:1}}});if(claimed.count!==1)throw Error('ACTIVITY_COUPON_UNAVAILABLE')
  }
 

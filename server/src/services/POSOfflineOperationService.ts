@@ -34,7 +34,7 @@ const permitted=(user:Pick<AuthUser,'role'|'accessRole'>,key:string)=>{
 }
 export function offlineAuthorization(user:AuthUser,allowedPayments:string[]=[],policy:Record<string,unknown>={}) {
  const issuedAt=Date.now()
- const permissions=['pos.shift','pos.cash','pos.expense','orders.create','orders.discount','orders.refund.request'].filter(key=>permitted(user,key))
+ const permissions=['pos.shift','pos.cash','pos.expense','orders.create','orders.discount','orders.refund.request','members.read'].filter(key=>permitted(user,key))
  return {token:jwt.sign({actorId:user.id,staffId:user.staffId,storeId:user.storeId,role:user.role,issuedAt,permissions,allowedPayments,...policy},config.jwt.secret,{audience:'pos-offline-operations',expiresIn:`${POS_OFFLINE_DAYS}d`}),actorId:user.id,issuedAt:new Date(issuedAt).toISOString(),expiresAt:new Date(issuedAt+POS_OFFLINE_TTL_MS).toISOString(),permissions}
 }
 async function operationActor(storeId:string,input:z.infer<typeof offlineOperationSchema>,permission?:string) {
