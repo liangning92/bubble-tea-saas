@@ -100,6 +100,17 @@ module.exports = async function staffUI(browser) {
     for (const [route, name] of [['/leave', /Apply.*Leave|Request.*Leave/], ['/reimbursement', /Expense|Reimbursement/]]) {
       await page.goto(origin + route); await page.locator('header').getByRole('button', { name }).click();
       const dialog = page.getByRole('dialog'); await expect(dialog).toBeVisible();
+      if (route === '/leave') {
+        const date = page.locator('input[data-picker=date]').first();
+        await date.fill('15/10/2026'); await date.press('ArrowDown');
+        const picker = page.locator('.localized-datetime-panel'); await expect(picker).toBeVisible();
+        await page.keyboard.press('Tab');
+        assert.equal(await picker.evaluate(el => el.contains(document.activeElement)), true);
+        assert.equal(await picker.locator('button[aria-pressed=true]').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(236, 109, 136)');
+        await page.keyboard.press('Escape'); await expect(picker).toHaveCount(0);
+        assert.equal(await page.locator('#root').evaluate(el => el.inert), true);
+        await page.screenshot({path:path.join(output,'leave-dialog-phone.jpg')});
+      }
       await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0);
     }
     await page.goto(origin + '/overtime');

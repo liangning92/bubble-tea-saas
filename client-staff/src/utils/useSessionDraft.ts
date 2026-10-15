@@ -27,7 +27,7 @@ export function useSessionDraft<T>(name: string, initial: T) {
     value,
     setValue,
     () => {
-      sessionStorage.removeItem(key);
+      try { sessionStorage.removeItem(key); } catch { /* Reset the in-memory draft even when storage is unavailable. */ }
       setState({ key, value: initial });
     },
   ] as const;
