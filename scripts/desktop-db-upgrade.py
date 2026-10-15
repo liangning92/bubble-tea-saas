@@ -33,13 +33,18 @@ COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
     ('PurchaseOrder','source',"TEXT NOT NULL DEFAULT 'admin'"), ('PurchaseOrder','onlineOrderNumber','TEXT'),
     ('PurchaseOrder','createdBy','TEXT'), ('PurchaseOrder','receivedBy','TEXT'),
     ('PurchaseOrderItem','inputQuantity','REAL'), ('PurchaseOrderItem','inputUnit','TEXT'),
-    ('PurchaseOrderItem','inputUnitCost','INTEGER'), ('PurchaseOrderItem','packageSnapshot','TEXT')]
+    ('PurchaseOrderItem','inputUnitCost','REAL'), ('PurchaseOrderItem','packageSnapshot','TEXT'),
+    ('PurchaseOrder','paidAt','DATETIME'), ('PurchaseOrderItem','lineAmount','INTEGER')]
 NEW_TABLES = ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference','OrderConsumptionSnapshot','ConsumptionAlert','TvScreen','TvDevice','TvPairSession')
 INVENTORY_INDEXES = ('StockInLog_operationId_key','StockOutLog_operationId_key','PurchaseOrder_requestId_key')
 CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence, LocalSchemaMigration and reusable media tables and indexes', 'Order_pickupNumber_idx nonunique index']
 LEGACY_INTEGER_FLOAT_COLUMNS = {('Leave', 'totalDays'), ('LeaveBalance', 'usedLeave'), ('LeaveBalance', 'usedSick')}
+LEGACY_COST_FLOAT_COLUMNS = {('Batch', 'unitCost'): 'INTEGER', ('StockInLog', 'unitCost'): 'INTEGER',
+                            ('PurchaseOrderItem', 'unitCost'): 'INTEGER', ('PurchaseOrderItem', 'inputUnitCost'): 'INTEGER',
+                            ('Inventory', 'avgCost'): 'BIGINT'}
 CHANGES += ['Preserve compatible legacy INTEGER affinity for leave day Float columns', 'StaffActionApproval and StaffApprovalCredential tables and indexes', 'Staff_employeeNumber_key unique index after duplicate-number validation']
 CHANGES += ['OrderConsumptionSnapshot and ConsumptionAlert tables and indexes', 'PurchaseOrder.supplierId nullable with historical rows and dependent records preserved', 'StockInLog_operationId_key, StockOutLog_operationId_key and PurchaseOrder_requestId_key unique indexes']
+CHANGES += ['Preserve compatible legacy INTEGER/BIGINT affinity for procurement cost Float columns']
 APP_GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
 LAST_DIAGNOSTIC = None
 LAST_STAGE = 'startup'
@@ -60,11 +65,13 @@ class PosStillRunningError(RuntimeError):
 def compatible_column(table, name, actual, expected):
     if actual == expected:
         return True
-    # These three historical columns stored whole days before half-day leave.
+    # Historical day and procurement cost columns stored whole values.
     # SQLite INTEGER affinity also stores REAL values; preserve the original
     # table and every historical value rather than rebuilding financial DBs.
     if (table, name) in LEGACY_INTEGER_FLOAT_COLUMNS and actual is not None:
         return expected['type'] == 'REAL' and actual == {**expected, 'type': 'INTEGER'}
+    if (table, name) in LEGACY_COST_FLOAT_COLUMNS and actual is not None:
+        return expected['type'] == 'REAL' and actual == {**expected, 'type': LEGACY_COST_FLOAT_COLUMNS[(table, name)]}
     return False
 
 
