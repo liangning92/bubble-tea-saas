@@ -1000,8 +1000,8 @@ a:focus-visible {
 .employee-modal h2 { overflow-wrap: anywhere; }
 .employee-modal button:focus-visible, .employee-modal a:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
 .employee-dialog-panel { overflow-y: auto; box-shadow: 0 12px 40px #0002; }
-.localized-datetime-panel button[aria-pressed=true] { background: var(--color-primary); }
-.localized-datetime-panel :focus-visible { outline-color: var(--color-primary); }
+body .localized-datetime-panel button[aria-pressed=true] { background: var(--color-primary); }
+body .localized-datetime-panel :focus-visible { outline-color: var(--color-primary); }
 @media (min-width: 768px) {
   .employee-shell, .employee-bottom-nav { max-width: 960px; }
   .employee-home { padding: 24px 32px; }

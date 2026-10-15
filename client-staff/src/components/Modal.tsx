@@ -32,7 +32,12 @@ export function Modal({ children, label, onClose, className = '' }: {
       if (openModals[openModals.length - 1] !== modal) return
       if (event.key === 'Escape') { event.preventDefault(); close.current?.() }
       if (event.key === 'Tab') {
-        const elements = focusable(), first = elements[0], last = elements[elements.length - 1]
+        // The shared date picker is a body portal owned by the expanded input.
+        const picker = modal.querySelector('input[aria-haspopup="dialog"][aria-expanded="true"]')
+          ? document.querySelector<HTMLElement>('.localized-datetime-panel') : null
+        const elements = picker ? [...picker.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled)')].filter(el => el.getClientRects().length > 0) : focusable()
+        const first = elements[0], last = elements[elements.length - 1]
+        if (picker && !picker.contains(document.activeElement)) { event.preventDefault(); (event.shiftKey ? last : first)?.focus(); return }
         if (!first) { event.preventDefault(); modal.focus(); return }
         if (event.shiftKey && (document.activeElement === first || document.activeElement === modal)) { event.preventDefault(); last?.focus() }
         else if (!event.shiftKey && (document.activeElement === last || document.activeElement === modal)) { event.preventDefault(); first.focus() }
