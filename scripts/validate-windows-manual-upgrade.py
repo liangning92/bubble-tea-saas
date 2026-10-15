@@ -228,7 +228,9 @@ def verify_started_runtime(expected_version):
                     ready = False
                 if ready:
                     verified = True
-                    return {'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
+                    ready_at = time.monotonic()
+                    trace(f'runtime-ready at={ready_at:.3f} version={expected_version}')
+                    return {'readyAtMonotonic': ready_at, 'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
         print('Owned restart processes: ' + json.dumps(launched), flush=True)
         log = DATA / 'logs/main.log'
@@ -363,8 +365,12 @@ try:
     installed_version = subprocess.check_output(['node', '-e', "const asar=require('asar');console.log(JSON.parse(asar.extractFile(process.argv[1],'package.json')).version)", str(APP / 'resources/app.asar')], cwd=ROOT, text=True).strip()
     assert installed_version == expected_version, ('installed version mismatch', installed_version, expected_version)
     restarted_runtime = verify_started_runtime(expected_version)
-    fast_downtime = time.monotonic() - fast_started
-    print(json.dumps({'preparedDowntimeSeconds': round(fast_downtime, 3), 'localApiReady': restarted_runtime['localApiReady']}), flush=True)
+    # Downtime ends at healthy runtime; the finally block then closes the owned test app.
+    fast_ready_at = restarted_runtime.pop('readyAtMonotonic')
+    fast_downtime = fast_ready_at - fast_started
+    assert fast_downtime >= 0
+    fast_cleanup_seconds = time.monotonic() - fast_ready_at
+    print(json.dumps({'preparedDowntimeSeconds': round(fast_downtime, 3), 'localApiReady': restarted_runtime['localApiReady'], 'testCleanupSeconds': round(fast_cleanup_seconds, 3)}), flush=True)
     assert fast_downtime <= 120, ('Prepared upgrade exceeded 120 second release limit', fast_downtime)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-online-install-without-repeat-confirmation-and-history-preserved')
@@ -375,7 +381,11 @@ try:
     assert silent.returncode == 0, ('Silent online installer failed', silent.returncode)
     silent_runtime = verify_started_runtime(expected_version)
     assert historic() == history, 'Silent update must preserve all historical rows'
-    assert time.monotonic() - silent_started <= 120, 'Silent update exceeded downtime limit'
+    silent_ready_at = silent_runtime.pop('readyAtMonotonic')
+    silent_downtime = silent_ready_at - silent_started
+    assert silent_downtime >= 0
+    print(json.dumps({'silentDowntimeSeconds': round(silent_downtime, 3), 'testCleanupSeconds': round(time.monotonic() - silent_ready_at, 3), 'localApiReady': silent_runtime['localApiReady']}), flush=True)
+    assert silent_downtime <= 120, ('Silent update exceeded downtime limit', silent_downtime)
     CASES.append('silent-nsis-online-install-restarts-original-profile-and-preserves-history')
 
     if SCOPE in ('installer', 'legacy'):
@@ -443,7 +453,7 @@ try:
             original_version='2026.10.392', original_hash='4b3b9d22e71d85e3e949d432d8a4a947ee0346b51505975bd98b63e41f137eff')
         assert authentic392['backgroundBackupReused'] and authentic392['downtimeSeconds'] <= 120
     report = {'scope': SCOPE, 'authentic392': authentic392, 'authentic372': authentic372, 'authentic384': authentic384,
-              'preparedDowntimeSeconds': round(fast_downtime, 3), 'downtimeLimitSeconds': 120, 'authentic295': authentic,
+              'preparedDowntimeSeconds': round(fast_downtime, 3), 'silentDowntimeSeconds': round(silent_downtime, 3), 'downtimeLimitSeconds': 120, 'downtimeEndpoint': 'installed-local-api-ready-before-test-teardown', 'authentic295': authentic,
               'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version,
               'cases': CASES, 'changes': runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['CHANGES'],
