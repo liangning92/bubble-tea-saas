@@ -4,6 +4,8 @@ import prisma from '../src/config/database'
 import {createPurchaseOrder,editPurchaseOrder,receivePurchaseOrder,reversePurchaseReceipt,cancelPurchaseOrder,refundPurchasePayment} from '../src/services/PurchaseOrderService'
 import {inventoryQuantityCost} from '../src/services/InventoryQuantityService'
 import {reverseTransfer} from '../src/services/FinanceAccountService'
+import {getCashFlow,getProfitAnalysis} from '../src/services/FinanceService'
+const financePeriod=[new Date(0),new Date('2100-01-01')] as const
 
 afterAll(()=>prisma.$disconnect())
 async function fixture(){
@@ -24,6 +26,7 @@ test('2.3 kg and Rp160000 preserve exact cost, payment posts once, receive refre
  expect(await inventoryQuantityCost(prisma,f.inv.id,25,'g')).toBeCloseTo(1739.1304347826,7)
  expect((await prisma.product.findUniqueOrThrow({where:{id:f.product.id}})).costPrice).toBe(1739)
  expect(await prisma.expense.count({where:{referenceId:order.id}})).toBe(1)
+ expect((await getCashFlow(f.store.id,...financePeriod)).outflows.inventoryPurchases).toBe(160000);expect((await getCashFlow(f.store.id,...financePeriod)).totalOutflows).toBe(160000);expect((await getProfitAnalysis(f.store.id,...financePeriod)).netProfit).toBe(0)
 })
 test('pending edit uses actual paid amounts and optimistic version; foreign owner and units rejected',async()=>{
  const f=await fixture(),data={storeId:f.store.id,createdBy:'buyer',items:[{inventoryId:f.inv.id,quantity:2.3,inputUnit:'kg',paidAmount:160000}]},order=await createPurchaseOrder(data)
@@ -40,6 +43,7 @@ test('cancel is not a refund; explicit actual refund is exactly once',async()=>{
  await refundPurchasePayment(order.id,f.store.id,'admin','refund received')
  await expect(refundPurchasePayment(order.id,f.store.id,'admin','duplicate')).rejects.toThrow('ALREADY_REFUNDED')
  expect((await prisma.expense.aggregate({where:{referenceId:order.id},_sum:{amount:true}}))._sum.amount).toBe(0)
+ expect((await getCashFlow(f.store.id,...financePeriod)).totalOutflows).toBe(0)
 })
 test('intact receipt can be reversed and received again without deleting historical ledger evidence',async()=>{
  const f=await fixture(),order=await createPurchaseOrder({storeId:f.store.id,items:[{inventoryId:f.inv.id,quantity:2.3,inputUnit:'kg',paidAmount:160000}]})

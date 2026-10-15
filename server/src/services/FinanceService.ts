@@ -229,7 +229,8 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
 
   // Expense ledger amounts are hundredths, while order and salary amounts are
   // whole rupiah. Linked salary payments are cash events, not a second P&L cost.
-  const postedExpenses = expenses.filter(e => e.referenceType !== 'salary')
+  const purchasePayments=expenses.filter(e=>['purchase','purchase_refund'].includes(e.referenceType||'')).reduce((sum,e)=>sum+e.amount/100,0)
+  const postedExpenses = expenses.filter(e => !['salary','purchase','purchase_refund'].includes(e.referenceType||''))
   const isManualSalary = (e: typeof postedExpenses[number]) => e.type === 'salary' || ['salary', 'gaji', '工资'].includes(e.category.toLowerCase())
   const manualSalary = postedExpenses.filter(isManualSalary).reduce((sum, e) => sum + e.amount / 100, 0)
   const otherExpenses = postedExpenses.filter(e => !isManualSalary(e)).reduce((sum, e) => sum + e.amount / 100, 0)
@@ -248,7 +249,7 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
   const salaryAccrual = payroll.reduce((sum,salary)=>sum+accrueSalary(salary),0)
   const pendingSalary = payroll.filter(s=>s.status==='pending').reduce((sum,salary)=>sum+accrueSalary(salary),0)
   const totalOperatingCosts = otherExpenses + manualSalary + salaryAccrual
-  const operatingCosts = { actual: totalOperatingCosts, salary: salaryAccrual + manualSalary, pendingSalary, other: otherExpenses, isEstimate: false }
+  const operatingCosts = { purchasePayments, actual: totalOperatingCosts, salary: salaryAccrual + manualSalary, pendingSalary, other: otherExpenses, isEstimate: false }
   const netProfit = grossProfit - totalOperatingCosts
   const netMargin = revenue > 0 ? Math.round(netProfit / revenue * 100) : 0
 
@@ -332,20 +333,20 @@ export async function getBalanceSheet(storeId: string, month: number, year: numb
     FixedAssetService.getDepreciationSchedule(storeId),
     prisma.bankAccount.findMany({ where: { storeId } }),
     prisma.inventory.findMany({ where: { storeId } }),
-    prisma.purchaseOrder.aggregate({ where: { storeId, status: { in: ['pending', 'approved'] } }, _sum: { totalAmount: true } })
+    prisma.purchaseOrder.aggregate({ where: { storeId, status: { in: ['pending', 'approved','awaiting_receipt'] },paidAt:null }, _sum: { totalAmount: true } })
   ])
 
   const payroll=await confirmedPayroll(storeId,rawPayroll)
 
   const revenue = orders.reduce((sum, order) => sum + netReceivedAmount(order), 0)
   const cost = orders.reduce((sum, order) => sum + (order.refundRequests.some(r => r.reasonCode === 'paid_unprepared') ? 0 : order.items.reduce((subtotal, item) => subtotal + (item.bomCost || 0) * item.quantity, 0)), 0)
-  const expensesTotal = expenses.filter(expense => expense.referenceType !== 'salary').reduce((sum, expense) => sum + expense.amount / 100, 0) + payroll.reduce((sum, salary) => sum + salary.finalAmount, 0)
+  const expensesTotal = expenses.filter(expense => !['salary','purchase','purchase_refund'].includes(expense.referenceType||'')).reduce((sum, expense) => sum + expense.amount / 100, 0) + payroll.reduce((sum, salary) => sum + salary.finalAmount, 0)
   const cash = bankAccounts.reduce((sum, account) => sum + account.balance / 100, 0)
-  const inventoryValue = inventories.reduce((sum, item) => sum + Math.max(0, item.currentStock * Number(item.avgCost || 0) / 100), 0)
+  const inventoryValue = inventories.reduce((sum, item) => sum + Math.max(0, item.currentStock * Number(item.avgCost || 0)), 0)
   const fixedAssetValue = fixedAssets.reduce((sum, asset) => sum + asset.currentValue / 100, 0)
   const totalAssets = cash + inventoryValue + fixedAssetValue
   const taxPayable = Math.max(0, Math.round((revenue - cost) * 0.11))
-  const accountsPayable = (pendingPOs._sum.totalAmount || 0) / 100
+  const accountsPayable = (pendingPOs._sum.totalAmount || 0)
   const payrollPayable = payroll.filter(salary => salary.status === 'pending').reduce((sum, salary) => sum + salary.finalAmount, 0)
   const totalLiabilities = taxPayable + accountsPayable + payrollPayable
   const grossProfit = revenue - cost
@@ -377,22 +378,16 @@ export async function getCashFlow(storeId: string, startDate: Date, endDate: Dat
   await requireVerifiedReceiptIncome(cashOrders)
   const cashSales = cashOrders.reduce((sum, order) => sum + netReceivedAmount(order), 0)
 
-  // Cash outflows (inventory purchases) - join through Inventory to filter by storeId
-  const inventoryPurchases = await prisma.stockInLog.aggregate({
-    where: {
-      createdAt: { gte: startDate, lte: endDate },
-      inventory: { storeId }
-    },
-    _sum: { totalAmount: true }
-  })
-
+  // Receipt time and inventory movements are not proof of payment. Purchases
+  // and refunds enter cash flow from their actual linked payment ledger only.
   // Salary cash outflow is the linked payment expense. Draft payroll is an
   // accrual, not cash paid, and recording it by Salary.createdAt was wrong.
   const expenseOutflows = await prisma.expense.findMany({where:{storeId,date:{gte:startDate,lte:endDate}},select:{amount:true,category:true,type:true,referenceType:true}})
   const isSalaryPayment = (e: typeof expenseOutflows[number]) => e.referenceType === 'salary' || e.type === 'salary' || ['salary','gaji','工资'].includes(e.category.toLowerCase())
   const staffSalaries = expenseOutflows.filter(isSalaryPayment).reduce((sum,e) => sum + e.amount / 100, 0)
-  const otherExpenses = expenseOutflows.filter(e => !isSalaryPayment(e)).reduce((sum,e) => sum + e.amount / 100, 0)
-  const inventoryPurchaseAmount = (inventoryPurchases._sum.totalAmount || 0) / 100
+  const isPurchasePayment=(e:typeof expenseOutflows[number])=>['purchase','purchase_refund'].includes(e.referenceType||'')
+  const otherExpenses = expenseOutflows.filter(e => !isSalaryPayment(e)&&!isPurchasePayment(e)).reduce((sum,e) => sum + e.amount / 100, 0)
+  const inventoryPurchaseAmount = expenseOutflows.filter(isPurchasePayment).reduce((sum,e)=>sum+e.amount/100,0)
   const totalOutflows = inventoryPurchaseAmount + staffSalaries + otherExpenses
 
   return {
