@@ -236,6 +236,7 @@ export function FinanceReportsPage() {
               <div className="card">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('finance.operatingCosts')}</h3>
                 <div className="space-y-3">
+                  <p className="text-sm text-gray-500">{t('entryFix.purchaseCashBasis')}</p>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.staffSalaries')}</span>
                     <span className="font-medium">{formatCurrency(profit.operatingCosts?.salary || 0)}</span>
@@ -437,21 +438,22 @@ export function FinanceReportsPage() {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.inventoryPurchases')}</span>
-                    <span className="font-medium text-red-600">-{formatCurrency(cashFlow.outflows?.inventoryPurchases || 0)}</span>
+                    <span className="font-medium text-red-600">{formatCurrency(-(cashFlow.outflows?.inventoryPurchases || 0))}</span>
                   </div>
+                  <p className="text-sm text-gray-500">{t('entryFix.purchaseCashBasis')}</p>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.staffSalaries')}</span>
-                    <span className="font-medium text-red-600">-{formatCurrency(cashFlow.outflows?.staffSalaries || 0)}</span>
+                    <span className="font-medium text-red-600">{formatCurrency(-(cashFlow.outflows?.staffSalaries || 0))}</span>
                   </div>
                   <p className="text-sm text-amber-700">{payrollLabels(i18n.language).pending}: {formatCurrency(profit.operatingCosts?.pendingSalary||0)}</p>
                   <p className="text-sm text-gray-500">{payrollLabels(i18n.language).financeHint}</p>
                   <div className="flex justify-between items-center py-2 border-b">
                     <span className="text-gray-600">{t('finance.otherExpenses')}</span>
-                    <span className="font-medium text-red-600">-{formatCurrency(cashFlow.outflows?.otherExpenses || 0)}</span>
+                    <span className="font-medium text-red-600">{formatCurrency(-(cashFlow.outflows?.otherExpenses || 0))}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 font-semibold">
                     <span>{t('finance.totalOutflows')}</span>
-                    <span className="text-red-600">-{formatCurrency(cashFlow.totalOutflows || 0)}</span>
+                    <span className="text-red-600">{formatCurrency(-(cashFlow.totalOutflows || 0))}</span>
                   </div>
                 </div>
               </div>
