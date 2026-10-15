@@ -15,7 +15,7 @@ export const EMPLOYEE_APP_WORK_ROUTES = new Set([
   'POST /api/purchase-orders', 'POST /api/purchase-orders/:id/receive', 'GET /api/suppliers',
   'POST /api/inventory-counts', 'POST /api/inventory-counts/:id/submit',
   'GET /api/inventory-counts', 'GET /api/inventory-counts/:id',
-  'PUT /api/inventory-counts/:id/item/:itemId',
+  'PUT /api/inventory-counts/:id/item/:itemId', 'PUT /api/inventory-counts/:id/items',
   'GET /api/announcement/active', 'POST /api/upload/attachment',
 ])
 export function isEmployeeAppRoute(key: string, spec: {personal?: boolean; ownerOnly?: boolean}): boolean {
