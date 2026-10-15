@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ attendanceReport:{paths:/(?:AttendanceReportService|attendanceReport|AttendanceDashboardPage|inventory-attendance-layout)/i,tests:/attendance-report/i},
  adminUi:{paths:/(?:AdminDialog|MainLayout|client-admin\/src\/stores\/auth\.|client-admin\/src\/pages\/LoginPage|client-admin\/src\/index\.css|ChannelProductPricingPage|client-admin\/src\/pages\/SettingsPage|InventoryIndexPage|admin-session-reuse|admin-ui-optimization)/i,tests:/admin-ui-optimization|admin-session-reuse/i},
  tv:{paths:/(?:tv-android-app|server\/public\/tv|TvSignage|tvSchema|\/routes\/tv\.|\/pages\/tv\/|tv-signage|sync-tv-player)/i,tests:/tv-signage/i},
  media:{paths:/(?:ProductImageEditor|MediaLibrary|\/services\/media\.|\/routes\/media\.|MediaService|mediaFiles|imageOptimization|image-optimization|ProductInsights|productInsights|ProductAnalysisPage|\/media-insights\/|test-media-insights)/i,tests:/media|product-insights/i},
@@ -58,9 +59,10 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ attendanceReport:{scripts:['tests/stoploss/inventory-attendance-layout-page-check.cjs'],components:['admin']},
  adminUi:{scripts:['tests/stoploss/admin-ui-optimization-page-check.cjs','tests/stoploss/admin-session-reuse-page-check.cjs','tests/stoploss/store-date-settings-page-check.cjs'],components:['admin']},
  tv:{scripts:['tests/stoploss/tv-signage-page-check.cjs','tests/stoploss/tv-signage-admin-page-check.cjs'],components:['admin']},
- inventory:{scripts:['tests/stoploss/inventory-count-workspace-page-check.cjs','tests/stoploss/inventory-attendance-layout-page-check.cjs'],components:['admin']},
+ inventory:{scripts:['tests/stoploss/inventory-count-workspace-page-check.cjs'],components:['admin']},
  staff:{scripts:['tests/stoploss/staff-basic-access-page-check.cjs'],components:['staff'],preview:{component:'staff',port:5179}},
  orders:{scripts:['tests/stoploss/order-export-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
  finance:{scripts:['tests/stoploss/revenue-page-check.cjs'],components:['admin']},
@@ -75,6 +77,7 @@ const browserChecks={
  training:{scripts:['tests/stoploss/training-management-page-check.cjs'],components:['admin','staff']},
 };
 const httpChecks={
+ attendanceReport:['tests/stoploss/employee-workspace-http-check.cjs'],
  finance:['tests/stoploss/revenue-query-http-check.cjs'],
  tv:['tests/stoploss/tv-signage-integration.cjs'],
  orders:['tests/stoploss/order-receipt-http-check.cjs'],
