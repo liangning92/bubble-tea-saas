@@ -55,8 +55,28 @@ test('workflow wiring keeps full suites opt-in and image publication uses the se
  const read=name=>yaml.load(fs.readFileSync(`.github/workflows/${name}.yml`,'utf8'));
  const ci=read('ci');assert.equal(ci.on.workflow_dispatch.inputs.full_regression.default,false);assert.ok(ci.jobs.verify_full.if.includes('inputs.full_regression == true'));assert.equal(ci.jobs.verify.steps.some(s=>s.run?.includes('npm run build\n')),false);assert.ok(ci.jobs.verify.steps.some(s=>s.run==='node scripts/run-scoped-ci.cjs browser'));
  const docker=read('docker-publish');assert.match(docker.jobs.verify.strategy.matrix,/fromJSON/);assert.match(docker.jobs.verify.if,/has_images == 'true'/);assert.ok(docker.jobs.scope.steps.some(s=>s.env?.BASE_SHA==='${{ inputs.base_sha }}'));
+ for(const workflow of [ci,docker]){assert.equal(workflow.on.workflow_dispatch.inputs.component_baselines.required,false);assert.ok(Object.values(workflow.jobs).some(job=>job.steps?.some(step=>step.env?.COMPONENT_BASELINES==='${{ inputs.component_baselines }}')))}
  const release=read('release-docker');assert.equal(release.on.workflow_dispatch.inputs.services.default,'auto');assert.match(release.jobs.publish.strategy.matrix.service,/needs.gate.outputs.services/);
  const windows=read('build-windows');assert.ok(windows.on.workflow_dispatch.inputs.base_sha.required);assert.ok(windows.jobs.build.steps.some(s=>s.env?.BASE_SHA==='${{ inputs.base_sha }}'));
+});
+
+test('different live component baselines retain pending API/admin/staff changes without replaying deployed POS changes',()=>{
+ const f=fixture();const git=(...args)=>execFileSync('git',args,{cwd:f.root,encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();try{
+  git('init','-q');git('config','user.email','ci@example.invalid');git('config','user.name','CI scope test');f.write('baseline.txt','base');git('add','.');git('commit','-qm','base');const base=git('rev-parse','HEAD');
+  f.write('client-pos/src/pages/POSPage.tsx','POS already deployed');f.write('client-pos/src/barcode.ts','barcode already deployed');git('add','.');git('commit','-qm','POS');const pos=git('rev-parse','HEAD');
+  f.write('server/src/services/InventoryService.ts','API pending');f.write('client-admin/src/pages/inventory/PurchasePage.tsx','admin pending');f.write('client-staff/src/PurchaseForm.tsx','staff pending');git('add','.');git('commit','-qm','procurement');const head=git('rev-parse','HEAD');
+  const componentBaselines={api:base,admin:base,pos,staff:base};const p=planRange(base,head,{root:f.root,componentBaselines});
+  assert.deepEqual(p.components,['api','admin','staff']);assert.ok(!p.files.some(file=>file.startsWith('client-pos/')));assert.ok(!p.domains.includes('barcode'));assert.ok(p.domains.includes('inventory'));assert.equal(p.componentRanges.pos.baseSha,pos);
+  for(const b of [{...componentBaselines,pos:'master'},{api:base},{...componentBaselines,unknown:base}])assert.throws(()=>planRange(base,head,{root:f.root,componentBaselines:b}));
+  assert.throws(()=>planRange(pos,head,{root:f.root,componentBaselines}));assert.throws(()=>planRange(base,head,{root:f.root,componentBaselines,full:true}));
+  // A later shared change must still reach the POS importer and select its image.
+  f.write('shared/utils/cost.ts','export const cost=1');f.write('client-pos/src/prices.ts',"import '../../../shared/utils/cost'");git('add','.');git('commit','-qm','shared');
+  const shared=planRange(base,git('rev-parse','HEAD'),{root:f.root,componentBaselines});assert.ok(shared.components.includes('pos'));assert.ok(shared.typecheck.includes('pos'));
+ }finally{f.close()}
+});
+
+test('root dependency updates retain component type checks without selecting every historical business domain',()=>{
+ const f=fixture();try{const p=selectScope(['package-lock.json'],f);assert.deepEqual(p.typecheck,['api','admin','pos','staff']);assert.deepEqual(p.domains,[]);assert.deepEqual(p.browser,[])}finally{f.close()}
 });
 
 test('scoped runner executes selected unit checks and leaves unrelated tests untouched',()=>{

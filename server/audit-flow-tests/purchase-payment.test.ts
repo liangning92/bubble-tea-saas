@@ -80,8 +80,9 @@ import {purchaseOrderRouter} from '../src/routes/purchaseOrder'
 import {memberRouter} from '../src/routes/member'
 import {depositRouter} from '../src/routes/deposit'
 import {hygieneRouter} from '../src/routes/hygiene'
+import {configRouter} from '../src/routes/config'
 const app=express();app.use(express.json());
-for(const [prefix,router]of [['staff-correction',staffCorrectionRouter],['shift-swap',shiftSwapRouter],['overtime',overtimeRouter],['purchase-orders',purchaseOrderRouter],['members',memberRouter],['deposit',depositRouter],['hygiene',hygieneRouter]] as const)app.use('/api/'+prefix,declareAccessRoutes('/api/'+prefix,router));
+for(const [prefix,router]of [['staff-correction',staffCorrectionRouter],['shift-swap',shiftSwapRouter],['overtime',overtimeRouter],['purchase-orders',purchaseOrderRouter],['members',memberRouter],['deposit',depositRouter],['hygiene',hygieneRouter],['config',configRouter]] as const)app.use('/api/'+prefix,declareAccessRoutes('/api/'+prefix,router));
 async function staffToken(storeId:string,role='staff'){
  const user=await prisma.user.create({data:{storeId,phone:randomUUID(),password:'synthetic',role}});
  const staff=await prisma.staff.create({data:{storeId,userId:user.id,name:'Synthetic buyer',employeeNumber:randomUUID()}});
@@ -191,4 +192,16 @@ test('upward stock correction retains fractional unit cost and posts a whole-rup
  const f=await fixture();await prisma.inventory.update({where:{id:f.inv.id},data:{currentStock:2300,avgCost:160000/2300}});
  await adjustInventory(f.inv.id,2301,'verified physical stock correction','admin');
  const log=await prisma.stockInLog.findFirstOrThrow({where:{inventoryId:f.inv.id}});expect(log.quantity).toBe(1);expect(log.unitCost).toBeCloseTo(160000/2300,9);expect(log.totalAmount).toBe(70);expect((await prisma.inventory.findUniqueOrThrow({where:{id:f.inv.id}})).currentStock).toBe(2301);
+});
+
+test('correction markers stay private and cannot be reset through generic configuration APIs',async()=>{
+ const f=await fixture(),admin=await staffToken(f.store.id,'admin'),api=request(app);
+ await prisma.config.create({data:{storeId:f.store.id,key:'shiftSettings',category:'pos',value:'{}'}});
+ for(const key of ['transfer.reversal.original','deposit.reversal.deduction.original','leave.period.employee.2026']){
+  await prisma.config.create({data:{storeId:f.store.id,key,category:'finance',value:JSON.stringify({actor:'admin',reason:'private correction',reversalId:'original'})}});
+  expect((await api.get(`/api/config/${f.store.id}/${key}`).set('Authorization',admin.token)).status).toBe(403);
+  expect((await api.post('/api/config').set('Authorization',admin.token).send({storeId:f.store.id,key,value:{},category:'finance'})).status).toBe(403);
+  expect((await api.delete(`/api/config/${f.store.id}/${key}`).set('Authorization',admin.token)).status).toBe(403);
+ }
+ const result=await api.get('/api/config').query({storeId:f.store.id}).set('Authorization',admin.token);expect(result.status).toBe(200);expect(result.body.data.shiftSettings).toEqual({});expect(Object.keys(result.body.data).some(key=>/reversal|leave.period/.test(key))).toBe(false);
 });
