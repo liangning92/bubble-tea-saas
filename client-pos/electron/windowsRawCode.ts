@@ -56,6 +56,7 @@ public class WinSpoolRaw {
     }
     public static bool HasProblem(uint status) { return (status & (1u | 2u | 4u | 32u | 64u | 256u | 512u | 1024u)) != 0; }
     public static bool IsStalled(uint status, double ageSeconds) { return !IsCompleted(status) && (HasProblem(status) || ageSeconds >= 30); }
+    public static bool BlocksNewSubmission(uint status) { return !IsCompleted(status); }
 
     static double Age(SYSTEMTIME s) {
         try { return (DateTime.UtcNow - new DateTime(s.Year,s.Month,s.Day,s.Hour,s.Minute,s.Second,DateTimeKind.Utc)).TotalSeconds; }
@@ -73,7 +74,11 @@ public class WinSpoolRaw {
             int size = Marshal.SizeOf(typeof(JOBINFO1));
             for (uint i=0;i<count;i++) {
                 JOBINFO1 job = (JOBINFO1)Marshal.PtrToStructure(IntPtr.Add(memory,(int)i*size),typeof(JOBINFO1));
-                if (IsStalled(job.Status,Age(job.Submitted))) return "PRINT_QUEUE_BLOCKED job="+job.JobId+" status="+job.Status;
+                // Even a recent unfinished job can still emerge. Do not accept
+                // another copy during the first thirty seconds after a timeout.
+                if (BlocksNewSubmission(job.Status)) return
+                    (IsStalled(job.Status,Age(job.Submitted)) ? "PRINT_QUEUE_BLOCKED" : "PRINT_QUEUE_BUSY")+
+                    " job="+job.JobId+" status="+job.Status;
             }
             return null;
         } finally { Marshal.FreeHGlobal(memory); }

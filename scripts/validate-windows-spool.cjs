@@ -15,6 +15,9 @@ if(![WinSpoolRaw]::HasProblem(1024)){throw 'Native UserIntervention bit not dete
 if(![WinSpoolRaw]::IsStalled(1024,1)){throw 'Device error must block immediately'}
 if([WinSpoolRaw]::IsStalled(8320,900)){throw 'Completed retained job must not block printing'}
 if([WinSpoolRaw]::IsStalled(8192,900)){throw 'An inactive retained job must not block printing'}
+if(![WinSpoolRaw]::BlocksNewSubmission(8208)){throw 'A recent unfinished receipt must block a duplicate submission'}
+if(![WinSpoolRaw]::BlocksNewSubmission(0)){throw 'A waiting unfinished job must block a new submission'}
+if([WinSpoolRaw]::BlocksNewSubmission(8192)){throw 'An inactive retained job must not block a new submission'}
 $dir=Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($dir)|Out-Null
 try {
