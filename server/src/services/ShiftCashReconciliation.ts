@@ -3,9 +3,16 @@ import { PrismaClient } from '@prisma/client'
 import { netReceivedAmount } from '../utils/refundAllocation'
 import { z } from 'zod'
 export const CASH_WARNING_PREFIX = 'pos.shift.cash-warning:'
-export type CashReconciliation = {version:1;source:string;windowStart:string;windowEnd:string;revenue:number;expenses:number;qris:number;cashFromRevenue:number;openFloat:number;expectedCash:number;cashIns?:number;cashOuts?:number;otherNonCash?:number}
+export type CashReconciliation = {version:1;source:string;windowStart:string;windowEnd:string;revenue:number;expenses:number;qris:number;recordedQris?:number;qrisSource?:'recorded_orders'|'manual_handover';cashFromRevenue:number;openFloat:number;expectedCash:number;cashIns?:number;cashOuts?:number;otherNonCash?:number}
 const money = (value:number) => Math.round(value * 100) / 100
-export async function calculateShiftCash(db:Pick<PrismaClient,'order'|'expense'>&Partial<Pick<PrismaClient,'cashEvent'|'refundRequest'|'financeAuditLog'>>,storeId:string,shift:{openedAt:Date;openFloat:number},asOf:Date):Promise<CashReconciliation> {
+// Manual QRIS is the shift total; only its difference replaces the recorded amount.
+// Cash refunds and cash movements remain in their actual payout shift.
+export function applyHandoverQris(recorded:CashReconciliation,manualQris?:number):CashReconciliation {
+ const recordedQris=recorded.recordedQris??recorded.qris,qris=manualQris??recordedQris
+ const cashFromRevenue=money(recorded.source==='occurrence_cash_ledger'?recorded.cashFromRevenue+recorded.qris-qris:recorded.revenue-recorded.expenses-qris-(recorded.otherNonCash||0))
+ return {...recorded,recordedQris,qris,qrisSource:manualQris===undefined?'recorded_orders':'manual_handover',cashFromRevenue,expectedCash:money(recorded.openFloat+cashFromRevenue+(recorded.cashIns||0)-(recorded.cashOuts||0))}
+}
+export async function calculateShiftCash(db:Pick<PrismaClient,'order'|'expense'>&Partial<Pick<PrismaClient,'cashEvent'|'refundRequest'>>,storeId:string,shift:{openedAt:Date;openFloat:number},asOf:Date):Promise<CashReconciliation> {
   const where={storeId,createdAt:{gte:shift.openedAt,lt:asOf}}
   if(db.refundRequest&&db.cashEvent){
     // Cash follows payout time, independent of the original order date or payment channel.
@@ -17,10 +24,10 @@ export async function calculateShiftCash(db:Pick<PrismaClient,'order'|'expense'>
     ])
     const gross=orders.filter(o=>o.status!=='refunded'||o.refundRequests.length>0)
     const sum=(method?:string)=>gross.filter(o=>!method||o.paymentMethod===method).reduce((s,o)=>s+o.finalAmount,0)-refunds.filter(r=>!method||r.order.paymentMethod===method).reduce((s,r)=>s+r.amount,0)
-    const audit=db.financeAuditLog&&refunds.length?await db.financeAuditLog.findMany({where:{storeId,entityType:'offline_refund',entityId:{in:refunds.map(r=>r.id)}},select:{entityId:true,newValue:true}}):[]
-    const payouts=new Map(audit.map(a=>[a.entityId,JSON.parse(a.newValue||'{}').payoutMethod]))
-    const bankReceived=(method:string)=>gross.filter(o=>o.paymentMethod===method).reduce((s,o)=>s+o.finalAmount,0)-refunds.filter(r=>r.order.paymentMethod===method&&(payouts.get(r.id)|| (method==='cash'?'cash':'external'))==='external').reduce((s,r)=>s+r.amount,0)
-    const revenue=sum(),qris=bankReceived('qris'),otherNonCash=POS_MANUAL_PAYMENT_METHODS.filter(m=>!['cash','qris'].includes(m)).reduce((s,m)=>s+bankReceived(m),0)
+    // Channel receipts are original collections. Refunds are separate payouts;
+    // subtracting them from QRIS here would count them twice when the cashier declares total QRIS collected.
+    const collected=(method:string)=>gross.filter(o=>o.paymentMethod===method).reduce((s,o)=>s+o.finalAmount,0)
+    const revenue=sum(),qris=collected('qris'),otherNonCash=POS_MANUAL_PAYMENT_METHODS.filter(m=>!['cash','qris'].includes(m)).reduce((s,m)=>s+collected(m),0)
     const expenseAmount=money(expenses.reduce((s,e)=>s+e.amount,0)/100),cashIns=events.filter(e=>e.type==='cash_in').reduce((s,e)=>s+e.amount,0),cashOuts=events.filter(e=>e.type==='cash_out').reduce((s,e)=>s+e.amount,0)
     const cashFromRevenue=money(gross.filter(o=>o.paymentMethod==='cash').reduce((s,o)=>s+o.finalAmount,0)-expenseAmount)
     return {version:1,source:'occurrence_cash_ledger',windowStart:shift.openedAt.toISOString(),windowEnd:asOf.toISOString(),revenue,expenses:expenseAmount,qris,otherNonCash,cashFromRevenue,openFloat:shift.openFloat,cashIns,cashOuts,expectedCash:money(shift.openFloat+cashFromRevenue+cashIns-cashOuts)}

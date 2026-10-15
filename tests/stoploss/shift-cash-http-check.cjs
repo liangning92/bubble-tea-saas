@@ -55,7 +55,7 @@ assert.equal((await prisma.shiftSession.findUnique({where:{id:session.id}})).sta
 const reviewedSnapshot={sessionId:session.id,updatedAt:session.updatedAt.toISOString(),openFloat:session.openFloat,revenue:calc.revenue,expenses:calc.expenses,qris:calc.qris};
 assert.equal((await posSend('POST','/pos-cash/shifts/close',{actualCash:50000,manualReceipts:amounts,reviewedSnapshot:{...reviewedSnapshot,revenue:0}})).status,409,'Changed preview cannot close the shift');
 assert.equal((await prisma.shiftSession.findUnique({where:{id:session.id}})).status,'open');
-const closed=await posSend('POST','/pos-cash/shifts/close',{actualCash:50000,manualReceipts:amounts,reviewedSnapshot});assert.equal(closed.status,200);const handover=(await closed.json()).data;assert.deepEqual(handover.report.manualReceipts,amounts);assert.equal(handover.actualCash,50000);assert.equal(handover.expectedCash,1426000);assert.equal(handover.cashWarning.difference,-1376000);assert.equal(handover.cashWarning.status,'pending');
+const closed=await posSend('POST','/pos-cash/shifts/close',{actualCash:50000,manualReceipts:amounts,reviewedSnapshot});assert.equal(closed.status,200);const handover=(await closed.json()).data;assert.deepEqual(handover.report.manualReceipts,amounts);assert.equal(handover.actualCash,50000);assert.equal(handover.expectedCash,2226000);assert.equal(handover.report.cashReconciliation.recordedQris,1000000);assert.equal(handover.report.cashReconciliation.qris,200000);assert.equal(handover.cashWarning.difference,-2176000);assert.equal(handover.cashWarning.status,'pending');
 const report=JSON.parse((await prisma.config.findUnique({where:{storeId_key:{storeId:'store',key:'pos.shift.report:'+session.id}}})).value);assert.deepEqual(report.manualReceipts,amounts);assert.equal(report.reportedBy,'cashier');
 const revenueRead=await fetch(base+'/api/revenue/handover-receipts?period=today',{headers:{Authorization:'Bearer '+ownerToken}});assert.equal(revenueRead.status,200);const receipts=(await revenueRead.json()).data;assert.deepEqual(receipts.totals,amounts);assert.equal(receipts.list[0].id,session.id);
 assert.equal((await posSend('GET','/revenue/handover-receipts?period=today')).status,403);
@@ -73,11 +73,19 @@ for(const roleToken of [ownerToken,managerToken]){
 }
 assert.equal((await call(ownerToken,'DELETE','/config/store/'+encodeURIComponent(warningKey))).status,403);
 const opened=await posSend('POST','/pos-cash/shifts/open',{openFloat:100000,shift:'day'});assert.equal(opened.status,201,'Pending cash warning must not prevent next shift');
+const openedSession=(await opened.json()).data;
+const floatLinkKey='pos.shift.float-event:'+openedSession.id;
+const floatLink=JSON.parse((await prisma.config.findUniqueOrThrow({where:{storeId_key:{storeId:'store',key:floatLinkKey}}})).value);
+const correction=await call(ownerToken,'PUT','/finance/shift-sessions/'+openedSession.id+'/correction',{updatedAt:openedSession.updatedAt,openFloat:42000,reason:'Synthetic reserve allocation correction without cash movement'});assert.equal(correction.status,200);
+assert.equal((await prisma.cashEvent.findUniqueOrThrow({where:{id:floatLink.eventId}})).amount,42000);
+const reserveAudit=await prisma.financeAuditLog.findFirstOrThrow({where:{entityId:openedSession.id,entityType:'shift_correction'}});assert.equal(JSON.parse(reserveAudit.newValue).openingFloatCorrection.returnedReserve,58000);assert.equal(JSON.parse(reserveAudit.newValue).openingFloatCorrection.cashMovement,0);
+assert.equal((await call(ownerToken,'POST','/config',{storeId:'store',key:floatLinkKey,value:{eventId:'foreign'},category:'pos'})).status,403);
+
 const day=new Date(Date.now()+7*3600000).toISOString().slice(0,10),read=await call(ownerToken,'GET','/finance/shift-sessions?startDate='+day+'&endDate='+day);assert.equal(read.status,200);assert.equal((await read.json()).data.sessions.find(s=>s.id===session.id).cashWarning.status,'pending');
 const auditedBefore=await prisma.financeAuditLog.count({where:{entityType:'shift_cash_warning'}});
-const reviewed=await call(ownerToken,'POST',reviewPath,{note:'Synthetic counted cash verified by administrator'});assert.equal(reviewed.status,200);const reviewedData=(await reviewed.json()).data;assert.equal(reviewedData.status,'reviewed');assert.equal(reviewedData.reviewedBy,'owner');assert.equal(reviewedData.difference,-1376000);
+const reviewed=await call(ownerToken,'POST',reviewPath,{note:'Synthetic counted cash verified by administrator'});assert.equal(reviewed.status,200);const reviewedData=(await reviewed.json()).data;assert.equal(reviewedData.status,'reviewed');assert.equal(reviewedData.reviewedBy,'owner');assert.equal(reviewedData.difference,-2176000);
 assert.equal((await call(ownerToken,'POST',reviewPath,{note:'Retry original review'})).status,200);assert.equal(await prisma.financeAuditLog.count({where:{entityType:'shift_cash_warning'}}),auditedBefore+1);
-assert.equal((await prisma.shiftSession.findUnique({where:{id:session.id}})).actualCash,50000);assert.equal(JSON.parse((await prisma.config.findUnique({where:{storeId_key:{storeId:'store',key:'pos.shift.report:'+session.id}}})).value).cashDifference,-1376000);
+assert.equal((await prisma.shiftSession.findUnique({where:{id:session.id}})).actualCash,50000);assert.equal(JSON.parse((await prisma.config.findUnique({where:{storeId_key:{storeId:'store',key:'pos.shift.report:'+session.id}}})).value).cashDifference,-2176000);
 console.log('PASS exact shift formula with scope/exclusions, threshold mismatch closes and next shift opens, durable warning only administrator can review, config bypass blocked, immutable amounts and one audit on retries');
 const {expenseAmountFromInput,expenseCalendarDate}=require(path.resolve('client-admin/src/utils/expenseInput.ts'));
 for(const text of ['4580000','4.580.000','4,580,000'])assert.equal(expenseAmountFromInput(text),458000000);

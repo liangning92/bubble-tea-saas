@@ -12,7 +12,7 @@ import { config } from '../config/env'
 import type { AuthUser } from '../middlewares/auth'
 import { userAccessV2 } from './StaffPermissionV2Service'
 import { assignedStaffAccess } from './StaffPermissionService'
-import { calculateShiftCash, cashWarningFor, CASH_WARNING_PREFIX } from './ShiftCashReconciliation'
+import { calculateShiftCash, applyHandoverQris, cashWarningFor, CASH_WARNING_PREFIX } from './ShiftCashReconciliation'
 import { loadShiftSummaryEvidence } from './ShiftSummaryEvidence'
 import { shiftHandoverFinancials } from './ShiftHandoverFinancials'
 import { summarizeShiftPurchases } from './PosExpenseService'
@@ -106,6 +106,7 @@ export async function applyOfflineOperation(storeId:string,body:unknown) {
    if(overlap)throw new OfflineOperationError('SHIFT_SESSIONS_OVERLAP')
    result=await tx.shiftSession.create({data:{id:input.sessionId,storeId,staffId:actor.staffId,shift:input.data.shift,openFloat:input.data.openFloat,status:'open',openedAt:at}})
    await tx.cashEvent.create({data:{id:input.id,storeId,staffId:actor.staffId,type:'float',amount:input.data.openFloat,shift:result.shift,createdAt:at,note:'Offline shift opening'}})
+   await tx.config.create({data:{storeId,key:'pos.shift.float-event:'+input.sessionId,category:'shift_report',value:JSON.stringify({version:1,eventId:input.id})}})
   }else if(input.kind==='refund'){
    const order=await tx.order.findFirst({where:{storeId,orderNumber:input.data.orderNumber},include:{items:true}})
    if(!order)throw new OfflineOperationError('OFFLINE_REFUND_ORDER_PENDING')
@@ -143,7 +144,7 @@ export async function applyOfflineOperation(storeId:string,body:unknown) {
     if(new Set(numbers).size!==numbers.length)throw new OfflineOperationError('OFFLINE_ORDER_MANIFEST_INVALID',400)
     const posted=await tx.order.findMany({where:{storeId,orderNumber:{in:numbers}},select:{orderNumber:true,finalAmount:true,createdAt:true}})
     if(posted.length!==numbers.length||input.data.orders.some(o=>!posted.some(p=>p.orderNumber===o.orderNumber&&p.finalAmount===o.finalAmount&&p.createdAt>=shift.openedAt&&p.createdAt<at)))throw new OfflineOperationError('OFFLINE_ORDERS_NOT_RECONCILED')
-    const cashReconciliation=await calculateShiftCash(tx,storeId,shift,at)
+    const cashReconciliation=applyHandoverQris(await calculateShiftCash(tx,storeId,shift,at),input.data.manualReceipts?.qris)
     const captured=await loadShiftSummaryEvidence(tx,storeId,at,shift)
     const purchaseExpenses=await summarizeShiftPurchases(storeId,shift.openedAt,at,tx)
     const difference=input.data.actualCash-cashReconciliation.expectedCash
