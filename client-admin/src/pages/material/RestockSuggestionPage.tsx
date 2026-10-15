@@ -13,6 +13,8 @@ import {
 export function RestockSuggestionPage() {
   const { t, i18n } = useTranslation();
   const [days, setDays] = useState(15);
+  const qty = (value: unknown) => value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 2 });
+  const category = (value: string) => ({ raw_material: t('material.typeRawMaterial'), semi_finished: t('material.typeSemiFinished'), finished_goods: t('material.typeFinishedGoods'), packaging: t('inventory.packaging') } as Record<string,string>)[value] || value;
 
   const { data: suggestionsData, isLoading } = useQuery({
     queryKey: ["restock-suggestions", days],
@@ -128,7 +130,7 @@ export function RestockSuggestionPage() {
                   className="border-b border-border last:border-0"
                 >
                   <td className="py-3 font-medium">{formatItemName(item, i18n.language)}</td>
-                  <td className="py-3 text-gray-600">{item.category}</td>
+                  <td className="py-3 text-gray-600">{category(item.category)}</td>
                   <td className="py-3 text-right">
                     <span
                       className={
@@ -137,16 +139,16 @@ export function RestockSuggestionPage() {
                           : ""
                       }
                     >
-                      {item.currentStock.toFixed(2)} {item.unit}
+                      {qty(item.currentStock)} {item.unit}
                     </span>
                   </td>
                   <td className="py-3 text-right text-gray-600">
-                    {item.dailyUsage.toFixed(2)} {item.unit}/
+                    {qty(item.dailyUsage)} {item.unit}/
                     {t("material.day") || "days"}
                   </td>
                   <td className="py-3 text-right">
                     <span className="text-orange-500 font-medium">
-                      {item.suggestQty} {item.unit}
+                      {qty(item.suggestQty)} {item.unit}
                     </span>
                   </td>
                   <td className="py-3 text-right">
@@ -177,7 +179,7 @@ export function RestockSuggestionPage() {
                   <div className="font-medium">{alert.inventoryName}</div>
                   <div className="text-sm text-gray-500">
                     Batch: {alert.batchNumber} |{" "}
-                    {t("material.quantity") || "Quantity"}: {alert.quantity}{" "}
+                    {t("material.quantity") || "Quantity"}: {qty(alert.quantity)}{" "}
                     {alert.unit}
                   </div>
                 </div>
