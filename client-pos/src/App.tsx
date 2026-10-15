@@ -1,3 +1,4 @@
+import {syncManager} from './db/offline'
 import {OfflineRefundInbox} from './components/OfflineRefundInbox'
 import {StaffAccessProvider,useStaffAccess} from '../../shared/StaffAccess'
 import {StaffApprovalDialog} from '../../shared/StaffApprovalDialog'
@@ -5,7 +6,7 @@ import {StaffApprovalInbox} from '../../shared/StaffApprovalInbox'
 import api from './services/api'
 import {useLocation} from 'react-router-dom'
 import { ReceiptHandoverModal } from './components/ReceiptHandoverModal'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { RouteLoading } from './components/RouteLoading'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { UpdateNotification } from './components/UpdateNotification'
@@ -40,7 +41,9 @@ function RootRoute() {
 const TvDisplayPage = lazy(() => import('./pages/TvDisplayPage').then(module => ({ default: module.TvDisplayPage })))
 
 function App() {
-  const {user,apiUrl}=useAuthStore()
+  const {user,apiUrl,token}=useAuthStore()
+  useEffect(()=>{syncManager.startSync(30000);const resume=()=>{void syncManager.syncPendingOrders()};window.addEventListener('pos-session-restored',resume);return()=>{window.removeEventListener('pos-session-restored',resume);syncManager.destroy()}},[])
+  useEffect(()=>{if(user?.id)void syncManager.syncPendingOrders()},[user?.id,user?.storeId,apiUrl,token])
   const installing=useOrderStore(state=>state.isInstallingUpdate)
   return (
     <StaffAccessProvider api={api} actor={user?[user.id,user.storeId,apiUrl||'pos'].join(':'):''} owner={user?.role==='admin'}><StaffApprovalDialog/>
