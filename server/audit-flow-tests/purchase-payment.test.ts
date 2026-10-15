@@ -1,7 +1,7 @@
 import {afterAll,test,expect} from '@jest/globals'
 import {randomUUID} from 'crypto'
 import prisma from '../src/config/database'
-import {createPurchaseOrder,editPurchaseOrder,receivePurchaseOrder,reversePurchaseReceipt,cancelPurchaseOrder,refundPurchasePayment} from '../src/services/PurchaseOrderService'
+import {createPurchaseOrder,editPurchaseOrder,receivePurchaseOrder,reversePurchaseReceipt,cancelPurchaseOrder,refundPurchasePayment,confirmPurchasePayment} from '../src/services/PurchaseOrderService'
 import {inventoryQuantityCost} from '../src/services/InventoryQuantityService'
 import {reverseTransfer} from '../src/services/FinanceAccountService'
 import {getCashFlow,getProfitAnalysis} from '../src/services/FinanceService'
@@ -205,3 +205,19 @@ test('correction markers stay private and cannot be reset through generic config
  }
  const result=await api.get('/api/config').query({storeId:f.store.id}).set('Authorization',admin.token);expect(result.status).toBe(200);expect(result.body.data.shiftSettings).toEqual({});expect(Object.keys(result.body.data).some(key=>/reversal|leave.period/.test(key))).toBe(false);
 });
+
+test('historical confirmation preserves original items and payment date, links exactly once, rejects stale or foreign confirmation',async()=>{
+ const f=await fixture(),other=await fixture(),order=await createPurchaseOrder({storeId:f.store.id,items:[{inventoryId:f.inv.id,quantity:6.9,inputUnit:'kg',unitCost:6765}]})
+ const paidAt=new Date('2026-01-15T00:00:00+07:00')
+ await expect(confirmPurchasePayment(order.id,other.store.id,'admin',order.updatedAt.toISOString(),paidAt,'verified')).rejects.toThrow('not found')
+ await expect(confirmPurchasePayment(order.id,f.store.id,'admin',new Date(0).toISOString(),paidAt,'verified')).rejects.toThrow('CHANGED')
+ await expect(confirmPurchasePayment(order.id,f.store.id,'admin',order.updatedAt.toISOString(),new Date('2100-01-01'),'verified')).rejects.toThrow('DATE')
+ const updated=await confirmPurchasePayment(order.id,f.store.id,'admin',order.updatedAt.toISOString(),paidAt,'actual payment verified')
+ expect(updated.financeExpenseId).toBeTruthy();expect(updated.items.map((i:any)=>i.id)).toEqual(order.items.map((i:any)=>i.id));expect(updated.totalAmount).toBe(46679)
+ const expense=await prisma.expense.findFirstOrThrow({where:{referenceId:order.id,referenceType:'purchase'}})
+ expect(expense.date).toEqual(paidAt);expect(expense.amount).toBe(4667900)
+ await expect(confirmPurchasePayment(order.id,f.store.id,'admin',updated.updatedAt.toISOString(),paidAt,'retry')).rejects.toThrow('ALREADY_PAID')
+ expect(await prisma.expense.count({where:{referenceId:order.id}})).toBe(1)
+ expect(await prisma.financeAuditLog.count({where:{entityId:order.id,action:'confirm_payment'}})).toBe(1)
+ expect((await prisma.inventory.findUniqueOrThrow({where:{id:f.inv.id}})).currentStock).toBe(0)
+})

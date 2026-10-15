@@ -5,7 +5,7 @@ import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../../stores/auth'
 import { expenseApi, reimbursementApi } from '../../services/api'
 import { Plus, X, Trash2, Calendar, Tag, Upload, Download, Settings, Edit2, Check, RefreshCw, ArrowLeft } from 'lucide-react'
@@ -101,7 +101,10 @@ export function ExpenseListPage() {
   const { user } = useAuthStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const [searchParams] = useSearchParams()
+  const purchaseReference = searchParams.get('purchase')
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const displayedExpenses = purchaseReference ? expenses.filter(e => e.referenceId===purchaseReference && ['purchase','purchase_refund'].includes(e.referenceType||'')) : expenses
   const [summary, setSummary] = useState<ExpenseSummary>({
     rent: 0,
     utilities: 0,
@@ -925,11 +928,12 @@ export function ExpenseListPage() {
             </div>
           </div>
 
+          {purchaseReference&&<div className="mb-3 p-3 bg-blue-50 rounded-lg text-sm flex flex-wrap gap-3"><span>{t('purchaseBoard.focusedExpense')}</span><Link to="/finance/expenses" className="text-primary underline">{t('purchaseBoard.allExpenses')}</Link></div>}
           {/* Expense List */}
           <div className="p-4 space-y-3">
             {isLoading ? (
               <div className="text-center py-8 text-gray-500">{t('common.loading')}</div>
-            ) : expenses.length === 0 ? (
+            ) : displayedExpenses.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-xl">
                 <p className="text-gray-500">{t('expense.noExpenses')}</p>
                 <button
@@ -942,7 +946,7 @@ export function ExpenseListPage() {
                 </button>
               </div>
             ) : (
-              expenses.map((expense) => {
+              displayedExpenses.map((expense) => {
                 const catColor = getCategoryColor(expense.category)
                 const catLabel = getCategoryLabel(expense.category)
 
