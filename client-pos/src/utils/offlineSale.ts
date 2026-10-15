@@ -6,7 +6,7 @@ import { readCheckoutGeneration, readCheckoutRecovery } from './checkoutIntent'
 import { posOrderNumber } from './orderNumber'
 
 const cacheKey = (backend: string, storeId: string, path: string) => `offline.snapshot:${encodeURIComponent(backend)}:${encodeURIComponent(storeId)}:${path}`
-const allowed = ['/products', '/config', '/channels', '/shifts', '/pos-cash/shifts/current', '/marketing/activity-prices', '/marketing/activities/offline-snapshot']
+const allowed = ['/products', '/config', '/channels', '/shifts', '/pos-cash/shifts/current', '/marketing/activity-prices', '/marketing/activities/offline-snapshot', '/staff-permissions/me']
 export function snapshotPath(url: string): string | null {
   const path = url.split('?')[0]
   return allowed.includes(path) ? path : null
@@ -32,6 +32,7 @@ function cashierProduct(value: Record<string, unknown>): Record<string, unknown>
 }
 export async function saveSnapshot(path: string, data: unknown, backend: string, storeId: string, complete: boolean): Promise<void> {
   if (localIdentity(storeId) !== backend) throw new Error('CHECKOUT_BACKEND_CHANGED')
+  const actorId = readBackendAuth().user?.id
   if (!complete) return
   let snapshot = JSON.parse(JSON.stringify(data))
   if (path === '/products') snapshot = {...primitiveFields(snapshot,['code','timestamp']),data:{list:(snapshot.data?.list || []).map(cashierProduct)}}
@@ -46,12 +47,14 @@ export async function saveSnapshot(path: string, data: unknown, backend: string,
   const digest = await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(snapshot)))
   const version = Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('')
   if (localIdentity(storeId) !== backend) throw new Error('CHECKOUT_BACKEND_CHANGED')
-  await db.config.put({key:cacheKey(backend,storeId,path),value:{data:snapshot,backend,storeId,version,complete:true},updatedAt:new Date()})
+  if (readBackendAuth().user?.id !== actorId) throw new Error('CHECKOUT_AUTH_CHANGED')
+  await db.config.put({key:cacheKey(backend,storeId,path),value:{data:snapshot,backend,storeId,version,complete:true,...(path === '/staff-permissions/me' ? {actorId} : {})},updatedAt:new Date()})
 }
 export async function readSnapshot(path: string, storeId: string): Promise<unknown> {
   const backend = localIdentity(storeId)
   const row = await db.config.get(cacheKey(backend,storeId,path))
   if (!row || row.value.complete !== true || row.value.backend !== backend || row.value.storeId !== storeId) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
+  if (path === '/staff-permissions/me' && (row.value.actorId !== readBackendAuth().user?.id || Date.now()-new Date(row.updatedAt).getTime() > 24*60*60*1000 || Date.now()<new Date(row.updatedAt).getTime())) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
   return row.value.data
 }
 

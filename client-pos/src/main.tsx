@@ -31,7 +31,16 @@ async function start(){
       }
     }
   }catch{/* Unavailable or expired handoffs use the normal login screen. */}
+  if (import.meta.env.PROD && window.location.protocol === 'https:' && 'serviceWorker' in navigator) {
+    void navigator.serviceWorker.register('/pos-sw.js').catch(error => console.warn('[OfflineShell] Cache installation failed', error))
+  }
+  connectionManager.addListener(event => {
+    if ((event.type === 'connected' || event.type === 'health-check') && useAuthStore.getState().token) {
+      window.dispatchEvent(new Event('pos-session-restored'))
+    }
+  })
   connectionManager.startHealthCheck(30000)
+  void connectionManager.connect().catch(() => {})
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <ErrorBoundary><QueryClientProvider client={queryClient}><HashRouter>

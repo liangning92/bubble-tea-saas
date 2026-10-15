@@ -1,3 +1,4 @@
+import { serverUnavailable } from '../utils/serverUnavailable'
 import { ReceiptRecovery } from '../components/ReceiptRecovery'
 import { submitSavedReceipt } from '../utils/receiptRecovery'
 import dateLocaleI18n from '../i18n'
@@ -24,7 +25,7 @@ import type { PromotionTextStyle } from '../../../shared/components/PromotionTex
 import { reportReceivedPayment } from '../utils/receivedReceipt'
 import { paymentProblem } from '../utils/paymentValidation'
 import { recordLocalSale } from '../utils/offlineSale'
-import { backendAuthHeaders } from '../utils/backendIdentity'
+import { backendAuthHeaders, currentBackendIdentity } from '../utils/backendIdentity'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, discardPreparedCheckout, definiteFirstRejection, acknowledgeRecoveredCheckout, quarantineCheckoutRecovery, type CheckoutIntent } from '../utils/checkoutIntent'
 import { ScanPage } from './ScanPage'
@@ -952,7 +953,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
 
     loadProducts()
-    return () => { cancelled = true }
+    window.addEventListener('pos-session-restored', loadProducts)
+    return () => { cancelled = true; window.removeEventListener('pos-session-restored', loadProducts) }
   }, [user?.storeId])
 
   // 定期同步产品 (每5分钟检查一次)
@@ -978,10 +980,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
           if (hasNewer) {
             // Fetch all products
-            const res = await fetch(`${connectionManager.getCurrentUrl()}/products?storeId=${storeId}&status=active`, {
-              headers: backendAuthHeaders(connectionManager.getCurrentUrl(),storeId)
-            })
-            const data = await res.json()
+            const res = await posApi.getProducts(storeId)
+            const data = res.data
 
             if (data?.data?.list) {
               const localProducts: LocalProduct[] = data.data.list.map((p: any) => ({
@@ -1431,9 +1431,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('focus', handleFocus)
+    window.addEventListener('pos-session-restored', handleFocus)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('focus', handleFocus)
+      window.removeEventListener('pos-session-restored', handleFocus)
     }
   }, [loadConfig])
 
@@ -1754,7 +1756,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
     const unsubscribe = connectionManager.addListener(updateConnectionStatus)
     // 初始化状态
-    setConnectionStatus(connectionManager.getState() === 'offline' ? 'offline' : connectionManager.getState() === 'connecting' ? 'connecting' : 'connected')
+    setConnectionStatus(connectionManager.isConnected() ? 'connected' : navigator.onLine ? 'connecting' : 'offline')
     return unsubscribe
   }, [])
 
@@ -2154,7 +2156,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setQuoteLoading(true);setQuoteError('')
     const timer=setTimeout(()=>{
       const apply=(value:any)=>{if(!live)return;const q={...value,inputKey:quoteInputKey};if(showPaymentModal&&lastActivityPrice.current?.inputKey===quoteInputKey&&lastActivityPrice.current.amount!==q.grandTotal){setActivityPriceNeedsConfirmation(true);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>setActivityPriceNeedsConfirmation(false)})}lastActivityPrice.current={inputKey:quoteInputKey,amount:q.grandTotal};setUnifiedQuote(q);setDiscountAmount(q.discount-Math.floor(q.pointsRedeemed/100));setAppliedPromotion(q.applied?{id:q.applied.id,name:q.applied.name,amount:q.discount,type:q.applied.kind,description:q.applied.name}:null);setIsManualDiscount(false)}
-      activitiesApi.quote(quoteInput).then(r=>apply(r.data.data)).catch(async e=>{try{if(e.response)throw e;const snapshot=await activitiesApi.offlineSnapshot();apply(cachedActivityQuote(snapshot.data.data,quoteInput))}catch(error:any){if(live){setUnifiedQuote(null);setQuoteError(error.response?.data?.message||error.message)}}}).finally(()=>{if(live)setQuoteLoading(false)})
+      activitiesApi.quote(quoteInput).then(r=>apply(r.data.data)).catch(async e=>{try{if(!serverUnavailable(e))throw e;const snapshot=await activitiesApi.offlineSnapshot();apply(cachedActivityQuote(snapshot.data.data,quoteInput))}catch(error:any){if(live){setUnifiedQuote(null);setQuoteError(error.response?.data?.message||error.message)}}}).finally(()=>{if(live)setQuoteLoading(false)})
     },200)
     return()=>{live=false;clearTimeout(timer)}
   },[quoteInputKey,activityRevision])
@@ -3359,6 +3361,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           </div>}
         </section>}
 
+        {!!recovery?.rows.some(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()) && <details role="status" className="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950">
+          <summary className="cursor-pointer font-medium">{t('offlineSale.queue')} ({recovery.rows.filter(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()).length})</summary>
+          <ul className="max-h-36 overflow-y-auto mt-2 space-y-1">{recovery.rows.filter(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()).map(row=><li key={row.localId} className="flex flex-wrap justify-between gap-x-4"><span className="break-all">{row.orderNumber}</span><span>{formatCurrency(row.finalAmount)} · {t(row.status==='review'?'offlineSale.review':'offlineSale.awaitUpload')}</span></li>)}</ul>
+        </details>}
         {!useAuthStore.getState().token && <button type="button" className="p-2 bg-amber-50 underline" onClick={()=>navigate('/login')}>{t('offlineSale.reconnectLogin')}</button>}
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
         <header className="bg-primary px-4 py-3 min-h-[56px] flex items-center justify-between gap-4 select-none">
