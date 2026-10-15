@@ -1,3 +1,5 @@
+import { CorrectionDialog } from '../../components/CorrectionDialog'
+import { staffApi } from '../../services/api'
 import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
@@ -31,6 +33,8 @@ export function HygieneTodayTasksPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [selectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [editingTask,setEditingTask]=useState<any>(null)
+  const {data:staffData}=useQuery({queryKey:['task-staff'],queryFn:()=>staffApi.list({pageSize:100})})
   const [selectedTask, setSelectedTask] = useState<any>(null)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [showApproveModal, setShowApproveModal] = useState(false)
@@ -301,6 +305,7 @@ export function HygieneTodayTasksPage() {
 
                 {/* Status & Actions */}
                 <div className="flex items-center gap-3">
+                  {['pending','overdue'].includes(task.status)&&<button className="text-sm text-primary" onClick={()=>setEditingTask(task)}>{t('entryFix.correctTask')}</button>}
                   {getStatusBadge(task.status)}
 
                   {task.status === 'pending' && (
@@ -521,6 +526,7 @@ export function HygieneTodayTasksPage() {
             </div>
           </AdminDialog>
       )}
+      {editingTask&&<CorrectionDialog title={t('entryFix.correctTask')} onClose={()=>setEditingTask(null)} fields={[{key:'name',label:t('entryFix.name'),value:editingTask.name},{key:'date',label:t('entryFix.date'),value:editingTask.date,type:'date'},{key:'time',label:t('entryFix.time'),value:editingTask.time,type:'time'},{key:'staffId',label:t('entryFix.assignee'),value:editingTask.staffId||'',options:[{value:'',label:'—'},...(staffData?.data?.data?.list||[]).map((s:any)=>({value:s.id,label:s.name}))]},{key:'note',label:t('entryFix.note'),value:editingTask.note||'',required:false}]} onSave={async data=>{await hygieneApi.editTask(editingTask.id,{...data,staffId:data.staffId||null,priority:editingTask.priority,expectedVersion:editingTask.updatedAt});await queryClient.invalidateQueries({queryKey:['hygiene-tasks']})}}/>}
     </div>
   )
 }

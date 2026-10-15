@@ -138,7 +138,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
     const quantity=convertQuantity(data.quantity,inputUnit,inventory.unit,pack)
     if(quantity<=0)throw new Error('INVALID_QUANTITY')
     const totalAmount=Math.round((unitCost||0)*data.quantity)
-    const baseCost=quantity>0?Math.round(totalAmount/quantity):0
+    const baseCost=quantity>0?totalAmount/quantity:0
     if(!Number.isSafeInteger(totalAmount)||totalAmount>2147483647||baseCost>2147483647)throw new Error('INVALID_STOCK_COST')
     const logNote=JSON.stringify({version:1,kind:'receipt',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit,ledgerUnit:inventory.unit,ledgerQuantity:quantity,inputUnitCost:unitCost??0,pack,note:note||''})
 
@@ -148,7 +148,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
     if (unitCost !== undefined) {
       const totalCurrentValue = avgCost * Math.max(0,inventory.currentStock)
       const totalNewValue = totalAmount
-      newAvgCost = Math.round((totalCurrentValue + totalNewValue) / (Math.max(0,inventory.currentStock) + quantity))
+      newAvgCost = (totalCurrentValue + totalNewValue) / (Math.max(0,inventory.currentStock) + quantity)
     }
 
     const dates=receiptBatchDates(data.manufacturingDate,data.expiryDate)

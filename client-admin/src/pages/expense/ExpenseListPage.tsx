@@ -569,7 +569,7 @@ export function ExpenseListPage() {
   }
 
   const openEditModal = (expense: Expense) => {
-    if (expense.referenceType === 'salary') return
+    if (['salary','purchase','purchase_refund'].includes(expense.referenceType||'')) return
     setSelectedExpense(expense)
     // Format amount with thousand separators for display
     const displayAmount = (expense.amount / 100).toLocaleString('id-ID', { maximumFractionDigits: 0 })
@@ -950,7 +950,7 @@ export function ExpenseListPage() {
                   <div
                     key={expense.id}
                     className="bg-white rounded-xl shadow-sm p-4 hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={canWrite && expense.referenceType !== 'salary' ? () => openEditModal(expense) : undefined}
+                    onClick={canWrite && !['salary','purchase','purchase_refund'].includes(expense.referenceType||'') ? () => openEditModal(expense) : undefined}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -966,8 +966,8 @@ export function ExpenseListPage() {
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-lg text-gray-900">{formatCurrency(expense.amount)}</p>
-                        {expense.referenceType !== 'salary' && <div className="flex items-center gap-1 mt-1">
+                        <p className="font-bold text-lg text-gray-900">{formatCurrency(expense.amount)}</p>{['purchase','purchase_refund'].includes(expense.referenceType||'')&&<Link to="/inventory/purchase-orders" className="text-xs text-primary underline">{t('entryFix.viewSource')}</Link>}
+                        {!['salary','purchase','purchase_refund'].includes(expense.referenceType||'') && <div className="flex items-center gap-1 mt-1">
                           <button
                             onClick={(e) => {
                               e.stopPropagation()

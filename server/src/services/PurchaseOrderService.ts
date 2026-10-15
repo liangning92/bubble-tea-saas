@@ -2,7 +2,7 @@ import {recalculateInventoryConsumers} from './InventoryQuantityService';
 import {loadInventoryActors} from '../utils/inventoryActors';
 import {alignInventoryBatches,receiptBatchDates} from './InventoryBatchService'
 import prisma from '../config/database';
-import { calculateProductCost } from './ProductService';
+
 import { convertQuantity, validatePackage } from '../utils/inventoryUnits';
 import { randomUUID, createHash } from 'crypto';
 export interface PurchaseOrderFilter {
@@ -21,7 +21,8 @@ async function view(order: any, db: any = prisma, suppliedActors?: Awaited<Retur
         return null;
     const inventory = await db.inventory.findMany({ where: { storeId: order.storeId, id: { in: order.items.map((i: any) => i.inventoryId) } }, select: { id: true, name: true, unit: true } });
     const actors = suppliedActors || await loadInventoryActors(db, order.storeId, [order.createdBy, order.receivedBy]);
-    return { ...order, createdByActor: actors.get(order.createdBy) || null, receivedByActor: actors.get(order.receivedBy) || null, items: order.items.map((i: any) => ({ ...i, inventory: inventory.find((m: any) => m.id === i.inventoryId) })) };
+    const refunded=!!(await db.expense.findFirst({where:{storeId:order.storeId,referenceType:'purchase_refund',referenceId:order.id},select:{id:true}}));
+    return { ...order, refunded, createdByActor: actors.get(order.createdBy) || null, receivedByActor: actors.get(order.receivedBy) || null, items: order.items.map((i: any) => ({ ...i, lineAmount:i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)), inventory: inventory.find((m: any) => m.id === i.inventoryId) })) };
 }
 export async function getPurchaseOrders(filter: PurchaseOrderFilter) {
     const where: any = { storeId: filter.storeId };
@@ -40,74 +41,71 @@ export async function getPurchaseOrders(filter: PurchaseOrderFilter) {
 }
 export async function getPurchaseOrderById(orderId: string) { return view(await prisma.purchaseOrder.findUnique({ where: { id: orderId }, include })); }
 export async function getPendingPurchaseOrders(storeId: string) { return getPurchaseOrders({ storeId, status: 'awaiting_receipt' }); }
-export async function createPurchaseOrder(data: {
-    storeId: string;
-    supplierId?: string;
-    expectedDate?: Date;
-    note?: string;
-    source?: string;
-    onlineOrderNumber?: string;
-    createdBy?: string;
-    requestId?: string;
-    items: {
-        inventoryId: string;
-        quantity: number;
-        unitCost: number;
-        inputUnit?: string;
-    }[];
-}) {
-    const fingerprint = createHash('sha256').update(JSON.stringify(data)).digest('hex');
-    const replay = async (db: any) => {
-        if (!data.requestId)
-            return null;
-        const prior = await db.purchaseOrder.findUnique({ where: { requestId: data.requestId }, include });
-        if (!prior)
-            return null;
-        if (prior.storeId !== data.storeId || prior.requestFingerprint !== fingerprint)
-            throw new PurchaseOrderError('PURCHASE_IDEMPOTENCY_CONFLICT');
-        return view(prior, db);
-    };
-    try {
-        return await prisma.$transaction(async (tx) => {
-            const previous = await replay(tx);
-            if (previous)
-                return previous;
-            if (data.supplierId && !await tx.supplier.findFirst({ where: { id: data.supplierId, storeId: data.storeId, isActive: true } }))
-                throw new PurchaseOrderError('Supplier does not belong to this store', 400);
-            if (!data.items.length || new Set(data.items.map(i => i.inventoryId)).size !== data.items.length)
-                throw new PurchaseOrderError('Duplicate or empty purchase items', 400);
-            const items = [];
-            let totalAmount = 0;
-            for (const item of data.items) {
-                const inventory = await tx.inventory.findFirst({ where: { id: item.inventoryId, storeId: data.storeId } });
-                if (!inventory)
-                    throw new PurchaseOrderError('Inventory does not belong to this store', 400);
-                if(inventory.type==='semi_finished'&&inventory.processRecipeId)throw new PurchaseOrderError('PROCESS_OUTPUT_IS_CONVERSION_ONLY',400);
-                if (!Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isSafeInteger(item.unitCost) || item.unitCost < 0)
-                    throw new PurchaseOrderError('Invalid quantity or cost', 400);
-                const saved = await tx.config.findUnique({ where: { storeId_key: { storeId: data.storeId, key: `inventoryPackage:${inventory.id}` } } });
-                const pack = saved ? validatePackage(JSON.parse(saved.value), inventory.unit) : null;
-                const inputUnit = item.inputUnit || inventory.unit;
-                const quantity = convertQuantity(item.quantity, inputUnit, inventory.unit, pack);
-                const amount = Math.round(item.quantity * item.unitCost);
-                totalAmount += amount;
-                const unitCost = Math.round(amount / quantity);
-                if (quantity <= 0 || !Number.isSafeInteger(totalAmount) || totalAmount > 2147483647 || !Number.isSafeInteger(unitCost) || unitCost > 2147483647)
-                    throw new PurchaseOrderError('Invalid purchase amount', 400);
-                items.push({ inventoryId: item.inventoryId, quantity, unitCost, inputQuantity: item.quantity, inputUnit, inputUnitCost: item.unitCost, packageSnapshot: JSON.stringify(pack) });
-            }
-            const order = await tx.purchaseOrder.create({ data: { storeId: data.storeId, supplierId: data.supplierId || null, orderNumber: `PO-${randomUUID()}`, source: data.source || 'admin', status: data.source === 'online' ? 'awaiting_receipt' : 'pending', onlineOrderNumber: data.onlineOrderNumber, createdBy: data.createdBy, requestId: data.requestId, requestFingerprint: fingerprint, expectedDate: data.expectedDate, note: data.note, totalAmount, items: { create: items } }, include });
-            return view(order, tx);
-        });
-    }
-    catch (error: any) {
-        if (error.code === 'P2002') {
-            const previous = await replay(prisma);
-            if (previous)
-                return previous;
-        }
-        throw error;
-    }
+export interface PurchaseInput {
+ storeId:string; supplierId?:string; expectedDate?:Date; note?:string; source?:string;
+ onlineOrderNumber?:string; createdBy?:string; requestId?:string;
+ items:Array<{inventoryId:string;quantity:number;inputUnit?:string;unitCost?:number;paidAmount?:number}>;
+}
+async function prepareItems(tx:any,data:PurchaseInput){
+ if(data.supplierId&&!await tx.supplier.findFirst({where:{id:data.supplierId,storeId:data.storeId,isActive:true}}))throw new PurchaseOrderError('SUPPLIER_STORE_MISMATCH',400);
+ if(!data.items.length||new Set(data.items.map(i=>i.inventoryId)).size!==data.items.length)throw new PurchaseOrderError('DUPLICATE_PURCHASE_ITEMS',400);
+ const items=[];let totalAmount=0;
+ const paid=data.items.every(i=>i.paidAmount!==undefined);
+ if(!paid&&data.items.some(i=>i.paidAmount!==undefined))throw new PurchaseOrderError('ALL_ITEMS_REQUIRE_PAID_AMOUNT',400);
+ for(const item of data.items){
+  const inv=await tx.inventory.findFirst({where:{id:item.inventoryId,storeId:data.storeId}});
+  if(!inv)throw new PurchaseOrderError('INVENTORY_STORE_MISMATCH',400);
+  if(inv.type==='semi_finished'&&inv.processRecipeId)throw new PurchaseOrderError('PROCESS_OUTPUT_IS_CONVERSION_ONLY',400);
+  if(!Number.isFinite(item.quantity)||item.quantity<=0)throw new PurchaseOrderError('INVALID_QUANTITY',400);
+  const saved=await tx.config.findUnique({where:{storeId_key:{storeId:data.storeId,key:`inventoryPackage:${inv.id}`}}});
+  const pack=saved?validatePackage(JSON.parse(saved.value),inv.unit):null;
+  const inputUnit=item.inputUnit||inv.unit;
+  let quantity:number;try{quantity=convertQuantity(item.quantity,inputUnit,inv.unit,pack)}catch{throw new PurchaseOrderError('INCOMPATIBLE_INVENTORY_UNITS',400)}
+  if(item.paidAmount===undefined&&(!Number.isFinite(item.unitCost)||item.unitCost!<0))throw new PurchaseOrderError('INVALID_PURCHASE_COST',400);
+  const amount=item.paidAmount??Math.round(item.quantity*item.unitCost!);
+  totalAmount+=amount;
+  if(!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(amount/quantity)||!Number.isFinite(amount/item.quantity)||!Number.isSafeInteger(amount)||amount<0||!Number.isSafeInteger(totalAmount)||totalAmount>2147483647||(paid&&totalAmount>21474836))throw new PurchaseOrderError('INVALID_PURCHASE_AMOUNT',400);
+  items.push({inventoryId:item.inventoryId,quantity,unitCost:amount/quantity,inputQuantity:item.quantity,inputUnit,inputUnitCost:amount/item.quantity,lineAmount:amount,packageSnapshot:JSON.stringify(pack)});
+ }
+ return {items,totalAmount,paid};
+}
+async function audit(tx:any,order:any,actor:string,action:string,oldValue:any,newValue:any){
+ await tx.financeAuditLog.create({data:{storeId:order.storeId,userId:actor,action,entityType:'purchase',entityId:order.id,description:action,oldValue:oldValue?JSON.stringify(oldValue):null,newValue:JSON.stringify(newValue)}});
+}
+async function syncExpense(tx:any,order:any){
+ if(!order.paidAt)return;
+ const materials=await tx.inventory.findMany({where:{storeId:order.storeId,id:{in:order.items.map((i:any)=>i.inventoryId)}},select:{id:true,name:true}});
+ const description=order.items.map((i:any)=>`${materials.find((m:any)=>m.id===i.inventoryId)?.name||'Material'} · ${i.inputQuantity??i.quantity} ${i.inputUnit||''}`).join('; ');
+ const value={amount:order.totalAmount*100,description,date:order.paidAt};
+ const old=await tx.expense.findFirst({where:{storeId:order.storeId,referenceType:'purchase',referenceId:order.id}});
+ if(old)await tx.expense.update({where:{id:old.id},data:value});
+ else if(order.totalAmount>0)await tx.expense.create({data:{...value,storeId:order.storeId,type:'supplies',category:'supplies',referenceType:'purchase',referenceId:order.id}});
+}
+export async function createPurchaseOrder(data:PurchaseInput){
+ const fingerprint=createHash('sha256').update(JSON.stringify(data)).digest('hex');
+ const replay=async(db:any)=>{if(!data.requestId)return null;const prior=await db.purchaseOrder.findUnique({where:{requestId:data.requestId},include});if(!prior)return null;if(prior.storeId!==data.storeId||prior.requestFingerprint!==fingerprint)throw new PurchaseOrderError('PURCHASE_IDEMPOTENCY_CONFLICT');return view(prior,db)};
+ try{return await prisma.$transaction(async tx=>{
+  const previous=await replay(tx);if(previous)return previous;
+  const {items,totalAmount,paid}=await prepareItems(tx,data);
+  const order=await tx.purchaseOrder.create({data:{storeId:data.storeId,supplierId:data.supplierId||null,orderNumber:`PO-${randomUUID()}`,source:data.source||'admin',status:data.source==='online'?'awaiting_receipt':'pending',onlineOrderNumber:data.onlineOrderNumber,createdBy:data.createdBy,requestId:data.requestId,requestFingerprint:fingerprint,expectedDate:data.expectedDate,note:data.note,totalAmount,paidAt:paid?new Date():null,items:{create:items}},include});
+  await syncExpense(tx,order);await audit(tx,order,data.createdBy||'system','create',null,order);return view(order,tx);
+ })}catch(e:any){if(e.code==='P2002'){const previous=await replay(prisma);if(previous)return previous}throw e}
+}
+export async function editPurchaseOrder(id:string,data:PurchaseInput,actor:string,expectedVersion:string,reason:string,ownerOnly=false){
+ return prisma.$transaction(async tx=>{
+  const old=await scopedOrder(tx,id,data.storeId);
+  if(ownerOnly&&old.createdBy!==actor)throw new PurchaseOrderError('PURCHASE_OWNER_REQUIRED',403);
+  if(!['pending','approved','awaiting_receipt'].includes(old.status))throw new PurchaseOrderError('REVERSE_RECEIPT_BEFORE_EDIT');
+  if(!reason.trim())throw new PurchaseOrderError('CORRECTION_REASON_REQUIRED',400);
+  const {items,totalAmount,paid}=await prepareItems(tx,data);
+  if(old.paidAt&&!paid)throw new PurchaseOrderError('PAID_AMOUNT_REQUIRED',400);
+  const changed=await tx.purchaseOrder.updateMany({where:{id,status:old.status,updatedAt:new Date(expectedVersion)},data:{supplierId:data.supplierId||null,expectedDate:data.expectedDate||null,note:data.note||'',onlineOrderNumber:data.onlineOrderNumber||null,totalAmount,paidAt:old.paidAt||(paid?new Date():null)}});
+  if(changed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
+  await tx.purchaseOrderItem.deleteMany({where:{purchaseOrderId:id}});
+  await tx.purchaseOrderItem.createMany({data:items.map(i=>({...i,purchaseOrderId:id}))});
+  const order=await tx.purchaseOrder.findUniqueOrThrow({where:{id},include});
+  await syncExpense(tx,order);await audit(tx,order,actor,'update',old,{...order,reason});return view(order,tx);
+ });
 }
 async function scopedOrder(tx: any, orderId: string, storeId?: string) {
     const order = await tx.purchaseOrder.findFirst({ where: { id: orderId, ...(storeId !== undefined ? { storeId } : {}) }, include: { items: { orderBy: { inventoryId: 'asc' } } } });
@@ -139,18 +137,18 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
             const dates=receiptBatchDates(metadata?.manufacturingDate,metadata?.expiryDate)
             await alignInventoryBatches(tx,inventory)
             const quantity = item.quantity;
-            if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isSafeInteger(item.unitCost) || item.unitCost < 0)
+            if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(item.unitCost) || item.unitCost < 0)
                 throw new PurchaseOrderError('Invalid purchase quantity or cost', 400);
-            const totalAmount = item.inputQuantity !== null && item.inputUnitCost !== null ? Math.round(item.inputQuantity * item.inputUnitCost) : Math.round(quantity * item.unitCost);
+            const totalAmount = item.lineAmount ?? (item.inputQuantity !== null && item.inputUnitCost !== null ? Math.round(item.inputQuantity * item.inputUnitCost) : Math.round(quantity * item.unitCost));
             const newStock = inventory.currentStock + quantity;
-            const newAvgCost = Math.round((Math.max(0, inventory.currentStock) * Number(inventory.avgCost) + totalAmount) / (Math.max(0, inventory.currentStock) + quantity));
-            if (!Number.isFinite(newStock) || !Number.isSafeInteger(newAvgCost) || newAvgCost < 0 || newAvgCost > 2147483647)
+            const newAvgCost = (Math.max(0, inventory.currentStock) * Number(inventory.avgCost) + totalAmount) / (Math.max(0, inventory.currentStock) + quantity);
+            if (!Number.isFinite(newStock) || !Number.isFinite(newAvgCost) || newAvgCost < 0 || newAvgCost > 2147483647)
                 throw new PurchaseOrderError('Invalid inventory balance', 400);
             const changed = await tx.inventory.updateMany({ where: { id: inventory.id, storeId: order.storeId, currentStock: inventory.currentStock, avgCost: inventory.avgCost }, data: { currentStock: { increment: quantity }, avgCost: newAvgCost } });
             if (!changed.count)
                 throw new PurchaseOrderError('Inventory changed during receiving; retry this order');
             await tx.purchaseOrderItem.update({ where: { id: item.id }, data: { receivedQty: quantity } });
-            const batch = await tx.batch.create({ data: { inventoryId: item.inventoryId, batchNumber: `PO-${order.id}-${item.id}`, quantity, unitCost: item.unitCost, status: 'active',...dates } });
+            const batch = await tx.batch.create({ data: { inventoryId: item.inventoryId, batchNumber: `PO-${order.id}-${item.id}-${randomUUID()}`, quantity, unitCost: item.unitCost, status: 'active',...dates } });
             await tx.stockInLog.create({ data: { inventoryId: item.inventoryId, purchaseOrderId: order.id, batchId: batch.id, quantity, unitCost: item.unitCost, totalAmount, supplierId: order.supplierId, staffId, note: JSON.stringify({ version: 1, kind: 'receipt', purchaseOrderId: order.id, orderNumber: order.orderNumber, ledgerUnit: inventory.unit, ledgerQuantity: quantity, inputQuantity: item.inputQuantity ?? quantity, inputUnit: item.inputUnit ?? inventory.unit, inputUnitCost: item.inputUnitCost ?? item.unitCost }) } });
         }
         await recalculateInventoryConsumers(tx,order.items.map((i:any)=>i.inventoryId));
@@ -159,3 +157,36 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
 }
 export async function cancelPurchaseOrder(orderId: string, reason: string, storeId?: string) { return prisma.$transaction(async (tx) => { const order = await scopedOrder(tx, orderId, storeId); const changed = await tx.purchaseOrder.updateMany({ where: { id: order.id, status: { in: ['pending', 'approved', 'awaiting_receipt'] } }, data: { status: 'cancelled', note: reason } }); if (!changed.count)
     throw new PurchaseOrderError('Received or cancelled orders cannot be cancelled'); return tx.purchaseOrder.findUnique({ where: { id: order.id } }); }); }
+
+/** Reverse only intact receipts; preserve the original receipt logs and actual payment. */
+export async function reversePurchaseReceipt(id:string,storeId:string,actor:string,reason:string){
+ return prisma.$transaction(async tx=>{
+  const order=await scopedOrder(tx,id,storeId);if(order.status!=='received')throw new PurchaseOrderError('PURCHASE_NOT_RECEIVED');
+  const claimed=await tx.purchaseOrder.updateMany({where:{id,status:'received',updatedAt:order.updatedAt},data:{status:'awaiting_receipt',receivedDate:null}});if(claimed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
+  for(const item of order.items){
+   const inv=await tx.inventory.findFirstOrThrow({where:{id:item.inventoryId,storeId}});
+   await alignInventoryBatches(tx,inv);
+   const batches=await tx.batch.findMany({where:{inventoryId:inv.id,batchNumber:{startsWith:`PO-${id}-${item.id}`},status:'active'}});
+   const available=batches.reduce((n,b)=>n+b.quantity,0);
+   if(Math.abs(available-item.quantity)>1e-7||inv.currentStock<item.quantity)throw new PurchaseOrderError('RECEIPT_ALREADY_CONSUMED_USE_INVENTORY_ADJUSTMENT');
+   const nextStock=inv.currentStock-item.quantity,amount=item.lineAmount??Math.round((item.inputQuantity??item.quantity)*(item.inputUnitCost??item.unitCost));
+   const nextValue=inv.currentStock*Number(inv.avgCost)-amount;
+   if(nextStock>1e-7&&nextValue< -0.01)throw new PurchaseOrderError('RECEIPT_REVALUATION_REQUIRES_REVIEW');
+   const updated=await tx.inventory.updateMany({where:{id:inv.id,currentStock:inv.currentStock,avgCost:inv.avgCost},data:{currentStock:nextStock,avgCost:nextStock>1e-7?Math.max(0,nextValue/nextStock):0}});if(updated.count!==1)throw new PurchaseOrderError('INVENTORY_CHANGED_RETRY');
+   await tx.batch.updateMany({where:{id:{in:batches.map(b=>b.id)}},data:{quantity:0,status:'used'}});
+   await tx.stockOutLog.create({data:{inventoryId:inv.id,quantity:item.quantity,reason:'adjust',staffId:actor,note:JSON.stringify({kind:'purchase-receipt-reversal',purchaseOrderId:id,reason})}});
+   await tx.purchaseOrderItem.update({where:{id:item.id},data:{receivedQty:0}});
+  }
+  await recalculateInventoryConsumers(tx,order.items.map(i=>i.inventoryId));await audit(tx,order,actor,'update',order,{status:'awaiting_receipt',reason});return view(await tx.purchaseOrder.findUniqueOrThrow({where:{id},include}),tx);
+ });
+}
+export async function refundPurchasePayment(id:string,storeId:string,actor:string,reason:string){
+ return prisma.$transaction(async tx=>{
+  const order=await scopedOrder(tx,id,storeId);if(order.status!=='cancelled'||!order.paidAt)throw new PurchaseOrderError('CANCEL_PURCHASE_BEFORE_REFUND');
+  const claimed=await tx.purchaseOrder.updateMany({where:{id,updatedAt:order.updatedAt,status:'cancelled'},data:{updatedAt:new Date()}});if(claimed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
+  if(await tx.expense.findFirst({where:{storeId,referenceType:'purchase_refund',referenceId:id}}))throw new PurchaseOrderError('PURCHASE_ALREADY_REFUNDED');
+  const materials=await tx.inventory.findMany({where:{id:{in:order.items.map(i=>i.inventoryId)},storeId},select:{name:true}});
+  await tx.expense.create({data:{storeId,type:'supplies',category:'supplies',amount:-order.totalAmount*100,description:`Refund · ${materials.map(i=>i.name).join(' · ')}: ${reason}`,referenceType:'purchase_refund',referenceId:id}});
+  await audit(tx,order,actor,'update',null,{refundAmount:order.totalAmount,reason});return {refunded:true};
+ });
+}

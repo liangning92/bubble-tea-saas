@@ -352,6 +352,9 @@ export const supplierApi = {
 
 // Purchase Orders
 export const purchaseOrderApi = {
+  update:(id:string,data:any)=>api.put('/purchase-orders/'+id,data),
+  reverseReceipt:(id:string,reason:string)=>api.post('/purchase-orders/'+id+'/reverse-receipt',{reason}),
+  refund:(id:string,reason:string)=>api.post('/purchase-orders/'+id+'/refund',{reason}),
   list: (params?: any) => api.get('/purchase-orders', { params }),
   getPending: (storeId?: string) => api.get('/purchase-orders/pending', { params: storeId ? { storeId } : undefined }),
   get: (id: string) => api.get('/purchase-orders/' + id),
@@ -429,6 +432,7 @@ export const assetApi = {
 
 // Finance Accounts (Chart of Accounts)
 export const accountApi = {
+  reverseTransfer:(id:string,reason:string)=>api.post('/finance/accounts/transfers/'+id+'/reverse',{reason}),
   list: (params?: any) => api.get('/finance/accounts', { params }),
   seed: () => api.post('/finance/accounts/seed'),
   get: (id: string) => api.get('/finance/accounts/' + id),
@@ -537,6 +541,7 @@ export const uploadApi = {
 
 // Hygiene
 export const hygieneApi = {
+  editTask:(id:string,data:any)=>api.put('/hygiene/tasks/'+id,data),
   // Areas
   areas: () => api.get('/hygiene/areas'),
   createArea: (data: any) => api.post('/hygiene/areas', data),
@@ -804,6 +809,8 @@ export const staffPointsApi = {
 
 // Deposit Management
 export const depositApi = {
+  correct:(id:string,data:any)=>api.put('/deposit/staff/'+id,data),
+  reverse:(id:string,kind:string,logId:string,reason:string)=>api.post(`/deposit/staff/${id}/reverse/${kind}/${logId}`,{reason}),
   // Rules
   rules: () => api.get('/deposit/rules'),
   createRule: (data: any) => api.post('/deposit/rules', data),

@@ -40,6 +40,7 @@ const upload = multer({
 
 // Validation schemas
 const applyReimbursementSchema = z.object({
+  editingId:z.string().optional(),expectedVersion:z.string().datetime().optional(),
   type: z.string().trim().min(1).max(100),
   amount: z.number().int().positive().max(2000000000),
   description: z.string().min(1),
@@ -82,7 +83,7 @@ router.post('/apply', authenticate, async (req: AuthRequest, res) => {
       amount: validated.amount,
       description: validated.description,
       receiptUrls: validated.receiptUrls
-    })
+    },validated.editingId?{id:validated.editingId,expectedVersion:validated.expectedVersion||''}:undefined)
 
     res.status(201).json({
       code: 201,

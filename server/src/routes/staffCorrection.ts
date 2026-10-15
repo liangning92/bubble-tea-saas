@@ -560,3 +560,24 @@ overtimeRouter.put('/:id/reject', authenticate, authorize('admin', 'manager'), s
 })
 
 export { router as staffCorrectionRouter, shiftSwapRouter, overtimeRouter }
+// Pending requests can be revised by their owner; approved evidence stays immutable.
+for(const [target,model,schema] of [[router,'attendanceCorrection',correctionSchema],[shiftSwapRouter,'shiftSwap',swapSchema],[overtimeRouter,'overtimeRequest',overtimeSchema]] as const){
+ target.put('/:id',authenticate,async(req:AuthRequest,res)=>{
+  try{
+   const expectedVersion=z.string().datetime().parse(req.body.expectedVersion);const input=schema.parse(req.body),staffId=req.user!.staffId,storeId=req.user!.storeId;
+   if(!staffId)return res.status(403).json({code:403,message:'STAFF_PROFILE_REQUIRED'});
+   if(model==='shiftSwap'&&(input as any).targetStaffId){const other=await prisma.staff.findFirst({where:{id:(input as any).targetStaffId,storeId}});if(!other||other.id===staffId)return res.status(400).json({code:400,message:'INVALID_SWAP_TARGET'})}
+   const data:any={...input};if(model==='shiftSwap')data.targetConfirmed=false;if(model==='overtimeRequest'){const minutes=(v:string)=>Number(v.slice(0,2))*60+Number(v.slice(3));data.hours=((minutes(data.endTime)-minutes(data.startTime)+1440)%1440)/60}
+   const result=await prisma.$transaction(async tx=>{
+    const db=tx[model] as any,old=await db.findFirst({where:{id:req.params.id,storeId,staffId,status:'pending'}});if(!old)throw new WorkflowConflict('REQUEST_CHANGED_OR_NOT_OWNED');
+    const changed=await db.updateMany({where:{id:old.id,storeId,staffId,status:'pending',updatedAt:new Date(expectedVersion)},data});if(changed.count!==1)throw new WorkflowConflict('REQUEST_CHANGED_REFRESH');
+    await tx.financeAuditLog.create({data:{storeId,userId:req.user!.id,action:'update',entityType:model,entityId:old.id,description:'Owner revised pending request',oldValue:JSON.stringify(old),newValue:JSON.stringify(data)}});return db.findUniqueOrThrow({where:{id:old.id}})
+   });res.json({code:200,data:result})
+  }catch(e:any){const status=e instanceof z.ZodError||e instanceof BusinessInputError?400:e instanceof WorkflowConflict?409:500;res.status(status).json({code:status,message:e.message})}
+ });
+ target.put('/:id/withdraw',authenticate,async(req:AuthRequest,res)=>{
+  try{if(!req.user!.staffId)return res.status(403).json({code:403,message:'STAFF_PROFILE_REQUIRED'});
+   const data=await prisma.$transaction(async tx=>{const db=tx[model] as any;const changed=await db.updateMany({where:{id:req.params.id,storeId:req.user!.storeId,staffId:req.user!.staffId,status:'pending'},data:{status:'cancelled'}});if(changed.count!==1)throw new WorkflowConflict('REQUEST_CHANGED_OR_NOT_OWNED');await tx.financeAuditLog.create({data:{storeId:req.user!.storeId,userId:req.user!.id,action:'update',entityType:model,entityId:req.params.id,description:'Owner withdrew pending request',newValue:JSON.stringify({status:'cancelled'})}});return db.findUniqueOrThrow({where:{id:req.params.id}})});res.json({code:200,data});
+  }catch(e:any){res.status(e instanceof WorkflowConflict?409:500).json({code:e instanceof WorkflowConflict?409:500,message:e.message})}
+ });
+}

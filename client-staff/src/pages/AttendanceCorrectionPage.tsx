@@ -17,8 +17,9 @@ interface CorrectionRequest {
   correctCheckIn?: string
   correctCheckOut?: string
   reason: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
   adminNote?: string
+  updatedAt: string
   createdAt: string
 }
 
@@ -32,6 +33,8 @@ export function AttendanceCorrectionPage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingId,setEditingId]=useState<string|null>(null)
+  const [editingVersion,setEditingVersion]=useState<string>('')
   const [formData, setFormData] = useSessionDraft('AttendanceCorrectionPage.tsx', {
     date: '',
     originalCheckIn: '',
@@ -68,11 +71,12 @@ export function AttendanceCorrectionPage() {
 
     setIsSubmitting(true)
     try {
-      const response = await staffApi.createCorrection(formData)
+      const response = editingId?await staffApi.editRequest('staff-correction',editingId,{...formData,expectedVersion:editingVersion}):await staffApi.createCorrection(formData)
       if (response.code === 201 || response.code === 200) {
         setSubmitSuccess(true)
         setFormData({ date: '', originalCheckIn: '', originalCheckOut: '', correctCheckIn: '', correctCheckOut: '', reason: '' })
         setShowForm(false)
+        setEditingId(null)
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
@@ -88,6 +92,7 @@ export function AttendanceCorrectionPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
+      cancelled:{bg:'bg-gray-100',text:'text-gray-500',label:t('entryFix.cancelled')},
       pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t('attendance.pending') },
       approved: { bg: 'bg-green-100', text: 'text-green-700', label: t('attendance.approved') },
       rejected: { bg: 'bg-red-100', text: 'text-red-700', label: t('attendance.rejected') }
@@ -118,7 +123,7 @@ export function AttendanceCorrectionPage() {
         {/* New Request Button */}
         {!showForm && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => {setEditingId(null);setShowForm(true)}}
             className="w-full py-4 bg-primary text-white rounded-xl font-medium mb-4 flex items-center justify-center gap-2"
           >
             <Clock size={20} />
@@ -257,6 +262,8 @@ export function AttendanceCorrectionPage() {
             <div className="divide-y divide-gray-100">
               {requests.map((req) => (
                 <div key={req.id} className="p-4">
+                  {req.status==='pending'&&<div className="flex justify-end gap-4 text-sm mb-2"><button disabled={isSubmitting} onClick={()=>{setEditingId(req.id);setEditingVersion(req.updatedAt);setFormData({date:req.date.slice(0,10),originalCheckIn:req.originalCheckIn||'',originalCheckOut:req.originalCheckOut||'',correctCheckIn:req.correctCheckIn||'',correctCheckOut:req.correctCheckOut||'',reason:req.reason});setShowForm(true)}}>{t('entryFix.edit')}</button><button disabled={isSubmitting} onClick={async()=>{if(!await dialogs.confirm(t('entryFix.withdrawHint')))return;setIsSubmitting(true);try{await staffApi.withdrawRequest('staff-correction',req.id);await loadData()}catch(e:any){await dialogs.alert(e.response?.data?.message||t('entryFix.error'))}finally{setIsSubmitting(false)}}}>{t('entryFix.withdraw')}</button></div>}
+
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-medium">{formatDate(req.date)}</p>

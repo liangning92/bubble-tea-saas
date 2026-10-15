@@ -17,8 +17,9 @@ interface ShiftSwapRequest {
   targetDate: string
   targetShift: string
   reason?: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
   adminNote?: string
+  updatedAt: string
   createdAt: string
 }
 
@@ -34,6 +35,8 @@ export function ShiftSwapPage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingId,setEditingId]=useState<string|null>(null)
+  const [editingVersion,setEditingVersion]=useState<string>('')
   const [formData, setFormData] = useSessionDraft('ShiftSwapPage.tsx', {
     originalDate: '',
     originalShift: '',
@@ -72,11 +75,12 @@ export function ShiftSwapPage() {
 
     setIsSubmitting(true)
     try {
-      const response = await staffApi.createShiftSwap(formData)
+      const response = editingId?await staffApi.editRequest('shift-swap',editingId,{...formData,expectedVersion:editingVersion}):await staffApi.createShiftSwap(formData)
       if (response.code === 201 || response.code === 200) {
         setSubmitSuccess(true)
         setFormData({ originalDate: '', originalShift: '', targetDate: '', targetShift: '', reason: '' })
         setShowForm(false)
+        setEditingId(null)
         loadData()
         setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
@@ -92,6 +96,7 @@ export function ShiftSwapPage() {
 
   const getStatusBadge = (status: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
+      cancelled:{bg:'bg-gray-100',text:'text-gray-500',label:t('entryFix.cancelled')},
       pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: t('attendance.pending') },
       approved: { bg: 'bg-green-100', text: 'text-green-700', label: t('attendance.approved') },
       rejected: { bg: 'bg-red-100', text: 'text-red-700', label: t('attendance.rejected') }
@@ -137,7 +142,7 @@ export function ShiftSwapPage() {
         {/* New Request Button */}
         {!showForm && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => {setEditingId(null);setShowForm(true)}}
             className="w-full py-4 bg-primary text-white rounded-xl font-medium mb-4 flex items-center justify-center gap-2"
           >
             <Calendar size={20} />
@@ -263,6 +268,8 @@ export function ShiftSwapPage() {
             <div className="divide-y divide-gray-100">
               {requests.map((req) => (
                 <div key={req.id} className="p-4">
+                  {req.status==='pending'&&<div className="flex justify-end gap-4 text-sm mb-2"><button disabled={isSubmitting} onClick={()=>{setEditingId(req.id);setEditingVersion(req.updatedAt);setFormData({originalDate:req.originalDate.slice(0,10),originalShift:req.originalShift,targetDate:req.targetDate.slice(0,10),targetShift:req.targetShift,reason:req.reason||''});setShowForm(true)}}>{t('entryFix.edit')}</button><button disabled={isSubmitting} onClick={async()=>{if(!await dialogs.confirm(t('entryFix.withdrawHint')))return;setIsSubmitting(true);try{await staffApi.withdrawRequest('shift-swap',req.id);await loadData()}catch(e:any){await dialogs.alert(e.response?.data?.message||t('entryFix.error'))}finally{setIsSubmitting(false)}}}>{t('entryFix.withdraw')}</button></div>}
+
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <p className="font-medium">{formatDate(req.originalDate)} → {formatDate(req.targetDate)}</p>

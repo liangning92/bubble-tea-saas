@@ -21,7 +21,8 @@ const createPOSchema = z.object({
     inventoryId: z.string(),
     quantity: z.number().finite().positive(),
     inputUnit: z.string().max(30).optional(),
-    unitCost: z.number().int().min(0)
+    unitCost: z.number().finite().min(0).optional(),
+    paidAmount: z.number().int().min(0).optional()
   })).min(1)
 })
 
@@ -110,6 +111,13 @@ router.post('/', authenticate, authorize('admin', 'manager', 'staff'), validateB
   }
 })
 
+router.put('/:id', authenticate, authorize('admin','manager','staff'), validateBody(createPOSchema.extend({expectedVersion:z.string().datetime(),reason:z.string().trim().min(1).max(1000)})), async(req:AuthRequest,res)=>{
+ try{res.json({code:200,data:await PurchaseOrderService.editPurchaseOrder(req.params.id,{...req.body,storeId:getStoreId(req),expectedDate:req.body.expectedDate?new Date(req.body.expectedDate):undefined},req.user!.staffId||req.user!.id,req.body.expectedVersion,req.body.reason,!!req.user!.employeeApp||req.user!.role==='staff')})}catch(e:any){res.status(e.statusCode||500).json({code:e.statusCode||500,message:e.message})}
+});
+for(const action of ['reverse-receipt','refund'])router.post(`/:id/${action}`,authenticate,authorize('admin','manager'),validateBody(z.object({reason:z.string().trim().min(1).max(1000)})),async(req:AuthRequest,res)=>{
+ try{const handler=action==='refund'?PurchaseOrderService.refundPurchasePayment:PurchaseOrderService.reversePurchaseReceipt;res.json({code:200,data:await handler(req.params.id,getStoreId(req),req.user!.staffId||req.user!.id,req.body.reason)})}catch(e:any){res.status(e.statusCode||500).json({code:e.statusCode||500,message:e.message})}
+});
+
 // PUT /api/purchase-orders/:id/status
 router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
@@ -150,10 +158,11 @@ router.post('/:id/receive', authenticate, authorize('admin', 'manager', 'staff')
 })
 
 // DELETE /api/purchase-orders/:id
-router.delete('/:id', authenticate, authorize('admin','manager'), async (req: AuthRequest, res) => {
+router.delete('/:id', authenticate, authorize('admin','manager','staff'), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { reason } = req.body
+    if(req.user!.employeeApp||req.user!.role==='staff'){const order=await PurchaseOrderService.getPurchaseOrderById(id);if(!order||order.storeId!==getStoreId(req)||order.createdBy!==(req.user!.staffId||req.user!.id))return res.status(404).json({code:404,message:'Purchase not found'})}
 
     const order = await PurchaseOrderService.cancelPurchaseOrder(id, reason || 'Cancelled by admin', req.user!.role === 'admin' && !req.user!.employeeApp ? undefined : getStoreId(req))
 

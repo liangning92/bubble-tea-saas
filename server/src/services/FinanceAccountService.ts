@@ -166,7 +166,7 @@ export async function getTransfers(storeId: string, options?: {
     if (options.endDate) where.date.lte = options.endDate
   }
 
-  return prisma.financeTransfer.findMany({
+  const rows=await prisma.financeTransfer.findMany({
     where,
     include: {
       fromAccount: true,
@@ -174,6 +174,8 @@ export async function getTransfers(storeId: string, options?: {
     },
     orderBy: { date: 'desc' }
   })
+  const markers=await prisma.config.findMany({where:{storeId,key:{startsWith:'transfer.reversal.'}},select:{key:true}})
+  return rows.map(row=>({...row,reversed:markers.some(m=>m.key==='transfer.reversal.'+row.id)}))
 }
 
 // Seed default accounts for a store
@@ -211,4 +213,20 @@ export async function seedDefaultAccounts(storeId: string) {
   })
 
   return { count: defaults.length }
+}
+
+export async function reverseTransfer(id:string,storeId:string,actor:string,reason:string){
+ if(!reason.trim())throw new Error('CORRECTION_REASON_REQUIRED');
+ return prisma.$transaction(async tx=>{
+  const key=`transfer.reversal.${id}`;
+  const marker=await tx.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,category:'finance',value:'{}'},update:{category:'finance'}});
+  if(JSON.parse(marker.value).reversalId)throw new Error('TRANSFER_ALREADY_REVERSED');
+  const old=await tx.financeTransfer.findFirst({where:{id,storeId},include:{fromAccount:true,toAccount:true}});
+  if(!old||old.fromAccount.storeId!==storeId||old.toAccount.storeId!==storeId)throw new Error('TRANSFER_NOT_FOUND');
+  if(old.note?.startsWith('[REVERSAL:'))throw new Error('CANNOT_REVERSE_A_REVERSAL');
+  const reverse=await tx.financeTransfer.create({data:{storeId,fromAccountId:old.toAccountId,toAccountId:old.fromAccountId,amount:old.amount,date:new Date(),note:`[REVERSAL:${id}] ${reason}`}});
+  for(const accountId of [old.fromAccountId,old.toAccountId].sort())await tx.financeAccount.update({where:{id:accountId},data:{balance:{increment:accountId===old.fromAccountId?old.amount:-old.amount}}});
+  await tx.config.update({where:{storeId_key:{storeId,key}},data:{value:JSON.stringify({reversalId:reverse.id,reason,actor})}});
+  await tx.financeAuditLog.create({data:{storeId,userId:actor,action:'update',entityType:'transfer',entityId:id,description:reason,oldValue:JSON.stringify(old),newValue:JSON.stringify(reverse)}});return reverse;
+ });
 }

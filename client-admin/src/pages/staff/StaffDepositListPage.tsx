@@ -1,3 +1,4 @@
+import { CorrectionDialog } from '../../components/CorrectionDialog'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
@@ -46,6 +47,7 @@ interface StaffDeposit {
   status: string
   startDate: string
   endDate?: string
+  updatedAt: string
   deductionCount: number
   deductionLogs: DeductionLog[]
   refundLogs: RefundLog[]
@@ -87,6 +89,7 @@ export function StaffDepositListPage() {
     totalAmount: ''
   })
   const [creating, setCreating] = useState(false)
+  const [correction,setCorrection]=useState<{deposit:StaffDeposit;kind?:string;logId?:string}|null>(null)
 
   // Deduct modal
   const [showDeductModal, setShowDeductModal] = useState(false)
@@ -368,19 +371,19 @@ export function StaffDepositListPage() {
                 <div className="mb-4">
                   <p className="text-sm font-medium text-gray-700 mb-2">{t('staff.deductionLogs')}</p>
                   <div className="space-y-1">
-                    {deposit.deductionLogs.slice(0, 3).map(log => (
-                      <div key={log.id} className="flex justify-between text-sm p-2 bg-red-50 rounded">
-                        <span className="text-red-600">-{formatCurrency(log.amount)}</span>
+                    {deposit.deductionLogs.map(log => (
+                      <div key={log.id} className="flex flex-wrap gap-2 justify-between text-sm p-2 bg-red-50 rounded">
+                        <span className="text-red-600">{formatCurrency(-log.amount)}</span>{user?.role==='admin'&&log.amount>0&&!log.salaryId&&!deposit.deductionLogs.some(row=>row.note?.startsWith(`[REVERSAL:${log.id}]`))&&<button onClick={()=>setCorrection({deposit,kind:'deduction',logId:log.id})}>{t('entryFix.reverseDeduction')}</button>}
                         <span className="text-gray-500">{formatDate(log.createdAt)}</span>
                       </div>
                     ))}
-                    {deposit.deductionLogs.length > 3 && (
-                      <p className="text-sm text-gray-500">+{deposit.deductionLogs.length - 3} more</p>
-                    )}
+
                   </div>
                 </div>
               )}
 
+              {deposit.refundLogs.length>0&&<section className="mb-3 space-y-2">{deposit.refundLogs.map(log=><div key={log.id} className="flex flex-wrap gap-2 justify-between text-sm bg-green-50 p-2 rounded"><span>{formatCurrency(log.amount)} · {formatDate(log.createdAt)}</span>{user?.role==='admin'&&log.amount>0&&!deposit.refundLogs.some(row=>row.note?.startsWith(`[REVERSAL:${log.id}]`))&&<button onClick={()=>setCorrection({deposit,kind:'refund',logId:log.id})}>{t('entryFix.reverseRefund')}</button>}</div>)}</section>}
+              {user?.role==='admin'&&<button className="text-primary text-sm mb-2" onClick={()=>setCorrection({deposit})}>{t('entryFix.correctDeposit')}</button>}
               {/* Actions */}
               <div className="flex gap-2">
                 {deposit.status === 'active' && (
@@ -598,6 +601,7 @@ export function StaffDepositListPage() {
             </div>
           </AdminDialog>
       )}
+      {correction&&<CorrectionDialog title={t('entryFix.correctDeposit')} onClose={()=>setCorrection(null)} fields={correction.kind?[]:[{key:'totalAmount',label:t('entryFix.amount')+' (Rp)',value:String(correction.deposit.totalAmount/100),type:'number'}]} onSave={async data=>{if(correction.kind)await depositApi.reverse(correction.deposit.id,correction.kind,correction.logId!,data.reason);else await depositApi.correct(correction.deposit.id,{totalAmount:Math.round(Number(data.totalAmount)*100),expectedVersion:correction.deposit.updatedAt,reason:data.reason});await loadData()}}/>}
     </div>
   )
 }

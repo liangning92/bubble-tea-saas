@@ -1,3 +1,6 @@
+import { AdminDialog } from '../../components/AdminDialog'
+import { ReferenceDetails } from '../../components/ReferenceDetails'
+import { useEmployeePermission } from '../../contexts/EmployeeAccess'
 import { formatNumber } from '../../utils/numberDisplay'
 import { OrderItemRows, OrderItemColumns } from '../../components/OrderItemsTable'
 import { useState } from 'react'
@@ -19,6 +22,8 @@ const POINT_TYPE_LABELS: Record<string, string> = {
 
 export function MemberDetailPage() {
   const { t } = useTranslation()
+  const canEdit=useEmployeePermission('members.write')
+  const [profile,setProfile]=useState<any>(null),[profileError,setProfileError]=useState(''),[savingProfile,setSavingProfile]=useState(false)
   const { id } = useParams()
   const location = useLocation()
   const queryClient = useQueryClient()
@@ -68,13 +73,15 @@ export function MemberDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
+          {canEdit&&<button className="btn-primary justify-self-start" onClick={()=>{setProfileError('');setProfile({name:member.name||'',phone:member.phone||'',email:member.email||'',birthday:member.birthday?.slice(0,10)||'',expectedVersion:member.updatedAt})}}>{t('entryFix.editMember')}</button>}
+          {profile&&<AdminDialog title={t('entryFix.editMember')} onClose={()=>setProfile(null)} busy={savingProfile} trackChanges chrome className="max-w-md"><form onSubmit={async e=>{e.preventDefault();if(savingProfile)return;setSavingProfile(true);try{await memberApi.update(member.id,profile);await queryClient.invalidateQueries({queryKey:['member']});await queryClient.invalidateQueries({queryKey:['members']});setProfile(null)}catch(e:any){setProfileError(e.response?.data?.message||t('entryFix.error'))}finally{setSavingProfile(false)}}} className="space-y-3">{(['name','phone','email','birthday'] as const).map(k=><label key={k} className="block text-sm">{t('entryFix.'+k)}<input className="input w-full" type={k==='birthday'?'date':k==='email'?'email':'text'} required={k==='name'||k==='phone'} value={profile[k]} onChange={e=>setProfile({...profile,[k]:e.target.value})}/></label>)}{profileError&&<p role="alert" className="text-red-700">{profileError}</p>}<button className="btn-primary" disabled={savingProfile}>{t('entryFix.save')}</button></form></AdminDialog>}
           {/* Member Info */}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <span className={`px-3 py-1 rounded-full text-sm font-medium ${levelColors[member.level] || levelColors.bronze}`}>
                 {member.level?.toUpperCase() || 'BRONZE'}
               </span>
-              <span className="text-sm text-gray-500">{t('members.id')}: {member.id}</span>
+              <ReferenceDetails value={member.id}/>
             </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-gray-500">{t('members.phone')}:</span> <span className="font-medium">{member.phone}</span></div>
