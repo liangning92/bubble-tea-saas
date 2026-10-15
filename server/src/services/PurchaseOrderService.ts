@@ -99,7 +99,7 @@ export async function editPurchaseOrder(id:string,data:PurchaseInput,actor:strin
   if(!reason.trim())throw new PurchaseOrderError('CORRECTION_REASON_REQUIRED',400);
   const {items,totalAmount,paid}=await prepareItems(tx,data);
   if(old.paidAt&&!paid)throw new PurchaseOrderError('PAID_AMOUNT_REQUIRED',400);
-  const changed=await tx.purchaseOrder.updateMany({where:{id,status:old.status,updatedAt:new Date(expectedVersion)},data:{supplierId:data.supplierId||null,expectedDate:data.expectedDate||null,note:data.note||'',onlineOrderNumber:data.onlineOrderNumber||null,totalAmount,paidAt:old.paidAt||(paid?new Date():null)}});
+  const changed=await tx.purchaseOrder.updateMany({where:{id,status:old.status,updatedAt:new Date(expectedVersion)},data:{supplierId:data.supplierId||null,expectedDate:data.expectedDate||null,note:data.note||'',onlineOrderNumber:data.onlineOrderNumber===undefined?old.onlineOrderNumber:data.onlineOrderNumber||null,totalAmount,paidAt:old.paidAt||(paid?new Date():null)}});
   if(changed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
   await tx.purchaseOrderItem.deleteMany({where:{purchaseOrderId:id}});
   await tx.purchaseOrderItem.createMany({data:items.map(i=>({...i,purchaseOrderId:id}))});
@@ -140,6 +140,7 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
             if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(item.unitCost) || item.unitCost < 0)
                 throw new PurchaseOrderError('Invalid purchase quantity or cost', 400);
             const totalAmount = item.lineAmount ?? (item.inputQuantity !== null && item.inputUnitCost !== null ? Math.round(item.inputQuantity * item.inputUnitCost) : Math.round(quantity * item.unitCost));
+            const receiptUnitCost=totalAmount/quantity;
             const newStock = inventory.currentStock + quantity;
             const newAvgCost = (Math.max(0, inventory.currentStock) * Number(inventory.avgCost) + totalAmount) / (Math.max(0, inventory.currentStock) + quantity);
             if (!Number.isFinite(newStock) || !Number.isFinite(newAvgCost) || newAvgCost < 0 || newAvgCost > 2147483647)
@@ -147,9 +148,9 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
             const changed = await tx.inventory.updateMany({ where: { id: inventory.id, storeId: order.storeId, currentStock: inventory.currentStock, avgCost: inventory.avgCost }, data: { currentStock: { increment: quantity }, avgCost: newAvgCost } });
             if (!changed.count)
                 throw new PurchaseOrderError('Inventory changed during receiving; retry this order');
-            await tx.purchaseOrderItem.update({ where: { id: item.id }, data: { receivedQty: quantity } });
-            const batch = await tx.batch.create({ data: { inventoryId: item.inventoryId, batchNumber: `PO-${order.id}-${item.id}-${randomUUID()}`, quantity, unitCost: item.unitCost, status: 'active',...dates } });
-            await tx.stockInLog.create({ data: { inventoryId: item.inventoryId, purchaseOrderId: order.id, batchId: batch.id, quantity, unitCost: item.unitCost, totalAmount, supplierId: order.supplierId, staffId, note: JSON.stringify({ version: 1, kind: 'receipt', purchaseOrderId: order.id, orderNumber: order.orderNumber, ledgerUnit: inventory.unit, ledgerQuantity: quantity, inputQuantity: item.inputQuantity ?? quantity, inputUnit: item.inputUnit ?? inventory.unit, inputUnitCost: item.inputUnitCost ?? item.unitCost }) } });
+            await tx.purchaseOrderItem.update({ where: { id: item.id }, data: { receivedQty: quantity, unitCost:receiptUnitCost } });
+            const batch = await tx.batch.create({ data: { inventoryId: item.inventoryId, batchNumber: `PO-${order.id}-${item.id}-${randomUUID()}`, quantity, unitCost: receiptUnitCost, status: 'active',...dates } });
+            await tx.stockInLog.create({ data: { inventoryId: item.inventoryId, purchaseOrderId: order.id, batchId: batch.id, quantity, unitCost: receiptUnitCost, totalAmount, supplierId: order.supplierId, staffId, note: JSON.stringify({ version: 1, kind: 'receipt', purchaseOrderId: order.id, orderNumber: order.orderNumber, ledgerUnit: inventory.unit, ledgerQuantity: quantity, inputQuantity: item.inputQuantity ?? quantity, inputUnit: item.inputUnit ?? inventory.unit, inputUnitCost: item.inputUnitCost ?? item.unitCost }) } });
         }
         await recalculateInventoryConsumers(tx,order.items.map((i:any)=>i.inventoryId));
         return tx.purchaseOrder.findUnique({ where: { id: order.id }, include });

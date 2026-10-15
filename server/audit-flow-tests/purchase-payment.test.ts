@@ -171,3 +171,12 @@ test('invalid payment rolls back and consumed batches cannot be reversed',async(
  expect((await prisma.purchaseOrder.findUniqueOrThrow({where:{id:order.id}})).status).toBe('received');
  expect((await prisma.inventory.findUniqueOrThrow({where:{id:f.inv.id}})).currentStock).toBe(2300);
 });
+
+test('legacy receipt reconstructs cost from original invoice quantity and preserves supplier reference on edit',async()=>{
+ const f=await fixture(),order=await createPurchaseOrder({storeId:f.store.id,onlineOrderNumber:'INVOICE-REFERENCE',items:[{inventoryId:f.inv.id,quantity:6.9,inputUnit:'kg',unitCost:6765}]});
+ const edited=await editPurchaseOrder(order.id,{storeId:f.store.id,items:[{inventoryId:f.inv.id,quantity:6.9,inputUnit:'kg',unitCost:6765}]},'admin',order.updatedAt.toISOString(),'quantity review');expect(edited.onlineOrderNumber).toBe('INVOICE-REFERENCE');
+ await prisma.purchaseOrderItem.updateMany({where:{purchaseOrderId:order.id},data:{unitCost:7,lineAmount:null}});
+ await receivePurchaseOrder(order.id,'admin',f.store.id);
+ const batch=await prisma.batch.findFirstOrThrow({where:{inventoryId:f.inv.id}}),log=await prisma.stockInLog.findFirstOrThrow({where:{purchaseOrderId:order.id}});
+ expect(batch.unitCost).toBeCloseTo(46679/6900,9);expect(log.unitCost).toBeCloseTo(46679/6900,9);expect(log.totalAmount).toBe(46679);expect(await prisma.expense.count({where:{referenceId:order.id}})).toBe(0);
+});
