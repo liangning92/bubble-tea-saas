@@ -7,11 +7,11 @@ const handover=load('server/src/services/ShiftHandoverFinancials.ts',{'./ShiftMa
 const svc=load('server/src/services/ShiftCorrectionService.ts',{zod,'./ShiftCashReconciliation':cash,'./ShiftManualReceipts':manual,'./ShiftHandoverFinancials':handover});
 const actor={id:'admin',storeId:'store',role:'admin'},updatedAt='2026-10-11T10:00:00.000Z';
 function fixture(status='closed'){
- const session={id:'s',storeId:'store',status,openFloat:100,actualCash:200,expectedCash:200,updatedAt:new Date(updatedAt)};
+ const session={id:'s',storeId:'store',staffId:'staff',shift:'day',openedAt:new Date('2026-10-11T01:00:00Z'),status,openFloat:100,actualCash:200,expectedCash:200,updatedAt:new Date(updatedAt)};
  const original={cashReconciliation:{cashFromRevenue:100,expectedCash:200,openFloat:100,expenses:0,revenue:100,qris:0},manualReceipts:{cash:200,qris:0,shopeefood:0,gofood:0}};
  let report=original,audit,warning,deleted=false;
- const tx={store:{update:async()=>{}},shiftSession:{findFirst:async q=>{assert.equal(q.where.storeId,'store');return session},updateMany:async q=>{Object.assign(session,q.data);return {count:1}},findUniqueOrThrow:async()=>session},config:{findUnique:async q=>q.where.storeId_key.key.startsWith('pos.shift.report:')?{value:JSON.stringify(report)}:null,update:async q=>{report=JSON.parse(q.data.value)},upsert:async q=>{warning=JSON.parse(q.update.value)},deleteMany:async()=>{deleted=true}},financeAuditLog:{create:async q=>{audit=q.data}}};
- return {db:{$transaction:fn=>fn(tx)},session,read:()=>({report,audit,warning,deleted})};
+ const tx={cashEvent:{findMany:async()=>[]},store:{update:async()=>{}},shiftSession:{findFirst:async q=>{assert.equal(q.where.storeId,'store');return session},updateMany:async q=>{Object.assign(session,q.data);return {count:1}},findUniqueOrThrow:async()=>session},config:{findUnique:async q=>q.where.storeId_key.key.startsWith('pos.shift.report:')?{value:JSON.stringify(report)}:null,update:async q=>{report=JSON.parse(q.data.value)},upsert:async q=>{warning=JSON.parse(q.update.value)},deleteMany:async()=>{deleted=true}},financeAuditLog:{create:async q=>{audit=q.data}}};
+ return {db:{$transaction:fn=>fn(tx)},tx,session,read:()=>({report,audit,warning,deleted})};
 }
 test('closed shift correction updates totals, resets warning and retains original values with reason',async()=>{
  const f=fixture();await svc.correctShift(f.db,actor,'s',{updatedAt,openFloat:100,manualReceipts:{cash:0,qris:0,shopeefood:0,gofood:0},reason:'wrong entry'});
@@ -38,4 +38,29 @@ test('editing only manual QRIS recalculates closed cash, preserves order totals,
  assert.equal(f.session.expectedCash,174);assert.equal(f.session.cashDifference,0);assert.equal(f.read().report.cashReconciliation.recordedQris,0);assert.equal(f.read().report.cashReconciliation.revenue,100);
  await svc.correctShift(f.db,actor,'s',{...valid,manualReceipts:{...valid.manualReceipts,cash:170,qris:30}});
  assert.equal(f.session.expectedCash,170);assert.equal(f.session.cashDifference,0);assert.equal(f.read().report.cashReconciliation.recordedQris,0);
+});
+
+test('reserve correction updates the bound opening ledger without manufacturing cash or changing another shift',async()=>{
+ const f=fixture('open'),event={id:'opening',storeId:'store',type:'float',amount:100,staffId:'staff',shift:'day'};
+ f.tx.cashEvent.findMany=async q=>{assert.equal(q.where.storeId,'store');return [event]};
+ let updates=0;f.tx.cashEvent.updateMany=async q=>{assert.equal(q.where.id,'opening');assert.equal(q.where.amount,event.amount);updates++;event.amount=q.data.amount;return {count:1}};
+ await svc.correctShift(f.db,actor,'s',{updatedAt,openFloat:40,reason:'Correct reserve allocation, no cash movement'});
+ assert.equal(event.amount,40);assert.equal(updates,1);assert.equal(f.session.actualCash,200);
+ const audit=JSON.parse(f.read().audit.newValue).openingFloatCorrection;assert.equal(audit.returnedReserve,60);assert.equal(audit.cashMovement,0);assert.equal(audit.originalLedgerReserve,100);
+});
+test('legacy stale float is repaired only with the matching audit chain and never returned twice',async()=>{
+ const f=fixture('open');f.session.openFloat=420;const event={id:'opening',amount:600};
+ f.tx.cashEvent.findMany=async()=>[event];f.tx.cashEvent.updateMany=async q=>{event.amount=q.data.amount;return {count:1}};
+ f.tx.financeAuditLog.findMany=async()=>[{oldValue:JSON.stringify({session:{openFloat:600}}),newValue:JSON.stringify({changes:{openFloat:420}})}];
+ await svc.correctShift(f.db,actor,'s',{updatedAt,openFloat:420,reason:'Repair previous reserve correction ledger'});
+ assert.equal(event.amount,420);assert.equal(JSON.parse(f.read().audit.newValue).openingFloatCorrection.returnedReserve,180);
+ await svc.correctShift(f.db,actor,'s',{updatedAt,openFloat:420,reason:'Verify unchanged reserve'});
+ assert.equal(JSON.parse(f.read().audit.newValue).openingFloatCorrection.returnedReserve,0);
+});
+test('ambiguous creation events and unmatched stale ledger amounts cannot be guessed',async()=>{
+ for(const candidates of [[{id:'a',amount:100},{id:'b',amount:100}],[{id:'a',amount:600}]]){
+  const f=fixture('open');f.tx.cashEvent.findMany=async()=>candidates;f.tx.financeAuditLog.findMany=async()=>[];
+  await assert.rejects(()=>svc.correctShift(f.db,actor,'s',{updatedAt,openFloat:40,reason:'Verify reserve'}),e=>e.status===409);
+  assert.equal(f.session.openFloat,100);
+ }
 });
