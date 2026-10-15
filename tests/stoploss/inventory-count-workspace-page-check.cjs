@@ -40,7 +40,7 @@ createRoot(document.getElementById('root')).render(<QueryClientProvider client={
    }next();
   });await server.listen();browser=await chromium.launch({headless:true});
   const errors=[];const open=async(role,lang='zh',viewport={width:1280,height:900})=>{const context=await browser.newContext({viewport});await context.addInitScript(({role,lang})=>{localStorage.setItem('fixture-role',role);localStorage.setItem('bubble-tea-language',lang)},{role,lang});const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());return{context,page}};
-  const manager=await open('manager'),p=manager.page,base='http://127.0.0.1:6241';await p.goto(base+'/inventory/count');await expect(p.getByRole('link',{name:'盘点工作台',exact:true})).toHaveCount(1);
+  const manager=await open('manager'),p=manager.page,base='http://127.0.0.1:6241';await p.goto(base+'/inventory/count');await expect(p.getByRole('link',{name:'盘点与审核',exact:true})).toHaveCount(1);
   await p.getByRole('tab',{name:/^进行中/}).click();await expect(p.getByRole('button').filter({hasText:'DRAFT'})).toHaveCount(1);await expect(p.getByRole('button').filter({hasText:'REVIEW'})).toHaveCount(0);
   await p.getByRole('button').filter({hasText:'DRAFT'}).click();await expect(p.getByRole('button',{name:'提交审核',exact:true})).toBeDisabled();await expect(p.getByRole('button',{name:/审核并调整库存/})).toHaveCount(0);
   await p.getByLabel('实际数量',{exact:true}).fill('12');await p.getByLabel('差异原因，不自动归责员工',{exact:true}).fill('Two extra cups');await p.getByRole('button',{name:'保存',exact:true}).click();await expect(p.getByRole('button',{name:'提交审核',exact:true})).toBeEnabled();
