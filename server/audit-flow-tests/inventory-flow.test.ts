@@ -207,6 +207,11 @@ test('HTTP alert acknowledgement and expiry edits are manager-only and reject fo
 
 test('declared employee-channel inventory operations work while management actions remain blocked',async()=>{
  const f=await fixture(),foreign=await fixture(),authorization='Bearer '+await token(f,'admin'),client=request(httpServer)
+ const count=await client.post('/api/inventory-counts').set('Authorization',authorization).set('X-Client-App','employee').send({storeId:f.store.id,period:'ad_hoc',startDate:'2026-10-15',endDate:'2026-10-15',inventoryIds:[f.inventory.id]});expect(count.status).toBe(201)
+ const inv=await prisma.inventory.findUniqueOrThrow({where:{id:f.inventory.id}})
+ const batch=await client.put(`/api/inventory-counts/${count.body.data.id}/items`).set('Authorization',authorization).set('X-Client-App','employee').send({items:[{itemId:count.body.data.items[0].id,countedQty:20,note:'',expectedStock:inv.currentStock,observedVersion:inv.updatedAt.toISOString()}]});expect(batch.status).toBe(200)
+ expect(await balance(f.inventory.id)).toBe(100)
+ expect((await client.post(`/api/inventory-counts/${count.body.data.id}/complete`).set('Authorization',authorization).set('X-Client-App','employee')).status).toBe(403)
  const listing=await client.get('/api/inventory').set('Authorization',authorization).set('X-Client-App','employee');expect(listing.status).toBe(200)
  const created=await client.post('/api/purchase-orders').set('Authorization',authorization).set('X-Client-App','employee').send({storeId:f.store.id,items:[{inventoryId:f.inventory.id,quantity:2,unitCost:1000}]});expect(created.status).toBe(201)
  expect((await client.post(`/api/purchase-orders/${created.body.data.id}/receive`).set('Authorization',authorization).set('X-Client-App','employee')).status).toBe(200)
