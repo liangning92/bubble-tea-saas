@@ -3,6 +3,7 @@ import { socketManager } from '../socket'
 import { projectCartState, projectClearedCart } from '../utils/posCartState'
 
 export type POSAction =
+  | 'receipt_print'
   | 'login'
   | 'logout'
   | 'cart_add'
@@ -33,6 +34,10 @@ export async function logPOSAction(data: {
   metadata?: Record<string, any>
   severity?: Severity
 }) {
+  // Old installed POS clients classify pending as warning. Normalize new process
+  // records here; retain historical audit rows without rewriting their evidence.
+  const receiptProcess = data.action === 'receipt_print' && ['pending', 'sent', 'paper-confirmed'].includes(data.metadata?.status)
+  const severity = receiptProcess ? 'info' : data.severity || 'info'
   const log = await prisma.pOSActionLog.create({
     data: {
       storeId: data.storeId,
@@ -43,12 +48,12 @@ export async function logPOSAction(data: {
       entityId: data.entityId || null,
       description: data.description,
       metadata: data.metadata ? JSON.stringify(data.metadata) : null,
-      severity: data.severity || 'info',
+      severity,
     },
   })
 
   // Broadcast to admin dashboard in real-time if warning/critical
-  if (data.severity === 'warning' || data.severity === 'critical') {
+  if (log.action !== 'receipt_print' && (severity === 'warning' || severity === 'critical')) {
     socketManager.emitToStore(data.storeId, 'pos:alert', {
       type: 'pos:alert',
       data: {
@@ -69,6 +74,7 @@ export async function logPOSAction(data: {
 }
 
 export async function getPOSActionLogs(storeId: string, options?: {
+  category?: 'behavior' | 'printing' | 'all'
   staffId?: string
   severity?: string
   startDate?: string
@@ -79,6 +85,9 @@ export async function getPOSActionLogs(storeId: string, options?: {
   limit?: number
 }) {
   const where: any = { storeId }
+
+  if (options?.category === 'behavior') where.AND = [{ action: { not: 'receipt_print' } }]
+  if (options?.category === 'printing') where.AND = [{ action: 'receipt_print' }]
 
   if (options?.staffId) where.staffId = options.staffId
   if (options?.severity) where.severity = options.severity
@@ -167,7 +176,7 @@ export async function getActiveSessions(storeId: string) {
 }
 
 export async function getAlertStats(storeId: string, startDate?: string, endDate?: string) {
-  const where: any = { storeId, severity: { in: ['warning', 'critical'] } }
+  const where: any = { storeId, action: { not: 'receipt_print' }, severity: { in: ['warning', 'critical'] } }
   if (startDate || endDate) {
     where.createdAt = {}
     if (startDate) where.createdAt.gte = new Date(startDate)

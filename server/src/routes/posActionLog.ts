@@ -61,9 +61,14 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
 router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const storeId = req.user!.storeId
-    const { staffId, severity, startDate, endDate, sessionId, action, page, limit } = req.query
+    const { staffId, severity, startDate, endDate, sessionId, action, page, limit, category } = req.query
+    if (category !== undefined && !['behavior', 'printing', 'all'].includes(category as string)) {
+      res.status(400).json({ code: 400, message: 'Invalid log category' })
+      return
+    }
 
     const result = await getPOSActionLogs(storeId, {
+      category: category as 'behavior' | 'printing' | 'all' | undefined,
       staffId: staffId as string,
       severity: severity as string,
       startDate: startDate as string,

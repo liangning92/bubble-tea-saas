@@ -137,6 +137,7 @@ export function POSMonitorPage() {
   const context=useDashboardContext()
   const { t } = useTranslation()
   const [filter, setFilter] = useState({
+    category: 'behavior',
     severity: '',
     action: '',
     staffId: '',
@@ -173,6 +174,7 @@ export function POSMonitorPage() {
     enabled:context.valid,
     queryFn: async () => {const response=await posActionLogApi.list({
       page: filter.page,
+      category: filter.category,
       limit: 50,
       severity: filter.severity || undefined,
       action: filter.action || undefined,
@@ -228,7 +230,7 @@ export function POSMonitorPage() {
     <div className="p-6">
       <DashboardContextNotice range={{startDate,endDate}} />
       <p className="text-sm text-gray-500 mb-2">{t('dashboardNavigation.sessionsCurrent')}</p>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t('posMonitor.pageTitle')}</h1>
           <p className="text-sm text-gray-500 mt-1">{t('posMonitor.pageSubtitle')}</p>
@@ -255,7 +257,8 @@ export function POSMonitorPage() {
         <ul className="mt-2 text-sm space-y-1">{unposted.map((row:any)=><li key={row.id} className="border-b last:border-0 py-3"><OrderItemsTable items={row.items} /><span className="text-xs text-gray-500">{row.orderNumber}</span> · Rp {row.grandTotal.toLocaleString('id-ID', { maximumFractionDigits: 0 })} · {row.paymentMethod} · {row.staffName || row.staffId} · {new Date(row.occurredAt).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})}{row.cashTender && <span className="ml-2">{t('posMonitor.receivedCash')}: Rp {row.cashTender.receivedCash.toLocaleString('id-ID', { maximumFractionDigits: 0 })} · {t('posMonitor.changeGiven')}: Rp {row.cashTender.changeGiven.toLocaleString('id-ID', { maximumFractionDigits: 0 })}</span>}{row.failureReason && <span className="ml-2 text-red-700">{t('posMonitor.'+(RECEIPT_REASON_KEYS[String(row.failureReason).split(':')[0]] || 'receiptNeedsReview'))}</span>}</li>)}</ul>
       </section>}
       {/* Stats Row */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <p className="mb-4 text-sm text-gray-600">{t('posMonitor.behaviorPurpose')}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <div className="card flex items-center gap-3">
           <div className="p-2 rounded-lg bg-red-100">
             <ShieldAlert size={20} className="text-red-600" />
@@ -362,6 +365,17 @@ export function POSMonitorPage() {
           </div>
 
           <select
+            aria-label={t('posMonitor.logCategory')}
+            value={filter.category}
+            onChange={(e) => setFilter({ ...filter, category: e.target.value, action: '', severity: '', page: 1 })}
+            className="input w-full sm:w-48"
+          >
+            <option value="behavior">{t('posMonitor.categoryBehavior')}</option>
+            <option value="printing">{t('posMonitor.categoryPrinting')}</option>
+            <option value="all">{t('posMonitor.categoryAll')}</option>
+          </select>
+
+          <select
             value={filter.dateRange}
             onChange={(e) => setFilter({ ...filter, dateRange: e.target.value, page: 1 })}
             className="input w-32"
@@ -387,7 +401,7 @@ export function POSMonitorPage() {
             className="input w-40"
           >
             <option value="">{t('posMonitor.allActions')}</option>
-            {Object.keys(ACTION_KEY_MAP).map((key) => (
+            {Object.keys(ACTION_KEY_MAP).filter(key => filter.category === 'all' || (filter.category === 'printing' ? key === 'receipt_print' : key !== 'receipt_print')).map((key) => (
               <option key={key} value={key}>{t(`posMonitor.${ACTION_KEY_MAP[key]}`)}</option>
             ))}
           </select>
@@ -425,6 +439,7 @@ export function POSMonitorPage() {
               <div
                 key={log.id}
                 className={`flex items-start gap-3 p-3 rounded-lg border transition-colors hover:bg-gray-50 ${
+                  log.action === 'receipt_print' ? 'border-blue-100 bg-blue-50/20' :
                   log.severity === 'critical' ? 'border-red-200 bg-red-50/30' :
                   log.severity === 'warning' ? 'border-orange-200 bg-orange-50/30' :
                   'border-gray-200'
