@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 
@@ -26,6 +26,8 @@ export function TextInputModal({
   const { t } = useTranslation()
   const [input, setInput] = useState(value)
   const [showKeyboard, setShowKeyboard] = useState(inputMode === 'tel' ? false : true)
+
+  useEffect(()=>{if(isOpen){setInput(value);setShowKeyboard(inputMode!=='tel')}},[isOpen,title,value,inputMode])
 
   // 字母键盘布局
   const letterRows = [
