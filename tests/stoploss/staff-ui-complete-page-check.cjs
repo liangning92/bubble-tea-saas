@@ -14,7 +14,7 @@ module.exports = async function staffUI(browser) {
   const materials = [{ id: 'm', name: 'Test Water', unit: 'ml', category: 'raw_material', currentStock: 88799.99999999994, safetyStock: 100, updatedAt: '2026-10-15T00:00:00Z' }];
   const purchase = { id: 'p', orderNumber: 'UI-PURCHASE', status: 'awaiting_receipt', createdAt: '2026-10-15T00:00:00Z', items: [{ id: 'pi', inventory: materials[0], quantity: 10 }] };
   const course = { key: 'onboarding', reviewed: true, title: { en: 'UI Course', id: 'UI Course', zh: '测试课程' }, subtitle: { en: 'UI subtitle', id: 'UI subtitle', zh: '测试说明' }, minutes: 5, sections: [{ title: { en: 'Section', id: 'Section' }, points: [{ en: 'Step', id: 'Step' }] }], quiz: [], practical: [], sources: [] };
-  let failInventory = false, failOvertime = false, confirmedSwap = false;
+  let failInventory = false, failOvertime = false, confirmedSwap = false, failLeaveRules = false;
   await context.route('**/api/**', async route => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname, method = req.method();
     let data = [], extra = {};
@@ -48,6 +48,7 @@ module.exports = async function staffUI(browser) {
     else if (p === '/api/training/my') data = [{ id: 'training', title: 'Official UI Training', trainingType: 'onboarding', startDate: '2026-10-15', status: 'completed', passed: true }];
     else if (p === '/api/training/categories') data = [{ key: 'onboarding', label: 'Onboarding' }];
     else if (p === '/api/leave-types') data = [{ code: 'annual', name: 'Annual Leave', deductBalance: true, requiresProof: false }];
+    else if (p === '/api/leave/rules') data = failLeaveRules ? [] : {blockedLeaveWeekdays:[],allowHalfDayLeave:true};
     else if (p === '/api/leave/balance') data = { annualLeave: 12, sickLeave: 12, unpaidLeave: 0, usedLeave: 0 };
     else if (p === '/api/reimbursement-types') data = [{ code: 'transportation', name: 'Transportation', maxAmount: 100000, requiresReceipt: false }];
     else if (p === '/api/staff-points/my') data = { currentPoints: 0, lifetimePoints: 0 };
@@ -107,9 +108,15 @@ module.exports = async function staffUI(browser) {
     assert.equal(await page.locator('#root').evaluate(el => el.inert), false);
     // Every form dialog can open, scroll and close without losing the session.
     for (const [route, name] of [['/leave', /Apply.*Leave|Request.*Leave/], ['/reimbursement', /Expense|Reimbursement/]]) {
+      if(route === '/leave') failLeaveRules=true;
       await page.goto(origin + route); await page.locator('header').getByRole('button', { name }).click();
       const dialog = page.getByRole('dialog'); await expect(dialog).toBeVisible();
       if (route === '/leave') {
+        await expect(page.getByRole('alert')).toContainText('Unable to load store leave rules')
+        failLeaveRules=false;
+        await page.getByRole('button',{name:'Reload',exact:true}).click();
+        await expect(page.getByRole('alert')).toHaveCount(0);
+        await expect(page.getByText('No weekday restrictions on leave.',{exact:true})).toBeVisible();
         const date = page.locator('input[data-picker=date]').first();
         await date.fill('15/10/2026'); await date.press('ArrowDown');
         const picker = page.locator('.localized-datetime-panel'); await expect(picker).toBeVisible();

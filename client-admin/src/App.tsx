@@ -52,6 +52,7 @@ const ShiftConfigPage = lazy(() => import('./pages/staff/ShiftConfigPage').then(
 const ReimbursementListPage = lazy(() => import('./pages/staff/ReimbursementListPage').then(module => ({ default: module.ReimbursementListPage })))
 const ReimbursementTypeConfigPage = lazy(() => import('./pages/staff/ReimbursementTypeConfigPage').then(module => ({ default: module.ReimbursementTypeConfigPage })))
 const ProbationRulesPage = lazy(() => import('./pages/staff/ProbationRulesPage').then(module => ({ default: module.ProbationRulesPage })))
+const StaffFeatureSettingsPage = lazy(()=>import('./pages/staff/StaffFeatureSettingsPage').then(module=>({default:module.StaffFeatureSettingsPage})))
 const PayrollRulesPage = lazy(()=>import('./pages/staff/PayrollRulesPage').then(module=>({default:module.PayrollRulesPage})))
 const SalaryListPage = lazy(() => import('./pages/staff/SalaryListPage').then(module => ({ default: module.SalaryListPage })))
 const ShiftSwapListPage = lazy(() => import('./pages/staff/ShiftSwapListPage').then(module => ({ default: module.ShiftSwapListPage })))
@@ -217,6 +218,7 @@ function App() {
 
         {/* 员工管理 */}
         <Route path="staff" element={<StaffIndexPage />}>
+          <Route path="features" element={<StaffFeatureSettingsPage />} />
           <Route index element={<StaffListPage />} />
           <Route path="new" element={<StaffFormPage />} />
           <Route path="adjustments" element={<StaffAdjustmentsPage />} />
@@ -235,7 +237,8 @@ function App() {
             <Route path="correction" element={<AttendanceCorrectionListPage />} />
             <Route path="shift-swap" element={<ShiftSwapListPage />} />
             <Route path="overtime" element={<OvertimeRequestListPage />} />
-            <Route path="workspace" element={<EmployeeWorkspacePage />} />
+            <Route path="workspace" element={<EmployeeWorkspacePage mode="review" />} />
+            <Route path="late-rules" element={<EmployeeWorkspacePage mode="lateness" />} />
             <Route path="rules" element={<AttendanceRulesPage />} />
           </Route>
 

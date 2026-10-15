@@ -4,7 +4,7 @@ import { readPayslip } from '../services/SalaryPayslipService'
 import { calculateSalary } from '../services/StaffService'
 import {userAccessV2} from '../services/StaffPermissionV2Service'
 import { isPayrollEmployee, saveStaffIdentity } from '../services/StaffIdentityService'
-import { getPayrollRules, savePayrollRules, payrollRuleSchema } from '../services/PayrollRuleService'
+import { getPayrollRules, savePayrollRules } from '../services/PayrollRuleService'
 import { isLegacyAutomaticBasis, refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
@@ -156,7 +156,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 router.get('/payroll-rules',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
  try{res.json({code:200,data:await getPayrollRules(prisma,req.user!.storeId!)})}catch(error:any){res.status(500).json({code:500,message:error.message})}
 })
-router.put('/payroll-rules',authenticate,authorize('admin'),validateBody(payrollRuleSchema),async(req:AuthRequest,res)=>{
+router.put('/payroll-rules',authenticate,authorize('admin'),async(req:AuthRequest,res)=>{
  try{res.json({code:200,data:await savePayrollRules(prisma,req.user!.storeId!,req.body)})}catch(error:any){res.status(400).json({code:400,message:error.message})}
 })
 

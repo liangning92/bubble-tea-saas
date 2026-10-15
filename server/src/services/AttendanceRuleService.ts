@@ -155,10 +155,10 @@ export async function calculateOvertimePay(
   overtimeHours: number,
   hourlyRate: number
 ): Promise<number> {
-  if (overtimeHours < (rule.overtimeMinHours || 1)) {
+  if (overtimeHours < (rule.overtimeMinHours ?? 1)) {
     return 0
   }
 
-  const rate = rule.overtimeRate || 1.5
+  const rate = rule.overtimeRate ?? 1.5
   return Math.floor(overtimeHours * hourlyRate * rate)
 }

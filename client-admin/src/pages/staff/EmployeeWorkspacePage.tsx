@@ -1,8 +1,12 @@
+import {useTranslation} from 'react-i18next'
+import {attendanceNavigationLabels} from '../../../../shared/attendanceNavigationLabels'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 import { useAuthStore } from "../../stores/auth";
-export function EmployeeWorkspacePage() {
+export function EmployeeWorkspacePage({mode='all'}:{mode?:'review'|'lateness'|'all'}) {
+  const {i18n}=useTranslation(),labels=attendanceNavigationLabels(i18n.language)
+  const showRules=mode!=='review',showReviews=mode!=='lateness'
   const user = useAuthStore((s) => s.user),
     [data, setData] = useState<any>(null),
     [error, setError] = useState(""),
@@ -24,6 +28,8 @@ export function EmployeeWorkspacePage() {
     try {
       const res = await api.get("/staff-work/admin");
       setData(res.data.data);
+      const saved=res.data.data?.rules?.find((item:any)=>item.month===rule.month)
+      if(saved)setRule({...saved,expectedVersion:saved.version,confirmRecalculate:false})
       setError("");
     } catch (e: any) {
       setError(e.response?.data?.message || "加载失败，请重试");
@@ -33,6 +39,7 @@ export function EmployeeWorkspacePage() {
     if (user?.role === "admin") void load();
   }, [user?.role]);
   if (user?.role !== "admin") return <p>仅管理员可审核申诉和个人资料。</p>;
+  if(!data)return <div className="space-y-3"><p role={error?'alert':'status'}>{error||labels.loading}</p><button className="btn-secondary" onClick={load}>{labels.retry}</button></div>
   async function review(kind: string, id: string, approved: boolean) {
     setBusy(true);
     setError("");
@@ -71,12 +78,13 @@ export function EmployeeWorkspacePage() {
   }
   return (
     <main className="space-y-6 p-4">
-      <h1 className="text-xl font-bold">员工工作台审核与迟到规则</h1>
+      <h1 className="text-xl font-bold">{mode==='review'?labels.reviewTitle:mode==='lateness'?labels.lateTitle:labels.allTitle}</h1>
+      {mode!=='all'&&<p className="text-sm text-gray-600">{mode==='review'?labels.reviewHint:labels.lateHint}</p>}
       <p role="alert" className="text-red-600">
         {error}
       </p>
       <button onClick={load}>刷新</button>
-      <section className="bg-white p-4 rounded-xl space-y-3">
+      {showRules&&<section className="bg-white p-4 rounded-xl space-y-3">
         <h2 className="font-bold">月度迟到处罚（金额 Rp）</h2>
         <p>
           按实际班次开始时间累计完整分钟，不使用宽限期。规则首次启用前的记录不会追加罚款。
@@ -142,7 +150,7 @@ export function EmployeeWorkspacePage() {
         {rule.mode === "tiers" ? (
           <div>
             {rule.tiers.map((tier: any, i: number) => (
-              <div key={i} className="flex gap-2 my-2">
+              <div key={i} className="flex flex-wrap gap-2 my-2">
                 <label>
                   累计分钟
                   <input
@@ -205,7 +213,7 @@ export function EmployeeWorkspacePage() {
             </button>
           </div>
         ) : (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <label>
               每累计分钟
               <input
@@ -295,12 +303,14 @@ export function EmployeeWorkspacePage() {
             </button>
           </div>
         )}
-      </section>
+      </section>}
+      {showReviews&&<>
       {(["appeal", "profile"] as const).map((kind) => (
         <section key={kind} className="space-y-3">
           <h2 className="font-bold">
             {kind === "appeal" ? "迟到申诉" : "KTP / 个人资料审核"}
           </h2>
+          {!data?.[kind === "appeal" ? "appeals" : "profiles"]?.length&&<p className="text-sm text-gray-500">{labels.empty}</p>}
           {data?.[kind === "appeal" ? "appeals" : "profiles"]?.map((r: any) => (
             <article key={r.id} className="bg-white p-4 rounded-xl space-y-2">
               <p>
@@ -358,6 +368,7 @@ export function EmployeeWorkspacePage() {
       ))}
       <section>
         <h2 className="font-bold">工资待处理</h2>
+        {!data?.payrollIssues?.length&&<p className="text-sm text-gray-500">{labels.empty}</p>}
         {data?.payrollIssues?.map((r: any) => (
           <article className="bg-white p-4 space-y-2" key={r.staffId + r.month}>
             <p>
@@ -417,6 +428,7 @@ export function EmployeeWorkspacePage() {
           </p>
         ))}
       </section>
+      </>}
     </main>
   );
 }

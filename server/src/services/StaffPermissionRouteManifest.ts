@@ -4443,6 +4443,19 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": true
   },
+  "GET /api/leave/rules": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.leave",
+    "resource": null,
+    "permission": "personal.leave",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
   "GET /api/leave/my": {
     "legacyRoles": [
       "manager",

@@ -169,6 +169,12 @@ export const staffApi = {
   },
 
   // Leave Types
+  getLeaveRules: async () => {
+    const response=await http.get(`${API_BASE}/leave/rules`, {headers:getAuthHeader()})
+    const rules=response.data?.data
+    if(!rules||!Array.isArray(rules.blockedLeaveWeekdays)||rules.blockedLeaveWeekdays.some((day:unknown)=>typeof day!=='number'||!Number.isInteger(day)||day<0||day>6)||typeof rules.allowHalfDayLeave!=='boolean')throw new Error('LEAVE_RULES_READ_FAILED')
+    return response.data
+  },
   getLeaveTypes: async () => {
     const response = await http.get(`${API_BASE}/leave-types`, {
       headers: getAuthHeader()
