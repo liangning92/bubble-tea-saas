@@ -2,11 +2,13 @@
 const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs'),{pathToFileURL}=require('node:url');
 (async()=>{const {createServer}=await import(pathToFileURL(path.join(path.dirname(require.resolve('vite/package.json')),'dist/node/index.js')).href);const tw=(await import(pathToFileURL(path.resolve('client-pos/tailwind.config.js')).href)).default;tw.content=[path.resolve('client-pos/src/**/*.{js,ts,jsx,tsx}')];const server=await createServer({configFile:false,esbuild:{jsx:'automatic'},root:path.resolve('client-pos'),cacheDir:'/tmp/pos-continuous-offline-vite-cache',css:{postcss:{plugins:[require('tailwindcss')(tw),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:6203,strictPort:true},resolve:{alias:{'@':path.resolve('client-pos/src')}}});let browser;
 try{await server.listen();browser=await chromium.launch({headless:true});fs.mkdirSync('/tmp/pos-continuous-offline-evidence',{recursive:true});
-for(const scenario of (process.env.OFFLINE_SCENARIOS||'activity-offline,closed-before-open,closed-before-confirm,closed-then-offline,payment-validation,ten-sales,restart,lost-receipt,reconnect,targets,qris,order-save-failure,generation-save-failure,refused,uninitialized,crashed-sync,legacy,foreign-store,expired-auth,multi-tab,policy,logo-warning').split(',')){
+for(const scenario of (process.env.OFFLINE_SCENARIOS||'activity-offline,closed-before-open,closed-before-confirm,closed-then-offline,payment-validation,ten-sales,restart,lost-receipt,reconnect,targets,qris,order-save-failure,generation-save-failure,refused,uninitialized,crashed-sync,legacy,foreign-store,expired-auth,multi-tab,policy,logo-warning,offline-login-reconnect,offline-expiry,permission-isolation,permission-expiry,permission-refusal,login-refusal,reconnect-revoked,resume-token-reload,gateway-outage').split(',')){
  const context=await browser.newContext({viewport:{width:1440,height:1100},serviceWorkers:'block'}),posts=[],errors=[],actionLogs=[],journals=new Map(),receipts=new Map();let shiftOpen=true;let disconnected=false,loseOnce=(scenario==='lost-receipt'||scenario==='uncertain-card-to-cash'),refuse=scenario==='refused';
  const origin='http://127.0.0.1:6203',target=origin+'/api';
  await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());if(url.origin!==origin){if(scenario==='fallback-blocks-offline'&&url.href==='https://api.aicube.online/api/health')return route.fulfill({status:200,contentType:'application/json',body:'{"status":"ok"}'});return route.abort();}if(!url.pathname.startsWith('/api/'))return route.continue();if(disconnected)return route.abort('internetdisconnected');let data={},status=200;
  if(url.pathname==='/api/pos-action-logs'&&req.method()==='POST')actionLogs.push(req.postDataJSON());
+ if(url.pathname==='/api/staff-permissions/me')data={role:{version:2,modes:{'orders.create':'allow','orders.read':'allow','pos.cash':'allow'}}};
+ if(url.pathname==='/api/auth/login')data={token:'restored-online',user:{id:'u',phone:'synthetic',role:'cashier',storeId:'store',staff:{id:'staff',name:'Synthetic'}}};
  if(url.pathname==='/api/products')data={list:[{id:'p',storeId:'store',name:'Synthetic Tea',status:'active',category:{id:'tea',name:'Tea'},specs:[{id:'s',name:'Regular',price:10000}],addons:[]}]};
  if(scenario==='inventory-cache'&&url.pathname==='/api/products'){Object.assign(data.list[0],{costPrice:100,bomItems:[{inventory:{currentStock:100,avgCost:100}}],inventory:{currentStock:100}});Object.assign(data.list[0].specs[0],{inventory:{currentStock:100}});}
  if(url.pathname==='/api/config')data={paymentMethods:{cash:true,qris:true,card:true,defaultMethod:'cash'},taxSettings:{enabled:false},posReceipt:{autoPrint:true},hardwareSettings:{autoOpenCashDrawer:false,printers:[{type:'receipt',enabled:true,printerName:'Synthetic receipt'}]}};
@@ -33,12 +35,68 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'activity-offline,closed-b
  window.electronAPI={getAppVersion:async()=> '2026.10.309',checkForUpdates:async()=>({success:true}),onUpdateStatus:()=>()=>{},onUpdateProgress:()=>()=>{},onUpdateError:()=>()=>{},sendPrintReceipt:async data=>{window.calls.push({kind:'print',data});return {success:true,warnings:scenario==='logo-warning'?['LOGO_UNAVAILABLE']:[]};},sendKitchenOrder:async()=>window.calls.push({kind:'kitchen'}),sendCupStickers:async()=>window.calls.push({kind:'cups'}),sendOrderComplete:()=>window.calls.push({kind:'complete'})};},{target,scenario});
  await require('./empty-activity-browser-fixture.cjs').emptyActivityQuotes(context,{isOffline:()=>disconnected,specialPrice:scenario==='activity-offline'?8000:undefined});const page=await context.newPage();page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
  const read=()=>page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return await db.orders.toArray();});
- const initialize=async()=>{await page.goto(origin+'/#/pos');await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();await expect.poll(async()=>page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return (await db.config.toArray()).filter(r=>r.key.startsWith('offline.snapshot:')).length;})).toBe(7);};
+ const initialize=async()=>{await page.goto(origin+'/#/pos');await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();await page.getByRole('button',{name:'Confirm Channel',exact:true}).click();await expect.poll(async()=>page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');return (await db.config.toArray()).filter(r=>r.key.startsWith('offline.snapshot:')).length;})).toBe(8);};
  const offline=async()=>{disconnected=true;await page.evaluate(()=>{window.networkOffline=true;localStorage.setItem('synthetic-network-offline','1');window.dispatchEvent(new Event('offline'));});};
  const reconnect=async()=>{disconnected=false;await page.evaluate(()=>{window.networkOffline=false;localStorage.removeItem('synthetic-network-offline');window.dispatchEvent(new Event('online'));});};
  const addCart=async()=>{const channel=page.getByRole('button',{name:'Confirm Channel',exact:true});if(await channel.count())await channel.click();await page.getByRole('button',{name:/^Synthetic Tea/}).click();await page.getByRole('button',{name:/Add to Cart/}).click();};
  const pay=async(qris=false)=>{await addCart();await page.getByRole('button',{name:/Checkout/}).click();if(qris){await page.getByRole('button',{name:/QRIS/}).click();await expect(page.locator('input[type=file]')).toHaveCount(0);await expect(page.getByRole('checkbox',{name:/Customer has paid/})).toHaveCount(0);}else await page.getByRole('button',{name:/Exact/}).click();await page.getByRole('button',{name:qris?/Customer has paid/:/Confirm Payment/}).click();};
  await initialize();
+ if(['offline-login-reconnect','offline-expiry','permission-isolation','permission-expiry','permission-refusal','login-refusal','reconnect-revoked','resume-token-reload','gateway-outage'].includes(scenario)) {
+   await page.evaluate(async target=>{const {useAuthStore}=await import('/src/stores/auth.ts');const state=useAuthStore.getState();await state.login('synthetic-only',state.user,'test-only-password',target)},target);
+   if(scenario==='resume-token-reload') {
+     await page.evaluate(async target=>{const {useAuthStore}=await import('/src/stores/auth.ts');const token='synthetic.'+btoa(JSON.stringify({exp:Math.floor(Date.now()/1000)+3600}))+'.fixture';await useAuthStore.getState().login(token,useAuthStore.getState().user,'test-only-password',target)},target);
+   }
+   if(scenario==='offline-expiry') {
+     await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');const row=await db.config.get('offlineCredentials');const value=JSON.parse(row.value);value.cachedAt=new Date(Date.now()-25*3600000);await db.config.update(row.key,{value:JSON.stringify(value)})});
+     const result=await page.evaluate(async()=>{const {useAuthStore}=await import('/src/stores/auth.ts');return useAuthStore.getState().loginOffline('synthetic','test-only-password')});
+     assert.equal(result.success,false);assert.equal(result.error,'offlineSale.authorizationExpired');
+   } else if(scenario==='permission-expiry') {
+     const denied=await page.evaluate(async()=>{const {db}=await import('/src/db/offline.ts');const {readSnapshot}=await import('/src/utils/offlineSale.ts');const rows=await db.config.toArray();const row=rows.find(r=>r.key.endsWith(':/staff-permissions/me'));await db.config.update(row.key,{updatedAt:new Date(Date.now()-25*3600000)});try{await readSnapshot('/staff-permissions/me','store');return false}catch{return true}});
+     assert.equal(denied,true);
+   } else if(scenario==='permission-refusal') {
+     await context.route('**/api/staff-permissions/me',route=>route.fulfill({status:403,json:{message:'Access denied'}}));
+     const status=await page.evaluate(async()=>{const {default:api}=await import('/src/services/api.ts');try{await api.get('/staff-permissions/me');return 200}catch(e){return e.response?.status}});assert.equal(status,403);
+   } else if(scenario==='login-refusal') {
+     await context.route('**/api/auth/login',route=>route.fulfill({status:401,json:{message:'Invalid phone or password'}}));
+     await page.evaluate(()=>sessionStorage.clear());await page.goto(origin+'/#/login');await page.reload();
+     await page.locator('input[type=tel]').fill('synthetic');await page.locator('input[type=password]').fill('test-only-password');await page.getByRole('button',{name:'Login',exact:true}).click();
+     await expect(page.getByText('Invalid phone or password',{exact:true})).toBeVisible();await expect(page.locator('input[type=tel]')).toBeVisible();
+   } else if(scenario==='permission-isolation') {
+     await page.evaluate(()=>{const raw=JSON.parse(sessionStorage.getItem('pos-auth'));raw.state.user.id='another-user';sessionStorage.setItem('pos-auth',JSON.stringify(raw))});
+     const denied=await page.evaluate(async()=>{const {readSnapshot}=await import('/src/utils/offlineSale.ts');try{await readSnapshot('/staff-permissions/me','store');return false}catch{return true}});
+     assert.equal(denied,true);
+   } else {
+     if(scenario==='gateway-outage') {
+       await context.route('**/api/**',route=>route.fulfill({status:503,json:{message:'Service unavailable'}}));
+     } else await offline();
+     // Lose all session state, retaining only the browser's durable local data.
+     await page.evaluate(()=>sessionStorage.clear());await page.goto(origin+'/#/login');await page.reload();
+     await page.locator('input[type=tel]').fill('synthetic');await page.locator('input[type=password]').fill('test-only-password');
+     await page.getByRole('button',{name:'Login',exact:true}).click();
+     await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();
+     await pay();await expect.poll(async()=>(await read()).length).toBe(1);
+     assert.equal(posts.length,0);const printed=await page.evaluate(()=>window.calls.filter(c=>c.kind==='print').length);assert.equal(printed,1);
+     if(scenario==='resume-token-reload') {
+       await page.reload();await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();await reconnect();
+       await expect.poll(async()=>(await read())[0]?.status).toBe('synced');assert.equal(posts.length,1);assert(posts[0].token.startsWith('Bearer synthetic.'));
+       assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.kind==='print').length),0);
+     }
+     if(scenario==='reconnect-revoked') {
+       await context.route('**/api/auth/login',route=>route.fulfill({status:401,json:{message:'Account disabled'}}));await reconnect();
+       await expect.poll(()=>page.evaluate(async()=>{const {useAuthStore}=await import('/src/stores/auth.ts');return useAuthStore.getState().isAuthenticated})).toBe(false);
+       assert.equal((await read())[0].status,'pending');assert.equal(posts.length,0);
+     }
+     if(scenario==='offline-login-reconnect') {
+       await reconnect();await expect.poll(async()=>(await read())[0]?.status).toBe('synced');
+       assert.equal(posts.length,1);assert.equal(posts[0].token,'Bearer restored-online');
+       await page.evaluate(async()=>{const {syncManager}=await import('/src/db/offline.ts');await syncManager.syncPendingOrders()});
+       assert.equal(posts.length,1);assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.kind==='print').length),printed);
+     }
+   }
+   await page.screenshot({path:'/tmp/pos-continuous-offline-evidence/'+scenario+'.png'});
+   assert.deepEqual(errors,[]);console.log('PASS '+scenario);await context.close();continue;
+ }
+
  if(scenario==='activity-offline'){ await offline();await pay();await expect.poll(async()=>(await read()).length).toBe(1);assert.equal((await read())[0].finalAmount,8000);assert.equal((await read())[0].checkoutRequest.items[0].unitPrice,10000);await page.reload();await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();await pay();await expect.poll(async()=>(await read()).length).toBe(2);assert.equal((await read())[1].finalAmount,8000);assert.equal(posts.length,0);await context.close();console.log('PASS cached activity price survives network loss and restart with exact local receipts');continue;}
 
 

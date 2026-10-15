@@ -1,3 +1,4 @@
+import { serverUnavailable } from '../utils/serverUnavailable'
 import { readSnapshot, saveSnapshot, snapshotPath } from '../utils/offlineSale'
 import { assertBackendAuth, assertCheckoutBackend, backendIdentity, backendAuthHeaders, readBackendAuth } from '../utils/backendIdentity'
 import axios from 'axios'
@@ -63,6 +64,7 @@ api.interceptors.request.use(async (config) => {
   if (!config.url?.includes('/auth/login') && !(!readBackendAuth().token && config.method === 'get' && snapshotPath(config.url || ''))) assertBackendAuth(backendIdentity(config.baseURL))
   const requestIdentity = readBackendAuth()
   if (config.method === 'get' && snapshotPath(config.url || '')) {
+    config.timeout = Math.min(config.timeout || 5000, 5000)
     const queryStore = config.params?.storeId || new URL(config.url!,window.location.href).searchParams.get('storeId')
     if (queryStore && queryStore !== requestIdentity.user?.storeId) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
     config.posStoreId = requestIdentity.user?.storeId
@@ -99,7 +101,7 @@ api.interceptors.response.use(
   async (error) => {
     const path = error.config?.method === 'get' && snapshotPath(error.config.url || '')
     const auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state
-    if (path && !error.response && auth?.user?.storeId === error.config.posStoreId && auth?.user?.id === error.config.posActorId) {
+    if (path && serverUnavailable(error) && auth?.user?.storeId === error.config.posStoreId && auth?.user?.id === error.config.posActorId) {
       try { return {data:await readSnapshot(path,auth.user.storeId),status:200,config:error.config,headers:{},statusText:'Local cached snapshot'} } catch {}
     }
     // Auto-logout on 401 Unauthorized (except for login requests)
@@ -157,7 +159,7 @@ export const posApi = {
 
   // Auth
   login: (phone: string, password: string) =>
-    api.post('/auth/login', { phone, password }),
+    api.post('/auth/login', { phone, password }, {timeout:5000}),
 
   // Config
   getConfigs: (storeId: string, category?: string) =>

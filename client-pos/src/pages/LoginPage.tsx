@@ -1,3 +1,4 @@
+import { serverUnavailable } from '../utils/serverUnavailable'
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -180,17 +181,7 @@ export function LoginPage() {
       // Check if network error (server unreachable) - try offline login
       // axios error codes: ECONNREFUSED, NETWORK_ERROR, ETIMEDOUT, etc.
       // Also check !navigator.onLine for browser offline state
-      const isNetworkError = !navigator.onLine ||
-        err.code === 'ECONNREFUSED' ||
-        err.code === 'ECONNRESET' ||
-        err.code === 'NETWORK_ERROR' ||
-        err.code === 'ETIMEDOUT' ||
-        err.code === 'ENOTFOUND' ||
-        err.message?.includes('Network') ||
-        err.message?.includes('fetch') ||
-        err.message?.includes('Failed to fetch') ||
-        err.message?.includes('Network Error') ||
-        (!err.response && err.message)
+      const isNetworkError = serverUnavailable(err)
 
       if (isNetworkError) {
         const offlineResult = await loginOffline(phone, password)
@@ -202,7 +193,7 @@ export function LoginPage() {
         if (offlineResult.error === 'offlineCredentialsNotFound') {
           setError(t('auth.offlineCredentialsNotFound'))
         } else {
-          setError(t('auth.offlineLoginFailed'))
+          setError(t(offlineResult.error || 'auth.offlineLoginFailed'))
         }
       } else {
         setError(err.response?.data?.message || t('auth.loginFailed'))

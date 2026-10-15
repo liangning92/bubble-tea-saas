@@ -1,0 +1,16 @@
+# POS offline recovery
+
+## Behavior
+- Packaged POS continues using its bundled pages. HTTPS Web POS precaches its application shell and all lazy chunks, so a previously initialized installation can reopen after the Web/API servers become unavailable. API responses and credentials are never cached by the service worker.
+- Previously verified staff can sign in offline on the same backend/store, within 24 hours of their last successful online login. Password verification remains bcrypt. The permission snapshot is persisted in IndexedDB with backend, store, actor and original fetch time; it expires after 24 hours and is never used to hide an online 401/403 response.
+- Only after the operator enters their password, retain it in process memory for the normal online login exchange upon recovery. Never persist this password, extend a token's lifetime or mint cloud authority locally. A restarted offline device requires password entry. Keep the original server token alongside the offline credentials only until its original expiry, restoring it only after local password verification. This allows replay after reload without retaining the password; the server still validates token signature, expiry and revocation. If that original token expires and no process-memory credential remains, request normal login. Logout discards local credentials.
+- Sync retries use the original order UUID/request and the existing server deduplication path. Journal/upload requests time out after 15 seconds. Token rejection leaves the order pending and revalidates identity before retry; account rejection preserves local paid orders and returns to login. Sync does not print.
+- Cached reads also handle temporary 502/503/504 responses. Product refresh uses the scoped API snapshot path. Recovery reloads product/config data and permissions.
+
+## Preserved boundaries
+Cash and the existing manual static QRIS path require initialized catalog, payment, marketing and an open shift snapshot. Offline shift opening/closing, server-confirmed QRIS, balance/points use, refund authorization and bank confirmation are not added. Physical printers and the local device must remain powered. Browser print dialogs do not prove USB/cup-label output.
+
+## Verification
+POS typecheck, production build, Electron main compilation, translation check and 14 checkout unit tests passed. Native React/Chromium/IndexedDB checks passed for ten consecutive sales, restart, lost response, reconnect, target isolation, storage failure, atomic rollback, refused upload, expired auth and concurrent tabs. Added nine checks: offline password login after session loss and automatic authenticated replay without reprinting, original-token recovery after page reload, offline authorization expiry, permission actor isolation/expiry, gateway outage while navigator remains online, online permission/login refusal, and revoked account on reconnect. Production service-worker test stops its real static server and verifies reopening at desktop/tablet/phone widths, lazy chunk coverage, no API caching and no horizontal overflow.
+
+Evidence and final CI/build/deployment records belong in workspace output/pos-offline-20261015. Synthetic API/printer boundaries are auxiliary evidence. Real business page operation and physical printer acceptance must be recorded separately; do not claim them from these tests.

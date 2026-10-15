@@ -145,7 +145,7 @@ export class SyncManager {
     this.emit({ type: 'offline' })
   }
 
-  // Auth tokens are session-only and are not retained for offline use.
+  // Active requests use the operator session; offline password login may restore an unexpired server token.
   private getToken(): string {
     try {
       const stored = sessionStorage.getItem('pos-auth')
@@ -165,6 +165,11 @@ export class SyncManager {
     if (this.isSyncing) { this.resyncRequested = true; return }
     let auth: any
     try { auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state } catch { return }
+    if (auth?.isAuthenticated && !auth.token) {
+      const {recoverOnlineSession} = await import('../stores/auth')
+      if (!await recoverOnlineSession()) return
+      try { auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state } catch { return }
+    }
     if (!auth?.token || !auth.user?.storeId || !['admin', 'manager', 'cashier'].includes(auth.user.role)) return
     this.isSyncing = true
     try { await withCheckoutSyncLock(auth.user.storeId, () => this.uploadClaimedOrders(auth, review)) }
@@ -200,12 +205,13 @@ export class SyncManager {
         const currentAuth = readBackendAuth()
         if (currentAuth.token!==auth.token || currentAuth.apiUrl!==auth.apiUrl || currentAuth.user?.storeId!==auth.user.storeId) throw new Error('CHECKOUT_AUTH_CHANGED')
         if ((order.locallyAcceptedAt || order.paymentReportedAt) && !order.cloudJournalId) {
-          const journal = await fetch(`${target}/orders/received-receipts`, {method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.token}`},body:JSON.stringify({orderNumber:order.orderNumber,occurredAt:new Date(order.occurredAt || order.paymentReportedAt || order.locallyAcceptedAt!).toISOString(),grandTotal:order.finalAmount,cashTender:order.cashTender,request:orderSyncPayload(order)})})
+          const journal = await fetch(`${target}/orders/received-receipts`, {method:'POST',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.token}`},body:JSON.stringify({orderNumber:order.orderNumber,occurredAt:new Date(order.occurredAt || order.paymentReportedAt || order.locallyAcceptedAt!).toISOString(),grandTotal:order.finalAmount,cashTender:order.cashTender,request:orderSyncPayload(order)})})
+          if (journal.status === 401) await this.expireRejectedSession(auth)
           const receipt = await journal.json().catch(()=>null)
           if (journal.status!==201 || !receipt?.data?.id || receipt.data.orderNumber!==order.orderNumber) throw new Error(receipt?.message || 'RECEIVED_RECEIPT_SAVE_FAILED')
           await db.orders.update(order.id!,{cloudJournalId:receipt.data.id})
         }
-        const response = await fetch(`${target}/orders${order.locallyAcceptedAt ? '/bulk-sync' : ''}`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.token}`},body:JSON.stringify(order.locallyAcceptedAt ? {orders:[orderSyncPayload(order)]} : orderSyncPayload(order))})
+        const response = await fetch(`${target}/orders${order.locallyAcceptedAt ? '/bulk-sync' : ''}`,{method:'POST',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json',Authorization:`Bearer ${auth.token}`},body:JSON.stringify(order.locallyAcceptedAt ? {orders:[orderSyncPayload(order)]} : orderSyncPayload(order))})
         const body = await response.json().catch(()=>null)
         const result = order.locallyAcceptedAt ? body?.data?.results?.[0] : {success:response.status===201,data:body?.data}
         if ((order.locallyAcceptedAt ? response.status===200 : response.status===201) && result?.success && typeof result.data?.id==='string' && result.data.orderNumber===order.orderNumber) {
@@ -214,12 +220,8 @@ export class SyncManager {
           syncedCount++
           this.emit({type:'sync:success',orderId:order.localId,serverId:result.data.id})
         } else {
-          if (response.status === 401) {
-            const {useAuthStore} = await import('../stores/auth')
-            const current = readBackendAuth()
-            if (current.token === auth.token && current.apiUrl === auth.apiUrl && current.user?.storeId === auth.user.storeId) useAuthStore.getState().expireCloudSession()
-          }
-          const definite = [400,401,403,404,409,422].includes(response.status) || (response.status===200 && result?.success===false)
+          if (response.status === 401) await this.expireRejectedSession(auth)
+          const definite = [400,403,404,409,422].includes(response.status) || (response.status===200 && result?.success===false)
           await this.releaseClaim(order,String(result?.error || body?.message || `HTTP ${response.status}`),!definite)
           failedCount++
         }
@@ -231,6 +233,12 @@ export class SyncManager {
       }
     }
     this.emit({type:'sync:complete',syncedCount,failedCount})
+  }
+
+  private async expireRejectedSession(auth: any) {
+    const {useAuthStore} = await import('../stores/auth')
+    const current = readBackendAuth()
+    if (current.token === auth.token && current.apiUrl === auth.apiUrl && current.user?.storeId === auth.user.storeId) useAuthStore.getState().expireCloudSession()
   }
 
   private async releaseClaim(order: LocalOrder, error: string, retry: boolean) {
@@ -474,6 +482,7 @@ export interface OfflineCredentials {
   apiUrl?: string
   phone: string
   passwordHash: string
+  resumeToken?: string
   user: {
     id: string
     phone: string
