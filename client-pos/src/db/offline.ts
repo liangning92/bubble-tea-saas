@@ -1,4 +1,4 @@
-import { assertCheckoutBackend, currentBackendIdentity, readBackendAuth } from '../utils/backendIdentity'
+import { assertCheckoutBackend, backendIdentity, currentBackendIdentity, readBackendAuth } from '../utils/backendIdentity'
 import { confirmRetriedCheckout } from '../utils/checkoutIntent'
 import { withCheckoutSyncLock, checkoutSyncLeaseMs } from '../utils/checkoutSyncClaim'
 import Dexie, { Table } from 'dexie'
@@ -520,6 +520,25 @@ export async function getOfflineCredentials(phone?:string): Promise<OfflineCrede
   } catch {
     return null
   }
+}
+
+// A successful authenticated online preparation renews the local 30-day lease.
+// Bind it to the exact original login token/password verifier. Never renew from
+// a cached response, another operator/backend, or a replaced server session.
+export async function refreshOfflineCredentialLease(backend:string,actorId:string,token:string):Promise<void>{
+ const auth=readBackendAuth();if(!token||auth.token!==token||auth.user?.id!==actorId||!auth.apiUrl||backendIdentity(auth.apiUrl)!==backend||currentBackendIdentity()!==backend)return
+ await db.transaction('rw',db.config,async()=>{
+  const rows=await db.config.where('key').startsWith(`offline.credentials:${encodeURIComponent(backend)}:`).toArray(),active=await db.config.get(OFFLINE_CREDS_KEY)
+  if(active)rows.push(active)
+  const now=new Date()
+  for(const row of rows){
+   let cached:OfflineCredentials;try{cached=JSON.parse(row.value)}catch{continue}
+   const age=now.getTime()-new Date(cached.cachedAt).getTime()
+   if(cached.resumeToken!==token||cached.user?.id!==actorId||cached.user.storeId!==auth.user?.storeId||cached.user.role!==auth.user?.role||!cached.apiUrl||backendIdentity(cached.apiUrl)!==backend||!Number.isFinite(age)||age<0)continue
+   if(row.key!==OFFLINE_CREDS_KEY&&row.key!==`offline.credentials:${encodeURIComponent(backend)}:${encodeURIComponent(cached.phone)}`)continue
+   cached.cachedAt=now;await db.config.update(row.key,{value:JSON.stringify(cached),updatedAt:now})
+  }
+ })
 }
 
 export async function clearOfflineCredentials(): Promise<void> {
