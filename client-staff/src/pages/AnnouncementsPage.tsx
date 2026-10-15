@@ -1,10 +1,9 @@
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { ArrowLeft, Megaphone, Calendar, CheckCircle } from 'lucide-react'
+import { Megaphone, Calendar, CheckCircle } from 'lucide-react'
 import { formatDate } from '../utils/helpers'
 
 interface Announcement {
@@ -19,7 +18,6 @@ interface Announcement {
 
 export function AnnouncementsPage() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { user } = useAuthStore()
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
@@ -105,9 +103,6 @@ export function AnnouncementsPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="flex items-center gap-3">
-          <button aria-label={t('common.back')} onClick={() => navigate('/')} className="p-2 hover:bg-gray-100 rounded-lg">
-            <ArrowLeft size={20} />
-          </button>
           <div className="flex-1">
             <h1 className="text-lg font-bold">{t('announcement.title')}</h1>
             {unreadCount > 0 && (

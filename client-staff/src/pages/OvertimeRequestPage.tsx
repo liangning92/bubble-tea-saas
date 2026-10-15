@@ -3,11 +3,10 @@ import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDate
 import { useSessionDraft } from '../utils/useSessionDraft'
 import { LoadFailure } from '../components/LoadFailure'
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { ArrowLeft, Clock, Calendar, Send } from 'lucide-react'
+import { Clock, Calendar, Send } from 'lucide-react'
 import { formatDate } from '../utils/helpers'
 
 interface OvertimeRequest {
@@ -26,7 +25,6 @@ export function OvertimeRequestPage() {
   const dialogs = useDialogs()
 
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { user } = useAuthStore()
 
   const [requests, setRequests] = useState<OvertimeRequest[]>([])
@@ -106,9 +104,6 @@ export function OvertimeRequestPage() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-4">
         <div className="flex items-center gap-3">
-          <button aria-label={t('common.back')} onClick={() => navigate('/attendance')} className="p-2 hover:bg-gray-100 rounded-lg">
-            <ArrowLeft size={20} />
-          </button>
           <div>
             <h1 className="text-lg font-bold">{t('overtime.title')}</h1>
           </div>

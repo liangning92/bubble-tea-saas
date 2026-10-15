@@ -40,7 +40,8 @@ module.exports = async function staffUI(browser) {
     else if (p === '/api/purchase-orders') data = { list: [purchase] };
     else if (p === '/api/inventory-counts') data = { list: [] };
     else if (p.includes('/inventory/logs/')) data = { list: [] };
-    else if (p === '/api/suppliers/dropdown') data = { list: [] };
+    else if (p === '/api/suppliers') data = { list: [{id:'supplier',name:'UI Supplier'}] };
+    else if (p === '/api/suppliers/dropdown') return route.fulfill({status:403,json:{code:403,message:'Not an employee work endpoint'}});
     else if (p === '/api/process-recipes') data = { list: [] };
     else if (p === '/api/hygiene/tasks/my') data = { list: [] };
     else if (p === '/api/training/library') data = { revision: 'ui-test', modules: [course], checklists: [], standardsToConfirm: [] };
@@ -67,6 +68,10 @@ module.exports = async function staffUI(browser) {
         await expect(page.locator('.employee-bottom-nav')).toBeVisible();
         await expect(page.locator('.employee-shell h1, .employee-shell h2, .employee-shell [role=alert]').first()).toBeVisible();
         await expect(page.locator('[role=status]').filter({ hasText: /^Loading\.\.\.$/ })).toHaveCount(0);
+        if (['/leave', '/reimbursement', '/overtime', '/attendance/correction', '/shift-swap', '/announcements', '/inventory/count'].includes(route)) {
+          await expect(page.locator('.employee-parent-link')).toHaveCount(1);
+          await expect(page.locator('header').getByRole('button', {name:'Back',exact:true})).toHaveCount(0);
+        }
         await expect.poll(() => page.locator('.employee-shell').innerText()).not.toMatch(/Unexpected Application Error|TypeError|undefined/);
         assert.ok(await page.locator('.employee-shell').evaluate(el => el.scrollWidth <= innerWidth + 1), `${width} ${route}: horizontal overflow`);
       }
@@ -79,7 +84,11 @@ module.exports = async function staffUI(browser) {
     await expect(page.locator('a[href="/attendance/correction"]')).toHaveCount(1);
     await expect(page.locator('a[href="/overtime"]')).toHaveCount(1);
     await expect(page.getByText('Jakarta, Indonesia', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('00:00', {exact:true})).toBeVisible();
     // Branded primary action and rounded control size, tested against generated CSS.
+    await page.goto(origin + '/inventory?action=purchase');
+    await expect(page.getByRole('option', {name:'UI Supplier',exact:true})).toHaveCount(1);
+    await expect(page.getByRole('alert')).toHaveCount(0);
     await page.goto(origin + '/inventory/count');
     const count = page.getByRole('button', { name: /Start.*count|New.*count/i });
     await expect(count).toBeEnabled();

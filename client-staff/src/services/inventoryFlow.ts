@@ -18,7 +18,7 @@ async function intent(path: string, data: Record<string, unknown>, keyField: str
 }
 export const inventoryFlowApi = {
     logs: async()=>{const [incoming,outgoing]=await Promise.all([get('/inventory/logs/stock-in?limit=100'),get('/inventory/logs/stock-out?limit=100')]);return {data:{list:[...incoming.data.list.map((r:any)=>({...r,type:'stock_in'})),...outgoing.data.list.map((r:any)=>({...r,type:'stock_out'}))]}}},
-    list: () => get('/inventory'), counts: () => get('/inventory-counts'), purchases: () => get('/purchase-orders'), suppliers: () => get('/suppliers/dropdown'),
+    list: () => get('/inventory'), counts: () => get('/inventory-counts'), purchases: () => get('/purchase-orders'), suppliers: () => get('/suppliers?isActive=true'),
     purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string, items: any[] = []) => post(`/purchase-orders/${id}/receive`, {items}),
     stock: (kind: 'in' | 'out', data: Record<string, unknown>) => intent(`/inventory/stock-${kind}`, data, 'operationId'),
     startCount: (data: unknown) => post('/inventory-counts', data), submitCount: (id: string) => post(`/inventory-counts/${id}/submit`, {})

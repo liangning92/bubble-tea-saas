@@ -4131,6 +4131,32 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": true
   },
+  "GET /api/shift-swap/pending-confirm": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.schedule",
+    "resource": null,
+    "permission": "personal.schedule",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "PUT /api/shift-swap/:id/confirm": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.schedule",
+    "resource": { "model": "shiftSwap", "param": "id" },
+    "permission": "personal.schedule",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
   "GET /api/shift-swap": {
     "legacyRoles": [
       "admin",
