@@ -152,26 +152,11 @@ router.post('/shifts/open', authenticate, authorize('admin', 'manager', 'cashier
       return res.status(400).json({ code: 400, message: 'There is already an open shift' })
     }
 
-    const session = await prisma.shiftSession.create({
-      data: {
-        storeId,
-        staffId,
-        shift,
-        openFloat: Math.round(openFloat),
-        status: 'open'
-      }
-    })
-
-    // 同时记录开班零钱事件
-    await prisma.cashEvent.create({
-      data: {
-        storeId,
-        staffId,
-        type: 'float',
-        amount: Math.round(openFloat),
-        shift,
-        note: '开班零钱'
-      }
+    const session = await prisma.$transaction(async tx => {
+      const opened = await tx.shiftSession.create({data:{storeId,staffId,shift,openFloat:Math.round(openFloat),status:'open'}})
+      const event = await tx.cashEvent.create({data:{storeId,staffId,type:'float',amount:Math.round(openFloat),shift,note:'开班零钱'}})
+      await tx.config.create({data:{storeId,key:'pos.shift.float-event:'+opened.id,category:'shift_report',value:JSON.stringify({version:1,eventId:event.id})}})
+      return opened
     })
 
     res.status(201).json({ code: 201, data: session })
