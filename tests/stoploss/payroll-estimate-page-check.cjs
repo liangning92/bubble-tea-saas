@@ -71,7 +71,7 @@ const { pathToFileURL } = require('node:url')
   await page.getByRole('button',{name:'取消',exact:true}).click()
   const legacyForecast=makeBasis()
   salary={...salary,baseSalary:0,finalAmount:0,payrollBasis:{...legacyForecast,version:1,daysSource:'attendance',workingDays:{probation:0,regular:0},manualCorrection:false,manualAdjustment:false},reestimate:{baseSalary:legacyForecast.amount,overtime:0,commission:0,bonus:50000,deduction:108000,finalAmount:legacyForecast.amount+50000-108000,originalFinalAmount:0,difference:legacyForecast.amount+50000-108000,payrollBasis:legacyForecast}}
-  await page.reload();await expect(page.getByText(/原保存金额/)).toBeVisible();await page.getByRole('button',{name:'更正',exact:true}).last().click();await expect(page.getByRole('spinbutton',{name:'试用期实际工作天数'})).toHaveValue('27');await expect(page.getByRole('spinbutton',{name:'本期基本工资'})).toHaveValue('1132258')
+  await page.reload();await page.getByRole('button',{name:'详情',exact:true}).click();await expect(page.getByText(/原保存金额/)).toBeVisible();await page.getByRole('button',{name:'更正',exact:true}).last().click();await expect(page.getByRole('spinbutton',{name:'试用期实际工作天数'})).toHaveValue('27');await expect(page.getByRole('spinbutton',{name:'本期基本工资'})).toHaveValue('1132258')
   assert.deepEqual(errors,[]);console.log('PASS admin/staff desktop/mobile: estimate without payables, half days, minutes and manual deductions, rule guard, import preview, repeated save, payment gate, downloaded payslip; evidence '+output)
   await context.close();await staffContext.close()
  }finally{if(browser)await browser.close();for(const server of servers)await server.close()}

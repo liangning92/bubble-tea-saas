@@ -1,3 +1,4 @@
+import { ConsumptionAlertsWidget } from '../../components/ConsumptionAlertsWidget'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -69,7 +70,7 @@ export function InventoryPage() {
     description: "",
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["inventory"],
     queryFn: () => inventoryApi.list({ pageSize: 500 }),
     refetchInterval: 30000, // Auto-refresh every 30 seconds
@@ -266,12 +267,14 @@ export function InventoryPage() {
 
   // API returns { code, data: { list } } but axios wraps it: data.data.data.list = array
   const inventory = data?.data?.data?.list || [];
+  const isStockItem = (item:any) => !(item.type === "semi_finished" && item.processRecipeId);
+  const isLowItem = (item:any) => isStockItem(item) && (item.isLowStock || item.currentStock <= (item.effectiveSafetyStock ?? item.safetyStock ?? 0));
   const alerts = alertsData?.data || [];
 
   const filteredInventory = inventory.filter((item: any) => {
     const matchSearch =
       !search || item.name?.toLowerCase().includes(search.toLowerCase());
-    const matchLowStock = !lowStockOnly || item.isLowStock;
+    const matchLowStock = !lowStockOnly || isLowItem(item);
     const matchCategory =
       !selectedCategory ||
       item.category === selectedCategory ||
@@ -362,34 +365,37 @@ export function InventoryPage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between gap-3"><h1>{t("operations.inventoryOverview")}</h1>
         <button
           onClick={() => setShowAddItem(true)}
           className="btn-primary flex items-center gap-2"
         >
           <Plus size={18} />
-          {t("inventory.addItem")}
+          {t("operations.addMaterial")}
         </button>
       </div>
 
+      <div className="grid grid-cols-3 gap-3">{[["materials",inventory.length],["lowStock",inventory.filter(isLowItem).length],["outOfStock",inventory.filter((item:any)=>isStockItem(item)&&item.currentStock<=0).length]].map(([key,value])=><div className="rounded-xl border bg-white p-4" key={key}><p className="text-sm text-gray-500">{t("operations."+key)}</p><p className="text-2xl font-semibold tabular-nums mt-1">{isLoading||isError?'—':value}</p></div>)}</div>
+      {isError&&<p role="alert" className="text-red-700"><button type="button" onClick={()=>refetch()}>{t("common.error")} · {t("operations.refresh")}</button></p>}
+      <ConsumptionAlertsWidget compact />
       {/* 分类看板 */}
       <div className="flex gap-3 overflow-x-auto pb-2">
         <div
           onClick={() => setSelectedCategory(null)}
-          className={`flex-shrink-0 w-40 p-4 rounded-xl cursor-pointer transition-all border-2 ${
+          className={`flex-shrink-0 w-auto min-w-[160px] max-w-[260px] p-3 rounded-xl cursor-pointer transition-all border-2 ${
             selectedCategory === null
-              ? "bg-white border-error shadow-sm"
+              ? "bg-white border-primary shadow-sm"
               : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm"
           }`}
         >
           <div className="text-center">
             <p
-              className={`text-lg font-bold ${selectedCategory === null ? "text-error" : "text-gray-700"}`}
+              className={`text-sm font-semibold ${selectedCategory === null ? "text-primary" : "text-gray-700"}`}
             >
               {t("common.all")}
             </p>
-            <p className="text-xs text-gray-400 mt-1">
-              {inventory.length} {t("inventory.items")}
+            <p className="text-sm text-gray-500 mt-1">
+              {inventory.length} {t("operations.materials")}
             </p>
           </div>
         </div>
@@ -400,30 +406,30 @@ export function InventoryPage() {
             <div
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`flex-shrink-0 w-40 p-4 rounded-xl cursor-pointer transition-all border-2 ${
+              className={`flex-shrink-0 w-auto min-w-[160px] max-w-[260px] p-3 rounded-xl cursor-pointer transition-all border-2 ${
                 selectedCategory === cat.id
-                  ? "bg-white border-error shadow-sm"
+                  ? "bg-white border-primary shadow-sm"
                   : "bg-white border-gray-100 hover:border-gray-200 hover:shadow-sm"
               }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   <p
-                    className={`font-semibold truncate ${selectedCategory === cat.id ? "text-error" : "text-gray-700"}`}
+                    className={`font-semibold truncate ${selectedCategory === cat.id ? "text-primary" : "text-gray-700"}`}
                   >
                     {cat.name}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {count} {t("inventory.items")}
+                  <p className="text-sm text-gray-500 mt-1">
+                    {count} {t("operations.materials")}
                   </p>
                 </div>
-                <div className="flex flex-col gap-1 ml-1">
+                <div className="flex gap-1 ml-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       openCategoryModal(cat);
                     }}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                    className="btn-sm p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
                   >
                     <Edit2 size={14} />
                   </button>
@@ -434,7 +440,7 @@ export function InventoryPage() {
                         handleDeleteCategory(cat.id);
                       }
                     }}
-                    className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
+                    className="btn-sm p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -447,7 +453,7 @@ export function InventoryPage() {
         {/* 添加分类按钮 */}
         <div
           onClick={() => openCategoryModal()}
-          className="flex-shrink-0 w-40 p-4 rounded-xl cursor-pointer transition-all border-2 border-dashed border-gray-200 hover:border-gray-300 hover:shadow-sm flex items-center justify-center"
+          className="flex-shrink-0 w-auto min-w-[160px] max-w-[260px] p-3 rounded-xl cursor-pointer transition-all border-2 border-dashed border-gray-200 hover:border-gray-300 hover:shadow-sm flex items-center justify-center"
         >
           <div className="text-center text-gray-400">
             <Plus size={18} className="mx-auto mb-1" />
@@ -456,6 +462,7 @@ export function InventoryPage() {
         </div>
       </div>
 
+      <details className="text-sm"><summary className="cursor-pointer text-gray-600">{t("inventory.lowStockAlert")}</summary>
       {/* Low Stock Alert */}
       {alerts.length > 0 && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
@@ -480,6 +487,7 @@ export function InventoryPage() {
         </div>
       )}
 
+      </details>
       {/* Search & Filters */}
       <div className="flex gap-4 items-center">
         <div className="relative flex-1 max-w-md">
@@ -545,10 +553,7 @@ export function InventoryPage() {
               </thead>
               <tbody>
                 {filteredInventory.map((item: any) => {
-                  const isLow = !(item.type==='semi_finished'&&item.processRecipeId) && (
-                    item.isLowStock ||
-                    item.currentStock <=
-                      (item.effectiveSafetyStock ?? item.safetyStock ?? 0));
+                  const isLow = isLowItem(item);
                   return (
                     <tr
                       key={item.id}
@@ -668,7 +673,7 @@ export function InventoryPage() {
 
       {/* Add Item Modal */}
       {showAddItem && (
-        <AdminDialog title={t("inventory.addItem")} onClose={() => setShowAddItem(false)} className="max-w-md" busy={Boolean(addItemMutation.isPending)} trackChanges chrome>
+        <AdminDialog title={t("operations.addMaterial")} onClose={() => setShowAddItem(false)} className="max-w-md" busy={Boolean(addItemMutation.isPending)} trackChanges chrome>
 
             <div className="space-y-4">
               <div>

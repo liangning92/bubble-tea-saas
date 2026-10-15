@@ -279,3 +279,28 @@ body {
 .admin-workspace input.pr-10:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=color]) { padding-right: 40px; }
 
 .recipe-edit-row .tabular-nums { overflow-wrap: anywhere; }
+
+/* Payroll is a comparison table on desktop and a compact record on phones. */
+.payroll-summary-table { table-layout: auto; }
+.payroll-summary-table > thead > tr > th:nth-child(2) { text-align: right; }
+.payroll-summary-table > tbody > .payroll-summary-row > td { padding: 12px; }
+.payroll-summary-table > tbody > .payroll-expanded-row > td { padding: 12px; }
+@media (max-width: 767px) {
+  .payroll-summary-table, .payroll-summary-table > tbody { display: block; width: 100%; }
+  .payroll-summary-table > thead { display: none; }
+  .payroll-summary-table > tbody > .payroll-summary-row { display: grid; grid-template-columns: minmax(0,1fr) auto; padding: 12px; border: 1px solid var(--color-border); border-radius: 12px; margin-bottom: 12px; background: white; gap: 8px 12px; }
+  .payroll-summary-table > tbody > .payroll-summary-row > td { display: block; padding: 0; max-width: 100%; }
+  .payroll-summary-row > td:nth-child(3), .payroll-summary-row > td:nth-child(4), .payroll-summary-row > td:nth-child(5) { grid-column: 1 / -1; }
+  .payroll-summary-table > tbody > .payroll-expanded-row, .payroll-summary-table > tbody > .payroll-expanded-row > td { display: block; width: 100%; }
+}
+
+.operations-table th:not(.text-right), .payroll-summary-table th:not(.text-right) { text-align: left; }
+
+.payroll-filters { display: grid; grid-template-columns: 20px repeat(3, minmax(0, 1fr)); gap: 8px; align-items: center; }
+.payroll-filters > :not(svg), .payroll-filters input { width: 100%; min-width: 0; }
+@media (max-width: 639px) {
+  .payroll-filters { grid-template-columns: minmax(0, 1fr); }
+  .payroll-filters > svg { display: none; }
+}
+
+.operations-table.admin-wide-table th:first-child, .operations-table.admin-wide-table td:first-child { width: 240px; white-space: normal; overflow-wrap: anywhere; }
