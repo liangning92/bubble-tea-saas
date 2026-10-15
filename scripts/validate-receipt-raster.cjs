@@ -1,8 +1,11 @@
 // Render using Electron and the exact packaged modules, without contacting a printer.
-const {app}=require('electron'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
+const {app,BrowserWindow}=require('electron'),assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
 const index=process.argv.indexOf('--resources');
 const modulePath=index>=0?path.resolve(process.argv[index+1],'app.asar/client-pos/dist-electron/electron/receiptRaster.js'):path.resolve('client-pos/dist-electron/electron/receiptRaster.js');
-const timeout=setTimeout(()=>{console.error('Receipt renderer validation timed out');app.exit(1)},60000);
+const timeout=setTimeout(()=>{console.error('Receipt renderer validation timed out');app.exit(1)},180000);
+// Verify the exact installer also works with GPU acceleration disabled.
+app.commandLine.appendSwitch('disable-gpu');
+app.on('window-all-closed',()=>{});
 app.whenReady().then(async()=>{
  const {renderTemplateReceipt}=require(modulePath),cases=[];
  const block=(type,config={},style={})=>({type,enabled:true,config,style});
@@ -13,5 +16,5 @@ app.whenReady().then(async()=>{
   while(offset<bytes.length){assert.deepEqual([...bytes.subarray(offset,offset+4)],[29,118,48,0]);assert.equal(bytes.readUInt16LE(offset+4),byteWidth);const rows=bytes.readUInt16LE(offset+6);assert.ok(rows>0&&rows<=800);const end=offset+8+rows*byteWidth;assert.ok(end<=bytes.length);for(const value of bytes.subarray(offset+8,end))if(value)ink++;offset=end;strips++;height+=rows;}
   assert.equal(offset,bytes.length);assert.ok(strips>=2);assert.ok(ink>1000);cases.push({paperSize,language,strips,height,bytes:bytes.length});
  }
- fs.writeFileSync('receipt-raster-validation.json',JSON.stringify({passed:true,physicalPrinting:false,modulePath,cases},null,2));console.log('PASS exact packaged receipt raster rendering: 58/80mm, three languages, long receipts, QR and barcode');clearTimeout(timeout);app.exit(0);
+ fs.writeFileSync('receipt-raster-validation.json',JSON.stringify({passed:true,physicalPrinting:false,renderBackend:'chromium-pdf-cpu',gpuDisabled:true,modulePath,cases},null,2));console.log('PASS exact packaged receipt raster rendering: 58/80mm, three languages, long receipts, QR and barcode');clearTimeout(timeout);app.exit(0);
 }).catch(error=>{console.error(error);clearTimeout(timeout);app.exit(1)});

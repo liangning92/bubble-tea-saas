@@ -10,7 +10,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "dev:electron": "npm run build:electron:main && electron .",
-    "build:electron:main": "tsc -p tsconfig.electron.json",
+    "build:electron:main": "node ../scripts/compile-electron.cjs",
     "build:electron": "npm run build && npm run build:electron:main && electron-builder --win portable",
     "build:electron:installer": "npm run build && npm run build:electron:main && electron-builder --win nsis"
   },

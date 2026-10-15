@@ -44,7 +44,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "electron:build": "npm run version:update && npm run db:generate:sqlite && npm run build:pos && npm run build:server && npm run build:admin && npm run electron:compile && electron-builder --config electron-builder.json --win",
     "version:update": "node scripts/update-version.js",
-    "electron:compile": "tsc -p client-pos/tsconfig.electron.json",
+    "electron:compile": "node scripts/compile-electron.cjs",
     "electron:dev": "npm run build:pos && npm run build:server && npm run electron:compile && electron .",
     "electron:start": "npm run electron:compile && electron .",
     "typecheck:server": "cd server && tsc --noEmit"
@@ -54,12 +54,14 @@
     "npm": ">=9.0.0"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.0.11",
     "@prisma/client": "^5.22.0",
     "asar": "^3.2.0",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.9",
     "jsbarcode": "3.12.3",
     "node-thermal-printer": "^4.6.0",
+    "pdfjs-dist": "6.4.299",
     "pdfkit": "^0.19.1",
     "qrcode": "1.5.4",
     "socket.io": "^4.8.3",
