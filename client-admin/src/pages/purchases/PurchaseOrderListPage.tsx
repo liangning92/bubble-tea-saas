@@ -246,8 +246,17 @@ export function PurchaseOrderListPage() {
 
   const editOrder=(order:PurchaseOrder)=>{setEditing(order);setReason('');setActionError('');setFormData({supplierId:order.supplierId||'',expectedDate:order.expectedDate?.slice(0,10)||'',note:order.note||'',items:order.items.map(i=>({inventoryId:i.inventoryId,quantity:String(i.inputQuantity??i.quantity),inputUnit:i.inputUnit||i.inventory?.unit||'',paidAmount:String(i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)))}))});setShowModal(true)}
   const summary = summarizePurchases(orders, today, dateSettings.timezone)
-  const visibleOrders=orders.filter(o=>(!filterStatus || (filterStatus==='awaiting_receipt' ? ['pending','approved','awaiting_receipt'].includes(o.status) : o.status===filterStatus)) && (!search||[o.supplier?.name,o.orderNumber,o.onlineOrderNumber,...o.items.map(i=>formatItemName(i.inventory?.name||'',i18n.language))].join(' ').toLowerCase().includes(search.toLowerCase())))
-  const rank=(o:PurchaseOrder)=>o.status==='awaiting_receipt'||o.status==='approved'?0:o.status==='pending'?1:o.status==='received'?2:3
+  const searchedOrders = orders.filter(o => !search || [o.supplier?.name, o.orderNumber, o.onlineOrderNumber, ...o.items.map(i => formatItemName(i.inventory?.name || '', i18n.language))].join(' ').toLowerCase().includes(search.toLowerCase()))
+  const matchesStatus = (order: PurchaseOrder, status: string) => !status || (status === 'awaiting_receipt' ? ['pending', 'approved', 'awaiting_receipt'].includes(order.status) : order.status === status)
+  const visibleOrders = searchedOrders.filter(order => matchesStatus(order, filterStatus))
+  const statusFilters = [
+    { value: '', label: 'purchases.allStatus' },
+    { value: 'awaiting_receipt', label: 'inventoryFlow.awaiting' },
+    { value: 'pending', label: 'inventoryFlow.pending' },
+    { value: 'approved', label: 'purchases.approved' },
+    { value: 'received', label: 'inventoryFlow.received' },
+    { value: 'cancelled', label: 'purchases.cancelled' }
+  ]
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -268,18 +277,6 @@ export function PurchaseOrderListPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-lg border p-1" role="group" aria-label={t('entryFix.view')}>{(['board','list'] as const).map(v=><button key={v} aria-pressed={viewMode===v} onClick={()=>setViewMode(v)} className={`px-3 py-1 rounded ${viewMode===v?'bg-primary text-white':''}`}>{t('entryFix.'+v)}</button>)}</div>
 <input className="p-2 border rounded-lg min-w-0 flex-1" aria-label={t('entryFix.search')} placeholder={t('entryFix.search')} value={search} onChange={e=>setSearch(e.target.value)}/>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="p-2 border border-gray-200 rounded-lg text-sm"
-          >
-            <option value="">{t('purchases.allStatus')}</option>
-            <option value="awaiting_receipt">{t('inventoryFlow.awaiting')}</option>
-            <option value="pending">{t('inventoryFlow.pending')}</option>
-            <option value="approved">{t('purchases.approved')}</option>
-            <option value="received">{t('purchases.received')}</option>
-            <option value="cancelled">{t('purchases.cancelled')}</option>
-          </select>
         </div>
       </div>
 
@@ -291,56 +288,55 @@ export function PurchaseOrderListPage() {
         <div className="bg-white border rounded-xl p-4 min-w-0"><p className="text-sm text-gray-500">{t('purchaseBoard.month')}</p><strong className="text-2xl tabular-nums break-words">{formatCurrency(summary.monthAmount)}</strong><p className="text-xs text-gray-500 mt-1">{today.slice(0,7)}</p></div>
       </section>
       <div className="px-4 pt-2 text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-1"><p>{t('purchaseBoard.basis')}</p><Link to="/finance/expenses" className="text-primary underline">{t('purchaseBoard.finance')}</Link></div>
-      {/* Content */}
-      <div className={viewMode==='board'?"p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start":"p-4 space-y-4"}>
+      {/* Status describes the same order throughout its lifecycle; it never reserves a card column. */}
+      <div className="px-4 pt-4 flex flex-wrap gap-2" role="group" aria-label={t('purchases.allStatus')}>
+        {statusFilters.map(({ value, label }) => <button key={value} aria-pressed={filterStatus === value} onClick={() => setFilterStatus(value)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${filterStatus === value ? 'border-primary bg-primary-light text-primary font-semibold' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'}`}>
+          {t(label)}<span className="rounded-md bg-gray-100 px-1.5 text-xs tabular-nums text-gray-600">{searchedOrders.filter(order => matchesStatus(order, value)).length}</span>
+        </button>)}
+      </div>
+      <div className={viewMode === 'board' ? "p-4 grid grid-cols-1 lg:grid-cols-2 gap-4 items-start" : "p-4 space-y-4"}>
         {isLoading ? (
-          <div className="text-center py-8 text-gray-500">{t('common.loading')}</div>
+          <div className="col-span-full text-center py-8 text-gray-500" role="status">{t('common.loading')}</div>
         ) : visibleOrders.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl">
+          <div className="col-span-full text-center py-12 bg-white rounded-xl">
             <p className="text-gray-500">{t('purchases.noData')}</p>
           </div>
         ) : (
-          (viewMode==='board'?[0,1,2,3]:[-1]).map(lane=><section key={lane} className="min-w-0 space-y-3">{lane>=0&&<h2 className="font-semibold flex justify-between px-1">{t(['inventoryFlow.awaiting','inventoryFlow.pending','inventoryFlow.received','purchases.cancelled'][lane])}<span>{visibleOrders.filter(o=>rank(o)===lane).length}</span></h2>}{visibleOrders.filter(o=>lane===-1||rank(o)===lane).map((order) => {
+          visibleOrders.map((order) => {
             const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending
             const StatusIcon = statusConfig.icon
 
             return (
-              <div key={order.id} className="bg-white rounded-xl shadow-sm p-4">
-                <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
-                  <div>
-                    <h3 className="font-bold text-gray-900 text-base break-words">{order.items.map(i=>formatItemName(i.inventory?.name||t('purchases.items'),i18n.language)).join(' · ')}</h3><ReferenceDetails value={order.onlineOrderNumber||order.orderNumber}/><p className="text-xs text-gray-500 mt-1">{t(order.refunded?'entryFix.refundDone':order.financeExpenseId?'entryFix.financeLinked':'entryFix.paymentUnconfirmed')}</p>{order.financeExpenseId&&<Link to={'/finance/expenses?purchase='+encodeURIComponent(order.id)} className="text-xs text-primary underline">{t('purchaseBoard.viewExpense')}</Link>}
-                    <p className="text-sm text-gray-500">{order.supplier?.name || t('purchases.supplier')}</p>
-                    <p className="text-sm text-gray-500 mt-1">{t('inventoryActors.buyer')}: <ActorName actor={order.createdByActor} id={order.createdBy}/></p>
-                    {order.status === 'received' && <p className="text-sm text-gray-500">{t('inventoryActors.receiver')}: <ActorName actor={order.receivedByActor} id={order.receivedBy}/></p>}
+              <article key={order.id} className="min-w-0 bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-bold text-gray-900 text-lg break-words">{order.items.map(i=>formatItemName(i.inventory?.name||t('purchases.items'),i18n.language)).join(' · ')}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{t('purchases.supplier')}: {order.supplier?.name || '—'}</p>
+                    <ReferenceDetails value={order.onlineOrderNumber||order.orderNumber}/>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusConfig.color} flex items-center gap-1`}>
-                    <StatusIcon size={14} />
-                    {t(statusConfig.labelKey)}
-                  </span>
+                  <div className="text-right shrink-0 max-w-full">
+                    <p className="text-xs text-gray-500">{t('purchases.total')}</p>
+                    <p className="font-bold text-xl tabular-nums break-words">{formatCurrency(order.totalAmount)}</p>
+                    <span className={`mt-2 inline-flex px-2 py-1 rounded-full text-xs font-medium ${statusConfig.color} items-center gap-1`}>
+                      <StatusIcon size={14} />{t(statusConfig.labelKey)}
+                    </span>
+                  </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                  <div>
-                    <p className="text-gray-500">{t('purchases.total')}</p>
-                    <p className="font-bold text-lg">{formatCurrency(order.totalAmount)}</p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500">{t('purchases.poDate')}</p>
-                    <p className="font-medium">{formatDate(order.createdAt)}</p>
-                  </div>
-                  {order.expectedDate && (
-                    <div>
-                      <p className="text-gray-500">{t('purchases.expected')}</p>
-                      <p className="font-medium">{formatDate(order.expectedDate)}</p>
-                    </div>
-                  )}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-xs mb-4">
+                  <div className="min-w-0"><p className="text-gray-500">{t('purchases.poDate')}</p><p className="font-medium mt-1">{formatDate(order.createdAt)}</p></div>
+                  {order.expectedDate && <div className="min-w-0"><p className="text-gray-500">{t('purchases.expected')}</p><p className="font-medium mt-1">{formatDate(order.expectedDate)}</p></div>}
+                  <div className="min-w-0 break-words"><p className="text-gray-500">{t('inventoryActors.buyer')}</p><div className="font-medium mt-1"><ActorName actor={order.createdByActor} id={order.createdBy}/></div></div>
+                  {order.status === 'received' && <div className="min-w-0 break-words"><p className="text-gray-500">{t('inventoryActors.receiver')}</p><div className="font-medium mt-1"><ActorName actor={order.receivedByActor} id={order.receivedBy}/></div></div>}
                 </div>
-
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mb-3">
+                  <span className={order.financeExpenseId ? 'text-green-700' : 'text-gray-500'}>{t(order.refunded?'entryFix.refundDone':order.financeExpenseId?'entryFix.financeLinked':'entryFix.paymentUnconfirmed')}</span>
+                  {order.financeExpenseId&&<Link to={'/finance/expenses?purchase='+encodeURIComponent(order.id)} className="text-primary underline">{t('purchaseBoard.viewExpense')}</Link>}
+                </div>
                <div className="border-t pt-3">
                   <p className="text-sm text-gray-500 mb-2">{order.items.length} {t('purchases.itemCount')}</p>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {order.items.map((item) => (
-                      <div key={item.id} className="border-b last:border-0 py-2 text-sm min-w-0"><p className="font-medium break-words">{formatItemName(item.inventory?.name||t('purchases.items'),i18n.language)}</p><p className="text-primary font-semibold">{(item.inputQuantity??item.quantity).toLocaleString(i18n.language,{maximumFractionDigits:9})} {item.inputUnit||item.inventory?.unit} · {formatCurrency(item.lineAmount??Math.round((item.inputQuantity??item.quantity)*(item.inputUnitCost??item.unitCost)))}</p><PurchasePrices quantity={item.inputQuantity??item.quantity} paidAmount={item.lineAmount??Math.round((item.inputQuantity??item.quantity)*(item.inputUnitCost??item.unitCost))} ledgerQuantity={item.quantity} unit={item.inputUnit||item.inventory?.unit||''} ledgerUnit={item.inventory?.unit||''}/></div>
+                      <div key={item.id} className="bg-gray-50 rounded-lg p-3 text-sm min-w-0 break-words"><p className="font-medium break-words">{formatItemName(item.inventory?.name||t('purchases.items'),i18n.language)}</p><p className="text-primary font-semibold">{(item.inputQuantity??item.quantity).toLocaleString(i18n.language,{maximumFractionDigits:9})} {item.inputUnit||item.inventory?.unit} · {formatCurrency(item.lineAmount??Math.round((item.inputQuantity??item.quantity)*(item.inputUnitCost??item.unitCost)))}</p><PurchasePrices quantity={item.inputQuantity??item.quantity} paidAmount={item.lineAmount??Math.round((item.inputQuantity??item.quantity)*(item.inputUnitCost??item.unitCost))} ledgerQuantity={item.quantity} unit={item.inputUnit||item.inventory?.unit||''} ledgerUnit={item.inventory?.unit||''}/></div>
                     ))}
 
                   </div>
@@ -350,8 +346,8 @@ export function PurchaseOrderListPage() {
                 {order.status==='cancelled'&&order.paidAt&&!order.refunded&&<button disabled={busyOrders.has(order.id)} className="text-sm text-amber-700 mt-3" onClick={()=>{setCommand({order,action:'refund'});setReason('')}}>{t('entryFix.refund')}</button>}
                 {!order.paidAt&&order.status!=='cancelled'&&['admin','manager'].includes(user?.role||'')&&<button className="text-sm text-primary underline mt-3" onClick={()=>{setConfirmingPayment(order);setPaidDate(storeCalendarDate(order.createdAt,'Asia/Jakarta'));setReason('');setActionError('')}}>{t('purchaseBoard.confirmPayment')}</button>}
                 {/* Actions */}
-                <div className="flex flex-wrap gap-2 mt-4 border-t pt-4">
-                  {['pending','approved','awaiting_receipt'].includes(order.status)&&<button className="text-sm text-primary" onClick={()=>editOrder(order)}>{t('entryFix.edit')}</button>}
+                <div className="flex flex-wrap items-center justify-end gap-2 mt-4 border-t pt-3">
+                  {['pending','approved','awaiting_receipt'].includes(order.status)&&<button className="text-sm text-primary rounded-lg border border-gray-200 px-3 py-2" onClick={()=>editOrder(order)}>{t('entryFix.edit')}</button>}
                                    {order.status === 'pending' && (
                     <>
                       <button
@@ -372,20 +368,20 @@ export function PurchaseOrderListPage() {
                       </button>
                     </>
                   )}
-                  {['approved','awaiting_receipt'].includes(order.status) && (<><button disabled={busyOrders.has(order.id)} onClick={()=>handleCancel(order.id)} className="text-red-600 px-3">{t('purchases.cancel')}</button>
+                  {['approved','awaiting_receipt'].includes(order.status) && (<><button disabled={busyOrders.has(order.id)} onClick={()=>handleCancel(order.id)} className="text-sm text-red-600 rounded-lg border border-gray-200 px-3 py-2">{t('purchases.cancel')}</button>
                     <button
                       disabled={busyOrders.has(order.id)}
                         onClick={() => handleStatusChange(order.id, 'received')}
-                      className="flex-1 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 flex items-center justify-center gap-1"
+                      className="px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 flex items-center justify-center gap-1"
                     >
                       <Truck size={16} />
                       {t('inventoryFlow.receiveAll')}
                     </button></>
                   )}
                 </div>
-              </div>
+              </article>
             )
-          })}</section>)
+          })
         )}
       </div>
 
