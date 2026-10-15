@@ -142,12 +142,16 @@ def validate(root, temp, app, data, db, drive, historic, verify_started, version
             assert prepared['status'] == 'prepared' and prepared['preverifiedBackup']
             background_reused = True
         runtime=verify_started(version)
-        downtime = time.monotonic() - install_started
+        # The callback closes its owned fixture after readiness; exclude that test teardown.
+        ready_at = runtime.pop('readyAtMonotonic')
+        downtime = ready_at - install_started
+        assert downtime >= 0
+        cleanup_seconds = time.monotonic() - ready_at
         assert historic()==before
         assert hashlib.sha256(alternate_db.read_bytes()).hexdigest() == alternate_before
         if stale_stage:
             assert all(hashlib.sha256(p.read_bytes()).hexdigest() == value for p, value in stale_evidence.items()), 'Obsolete stage and recovery files must remain untouched'
-        return {'backgroundBackupReused': background_reused, 'downtimeSeconds': round(downtime, 3), 'obsoleteStagePreserved': stale_stage, 'originalVersion':original_version,'originalInstallerSha256':original_hash,'originalUninstallerPresent':True,'originalPayloadUnmodified':True,'originalUpdaterIpcUsed':True,'downloadedCandidateHashMatched':True,'historicalRowsPreserved':True,'alternateProfilePreserved':True,'restartedRuntime':runtime}
+        return {'backgroundBackupReused': background_reused, 'downtimeSeconds': round(downtime, 3), 'testCleanupSeconds': round(cleanup_seconds, 3), 'obsoleteStagePreserved': stale_stage, 'originalVersion':original_version,'originalInstallerSha256':original_hash,'originalUninstallerPresent':True,'originalPayloadUnmodified':True,'originalUpdaterIpcUsed':True,'downloadedCandidateHashMatched':True,'historicalRowsPreserved':True,'alternateProfilePreserved':True,'restartedRuntime':runtime}
     finally:
         server.shutdown()
         if old_process.poll() is None:
