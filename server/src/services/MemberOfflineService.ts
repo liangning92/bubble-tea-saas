@@ -18,7 +18,7 @@ export async function memberOfflineSnapshot(storeId:string,after?:string){
    const payload={purpose:'pos-offline-member',storeId,member,rule,coupons,issuedAt:issuedAt.toISOString(),expiresAt:expiresAt.toISOString()}
    return {...payload,token:jwt.sign(payload,config.jwt.secret,{audience:'pos-offline-member',expiresIn:`${POS_OFFLINE_DAYS}d`})}
   })}
- },{isolationLevel:process.env.DATABASE_URL?.startsWith('file:')?'Serializable':'RepeatableRead'})
+ },{isolationLevel:'Serializable'})
 }
 export async function verifyOfflineMember(token:string,storeId:string,memberId:string,occurredAt:string,db:any=prisma){
  const at=Date.parse(occurredAt)

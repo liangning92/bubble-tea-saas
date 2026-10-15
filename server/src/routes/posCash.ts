@@ -2,7 +2,6 @@ import {offlineWorkSnapshot} from '../services/POSOfflineWorkService'
 import {readPolicyV2} from '../services/StaffPermissionV2Service'
 import { POS_MANUAL_PAYMENT_METHODS } from '../utils/offlinePolicy'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
-import { config as runtimeConfig } from '../config/env'
 import { offlineAuthorization, applyOfflineOperation, OfflineOperationError } from '../services/POSOfflineOperationService'
 import { z } from 'zod'
 import { shiftHandoverFinancials } from '../services/ShiftHandoverFinancials'
@@ -90,7 +89,7 @@ for (const path of ['/balance', '/shifts/current']) {
         const operations=data.shift?await tx.config.findMany({where:{storeId:req.user!.storeId,category:'pos_offline_operation',key:{startsWith:'pos.offline.operation:'}},select:{key:true,value:true}}):[]
         const includedOfflineOperationIds=operations.filter(row=>JSON.parse(row.value).sessionId===data.shift?.id).map(row=>row.key.slice('pos.offline.operation:'.length))
         return {...data,purchaseExpenses,cashReconciliation,includedOrderNumbers,includedOfflineOperationIds}
-      },{isolationLevel:runtimeConfig.databaseUrl.startsWith('postgres')?'RepeatableRead':'Serializable'})
+      },{isolationLevel:'Serializable'})
       const allowedPayments=[]
       for(const method of POS_MANUAL_PAYMENT_METHODS)if(!await checkPaymentMethod(req.user!.storeId,method))allowedPayments.push(method)
       const [shifts,settingsRow,categoriesRow]=await Promise.all([
@@ -107,7 +106,7 @@ for (const path of ['/balance', '/shifts/current']) {
   })
 }
 
-router.get('/offline-work',authenticate,authorize('admin','manager','cashier'),async(req:AuthRequest,res)=>{try{return res.json({code:200,data:await prisma.$transaction(tx=>offlineWorkSnapshot(req.user!,tx),{isolationLevel:runtimeConfig.databaseUrl.startsWith('postgres')?'RepeatableRead':'Serializable'})})}catch(error:any){return res.status(409).json({code:409,message:error.message})}})
+router.get('/offline-work',authenticate,authorize('admin','manager','cashier'),async(req:AuthRequest,res)=>{try{return res.json({code:200,data:await prisma.$transaction(tx=>offlineWorkSnapshot(req.user!,tx),{isolationLevel:'Serializable'})})}catch(error:any){return res.status(409).json({code:409,message:error.message})}})
 
 // The current operator authenticates delivery; each original actor has a signed, bounded grant.
 router.post('/shifts/offline-operations', authenticate, authorize('admin','manager','cashier'), async(req:AuthRequest,res)=>{
