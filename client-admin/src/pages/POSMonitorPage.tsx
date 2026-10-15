@@ -1,6 +1,7 @@
 import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod,queryInstantRange} from '../utils/queryPeriods'
 import { OrderItemsTable } from '../components/OrderItemsTable'
+import { readReceiptLog } from '../utils/posLogPresentation'
 import { readPOSFailure } from '../utils/posMonitorFailure'
 import { formatCurrency } from '../utils/helpers'
 import { useMemo, useEffect } from 'react'
@@ -37,6 +38,7 @@ const ACTION_KEY_MAP: Record<string, string> = {
   checkout_complete: 'actionCheckoutComplete',
   checkout_failed: 'actionCheckoutFailed',
   received_receipt: 'actionReceivedReceipt',
+  receipt_print: 'actionReceiptPrint',
   order_created: 'actionOrderCreated',
   suspend: 'actionSuspend',
   resume: 'actionResume',
@@ -71,6 +73,19 @@ function POSFailureDetails({ metadata }: { metadata: unknown }) {
     <p className="text-red-800"><span className="font-semibold">{t('posMonitor.failureReason')}: </span>{t(`posMonitor.${failure.reasonKey}`)}</p>
     {failure.code && <p className="mt-1 text-xs text-red-700 break-words">{t('posMonitor.failureCode')}: <code>{failure.code}</code>{failure.httpStatus ? ` · HTTP ${failure.httpStatus}` : ''}</p>}
     {failure.needsReview && <p className="mt-1 text-xs text-red-700">{t('posMonitor.failureNeedsReview')}</p>}
+  </div>
+}
+
+function ReceiptLogDetails({ log }: { log: any }) {
+  const { t } = useTranslation()
+  const receipt = readReceiptLog(log)!
+  const needsReason = receipt.status === 'failed' || receipt.status === 'unknown'
+  return <div className="mt-2 space-y-2 text-sm leading-relaxed break-words" data-testid="receipt-log-details">
+    <p className="font-medium text-gray-800">{t(`posReceiptLog.${receipt.status}`)}</p>
+    <p className="text-gray-600">{t('posReceiptLog.order')}: {receipt.orderNumber || t('posReceiptLog.notRecorded')}{receipt.pickupNumber && <> · {t('posReceiptLog.pickup')}: {receipt.pickupNumber}</>}</p>
+    {needsReason && <p className="text-gray-700"><strong>{t('posReceiptLog.reason')}: </strong>{t(`posReceiptLog.${receipt.reason}`)}</p>}
+    <p className="text-gray-600"><strong>{t('posReceiptLog.next')}: </strong>{t(`posReceiptLog.${needsReason ? receipt.reason + 'Next' : receipt.status + 'Next'}`)}</p>
+    {receipt.error && <p className="text-xs text-gray-500">{t('posMonitor.failureCode')}: <code>{receipt.error}</code></p>}
   </div>
 }
 
@@ -422,14 +437,14 @@ export function POSMonitorPage() {
                     <span className="font-medium text-sm">{log.staffName}</span>
                     <span className="text-gray-400">·</span>
                     <span className="text-sm text-gray-600">
-                      {t(`posMonitor.${ACTION_KEY_MAP[log.action]}`) || log.action}
+                      {ACTION_KEY_MAP[log.action] ? t(`posMonitor.${ACTION_KEY_MAP[log.action]}`) : t('posReceiptLog.otherAction')}
                     </span>
-                    <SeverityBadge severity={log.severity} />
+                    {log.action === 'receipt_print' ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${['failed','unknown','unrecorded'].includes(readReceiptLog(log)!.status) ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>{t(`posReceiptLog.badge_${readReceiptLog(log)!.status}`)}</span> : <SeverityBadge severity={log.severity} />}
                   </div>
-                  <p className="text-sm text-gray-500 mt-0.5">{log.description}</p>
+                  {log.action === 'receipt_print' ? <ReceiptLogDetails log={log} /> : <p className="text-sm text-gray-500 mt-0.5 break-words">{log.description}</p>}
                   {log.action === 'checkout_failed' && <POSFailureDetails metadata={log.metadata} />}
                   {log.action === 'cart_clear' && log.severity !== 'info' && <ClearedCartDetails log={log} />}
-                  {log.metadata && log.severity !== 'info' && <details className="mt-2 text-xs text-gray-500"><summary className="cursor-pointer">{t('posMonitor.rawRecord')}</summary><pre className="mt-1 whitespace-pre-wrap break-words">{typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata, null, 2)}</pre></details>}
+                  {(log.metadata || log.action === 'receipt_print') && (log.severity !== 'info' || log.action === 'receipt_print') && <details className="mt-2 text-xs text-gray-500"><summary className="cursor-pointer">{t('posMonitor.rawRecord')}</summary><pre className="mt-1 whitespace-pre-wrap break-words">{log.action === 'receipt_print' ? JSON.stringify({ action: log.action, severity: log.severity, description: log.description, metadata: log.metadata }, null, 2) : typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata, null, 2)}</pre></details>}
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-xs text-gray-500">{formatDate(log.createdAt)}</p>
