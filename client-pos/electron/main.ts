@@ -624,6 +624,9 @@ function stopLocalServer(): void {
 }
 
 async function prepareOnlineInstallation(): Promise<void> {
+  // Do not terminate the native worker while a receipt is being rendered or
+  // waiting for its exact spool job to finish, including a recovery reprint.
+  if (receiptPrintBusy) throw Error('UPDATE_RECEIPT_STILL_PROCESSING')
   await mainWindow?.webContents.session.flushStorageData()
   const child = serverProcess
   if (!child || child.exitCode !== null) return
