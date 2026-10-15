@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
 function load(file,imports={}){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,{module:m,exports:m.exports,require:n=>{if(n in imports)return imports[n];if(n.endsWith('/storeDateSettings'))return load('server/src/utils/storeDateSettings.ts');throw Error(n)},Date,Map,Set,console});return m.exports;}
 const zod=require('../../server/node_modules/zod');
-const cash=load('server/src/services/ShiftCashReconciliation.ts',{zod,'../utils/refundAllocation':load('server/src/utils/refundAllocation.ts')});
+const cash=load('server/src/services/ShiftCashReconciliation.ts',{zod,'../utils/offlinePolicy':{POS_MANUAL_PAYMENT_METHODS:['cash','qris','gopay','ovo','dana','shopeepay','debit','card']},'../utils/refundAllocation':load('server/src/utils/refundAllocation.ts')});
 const manual=load('server/src/services/ShiftManualReceipts.ts',{zod,'../utils/dailyOnlineRevenue':load('server/src/utils/dailyOnlineRevenue.ts',{'./revenueDateRange':load('server/src/utils/revenueDateRange.ts')}),'../utils/revenueDateRange':load('server/src/utils/revenueDateRange.ts')});
 const handover=load('server/src/services/ShiftHandoverFinancials.ts',{'./ShiftManualReceipts':manual});
 const svc=load('server/src/services/ShiftCorrectionService.ts',{zod,'./ShiftCashReconciliation':cash,'./ShiftManualReceipts':manual,'./ShiftHandoverFinancials':handover});

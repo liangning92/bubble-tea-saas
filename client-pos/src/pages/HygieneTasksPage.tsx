@@ -71,7 +71,7 @@ export function HygieneTasksPage() {
       if (!user?.storeId) return
       setLoading(true)
       try {
-        const today = new Date().toISOString().split('T')[0]
+        const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
         const [tasksRes, overdueRes] = await Promise.all([
           posApi.getMyTasks(today),
           posApi.getOverdueTasks().catch(() => ({ data: { data: { list: [] } } }))
@@ -79,7 +79,7 @@ export function HygieneTasksPage() {
         setTasks(Array.isArray(tasksRes?.data?.data) ? tasksRes.data.data : tasksRes?.data?.data?.list || [])
         setOverdueTasks(Array.isArray(overdueRes?.data?.data) ? overdueRes.data.data : overdueRes?.data?.data?.list || [])
       } catch (e) {
-        setError('Failed to load tasks')
+        setError(t('offlineWork.unprepared'))
       } finally {
         setLoading(false)
       }
@@ -108,7 +108,7 @@ export function HygieneTasksPage() {
 
   // Refresh tasks list
   const refreshTasks = async () => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
     const [tasksRes, overdueRes] = await Promise.all([
       posApi.getMyTasks(today),
       posApi.getOverdueTasks().catch(() => ({ data: { data: { list: [] } } }))
@@ -283,9 +283,10 @@ export function HygieneTasksPage() {
         </div>
       </div>
 
+      {error&&!showDetail&&<p role="alert" className="m-4 rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">{error}</p>}
       {/* Task List */}
       <div className="p-4 space-y-3">
-        {displayTasks.length === 0 ? (
+        {displayTasks.length === 0 ? (error?null:
           <div className="text-center py-12 text-gray-500">
             <CheckCircle size={48} className="mx-auto mb-3 text-green-400" />
             <p>{activeTab === 'overdue' ? t('tasks.noOverdueTasks') : t('tasks.noTasks')}</p>
@@ -294,7 +295,7 @@ export function HygieneTasksPage() {
           displayTasks.map((task) => {
             const badge = getStatusBadge(task.status)
             const overdue = isOverdue(task)
-            const canStart = task.status === 'pending'
+            const canStart = ['pending','overdue','in_progress'].includes(task.status)
 
             return (
               <div
@@ -353,7 +354,7 @@ export function HygieneTasksPage() {
                       onClick={(e) => { e.stopPropagation(); openTask(task) }}
                       className="px-3 py-1.5 bg-primary text-white text-sm rounded-lg"
                     >
-                      {t('tasks.start')}
+                      {t(task.status==='in_progress'?'tasks.complete':'tasks.start')}
                     </button>
                   )}
                 </div>
@@ -526,7 +527,7 @@ export function HygieneTasksPage() {
                 {photoUrl ? (
                   <div className="relative rounded-lg overflow-hidden border border-gray-200 bg-gray-50 aspect-video max-h-48 flex items-center justify-center">
                     <img
-                      src={photoUrl.startsWith('http') ? photoUrl : `${window.location.origin}${photoUrl}`}
+                      src={(photoUrl.startsWith('http')||photoUrl.startsWith('data:')) ? photoUrl : `${window.location.origin}${photoUrl}`}
                       alt="Task evidence"
                       className="w-full h-full object-contain"
                     />
@@ -617,7 +618,7 @@ export function HygieneTasksPage() {
               )}
 
               {/* Actions - Pending: show Start button */}
-              {!showSkipConfirm && selectedTask.status === 'pending' && (
+              {!showSkipConfirm && ['pending','overdue'].includes(selectedTask.status) && (
                 <div className="flex gap-3 pt-4 border-t">
                   <button
                     onClick={() => setShowSkipConfirm(true)}

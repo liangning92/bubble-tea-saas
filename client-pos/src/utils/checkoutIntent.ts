@@ -73,7 +73,7 @@ export async function claimCheckout(intent: CheckoutIntent): Promise<void> {
   })
 }
 
-export async function finishCheckout(intent: CheckoutIntent, result: 'accepted' | 'rejected' | 'review', serverId?: string): Promise<void> {
+export async function finishCheckout(intent: CheckoutIntent, result: 'accepted' | 'rejected' | 'review', serverId?: string, serverReceipt?:Record<string,unknown>): Promise<void> {
   await db.transaction('rw', db.config, db.orders, async () => {
     const current = await readCheckoutIntent(intent.request.storeId)
     if (!current || current.localId !== intent.localId) throw new Error('CHECKOUT_RECOVERY_INVALID')
@@ -82,7 +82,7 @@ export async function finishCheckout(intent: CheckoutIntent, result: 'accepted' 
     // Reported funds cannot be discarded merely because order admission was refused.
     if (result === 'rejected' && row.paymentReportedAt) result = 'review'
     const status = result === 'accepted' ? 'synced' : result === 'rejected' ? 'failed' : 'review'
-    await db.orders.update(intent.orderId, { status, serverId, checkoutResolution: result, ...(result === 'accepted' ? { syncedAt: new Date() } : {}) })
+    await db.orders.update(intent.orderId, { status, serverId, checkoutResolution: result, ...(result === 'accepted' ? { syncedAt: new Date(),...(serverReceipt?{cloudReceipt:JSON.parse(JSON.stringify(serverReceipt))}:{}) } : {}) })
     if (result === 'review') await db.config.put({ key: key(intent.request.storeId), value: { ...current, phase: 'review' }, updatedAt: new Date() })
     else {
       await db.config.delete(key(intent.request.storeId))

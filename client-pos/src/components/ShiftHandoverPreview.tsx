@@ -4,7 +4,7 @@ import { formatShiftCash } from '../../../shared/utils/shiftCashReconciliation'
 export function ShiftHandoverPreview({data,actualCash,receipts,cashierName,shiftName}:{data:any;actualCash:number;receipts:{qris:number;shopeefood:number;gofood:number};cashierName:string;shiftName:string}) {
   const {t,i18n}=useTranslation()
   const r=data.cashReconciliation
-  const values={revenue:r.revenue+receipts.shopeefood+receipts.gofood,cash:actualCash-r.expenses-data.shift.openFloat-receipts.qris,openFloat:data.shift.openFloat,drawerTotal:actualCash,expenses:r.expenses,...receipts}
+  const values={revenue:r.revenue+receipts.shopeefood+receipts.gofood,cash:actualCash-data.shift.openFloat,openFloat:data.shift.openFloat,drawerTotal:actualCash,expenses:r.expenses,...receipts}
   const date=new Date(data.shift.openedAt).toLocaleString(i18n.language,{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false})
   return <section className="mb-4 rounded-xl border bg-white p-4" data-testid="handover-preview">
     <h3 className="text-lg font-bold">{t('handoverFlow.title')}</h3>

@@ -28,7 +28,7 @@ export interface LocalOrder {
   occurredAt?: Date
   cloudReceipt?: Record<string, unknown>
   cacheEvidence?: {activityRules?:unknown; activityVersion?:string; activityFetchedAt?:Date; backendUrl:string; catalogVersion:string; catalogFetchedAt:Date; quotedProducts:unknown[]; paymentConfig:unknown; shiftConfig:unknown}
-  manualPayment?: {kind: 'qris_manual'; actorId: string; at: Date; evidence: 'customer_success_photo'; bankConfirmed: false}
+  manualPayment?: {kind: 'qris_manual'|'external_manual'; method?:string; actorId: string; at: Date; evidence: 'customer_success_photo'|'external_terminal_receipt'; bankConfirmed: false}
   serverId?: string
   storeId: string
   staffId: string
@@ -92,6 +92,8 @@ class POSDatabase extends Dexie {
       syncQueue: '++id, type, localId, createdAt',
       config: 'key'
     })
+    // Add indexes without replacing or clearing existing paid receipts.
+    this.version(2).stores({orders:'++id, localId, serverId, status, createdAt, [backendUrl+storeId+shiftSessionId], [backendUrl+storeId]'})
   }
 }
 
@@ -184,7 +186,13 @@ export class SyncManager {
     this.emit({type:'sync:start'})
     let syncedCount = 0, failedCount = 0
     const rows = await db.orders.where('status').anyOf(review ? ['review'] : ['pending','syncing']).and(row=>row.storeId===auth.user.storeId).toArray()
+    const {syncOperationsBefore}=await import('../utils/offlineOperations')
+    rows.sort((a,b)=>new Date(a.occurredAt||a.createdAt).getTime()-new Date(b.occurredAt||b.createdAt).getTime())
+    let blocked=false
     for (const candidate of rows) {
+      if(candidate.backendUrl&&candidate.backendUrl!==currentBackendIdentity())continue
+      if(!await syncOperationsBefore(auth,new Date(candidate.occurredAt||candidate.createdAt).getTime(),review)){blocked=true;failedCount++;break}
+
       // Web Locks prove that a previous document no longer owns a request. Without
       // them, lease expiry is needed before retrying a locally accepted UUID.
       if (candidate.status==='syncing' && (!candidate.locallyAcceptedAt || (!navigator.locks && (candidate.syncClaim?.expiresAt || 0)>Date.now()))) continue
@@ -232,6 +240,7 @@ export class SyncManager {
         this.emit({type:'sync:error',error:String(error)})
       }
     }
+    if(!blocked&&!await syncOperationsBefore(auth,Infinity,review))failedCount++
     this.emit({type:'sync:complete',syncedCount,failedCount})
   }
 
@@ -494,6 +503,7 @@ export interface OfflineCredentials {
 }
 
 export async function saveOfflineCredentials(creds: OfflineCredentials): Promise<void> {
+  if(creds.apiUrl)await db.config.put({key:`offline.credentials:${encodeURIComponent(creds.apiUrl)}:${encodeURIComponent(creds.phone)}`,value:JSON.stringify(creds),updatedAt:new Date()})
   await db.config.put({
     key: OFFLINE_CREDS_KEY,
     value: JSON.stringify(creds),
@@ -501,8 +511,9 @@ export async function saveOfflineCredentials(creds: OfflineCredentials): Promise
   })
 }
 
-export async function getOfflineCredentials(): Promise<OfflineCredentials | null> {
-  const config = await db.config.get(OFFLINE_CREDS_KEY)
+export async function getOfflineCredentials(phone?:string): Promise<OfflineCredentials | null> {
+  let config = await db.config.get(OFFLINE_CREDS_KEY)
+  if(phone&&(!config?.value||JSON.parse(config.value).phone!==phone)) config=await db.config.get(`offline.credentials:${encodeURIComponent(currentBackendIdentity())}:${encodeURIComponent(phone)}`)
   if (!config?.value) return null
   try {
     return JSON.parse(config.value)
@@ -512,5 +523,7 @@ export async function getOfflineCredentials(): Promise<OfflineCredentials | null
 }
 
 export async function clearOfflineCredentials(): Promise<void> {
+  const current=await getOfflineCredentials()
+  if(current?.apiUrl)await db.config.delete(`offline.credentials:${encodeURIComponent(current.apiUrl)}:${encodeURIComponent(current.phone)}`)
   await db.config.delete(OFFLINE_CREDS_KEY)
 }

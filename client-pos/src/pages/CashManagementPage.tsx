@@ -1,3 +1,4 @@
+import { OfflineOperationsStatus } from '../components/OfflineOperationsStatus'
 import dateLocaleI18n from '../i18n'
 import { resolveHandoverReceiptItems } from '../../../shared/utils/handoverReceipt'
 import { selectPrinter } from '../utils/printerRouting'
@@ -287,6 +288,7 @@ export function CashManagementPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <OfflineOperationsStatus />
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">

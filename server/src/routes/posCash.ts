@@ -1,3 +1,9 @@
+import {offlineWorkSnapshot} from '../services/POSOfflineWorkService'
+import {readPolicyV2} from '../services/StaffPermissionV2Service'
+import { POS_MANUAL_PAYMENT_METHODS } from '../utils/offlinePolicy'
+import { checkPaymentMethod } from '../services/POSConfigPolicy'
+import { config as runtimeConfig } from '../config/env'
+import { offlineAuthorization, applyOfflineOperation, OfflineOperationError } from '../services/POSOfflineOperationService'
 import { z } from 'zod'
 import { shiftHandoverFinancials } from '../services/ShiftHandoverFinancials'
 import { parseDateBoundary } from '../utils/businessDate'
@@ -75,16 +81,39 @@ router.post('/events', authenticate, authorize('admin', 'manager', 'cashier'), a
 for (const path of ['/balance', '/shifts/current']) {
   router.get(path, authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
     try {
-      const data = await loadShiftSummaryEvidence(prisma, req.user!.storeId)
-      const purchaseExpenses = data.shift ? await summarizeShiftPurchases(req.user!.storeId, data.shift.openedAt, new Date()) : null
-      const cashReconciliation = data.shift ? await calculateShiftCash(prisma, req.user!.storeId, data.shift, new Date(data.summaryEvidence.windowEnd)) : null
-      res.json({ code: 200, data: { ...data, purchaseExpenses, cashReconciliation } })
+      const result=await prisma.$transaction(async tx=>{
+        const data=await loadShiftSummaryEvidence(tx,req.user!.storeId)
+        const at=new Date(data.summaryEvidence.windowEnd)
+        const purchaseExpenses=data.shift?await summarizeShiftPurchases(req.user!.storeId,data.shift.openedAt,at,tx):null
+        const cashReconciliation=data.shift?await calculateShiftCash(tx,req.user!.storeId,data.shift,at):null
+        const includedOrderNumbers=data.shift?(await tx.order.findMany({where:{storeId:req.user!.storeId,createdAt:{gte:data.shift.openedAt,lt:at}},select:{orderNumber:true}})).map(o=>o.orderNumber):[]
+        const operations=data.shift?await tx.config.findMany({where:{storeId:req.user!.storeId,category:'pos_offline_operation',key:{startsWith:'pos.offline.operation:'}},select:{key:true,value:true}}):[]
+        const includedOfflineOperationIds=operations.filter(row=>JSON.parse(row.value).sessionId===data.shift?.id).map(row=>row.key.slice('pos.offline.operation:'.length))
+        return {...data,purchaseExpenses,cashReconciliation,includedOrderNumbers,includedOfflineOperationIds}
+      },{isolationLevel:runtimeConfig.databaseUrl.startsWith('postgres')?'RepeatableRead':'Serializable'})
+      const allowedPayments=[]
+      for(const method of POS_MANUAL_PAYMENT_METHODS)if(!await checkPaymentMethod(req.user!.storeId,method))allowedPayments.push(method)
+      const [shifts,settingsRow,categoriesRow]=await Promise.all([
+        prisma.shift.findMany({where:{storeId:req.user!.storeId,isActive:true},select:{key:true}}),
+        prisma.config.findUnique({where:{storeId_key:{storeId:req.user!.storeId,key:'shiftSettings'}}}),
+        getExpenseCategories(req.user!.storeId)
+      ])
+      const policy={independentRefundApproval:!!(await readPolicyV2(req.user!.storeId))?.active,shiftKeys:shifts.filter(s=>s.key!=='off').map(s=>s.key),requireSupervisorConfirm:!!(settingsRow&&JSON.parse(settingsRow.value).requireSupervisorConfirm),expenseCategoryKeys:categoriesRow.filter((c:any)=>c.posVisible!==false).map((c:any)=>c.key)}
+      res.json({code:200,data:{...result,offlineAuthorization:offlineAuthorization(req.user!,allowedPayments,policy)}})
     } catch (error) {
       console.error('Get shift evidence error:', error)
       res.status(500).json({ code: 500, message: 'Failed to get shift evidence' })
     }
   })
 }
+
+router.get('/offline-work',authenticate,authorize('admin','manager','cashier'),async(req:AuthRequest,res)=>{try{return res.json({code:200,data:await prisma.$transaction(tx=>offlineWorkSnapshot(req.user!,tx),{isolationLevel:runtimeConfig.databaseUrl.startsWith('postgres')?'RepeatableRead':'Serializable'})})}catch(error:any){return res.status(409).json({code:409,message:error.message})}})
+
+// The current operator authenticates delivery; each original actor has a signed, bounded grant.
+router.post('/shifts/offline-operations', authenticate, authorize('admin','manager','cashier'), async(req:AuthRequest,res)=>{
+ try {return res.json({code:200,data:await applyOfflineOperation(req.user!.storeId,req.body)})}
+ catch(error:any){const status=error instanceof OfflineOperationError?error.status:error?.name==='ZodError'?400:/^(?:REFUND_|OFFLINE_REFUND_|OFFLINE_SHIFT_|OFFLINE_TASK_|OFFLINE_WORK_|OFFLINE_ATTENDANCE_|STAFF_ACCESS_|ADMIN_APPROVAL_|UNPREPARED_|INVALID_REFUND_|PARTIAL_REFUND_|REPLICA_FINANCIAL_)/.test(error?.message||'')?409:500;return res.status(status).json({code:status,message:status===500?'OFFLINE_OPERATION_SAVE_FAILED':error.message})}
+})
 
 // ==================== SHIFT SESSIONS ====================
 

@@ -1,3 +1,7 @@
+import {offlineMemberEvidence} from './offlineMembers'
+import {offlineMemberCandidates,offlineEarnedPoints} from '../../../shared/utils/offlineMemberPricing'
+import { currentOfflineShift } from './offlineOperations'
+import { POS_OFFLINE_TTL_MS, POS_OFFLINE_DAYS, POS_MANUAL_PAYMENT_METHODS } from '../../../shared/utils/offlinePolicy'
 import { bestActivityPrice } from '../../../shared/utils/activities'
 import { paymentProblem } from './paymentValidation'
 import { db, type LocalOrder } from '../db/offline'
@@ -6,7 +10,7 @@ import { readCheckoutGeneration, readCheckoutRecovery } from './checkoutIntent'
 import { posOrderNumber } from './orderNumber'
 
 const cacheKey = (backend: string, storeId: string, path: string) => `offline.snapshot:${encodeURIComponent(backend)}:${encodeURIComponent(storeId)}:${path}`
-const allowed = ['/products', '/config', '/channels', '/shifts', '/pos-cash/shifts/current', '/marketing/activity-prices', '/marketing/activities/offline-snapshot', '/staff-permissions/me']
+const allowed = ['/products', '/config', '/channels', '/shifts', '/pos-cash/shifts/current', '/marketing/activity-prices', '/marketing/activities/offline-snapshot', '/staff-permissions/me', '/expenses/categories']
 export function snapshotPath(url: string): string | null {
   const path = url.split('?')[0]
   return allowed.includes(path) ? path : null
@@ -48,30 +52,44 @@ export async function saveSnapshot(path: string, data: unknown, backend: string,
   const version = Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,'0')).join('')
   if (localIdentity(storeId) !== backend) throw new Error('CHECKOUT_BACKEND_CHANGED')
   if (readBackendAuth().user?.id !== actorId) throw new Error('CHECKOUT_AUTH_CHANGED')
+  if(path==='/pos-cash/shifts/current'&&snapshot.data?.offlineAuthorization?.actorId===actorId)await db.config.put({key:`offline.authorization:${encodeURIComponent(backend)}:${encodeURIComponent(storeId)}:${actorId}`,value:snapshot.data.offlineAuthorization,updatedAt:new Date()})
+  if(path==='/staff-permissions/me')await db.config.put({key:`offline.actor.permissions:${encodeURIComponent(backend)}:${encodeURIComponent(storeId)}:${actorId}`,value:{data:snapshot,actorId,backend,storeId,complete:true},updatedAt:new Date()})
   await db.config.put({key:cacheKey(backend,storeId,path),value:{data:snapshot,backend,storeId,version,complete:true,...(path === '/staff-permissions/me' ? {actorId} : {})},updatedAt:new Date()})
 }
-export async function readSnapshot(path: string, storeId: string): Promise<unknown> {
+export async function readServerSnapshot(path: string, storeId: string): Promise<unknown> {
   const backend = localIdentity(storeId)
-  const row = await db.config.get(cacheKey(backend,storeId,path))
+  let row = await db.config.get(cacheKey(backend,storeId,path))
+  if(path==='/staff-permissions/me'&&row?.value?.actorId!==readBackendAuth().user?.id)row=await db.config.get(`offline.actor.permissions:${encodeURIComponent(backend)}:${encodeURIComponent(storeId)}:${readBackendAuth().user?.id}`)
   if (!row || row.value.complete !== true || row.value.backend !== backend || row.value.storeId !== storeId) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
-  if (path === '/staff-permissions/me' && (row.value.actorId !== readBackendAuth().user?.id || Date.now()-new Date(row.updatedAt).getTime() > 24*60*60*1000 || Date.now()<new Date(row.updatedAt).getTime())) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
+  if (path === '/staff-permissions/me' && (row.value.actorId !== readBackendAuth().user?.id || Date.now()-new Date(row.updatedAt).getTime() > POS_OFFLINE_TTL_MS || Date.now()<new Date(row.updatedAt).getTime())) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
   return row.value.data
 }
 
+export async function readSnapshot(path:string,storeId:string):Promise<unknown> {
+  if(path==='/pos-cash/shifts/current')return currentOfflineShift(storeId)
+  return readServerSnapshot(path,storeId)
+}
+
 /** Financial acceptance is local; cloud delivery status never erases a collected payment. */
-export async function recordLocalSale(request: Record<string, any>, totals: Pick<LocalOrder,'subtotal'|'ppn'|'finalAmount'>, generation: string, manualQris = false, cashTender?: {receivedCash:number;changeGiven:number}): Promise<LocalOrder> {
+export async function recordLocalSale(request: Record<string, any>, totals: Pick<LocalOrder,'subtotal'|'ppn'|'finalAmount'>, generation: string, manualQris = false, cashTender?: {receivedCash:number;changeGiven:number}, externalConfirmed=false): Promise<LocalOrder> {
   const backendUrl = localIdentity(request.storeId)
   const auth = readBackendAuth() as ReturnType<typeof readBackendAuth> & {user?:{id?:string;staff?:{id?:string}}}
   if (!auth.user?.id || auth.user.staff?.id !== request.staffId) throw new Error('CHECKOUT_BACKEND_LOGIN_REQUIRED')
-  if (!['cash','qris'].includes(request.paymentMethod) || (request.paymentMethod === 'qris' && !manualQris) || request.pointsRedeemed || request.memberId || (request.discountAmount&&!request.activityOfflineToken)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+  if (!(POS_MANUAL_PAYMENT_METHODS as readonly string[]).includes(request.paymentMethod) || (request.paymentMethod === 'qris' && !manualQris) || (!['cash','qris'].includes(request.paymentMethod)&&!externalConfirmed) || (request.discountAmount&&!request.activityOfflineToken)) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+  if((request.memberId||request.pointsRedeemed||request.offlineMemberToken)&&(!request.memberId||!request.offlineMemberToken||!request.activityOfflineToken))throw Error('OFFLINE_MEMBER_AUTHORIZATION_REQUIRED')
   const localId = `LOCAL-${crypto.randomUUID()}`
-  const occurredAt = new Date()
-  const original = JSON.parse(JSON.stringify({...request,orderNumber:posOrderNumber(localId, occurredAt)}))
+  let occurredAt = new Date()
+  const original = JSON.parse(JSON.stringify({...request,items:request.items.map((item:any)=>({...item,offlineItemId:crypto.randomUUID()})),orderNumber:posOrderNumber(localId, occurredAt)}))
   return db.transaction('rw',db.config,db.orders,async()=> {
     if (localIdentity(request.storeId) !== backendUrl) throw new Error('CHECKOUT_BACKEND_CHANGED')
     if (await readCheckoutGeneration(request.storeId) !== generation) throw new Error('CHECKOUT_BASKET_STALE')
     const recovery = await readCheckoutRecovery(request.storeId)
     if (recovery.blocked || recovery.confirmed.length) throw new Error('CHECKOUT_REVIEW_REQUIRED')
+    const clockKey=`offline.ledger.clock:${encodeURIComponent(backendUrl)}:${encodeURIComponent(request.storeId)}`
+    const clock=(await db.config.get(clockKey))?.value||0
+    if(!Number.isSafeInteger(clock)||clock>Date.now()+60000)throw Error('OFFLINE_CLOCK_INVALID')
+    occurredAt=new Date(Math.max(Date.now(),clock+1))
+    if(original.activityOfflineToken)original.activityOccurredAt=occurredAt.toISOString()
     const products = await readSnapshot('/products',request.storeId) as {data?:{list?:Array<{id:string;specs?:Array<{id:string}>}>}}
     const configs = await readSnapshot('/config',request.storeId) as {data?:{paymentMethods?:Record<string,unknown>}}
     const shifts = await readSnapshot('/shifts',request.storeId) as {data?:Array<{key:string}>}
@@ -83,19 +101,38 @@ export async function recordLocalSale(request: Record<string, any>, totals: Pick
       if (cashTender.receivedCash-cashTender.changeGiven!==totals.finalAmount || paymentProblem({ready:true,enabled:true,method:request.paymentMethod,total:totals.finalAmount,paid:String(cashTender.receivedCash),minAmount:policy.minAmount || 0,maxCashAmount:policy.maxCashAmount || 0,changeEnabled:policy.changeEnabled !== false})) throw new Error('PAYMENT_TENDER_INVALID')
     }
     if (!original.items?.length || original.items.some((i:{productId:string;specId:string;quantity:number})=>!products.data!.list!.some(p=>p.id===i.productId&&p.specs?.some(s=>s.id===i.specId)) || !Number.isSafeInteger(i.quantity)||i.quantity<1)) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
+    if(request.manualDiscountAmount){
+      const grant=(await db.config.get(`offline.authorization:${encodeURIComponent(backendUrl)}:${encodeURIComponent(request.storeId)}:${auth.user!.id}`))?.value
+      if(!Number.isSafeInteger(request.manualDiscountAmount)||request.manualDiscountAmount<1||!grant?.permissions?.includes('orders.discount')||!grant.token||Date.parse(grant.expiresAt)<=Date.now())throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
+    }
     if(request.activityOfflineToken){const cached=await readSnapshot('/marketing/activities/offline-snapshot',request.storeId) as any;const snapshot=cached.data
-      if(!snapshot||snapshot.token!==request.activityOfflineToken||new Date(request.activityOccurredAt).getTime()>Date.parse(snapshot.expiresAt))throw Error('ACTIVITY_OFFLINE_CACHE_EXPIRED')
-      const price=bestActivityPrice(snapshot.activities,request.items,{now:new Date(request.activityOccurredAt),channel:request.activityChannelCode,paymentMethod:request.paymentMethod})
-      const tax=request.taxEnabled===false?0:Math.round(price.finalAmount*snapshot.taxRate)
-      if(price.discount!==request.discountAmount||price.subtotal!==totals.subtotal||tax!==totals.ppn||price.finalAmount+tax!==totals.finalAmount)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
+      if(!snapshot||snapshot.token!==request.activityOfflineToken||new Date(original.activityOccurredAt).getTime()>Date.parse(snapshot.expiresAt))throw Error('ACTIVITY_OFFLINE_CACHE_EXPIRED')
+      const member=request.memberId?await offlineMemberEvidence(request.memberId):undefined
+      if(member&&(request.offlineMemberToken!==member.token||request.offlineMemberPointsBefore!==member.member.points))throw Error('OFFLINE_MEMBER_LEDGER_CONFLICT')
+      const extras=member?offlineMemberCandidates(member,{...request,pointsRequested:request.activityPointsRequested,couponId:request.activityCouponId},request.items,new Date(original.activityOccurredAt)):[]
+      const price=bestActivityPrice(snapshot.activities,request.items,{now:new Date(original.activityOccurredAt),channel:request.activityChannelCode,paymentMethod:request.paymentMethod},extras)
+      const points=price.applied?.kind==='points'?price.applied.pointsRedeemed||0:0
+      if((request.pointsRedeemed||0)!==points)throw Error('OFFLINE_MEMBER_PRICE_CHANGED')
+      original.offlineMemberPointsEarned=member?offlineEarnedPoints(totals.finalAmount,member.member,member.rule,occurredAt.toISOString()):undefined
+      original.offlineMemberCouponId=price.applied?.kind==='coupon'?price.applied.id:undefined
+      original.offlineMemberCouponTemplateId=price.applied?.kind==='coupon'?member.coupons.find((c:any)=>c.id===price.applied?.id)?.coupon.id:undefined
+      const tax=request.taxEnabled===false?0:Math.round((price.finalAmount-(request.manualDiscountAmount||0))*snapshot.taxRate)
+      if(price.finalAmount<(request.manualDiscountAmount||0)||price.discount-Math.floor(points/100)+(request.manualDiscountAmount||0)!==request.discountAmount||price.subtotal!==totals.subtotal||tax!==totals.ppn||price.finalAmount-(request.manualDiscountAmount||0)+tax!==totals.finalAmount)throw Error('ACTIVITY_OFFLINE_PRICE_CHANGED')
     }
     const catalog = await db.config.get(cacheKey(backendUrl,request.storeId,'/products'))
     if (!catalog?.value.version) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
+    const authorization=(await db.config.get(`offline.authorization:${encodeURIComponent(backendUrl)}:${encodeURIComponent(request.storeId)}:${auth.user!.id}`))?.value
+    if(authorization?.token){
+      if(!Number.isFinite(Date.parse(authorization.expiresAt))||Date.parse(authorization.expiresAt)<occurredAt.getTime()||Date.parse(authorization.issuedAt)>occurredAt.getTime())throw Error('OFFLINE_AUTHORIZATION_REQUIRED')
+      original.offlineAuthorization=authorization.token
+    }
     original.shiftSessionId = current.data.shift.id
     const activityCache = await db.config.get(cacheKey(backendUrl, request.storeId, '/marketing/activity-prices'))
-    const row: LocalOrder = {localId,backendUrl,cashTender,cacheEvidence:{activityRules:activityCache?.value?.data?.data,activityVersion:activityCache?.value?.version,activityFetchedAt:activityCache?.updatedAt,backendUrl,catalogVersion:catalog.value.version,catalogFetchedAt:catalog.updatedAt,quotedProducts:JSON.parse(JSON.stringify(products.data.list.filter(p=>original.items.some((i:{productId:string})=>i.productId===p.id)))),paymentConfig:configs.data,shiftConfig:current.data},checkoutRequest:original,storeId:original.storeId,staffId:original.staffId,shiftSessionId:original.shiftSessionId,items:original.items,...totals,totalAmount:totals.subtotal,discountAmount:original.discountAmount||0,paymentMethod:original.paymentMethod,taxEnabled:original.taxEnabled,pointsRedeemed:0,orderNumber:original.orderNumber,pickupNumber:original.pickupNumber,customerCount:original.customerCount||1,status:'pending',syncAttempts:0,createdAt:occurredAt,occurredAt,locallyAcceptedAt:occurredAt,
+    const row: LocalOrder = {localId,backendUrl,cashTender,cacheEvidence:{activityRules:activityCache?.value?.data?.data,activityVersion:activityCache?.value?.version,activityFetchedAt:activityCache?.updatedAt,backendUrl,catalogVersion:catalog.value.version,catalogFetchedAt:catalog.updatedAt,quotedProducts:JSON.parse(JSON.stringify(products.data.list.filter(p=>original.items.some((i:{productId:string})=>i.productId===p.id)))),paymentConfig:configs.data,shiftConfig:current.data},checkoutRequest:original,storeId:original.storeId,staffId:original.staffId,memberId:original.memberId,shiftSessionId:original.shiftSessionId,items:original.items,...totals,totalAmount:totals.subtotal,discountAmount:original.discountAmount||0,paymentMethod:original.paymentMethod,taxEnabled:original.taxEnabled,pointsRedeemed:original.pointsRedeemed||0,orderNumber:original.orderNumber,pickupNumber:original.pickupNumber,customerCount:original.customerCount||1,status:'pending',syncAttempts:0,createdAt:occurredAt,occurredAt,locallyAcceptedAt:occurredAt,
+      ...(!['cash','qris'].includes(request.paymentMethod)?{manualPayment:{kind:'external_manual' as const,method:request.paymentMethod,actorId:auth.user!.id!,at:occurredAt,evidence:'external_terminal_receipt' as const,bankConfirmed:false as const}}:{}),
       ...(manualQris?{manualPayment:{kind:'qris_manual' as const,actorId:auth.user!.id!,at:occurredAt,evidence:'customer_success_photo' as const,bankConfirmed:false as const}}:{})}
     row.id = await db.orders.add(row) as number
+    await db.config.put({key:clockKey,value:occurredAt.getTime(),updatedAt:occurredAt})
     await db.config.put({key:`checkout.generation:${encodeURIComponent(row.storeId)}`,value:crypto.randomUUID(),updatedAt:occurredAt})
     return row
   })

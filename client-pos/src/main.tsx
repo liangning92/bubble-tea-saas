@@ -34,6 +34,7 @@ async function start(){
   if (import.meta.env.PROD && window.location.protocol === 'https:' && 'serviceWorker' in navigator) {
     void navigator.serviceWorker.register('/pos-sw.js').catch(error => console.warn('[OfflineShell] Cache installation failed', error))
   }
+  void navigator.storage?.persist?.().catch(()=>false)
   connectionManager.addListener(event => {
     if ((event.type === 'connected' || event.type === 'health-check') && useAuthStore.getState().token) {
       window.dispatchEvent(new Event('pos-session-restored'))

@@ -20,7 +20,9 @@ export function orderRequestFingerprint(data: CreateOrderData): string {
   const request = {
     storeId: data.storeId, staffId: data.staffId, orderNumber: data.orderNumber ?? null,
     channelId: data.channelId ?? null, memberId: data.memberId ?? null,
+    ...(data.offlineMemberToken?{offlineMemberToken:data.offlineMemberToken,offlineMemberPointsBefore:data.offlineMemberPointsBefore,offlineMemberPointsEarned:data.offlineMemberPointsEarned,offlineMemberCouponId:data.offlineMemberCouponId,offlineMemberCouponTemplateId:data.offlineMemberCouponTemplateId,activityCouponId:data.activityCouponId,activityPointsRequested:data.activityPointsRequested}:{}),
     pickupNumber: data.pickupNumber ?? null, channelName: data.channelName ?? null,
+    ...(data.offlineAuthorization ? {offlineAuthorization:data.offlineAuthorization,manualDiscountAmount:data.manualDiscountAmount||0} : {}),
     shiftSessionId: data.shiftSessionId ?? null, dineInCount: data.dineInCount ?? null, customerCount: data.customerCount ?? 1,
     discountAmount: data.discountAmount ?? 0, pointsRedeemed: data.pointsRedeemed ?? 0,
     taxEnabled: data.taxEnabled ?? true, paymentMethod: data.paymentMethod,
@@ -32,7 +34,7 @@ export function orderRequestFingerprint(data: CreateOrderData): string {
     ...(data.paymentEvidenceId !== undefined ? {paymentEvidenceId:data.paymentEvidenceId} : {}),
     ...(data.activityOfflineToken?{activityOfflineToken:data.activityOfflineToken,activityOccurredAt:data.activityOccurredAt,activityChannelCode:data.activityChannelCode}:{}),
     ...(data.activityQuoteSignature ? {activityQuoteSignature:data.activityQuoteSignature,activityCouponId:data.activityCouponId,activityPointsRequested:data.activityPointsRequested,activityGroupId:data.activityGroupId,activityGiftSelections:data.activityGiftSelections} : {}),
-    items: data.items.map(item => ({ productId: item.productId, productName: item.productName,
+    items: data.items.map(item => ({ ...(item.offlineItemId?{offlineItemId:item.offlineItemId}:{}),productId: item.productId, productName: item.productName,
       specId: item.specId, specName: item.specName, quantity: item.quantity, unitPrice: item.unitPrice,
       addons: (item.addons ?? []).map(addon => ({ name: addon.name, price: addon.price,...(addon.qty!==undefined?{qty:addon.qty}:{}) })) }))
   }

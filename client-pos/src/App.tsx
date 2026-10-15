@@ -1,3 +1,4 @@
+import {OfflineRefundInbox} from './components/OfflineRefundInbox'
 import {StaffAccessProvider,useStaffAccess} from '../../shared/StaffAccess'
 import {StaffApprovalDialog} from '../../shared/StaffApprovalDialog'
 import {StaffApprovalInbox} from '../../shared/StaffApprovalInbox'
@@ -47,7 +48,7 @@ function App() {
       <ReceiptHandoverModal />
       <div style={installing?{pointerEvents:'none'}:undefined} onKeyDownCapture={event=>{if(installing){event.preventDefault();event.stopPropagation()}}}>
       <Suspense fallback={<RouteLoading />}><Routes>
-      <Route path="/approvals" element={<ProtectedRoute><StaffApprovalInbox api={api} userId={user?.id||''}/></ProtectedRoute>}/>
+      <Route path="/approvals" element={<ProtectedRoute><><OfflineRefundInbox/><StaffApprovalInbox api={api} userId={user?.id||''}/></></ProtectedRoute>}/>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
       <Route path="/tv-display" element={<TvDisplayPage />} />

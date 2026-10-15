@@ -1,3 +1,5 @@
+import {createHash} from 'crypto'
+export const offlineTaskId=(templateId:string,staffId:string,date:string,index:number)=>'POSHT-'+createHash('sha256').update(JSON.stringify([templateId,staffId,date,index])).digest('hex').slice(0,40)
 import prisma from '../config/database'
 import { formatDate } from '../utils/dateUtils'
 import { socketManager } from '../socket'
@@ -796,9 +798,10 @@ export async function generateDailyTasks(storeId: string, date: string) {
         // 使用 Date 构造函数直接创建本地时间
         const dueTime = new Date(year, month - 1, day, hours, mins + estimated, 0, 0)
 
-        const task = await prisma.hygieneTask.create({
-          data: {
-            storeId,
+        const task = await prisma.hygieneTask.upsert({
+          where:{id:offlineTaskId(template.id,staffId,date,timeIdx)},update:{},
+          create: {
+            id:offlineTaskId(template.id,staffId,date,timeIdx),storeId,
             templateId: template.id,
             staffId,
             areaCode: template.areaCode,
@@ -830,7 +833,7 @@ export async function generateDailyTasks(storeId: string, date: string) {
 /**
  * 获取模板的执行时间列表（支持多次执行）
  */
-function getExecutionTimes(template: any): string[] {
+export function getExecutionTimes(template: any): string[] {
   // 优先使用 executionTimes 字段
   if (template.executionTimes) {
     try {
@@ -1525,9 +1528,10 @@ export async function processDueTemplates() {
       const estimated = template.estimatedMinutes || 10
       const dueTime = new Date(year, month - 1, day, hours, mins + estimated, 0, 0)
 
-      const task = await prisma.hygieneTask.create({
-        data: {
-          storeId: template.storeId,
+      const task = await prisma.hygieneTask.upsert({
+        where:{id:offlineTaskId(template.id,staffId,today,0)},update:{},
+        create: {
+          id:offlineTaskId(template.id,staffId,today,0),storeId: template.storeId,
           templateId: template.id,
           staffId,
           areaCode: template.areaCode,
@@ -1633,7 +1637,7 @@ async function resolveStaffIds(template: any, storeId: string): Promise<string[]
 /**
  * 检查模板是否应该在指定日期生成
  */
-function shouldGenerateOnDate(template: any, dateStr: string): boolean {
+export function shouldGenerateOnDate(template: any, dateStr: string): boolean {
   if (!template.specificDays) return true
 
   try {

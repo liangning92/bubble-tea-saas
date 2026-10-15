@@ -1,3 +1,7 @@
+import { offlineActivityQuote } from '../utils/offlineMembers'
+import { ReprintReceiptButton } from '../components/ReprintReceiptButton'
+import { readOfflineDrafts, suspendOfflineDraft, removeOfflineDraft } from '../utils/offlineDrafts'
+import { OfflineOperationsStatus } from '../components/OfflineOperationsStatus'
 import { serverUnavailable } from '../utils/serverUnavailable'
 import { ReceiptRecovery } from '../components/ReceiptRecovery'
 import { submitSavedReceipt } from '../utils/receiptRecovery'
@@ -509,9 +513,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   })
 
   // 小票模板（从ReceiptTemplate表加载，支持本地持久化离线容灾）
+  const receiptTemplateCacheKey=`pos_receipt_template:${encodeURIComponent(currentBackendIdentity())}:${user?.storeId||''}`
   const [receiptTemplate, setReceiptTemplate] = useState<any>(() => {
     try {
-      const cached = localStorage.getItem('pos_receipt_template')
+      const cached = localStorage.getItem(receiptTemplateCacheKey)
       return cached ? JSON.parse(cached) : null
     } catch {
       return null
@@ -1044,7 +1049,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   }, [])
 
   // 获取所有配置 (店铺信息、布局、支付方式、小票设置)
-  useEffect(() => { if (user?.storeId) void fetchShiftData() }, [user?.storeId])
+  useEffect(() => {
+    if(!user?.storeId)return
+    void Promise.allSettled([fetchShiftData(),posApi.getExpenseCategories(),posApi.getMyPosExpenses(),posApi.getCashEvents(),posApi.getShifts()])
+    void navigator.storage?.persist?.().catch(()=>false)
+  }, [user?.storeId])
 
   const loadConfig = useCallback(() => {
     // Guard: only load when storeId is available (not during initial loading with 'default')
@@ -1176,7 +1185,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 setPosReceipt(prev => ({ ...prev, paperSize: template.paperSize }))
               }
               try {
-                localStorage.setItem('pos_receipt_template', JSON.stringify(template))
+                localStorage.setItem(receiptTemplateCacheKey, JSON.stringify(template))
               } catch {}
             }
           } catch (e) {
@@ -1606,7 +1615,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem('suspended_orders')
-      if (saved) setSuspendedOrders(JSON.parse(saved))
+      const legacy=saved?JSON.parse(saved):[]
+      setSuspendedOrders(legacy)
+      if(user?.storeId)void readOfflineDrafts(user.storeId).then(drafts=>setSuspendedOrders([...legacy,...drafts])).catch(console.error)
     } catch (e) {
       console.error('Failed to load suspended orders:', e)
       localStorage.removeItem('suspended_orders')
@@ -2124,12 +2135,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 动态grid class
   const gridColsClass = {
-    '3': 'grid-cols-3',
-    '4': 'grid-cols-4',
-    '5': 'grid-cols-5',
-    '6': 'grid-cols-6',
-    '8': 'grid-cols-8'
-  }[posLayout.gridCols] || 'grid-cols-4'
+    '3': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-3',
+    '4': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4',
+    '5': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-5',
+    '6': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-6',
+    '8': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-8'
+  }[posLayout.gridCols] || 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
 
   const cardHeightClass = posLayout.cardSize === 'large' ? 'h-24' : posLayout.cardSize === 'small' ? 'h-16' : 'h-20'
 
@@ -2156,13 +2167,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setQuoteLoading(true);setQuoteError('')
     const timer=setTimeout(()=>{
       const apply=(value:any)=>{if(!live)return;const q={...value,inputKey:quoteInputKey};if(showPaymentModal&&lastActivityPrice.current?.inputKey===quoteInputKey&&lastActivityPrice.current.amount!==q.grandTotal){setActivityPriceNeedsConfirmation(true);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>setActivityPriceNeedsConfirmation(false)})}lastActivityPrice.current={inputKey:quoteInputKey,amount:q.grandTotal};setUnifiedQuote(q);setDiscountAmount(q.discount-Math.floor(q.pointsRedeemed/100));setAppliedPromotion(q.applied?{id:q.applied.id,name:q.applied.name,amount:q.discount,type:q.applied.kind,description:q.applied.name}:null);setIsManualDiscount(false)}
-      activitiesApi.quote(quoteInput).then(r=>apply(r.data.data)).catch(async e=>{try{if(!serverUnavailable(e))throw e;const snapshot=await activitiesApi.offlineSnapshot();apply(cachedActivityQuote(snapshot.data.data,quoteInput))}catch(error:any){if(live){setUnifiedQuote(null);setQuoteError(error.response?.data?.message||error.message)}}}).finally(()=>{if(live)setQuoteLoading(false)})
+      activitiesApi.quote(quoteInput).then(r=>apply(r.data.data)).catch(async e=>{try{if(!serverUnavailable(e))throw e;const snapshot=await activitiesApi.offlineSnapshot();apply(await offlineActivityQuote(snapshot.data.data,quoteInput))}catch(error:any){if(live){setUnifiedQuote(null);setQuoteError(error.message?.startsWith('OFFLINE_MEMBER')?t(error.message==='OFFLINE_MEMBER_LEDGER_CONFLICT'?'offlineMembers.conflict':'offlineMembers.initialize'):(error.response?.data?.message||error.message))}}}).finally(()=>{if(live)setQuoteLoading(false)})
     },200)
     return()=>{live=false;clearTimeout(timer)}
   },[quoteInputKey,activityRevision])
   useEffect(()=>{
     let live=true
-    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
+    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void posApi.prepareOfflineMembers().catch(()=>{});void posApi.prepareOfflineWork().catch(()=>{});void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
     void refresh();const timer=setInterval(refresh,15000)
     const focus=()=>{if(document.visibilityState==='visible')void refresh()}
     window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus)
@@ -2353,6 +2364,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setIsManualDiscount(false)
     setAppliedPromotion(null)
     setMember(null)
+    setPointsToRedeem(0)
+    setMemberCoupons([])
+    setSelectedCoupon(null)
     setDineInCount(1) // 重置堂食人数
     setCustomerCount(1) // 重置顾客人数
     setOrderSuccess('') // 清除订单成功提示
@@ -2375,6 +2389,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     let accepted = false
     setIsCheckingOut(true)
     try {
+      const shiftState=await posApi.getCurrentShift()
+      if(!navigator.onLine||!useAuthStore.getState().token||shiftState.config.posCachedSnapshot||shiftState.statusText==='Local cached snapshot'||currentQuote?.offline){
+        const draft=await suspendOfflineDraft(user!.storeId!,cart,selectedChannel,basketGeneration)
+        settledCartRef.current=cart
+        setSuspendedOrders([...suspendedOrders,draft])
+        clearCart('settled')
+        showToast(t('pos.orderSuspended'),'success')
+        return
+      }
       // 在服务端创建挂单状态的订单
       const orderData: any = {
         storeId: user?.storeId || 'default',
@@ -2746,6 +2769,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const resumeOrderConfirmed = async (order: typeof suspendedOrders[0]) => {
     // 取单时删除服务端 suspended 订单（结账会创建新订单）
     try {
+      if(order.id.startsWith('SUSP-')&&user?.storeId)await removeOfflineDraft(user.storeId,order.id)
       if (order.id && !order.id.startsWith('SUSP-')) {
         await posApi.deleteOrder(order.id)
       }
@@ -2768,6 +2792,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const searchMember = async () => {
     if (!memberPhone || isSearchingMember) return
     setIsSearchingMember(true)
+    setPointsToRedeem(0)
     setMemberCoupons([])
     setSelectedCoupon(null)
     setDiscountAmount(0)
@@ -2905,7 +2930,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     if(isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
     const checkoutStarted=performance.now()
     const checkoutTiming=(phase:string)=>console.info(`[CHECKOUT-TIMING] ${phase}_ms=${Math.round(performance.now()-checkoutStarted)}`)
-    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>cachedActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
+    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>offlineActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
     if(!verifiedQuote||verifiedQuote.signature!==currentQuote.signature){if(verifiedQuote)setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey});setActivityRevision(v=>v+1);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>{}});return}
 
     if (paymentIssue) { showToast(t(`paymentValidation.${paymentIssue}`), 'error'); return }
@@ -2959,6 +2984,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       })),
       activityQuoteSignature:currentQuote?.offline?undefined:currentQuote?.signature,
       activityOfflineToken:currentQuote?.offline?currentQuote.offlineToken:undefined,activityOccurredAt:currentQuote?.offline?verifiedQuote.occurredAt:undefined,activityChannelCode:selectedChannel?.code||'DINE_IN',
+      offlineMemberToken:verifiedQuote.offlineMemberToken,offlineMemberPointsBefore:verifiedQuote.offlineMemberPointsBefore,offlineMemberPointsEarned:verifiedQuote.offlineMemberPointsEarned,offlineMemberCouponId:verifiedQuote.offlineMemberCouponId,offlineMemberCouponTemplateId:verifiedQuote.offlineMemberCouponTemplateId,
       activityCouponId:selectedCoupon?.id,activityPointsRequested:pointsToRedeem||0,activityGroupId:activityGroupId||undefined,activityGiftSelections:giftSelections,
       paymentMethod,
       discountAmount:discountAmount+manualDiscountAmount,
@@ -2997,13 +3023,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       await requireOpenShift()
       checkoutTiming('quote_and_shift')
       // Both recovery writes must commit before an HTTP request can leave this browser.
-      if(manualDiscountAmount&&!navigator.onLine)throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
+      if(manualDiscountAmount&&(!navigator.onLine||currentQuote?.offline)&&!access.can('orders.discount'))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if(manualDiscountAmount&&!access.can('orders.discount')&&(!manualDiscountGrant||new Date(manualDiscountGrant.expiresAt)<new Date()))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if (manualQris) orderData.note = [orderData.note,t('manualPayment.customerPaid')].filter(Boolean).join(' ')
-      if ((!navigator.onLine || !useAuthStore.getState().token) && (member || pointsToRedeem || selectedCoupon || (discountAmount&&!currentQuote?.offline))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+      if ((!navigator.onLine || !useAuthStore.getState().token) && (!currentQuote?.offline&&(member || pointsToRedeem || selectedCoupon || discountAmount))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
-      if ((paymentMethod === 'cash' || manualQris) && !member && !pointsToRedeem && (!discountAmount||currentQuote?.offline) && !selectedCoupon && currentQuote?.offline) {
-        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,manualQris,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
+      if ((paymentMethod === 'cash' || manualQris || externalPaymentConfirmed) && (!discountAmount||currentQuote?.offline) && currentQuote?.offline) {
+        const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,manualQris,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined,externalPaymentConfirmed)
         accepted = true
         settledCartRef.current = cart
         Object.assign(orderData,local.checkoutRequest)
@@ -3019,7 +3045,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         const verified = res.data?.data
         if (!verified?.id || verified.orderNumber !== intent.request.orderNumber) throw new Error('CHECKOUT_RESPONSE_UNVERIFIED')
         checkoutTiming('order_saved')
-        await finishCheckout(intent,'accepted',verified.id)
+        await finishCheckout(intent,'accepted',verified.id,verified)
         accepted = true
         settledCartRef.current = cart
         Object.assign(orderData,intent.request)
@@ -3105,7 +3131,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
       setShowPaymentModal(false)
-      showToast(`${t(receiptSent ? (paymentMethod === 'cash' || manualQris ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
+      showToast(`${t(receiptSent ? (currentQuote?.offline ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
       void syncManager.syncPendingOrders()
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
@@ -3118,6 +3144,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       setPaidAmount('')
       setShowChannelModal(true)
     } catch (error: any) {
+      console.warn('[POS Checkout]', error?.name, error?.message)
       if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
       if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent && error?.message === 'OPEN_SHIFT_REQUIRED') { showOpenShiftRequired(); return }
@@ -3235,7 +3262,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         pointsRedeemed: pointsToRedeem
       }
       // Save the exact receipt before transport; uncertain jobs are never resent automatically.
-      await db.config.put({key:receiptKey,value:{payload,status:'pending',attemptedAt:new Date()},updatedAt:new Date()})
+      await db.config.put({key:receiptKey,value:{backendUrl:currentBackendIdentity(),storeId:user?.storeId,payload,status:'pending',attemptedAt:new Date()},updatedAt:new Date()})
       const result = await submitSavedReceipt(receiptKey, electronAPI.sendPrintReceipt, audit)
       if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
       return result?.success ?? false
@@ -3366,8 +3393,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           <ul className="max-h-36 overflow-y-auto mt-2 space-y-1">{recovery.rows.filter(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()).map(row=><li key={row.localId} className="flex flex-wrap justify-between gap-x-4"><span className="break-all">{row.orderNumber}</span><span>{formatCurrency(row.finalAmount)} · {t(row.status==='review'?'offlineSale.review':'offlineSale.awaitUpload')}</span></li>)}</ul>
         </details>}
         {!useAuthStore.getState().token && <button type="button" className="p-2 bg-amber-50 underline" onClick={()=>navigate('/login')}>{t('offlineSale.reconnectLogin')}</button>}
+        <OfflineOperationsStatus />
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
-        <header className="bg-primary px-4 py-3 min-h-[56px] flex items-center justify-between gap-4 select-none">
+        <header className="bg-primary px-4 py-3 min-h-[56px] shrink-0 flex flex-wrap items-center justify-between gap-3 select-none">
           {/* 左侧：Logo (下方紧贴收银员) + Online指示器 */}
           <div className="flex items-center gap-4 shrink-0">
             {/* Logo 区域：上面是 Logo，下面紧贴收银员姓名 */}
@@ -3428,7 +3456,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           </div>
 
           {/* 右侧：工具栏 + 窗口控制按钮 */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex flex-wrap max-w-full items-center gap-1.5 shrink-0">
             {selectedChannel && (() => {
               // 构建工具栏按钮数组
               const toolbarButtons: Array<{
@@ -3527,7 +3555,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               }
 
               return (
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   {toolbarButtons.map(btn => (
                     <button
                       key={btn.id}
@@ -3626,9 +3654,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       )}
 
       {/* Main */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
         {/* 左侧：分类栏 + 产品区 */}
-        <div className="flex-1 flex flex-col overflow-hidden relative">
+        <div className="h-[45vh] min-h-[320px] shrink-0 md:h-auto md:min-h-0 md:flex-1 min-w-0 flex flex-col overflow-hidden relative">
 
           {/* 分类区域 - 白色背景 */}
           {selectedChannel && (
@@ -3703,7 +3731,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         </div>
 
         {/* 购物车 - 大屏设计 */}
-        <div className="w-80 bg-white border-l flex flex-col">
+        <div className="w-full md:w-80 shrink-0 bg-white border-t md:border-t-0 md:border-l flex flex-col min-h-[320px] md:min-h-0">
           {/* 当前订单渠道与桌号/人数条（点击可随时修改） */}
           <div
             onClick={() => setShowChannelModal(true)}
@@ -4339,6 +4367,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <p className="font-medium">{member.name}</p>
                 <p className="text-sm text-gray-500">{member.phone}</p>
                 <p className="text-sm text-green-600">{t('pos.points')}: {member.points || 0}</p>
+                {currentQuote?.offline&&<p className="text-xs text-gray-600 mt-2 break-words">{t('offlineMembers.policy')}</p>}
                 {maxRedeemablePoints > 0 && (
                   <div className="mt-2 pt-2 border-t border-green-200">
                     <p className="text-xs text-gray-600 mb-1">{t('pos.redeemPoints')}: {pointsToRedeem}</p>
@@ -4814,7 +4843,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           } catch (error) { console.warn('Handover print failed; shift remains closed', error); showToast(t('pos.handoverPrintFailed'), 'warning'); return }
                           finishHandover()
                         } catch (e: any) {
-                          if(e?.response?.data?.message === 'SHIFT_PREVIEW_CHANGED'){setHandoverPreview(null);showToast(t('handoverFlow.changed'),'warning')}
+                          if((e?.response?.data?.message||e?.message) === 'SHIFT_PREVIEW_CHANGED'){setHandoverPreview(null);showToast(t('handoverFlow.changed'),'warning')}
                           else showToast(t('pos.shiftCloseFailed'), 'error')
                         } finally { setShiftClosing(false) }
                       }}
@@ -4980,6 +5009,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <div className="mt-2 text-sm text-gray-600">
                         <OrderItemsTable items={order.items} />
                       </div>
+                      <div className="mt-2"><ReprintReceiptButton storeId={user?.storeId} orderNumber={order.orderNumber} /></div>
                     </div>
                   ))}
                 </div>

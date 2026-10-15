@@ -21,13 +21,13 @@ export function ShiftSummaryEvidence({ evidence, openFloat, storeId, showValues 
   const { t } = useTranslation()
   const pending = useLiveQuery(async () => {
     if (!storeId) return null
-    try { return await db.orders.where('status').anyOf('pending', 'syncing', 'failed', 'prepared', 'sending', 'review', 'quarantined').and(o => o.storeId === storeId && !['rejected', 'discarded'].includes(o.checkoutResolution || '')).count() }
+    try { return await db.orders.where('status').anyOf('pending', 'syncing', 'failed', 'prepared', 'sending', 'review', 'quarantined').and(o => o.storeId === storeId && !['rejected', 'discarded'].includes(o.checkoutResolution || '') && (evidence?.status !== 'local' || !o.locallyAcceptedAt)).count() }
     catch { return null }
-  }, [storeId])
+  }, [storeId,evidence?.status])
   const locallyUncertain = pending === undefined || pending === null || pending > 0
   const money = (value: number | null | undefined) => typeof value === 'number' ? formatCurrency(value) : t('shiftEvidence.unknown')
   return <section className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4 text-gray-800" data-testid="shift-evidence">
-    <h4 className="font-bold">{t('shiftEvidence.title')} · {t(!locallyUncertain && evidence?.status === 'provisional' ? 'shiftEvidence.provisional' : 'shiftEvidence.unknown')}</h4>
+    <h4 className="font-bold">{t('shiftEvidence.title')} · {t(!locallyUncertain && ['provisional','local'].includes(evidence?.status || '') ? 'shiftEvidence.provisional' : 'shiftEvidence.unknown')}</h4>
     <p className="text-sm mt-2" role="alert">{t('shiftEvidence.notice')}</p>
     {locallyUncertain && <p className="text-sm mt-2">{t(typeof pending === 'number' ? 'shiftEvidence.pending' : 'shiftEvidence.queueUnknown', { count: typeof pending === 'number' ? pending : undefined })}</p>}
     {evidence?.windowStart && <p className="text-xs text-gray-600 mt-2">{t('shiftEvidence.window')}: {new Date(evidence.windowStart).toLocaleString(dateLocaleI18n.language)} – {new Date(evidence.windowEnd).toLocaleString(dateLocaleI18n.language)}</p>}

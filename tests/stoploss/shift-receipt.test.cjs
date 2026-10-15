@@ -26,3 +26,11 @@ test('handover receipt explicit print choices show financial fields independentl
  assert.ok(text.includes('________________________'));for(const line of text.split('\n'))assert.ok(width(line)<=(paperSize==='80mm'?48:32),line);
  }
 });
+
+test('offline and synchronized handovers visibly distinguish delivery state without exceeding either paper width',()=>{
+ for(const paperSize of ['58mm','80mm'])for(const language of ['en','zh','id'])for(const offlineStatus of ['pending','synced']){
+  const text=renderer().shift({...report,paperSize,language,offlineStatus});
+  for(const line of text.split('\n'))assert.ok(width(line)<=(paperSize==='80mm'?48:32),line);
+  if(language==='en')assert.ok(text.includes(offlineStatus==='pending'?'PENDING SYNC':'SERVER SYNC CONFIRMED'));
+ }
+});

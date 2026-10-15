@@ -44,15 +44,18 @@ export async function quoteItemRefund(orderId:string,storeId:string){
  return prisma.$transaction(async tx=>{
   const state=await orderState(tx,orderId,storeId);requireRefundEvidence(state.order)
   const totals=allocateRefundTotal(state.order,state.order.finalAmount)
-  return {orderId,finalAmount:state.order.finalAmount,refundedAmount:state.refunded,items:state.order.items.map((i:any)=>({itemId:i.id,name:i.productName,quantity:i.quantity,remaining:i.quantity-(state.used.get(i.id)||0),allocatedAmount:totals.get(i.id),refundedQuantity:state.used.get(i.id)||0}))}
+  const logs=state.order.memberId?await tx.pointLog.findMany({where:{orderId,memberId:state.order.memberId,type:{in:['earn','redeem']}}}):[]
+  const coupon=await tx.memberCoupon.findFirst({where:{orderId:{in:[orderId,state.order.orderNumber]},status:'used'}})
+  const memberEffects={memberId:state.order.memberId,pointsEarned:logs.filter(l=>l.type==='earn').reduce((s,l)=>s+Math.max(0,l.points),0),pointsRedeemed:logs.filter(l=>l.type==='redeem').reduce((s,l)=>s+Math.abs(l.points),0),couponId:coupon?.id,couponTemplateId:coupon?.couponId}
+  return {memberEffects,refundRequestIds:(await tx.refundRequest.findMany({where:{orderId,status:{in:['approved','paid']}},select:{id:true}})).map((r:any)=>r.id),orderId,finalAmount:state.order.finalAmount,refundedAmount:state.refunded,items:state.order.items.map((i:any)=>({itemId:i.id,name:i.productName,quantity:i.quantity,remaining:i.quantity-(state.used.get(i.id)||0),allocatedAmount:totals.get(i.id),refundedQuantity:state.used.get(i.id)||0}))}
  },{isolationLevel:'Serializable'})
 }
-export async function requestItemRefund(params:{requestId:string;orderId:string;storeId:string;reason:string;requestedBy:string;reasonCode:string;items:unknown}){
+export async function requestItemRefund(params:{requestId:string;orderId:string;storeId:string;reason:string;requestedBy:string;reasonCode:string;items:unknown},db:any=prisma){
  const items=canonicalSelection(params.items)
  if(!/^[A-Za-z0-9-]{16,100}$/.test(params.requestId))throw Error('REFUND_REQUEST_ID_REQUIRED')
  if(params.reasonCode!=='customer_dissatisfied')throw Error('UNPREPARED_FULL_REFUND_REQUIRED')
  const digest=fingerprint({orderId:params.orderId,reason:params.reason,reasonCode:params.reasonCode,requestedBy:params.requestedBy,items})
- return prisma.$transaction(async tx=>{
+ const operation=async(tx:any)=>{
   // All create/approve paths serialize on the same existing order row.
   const locked=await tx.order.updateMany({where:{id:params.orderId,storeId:params.storeId},data:{updatedAt:new Date()}})
   if(locked.count!==1)throw Error('REFUND_ORDER_NOT_FOUND')
@@ -63,9 +66,9 @@ export async function requestItemRefund(params:{requestId:string;orderId:string;
   if(await tx.refundRequest.findFirst({where:{orderId:params.orderId,status:'pending'}}))throw Error('REFUND_PENDING_REQUEST_EXISTS')
   const selected=plan(state,items)
   return tx.refundRequest.create({data:{id:params.requestId,orderId:params.orderId,reason:params.reason,reasonCode:params.reasonCode,requestedBy:params.requestedBy,amount:selected.amount,selectedItemIds:JSON.stringify({version:2,fingerprint:digest,items:selected.items,allItems:selected.allItems}),status:'pending'}})
- })
+ };return db===prisma?prisma.$transaction(operation):operation(db)
 }
-export async function approveItemRefund(requestId:string,actor:{storeId:string;id:string;role:string},verifiedPrepared:boolean,note?:string,db:any=prisma){
+export async function approveItemRefund(requestId:string,actor:{storeId:string;id:string;role:string},verifiedPrepared:boolean,note?:string,db:any=prisma,execution?:{occurredAt:Date;payoutMethod:'cash'|'external';shift:string;cashEventId?:string}){
  if(!['admin','manager'].includes(actor.role))throw Error('REFUND_APPROVAL_FORBIDDEN')
  if(!verifiedPrepared)throw Error('REFUND_CLASSIFICATION_REQUIRED')
  const operation=async (tx:any)=>{
@@ -104,8 +107,8 @@ export async function approveItemRefund(requestId:string,actor:{storeId:string;i
    await tx.order.update({where:{id:o.id},data:{status:'refunded'}})
    await tx.memberCoupon.updateMany({where:{orderId:{in:[o.id,o.orderNumber]},status:'used'},data:{status:'unused',usedAt:null}})
   }
-  if(o.paymentMethod==='cash'&&request.amount>0)await tx.cashEvent.create({data:{storeId:o.storeId,staffId:actor.id,type:'cash_out',amount:request.amount,paymentMethod:'cash',orderId:o.orderNumber,note:`Item refund ${request.id}`}})
-  const changed=await tx.refundRequest.updateMany({where:{id:request.id,status:'pending'},data:{status:'approved',approvedBy:actor.id,approvedAt:new Date(),note}})
+  if((execution?execution.payoutMethod==='cash':o.paymentMethod==='cash')&&request.amount>0)await tx.cashEvent.create({data:{storeId:o.storeId,staffId:actor.id,type:'cash_out',amount:request.amount,paymentMethod:'cash',orderId:o.orderNumber,note:`Item refund ${request.id}`,...(execution?{id:execution.cashEventId,createdAt:execution.occurredAt,shift:execution.shift}:{})}})
+  const changed=await tx.refundRequest.updateMany({where:{id:request.id,status:'pending'},data:{status:'approved',approvedBy:actor.id,approvedAt:execution?.occurredAt||new Date(),note}})
   if(changed.count!==1)throw Error('REFUND_REQUEST_ALREADY_PROCESSED')
   const netAllocations=allocateRefundTotal(o,Math.max(0,o.finalAmount-(o.checkoutTaxAmount||0)))
   const remainingItems=o.items.map((i:any)=>({...i,quantity:i.quantity-(state.used.get(i.id)||0)-(stored.items.find(s=>s.itemId===i.id)?.quantity||0),addons:JSON.parse(i.addons||'[]')})).filter((i:any)=>i.quantity>0)

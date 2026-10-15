@@ -1,6 +1,7 @@
+import {calculateShiftCash} from './ShiftCashReconciliation'
 import { PrismaClient } from '@prisma/client'
 
-type EvidenceDB = Pick<PrismaClient, 'shiftSession' | 'cashEvent' | 'order'>
+type EvidenceDB = Pick<PrismaClient, 'shiftSession' | 'cashEvent' | 'order'>&Partial<Pick<PrismaClient,'refundRequest'|'expense'>>
 
 // Read-only window evidence. Insertion time/key never certify session ownership.
 export async function loadShiftSummaryEvidence(db: EvidenceDB, storeId: string, asOf = new Date(), capturedShift?: {id:string;storeId:string;shift:string;openedAt:Date;openFloat:number}) {
@@ -49,6 +50,10 @@ export async function loadShiftSummaryEvidence(db: EvidenceDB, storeId: string, 
     orderCount: completed.length,
     cupCount: completed.every(o => Array.isArray(o.items) && o.items.every(i => Number.isSafeInteger(i.quantity) && i.quantity > 0)) ? completed.reduce((sum,o) => sum + o.items.reduce((cups,i)=>cups+i.quantity,0),0) : null,
     orderReceipts: orders.some(o => o.status === 'refunded') ? null : completed.reduce((sum, o) => sum + o.finalAmount, 0)
+  }
+  if(db.refundRequest&&db.expense){
+    const reconciled=await calculateShiftCash(db as any,storeId,shift,asOf)
+    Object.assign(summaryEvidence,{cashSales:reconciled.cashFromRevenue+reconciled.expenses,cashIns:reconciled.cashIns,cashOuts:reconciled.cashOuts,qrisReceipts:reconciled.qris,orderReceipts:reconciled.revenue})
   }
   return { hasOpenShift: true, shift, openFloat: shift.openFloat,
     expectedCash: null, currentBalance: null, qrisSales: null,
