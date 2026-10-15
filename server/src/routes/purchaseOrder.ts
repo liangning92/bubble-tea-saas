@@ -1,4 +1,4 @@
-import { parseDateBoundary } from '../utils/businessDate'
+import { parseBusinessDate, parseDateBoundary } from '../utils/businessDate'
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -113,6 +113,10 @@ router.post('/', authenticate, authorize('admin', 'manager', 'staff'), validateB
 
 router.put('/:id', authenticate, authorize('admin','manager','staff'), validateBody(createPOSchema.extend({expectedVersion:z.string().datetime(),reason:z.string().trim().min(1).max(1000)})), async(req:AuthRequest,res)=>{
  try{res.json({code:200,data:await PurchaseOrderService.editPurchaseOrder(req.params.id,{...req.body,storeId:getStoreId(req),expectedDate:req.body.expectedDate?new Date(req.body.expectedDate):undefined},req.user!.staffId||req.user!.id,req.body.expectedVersion,req.body.reason,!!req.user!.employeeApp||req.user!.role==='staff')})}catch(e:any){res.status(e.statusCode||500).json({code:e.statusCode||500,message:e.message})}
+});
+router.post('/:id/confirm-payment',authenticate,authorize('admin','manager'),validateBody(z.object({expectedVersion:z.string().datetime(),paidDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),reason:z.string().trim().min(1).max(1000)})),async(req:AuthRequest,res)=>{
+ try{let paidAt:Date;try{paidAt=parseBusinessDate(req.body.paidDate)}catch{throw new PurchaseOrderService.PurchaseOrderError('INVALID_PAYMENT_DATE',400)}
+ res.json({code:200,data:await PurchaseOrderService.confirmPurchasePayment(req.params.id,getStoreId(req),req.user!.staffId||req.user!.id,req.body.expectedVersion,paidAt,req.body.reason)})}catch(e:any){res.status(e.statusCode||500).json({code:e.statusCode||500,message:e.message})}
 });
 for(const action of ['reverse-receipt','refund'])router.post(`/:id/${action}`,authenticate,authorize('admin','manager'),validateBody(z.object({reason:z.string().trim().min(1).max(1000)})),async(req:AuthRequest,res)=>{
  try{const handler=action==='refund'?PurchaseOrderService.refundPurchasePayment:PurchaseOrderService.reversePurchaseReceipt;res.json({code:200,data:await handler(req.params.id,getStoreId(req),req.user!.staffId||req.user!.id,req.body.reason)})}catch(e:any){res.status(e.statusCode||500).json({code:e.statusCode||500,message:e.message})}

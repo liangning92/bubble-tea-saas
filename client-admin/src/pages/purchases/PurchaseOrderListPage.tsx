@@ -1,3 +1,7 @@
+import { Link } from 'react-router-dom'
+import { useStoreDateSettings } from '../../hooks/useStoreDateSettings'
+import { storeCalendarDate } from '../../utils/storeDateTime'
+import { summarizePurchases } from '../../utils/purchaseSummary'
 import { ReferenceDetails } from '../../components/ReferenceDetails'
 import { PurchasePrices } from '../../../../shared/components/PurchasePrices'
 import { inventoryInputUnits,defaultInventoryInputUnit,inventoryLedgerQuantity } from '../../utils/inventoryInputUnits'
@@ -42,6 +46,7 @@ interface PurchaseOrder {
   note?: string
   items: PurchaseOrderItem[]
   refunded?: boolean
+  financeExpenseId?: string | null
   paidAt?: string | null
   updatedAt: string
   createdAt: string
@@ -71,6 +76,14 @@ const STATUS_CONFIG: Record<string, { labelKey: string; color: string; icon: any
 export function PurchaseOrderListPage() {
   const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
+  const dateSettings = useStoreDateSettings()
+  const [today, setToday] = useState(() => storeCalendarDate(new Date(), dateSettings.timezone))
+  useEffect(() => {
+    const tick = () => setToday(storeCalendarDate(new Date(), dateSettings.timezone))
+    tick(); const timer = window.setInterval(tick, 30000)
+    window.addEventListener('focus', tick)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', tick) }
+  }, [dateSettings.timezone])
 
   const [orders, setOrders] = useState<PurchaseOrder[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -79,6 +92,8 @@ export function PurchaseOrderListPage() {
   const [showModal, setShowModal] = useState(false)
   const [editing,setEditing]=useState<PurchaseOrder|null>(null)
   const [reason,setReason]=useState('')
+  const [confirmingPayment,setConfirmingPayment]=useState<PurchaseOrder|null>(null)
+  const [paidDate,setPaidDate]=useState('')
   const [viewMode,setViewMode]=useState<'list'|'board'>('board')
   const [command,setCommand]=useState<{order:PurchaseOrder;action:'reverse'|'refund'}|null>(null)
   const [filterStatus, setFilterStatus] = useState('')
@@ -97,15 +112,14 @@ export function PurchaseOrderListPage() {
 
   useEffect(() => {
     loadData()
-  }, [user, filterStatus])
+  }, [user])
 
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const statusFilter = filterStatus || undefined
       const storeId = user?.storeId as string | undefined
       const [ordersRes, suppliersRes, inventoryRes] = await Promise.all([
-        purchaseOrderApi.list({ status: statusFilter as string | undefined }),
+        purchaseOrderApi.list(),
         supplierApi.getDropdown(storeId),
         inventoryApi.list({ storeId })
       ])
@@ -231,7 +245,8 @@ export function PurchaseOrderListPage() {
   }
 
   const editOrder=(order:PurchaseOrder)=>{setEditing(order);setReason('');setActionError('');setFormData({supplierId:order.supplierId||'',expectedDate:order.expectedDate?.slice(0,10)||'',note:order.note||'',items:order.items.map(i=>({inventoryId:i.inventoryId,quantity:String(i.inputQuantity??i.quantity),inputUnit:i.inputUnit||i.inventory?.unit||'',paidAmount:String(i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)))}))});setShowModal(true)}
-  const visibleOrders=orders.filter(o=>!search||[o.supplier?.name,o.orderNumber,o.onlineOrderNumber,...o.items.map(i=>formatItemName(i.inventory?.name||'',i18n.language))].join(' ').toLowerCase().includes(search.toLowerCase()))
+  const summary = summarizePurchases(orders, today, dateSettings.timezone)
+  const visibleOrders=orders.filter(o=>(!filterStatus || (filterStatus==='awaiting_receipt' ? ['pending','approved','awaiting_receipt'].includes(o.status) : o.status===filterStatus)) && (!search||[o.supplier?.name,o.orderNumber,o.onlineOrderNumber,...o.items.map(i=>formatItemName(i.inventory?.name||'',i18n.language))].join(' ').toLowerCase().includes(search.toLowerCase())))
   const rank=(o:PurchaseOrder)=>o.status==='awaiting_receipt'||o.status==='approved'?0:o.status==='pending'?1:o.status==='received'?2:3
   return (
     <div className="min-h-screen bg-gray-50">
@@ -270,11 +285,12 @@ export function PurchaseOrderListPage() {
 
       {!showModal && actionError && <div role="alert" className="mx-4 mt-4 p-3 bg-red-50 text-red-700 rounded-lg">{actionError}<button className="underline ml-3" onClick={()=>{setActionError('');void loadData()}}>{t('common.refresh')}</button></div>}
 
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 pb-0">
-        <div className="bg-white border rounded-xl p-4"><p className="text-sm text-gray-500">{t('inventoryFlow.awaiting')}</p><strong className="text-2xl">{visibleOrders.filter(o=>['pending','approved','awaiting_receipt'].includes(o.status)).length}</strong></div>
-        <div className="bg-white border rounded-xl p-4"><p className="text-sm text-gray-500">{t('entryFix.paidAmount')}</p><strong className="text-xl break-all">{formatCurrency(visibleOrders.filter(o=>o.paidAt).reduce((n,o)=>n+o.totalAmount,0))}</strong><p className="text-xs text-gray-400">{t('entryFix.filteredScope')}</p></div>
-        <div className="bg-white border rounded-xl p-4"><p className="text-sm text-gray-500">{t('entryFix.financeLinked')}</p><strong className="text-2xl">{visibleOrders.filter(o=>o.paidAt).length}</strong></div>
+      <section aria-label={t('purchaseBoard.summary')} className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 pb-0">
+        <div className="bg-white border rounded-xl p-4 min-w-0"><p className="text-sm text-gray-500">{t('inventoryFlow.awaiting')}</p><strong className="text-2xl tabular-nums">{summary.awaiting}</strong><p className="text-xs text-gray-500 mt-1">{t('purchaseBoard.orders')}</p></div>
+        <div className="bg-white border rounded-xl p-4 min-w-0"><p className="text-sm text-gray-500">{t('purchaseBoard.today')}</p><strong className="text-2xl tabular-nums break-words">{formatCurrency(summary.todayAmount)}</strong><p className="text-xs text-gray-500 mt-1">{today}</p></div>
+        <div className="bg-white border rounded-xl p-4 min-w-0"><p className="text-sm text-gray-500">{t('purchaseBoard.month')}</p><strong className="text-2xl tabular-nums break-words">{formatCurrency(summary.monthAmount)}</strong><p className="text-xs text-gray-500 mt-1">{today.slice(0,7)}</p></div>
       </section>
+      <div className="px-4 pt-2 text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-1"><p>{t('purchaseBoard.basis')}</p><Link to="/finance/expenses" className="text-primary underline">{t('purchaseBoard.finance')}</Link></div>
       {/* Content */}
       <div className={viewMode==='board'?"p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start":"p-4 space-y-4"}>
         {isLoading ? (
@@ -292,7 +308,7 @@ export function PurchaseOrderListPage() {
               <div key={order.id} className="bg-white rounded-xl shadow-sm p-4">
                 <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
                   <div>
-                    <h3 className="font-bold text-gray-900 text-base break-words">{order.items.map(i=>formatItemName(i.inventory?.name||t('purchases.items'),i18n.language)).join(' · ')}</h3><ReferenceDetails value={order.onlineOrderNumber||order.orderNumber}/><p className="text-xs text-gray-500 mt-1">{t(order.refunded?'entryFix.refundDone':order.paidAt?'entryFix.financeLinked':'entryFix.paymentUnconfirmed')}</p>
+                    <h3 className="font-bold text-gray-900 text-base break-words">{order.items.map(i=>formatItemName(i.inventory?.name||t('purchases.items'),i18n.language)).join(' · ')}</h3><ReferenceDetails value={order.onlineOrderNumber||order.orderNumber}/><p className="text-xs text-gray-500 mt-1">{t(order.refunded?'entryFix.refundDone':order.financeExpenseId?'entryFix.financeLinked':'entryFix.paymentUnconfirmed')}</p>{order.financeExpenseId&&<Link to={'/finance/expenses?purchase='+encodeURIComponent(order.id)} className="text-xs text-primary underline">{t('purchaseBoard.viewExpense')}</Link>}
                     <p className="text-sm text-gray-500">{order.supplier?.name || t('purchases.supplier')}</p>
                     <p className="text-sm text-gray-500 mt-1">{t('inventoryActors.buyer')}: <ActorName actor={order.createdByActor} id={order.createdBy}/></p>
                     {order.status === 'received' && <p className="text-sm text-gray-500">{t('inventoryActors.receiver')}: <ActorName actor={order.receivedByActor} id={order.receivedBy}/></p>}
@@ -332,6 +348,7 @@ export function PurchaseOrderListPage() {
 
                 {order.status==='received'&&<button disabled={busyOrders.has(order.id)} className="text-sm text-amber-700 mt-3" onClick={()=>{setCommand({order,action:'reverse'});setReason('')}}>{t('entryFix.reverseReceipt')}</button>}
                 {order.status==='cancelled'&&order.paidAt&&!order.refunded&&<button disabled={busyOrders.has(order.id)} className="text-sm text-amber-700 mt-3" onClick={()=>{setCommand({order,action:'refund'});setReason('')}}>{t('entryFix.refund')}</button>}
+                {!order.paidAt&&order.status!=='cancelled'&&['admin','manager'].includes(user?.role||'')&&<button className="text-sm text-primary underline mt-3" onClick={()=>{setConfirmingPayment(order);setPaidDate(storeCalendarDate(order.createdAt,'Asia/Jakarta'));setReason('');setActionError('')}}>{t('purchaseBoard.confirmPayment')}</button>}
                 {/* Actions */}
                 <div className="flex flex-wrap gap-2 mt-4 border-t pt-4">
                   {['pending','approved','awaiting_receipt'].includes(order.status)&&<button className="text-sm text-primary" onClick={()=>editOrder(order)}>{t('entryFix.edit')}</button>}
@@ -454,6 +471,13 @@ export function PurchaseOrderListPage() {
             </div>
           </AdminDialog>
       )}
+      {confirmingPayment&&<AdminDialog title={t('purchaseBoard.confirmPayment')} onClose={()=>setConfirmingPayment(null)} busy={busyOrders.has(confirmingPayment.id)} className="max-w-md" chrome>
+        <p className="text-sm text-gray-600">{t('purchaseBoard.confirmHint')}</p><p className="font-bold text-xl my-3">{formatCurrency(confirmingPayment.totalAmount)}</p>
+        <label className="block mt-3">{t('purchaseBoard.paidDate')}<LocalizedDateTimeInput type="date" value={paidDate} onChange={e=>setPaidDate(e.target.value)} className="input w-full"/></label>
+        <label className="block mt-3">{t('entryFix.reason')}<textarea className="input w-full" value={reason} onChange={e=>setReason(e.target.value)}/></label>
+        {actionError&&<p role="alert" className="text-red-700">{actionError}</p>}
+        <button className="btn-primary mt-3" disabled={!reason.trim()||!paidDate||busyOrders.has(confirmingPayment.id)} onClick={()=>runOrderAction(confirmingPayment.id,async()=>{await purchaseOrderApi.confirmPayment(confirmingPayment.id,{expectedVersion:confirmingPayment.updatedAt,paidDate,reason});setConfirmingPayment(null)})}>{t('purchaseBoard.confirmPayment')}</button>
+      </AdminDialog>}
       {command&&<AdminDialog title={t(command.action==='reverse'?'entryFix.reverseReceipt':'entryFix.refund')} onClose={()=>setCommand(null)} className="max-w-md" busy={busyOrders.has(command.order.id)} chrome><p className="text-sm text-gray-600">{t(command.action==='reverse'?'entryFix.reverseHint':'entryFix.refundHint')}</p><label className="block mt-3">{t('entryFix.reason')}<textarea className="input w-full" value={reason} onChange={e=>setReason(e.target.value)}/></label>{actionError&&<p role="alert" className="text-red-700">{actionError}</p>}<button className="btn-primary mt-3" disabled={!reason.trim()||busyOrders.has(command.order.id)} onClick={()=>runOrderAction(command.order.id,async()=>{await (command.action==='reverse'?purchaseOrderApi.reverseReceipt:purchaseOrderApi.refund)(command.order.id,reason);setCommand(null)})}>{t('common.confirm')}</button></AdminDialog>}
     </div>
   )

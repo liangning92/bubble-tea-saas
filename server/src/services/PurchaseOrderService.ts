@@ -22,7 +22,8 @@ async function view(order: any, db: any = prisma, suppliedActors?: Awaited<Retur
     const inventory = await db.inventory.findMany({ where: { storeId: order.storeId, id: { in: order.items.map((i: any) => i.inventoryId) } }, select: { id: true, name: true, unit: true } });
     const actors = suppliedActors || await loadInventoryActors(db, order.storeId, [order.createdBy, order.receivedBy]);
     const refunded=!!(await db.expense.findFirst({where:{storeId:order.storeId,referenceType:'purchase_refund',referenceId:order.id},select:{id:true}}));
-    return { ...order, refunded, createdByActor: actors.get(order.createdBy) || null, receivedByActor: actors.get(order.receivedBy) || null, items: order.items.map((i: any) => ({ ...i, lineAmount:i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)), inventory: inventory.find((m: any) => m.id === i.inventoryId) })) };
+    const paymentExpense=await db.expense.findFirst({where:{storeId:order.storeId,referenceType:'purchase',referenceId:order.id},select:{id:true}});
+    return { ...order, financeExpenseId:paymentExpense?.id||null, refunded, createdByActor: actors.get(order.createdBy) || null, receivedByActor: actors.get(order.receivedBy) || null, items: order.items.map((i: any) => ({ ...i, lineAmount:i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)), inventory: inventory.find((m: any) => m.id === i.inventoryId) })) };
 }
 export async function getPurchaseOrders(filter: PurchaseOrderFilter) {
     const where: any = { storeId: filter.storeId };
@@ -105,6 +106,21 @@ export async function editPurchaseOrder(id:string,data:PurchaseInput,actor:strin
   await tx.purchaseOrderItem.createMany({data:items.map(i=>({...i,purchaseOrderId:id}))});
   const order=await tx.purchaseOrder.findUniqueOrThrow({where:{id},include});
   await syncExpense(tx,order);await audit(tx,order,actor,'update',old,{...order,reason});return view(order,tx);
+ });
+}
+// Confirm a historical payment without rewriting purchase items or touching inventory.
+export async function confirmPurchasePayment(id:string,storeId:string|undefined,actor:string,expectedVersion:string,paidAt:Date,reason:string){
+ return prisma.$transaction(async tx=>{
+  const old=await scopedOrder(tx,id,storeId);
+  if(old.status==='cancelled')throw new PurchaseOrderError('CANCELLED_PURCHASE_PAYMENT',400);
+  if(old.paidAt)throw new PurchaseOrderError('PURCHASE_ALREADY_PAID');
+  if(!reason.trim())throw new PurchaseOrderError('CORRECTION_REASON_REQUIRED',400);
+  if(!Number.isFinite(paidAt.getTime())||paidAt.getTime()>Date.now())throw new PurchaseOrderError('INVALID_PAYMENT_DATE',400);
+  if(!Number.isSafeInteger(old.totalAmount)||old.totalAmount<0||old.totalAmount>21474836)throw new PurchaseOrderError('INVALID_PURCHASE_AMOUNT',400);
+  const changed=await tx.purchaseOrder.updateMany({where:{id,paidAt:null,status:old.status,updatedAt:new Date(expectedVersion)},data:{paidAt}});
+  if(changed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
+  const order=await tx.purchaseOrder.findUniqueOrThrow({where:{id},include});
+  await syncExpense(tx,order);await audit(tx,order,actor,'confirm_payment',old,{...order,reason});return view(order,tx);
  });
 }
 async function scopedOrder(tx: any, orderId: string, storeId?: string) {
