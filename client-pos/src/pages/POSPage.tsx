@@ -1,3 +1,4 @@
+import {RefundRequestForm} from '../components/RefundRequestForm'
 import { offlineActivityQuote } from '../utils/offlineMembers'
 import { ReprintReceiptButton } from '../components/ReprintReceiptButton'
 import { readOfflineDrafts, suspendOfflineDraft, removeOfflineDraft } from '../utils/offlineDrafts'
@@ -336,11 +337,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 删除申请弹窗
   const [deleteModalOrder, setDeleteModalOrder] = useState<any>(null)
-  const [deleteReason, setDeleteReason] = useState('')
-  const [refundReasonCode, setRefundReasonCode] = useState<'customer_dissatisfied'|'paid_unprepared'>('customer_dissatisfied')
-  const [refundItemIds, setRefundItemIds] = useState<string[]>([])
-  useEffect(() => { setRefundReasonCode('customer_dissatisfied'); setRefundItemIds((deleteModalOrder?.items || []).map((item: any) => item.id).filter(Boolean)) }, [deleteModalOrder?.id])
-  const [isSubmittingDelete, setIsSubmittingDelete] = useState(false)
 
   // 支付 - 使用orderStore
   const {
@@ -1885,29 +1881,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       console.error('Failed to fetch orders:', e)
     } finally {
       setOrdersLoading(false)
-    }
-  }
-
-  // 提交删除申请
-  const submitDeleteRequest = async () => {
-    if (!deleteModalOrder || !deleteReason.trim()) return
-    setIsSubmittingDelete(true)
-    try {
-      await posApi.requestRefund({
-        orderId: deleteModalOrder.id,
-        reason: deleteReason,
-        reasonCode: refundReasonCode,
-        selectedItemIds: refundItemIds,
-        staffId: user?.id
-      })
-      showToast(t('orders.deleteRequestSubmitted'), 'success')
-      setDeleteModalOrder(null)
-      setDeleteReason('')
-      fetchOrders() // 刷新列表
-    } catch (e: any) {
-      showToast(e?.response?.data?.message || t('orders.deleteRequestFailed'), 'error')
-    } finally {
-      setIsSubmittingDelete(false)
     }
   }
 
@@ -4988,7 +4961,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       key={order.id}
                       onClick={() => {
                         setDeleteModalOrder(order)
-                        setDeleteReason('')
                       }}
                       className={`p-3 rounded-xl cursor-pointer transition-all ${
                         deleteModalOrder?.id === order.id
@@ -5019,47 +4991,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         </div>
       )}
 
-      {/* 删除申请弹窗 */}
+      {/* 历史订单退款申请 */}
       {deleteModalOrder && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setDeleteModalOrder(null)}>
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl z-[80]" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 flex justify-between items-center border-b">
-              <h3 className="font-bold">{t('orders.requestDelete')}</h3>
-              <button onClick={() => setDeleteModalOrder(null)} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded-full">
-                <X size={20} />
-              </button>
-            </div>
-            <div className="p-4 space-y-4">
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <p className="font-bold">#{deleteModalOrder.orderNumber || deleteModalOrder.id}</p>
-                <p className="text-sm text-gray-500">{formatCurrency(deleteModalOrder.finalAmount || deleteModalOrder.totalAmount)}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium">{t('refundPolicy.reason')}<select className="block w-full p-2 border rounded my-2" value={refundReasonCode} onChange={e=>setRefundReasonCode(e.target.value as 'customer_dissatisfied'|'paid_unprepared')}><option value="customer_dissatisfied">{t('refundPolicy.customer_dissatisfied')}</option><option value="paid_unprepared">{t('refundPolicy.paid_unprepared')}</option></select></label>
-                <p className="text-sm text-amber-700 mb-2">{t(refundReasonCode === 'paid_unprepared' ? 'refundPolicy.unpreparedBlocked' : 'refundPolicy.noRestock')}</p>
-                <div className="space-y-1 mb-3">{(deleteModalOrder.items || []).map((item: any)=><label key={item.id} className="flex gap-2 text-sm"><input type="checkbox" checked={refundItemIds.includes(item.id)} onChange={e=>setRefundItemIds(e.target.checked ? [...refundItemIds,item.id] : refundItemIds.filter(id=>id!==item.id))}/><span className="flex-1">{item.productName}</span><span>{t('pos.quantity')}: {item.quantity}</span></label>)}</div>
-                <label className="block text-sm font-medium mb-2">{t('orders.deleteReason')}</label>
-                <textarea
-                  value={deleteReason}
-                  onChange={e => setDeleteReason(e.target.value)}
-                  className="w-full p-3 border rounded-lg"
-                  rows={3}
-                  placeholder={t('orders.deleteReasonPlaceholder')}
-                />
-              </div>
-              <button
-                onClick={submitDeleteRequest}
-                disabled={!deleteReason.trim() || !refundItemIds.length || isSubmittingDelete}
-                className="w-full py-3 bg-red-500 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isSubmittingDelete ? (
-                  <Loader2 size={20} className="animate-spin" />
-                ) : (
-                  <RotateCcw size={20} />
-                )}
-                {t('orders.submitDeleteRequest')}
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={()=>setDeleteModalOrder(null)}>
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[80]" onClick={e=>e.stopPropagation()}>
+            <RefundRequestForm order={deleteModalOrder} onCancel={()=>setDeleteModalOrder(null)} onDone={()=>{setDeleteModalOrder(null);void fetchOrders();showToast(t('refundPolicy.submitted'),'success')}} />
           </div>
         </div>
       )}
