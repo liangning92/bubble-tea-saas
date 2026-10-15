@@ -40,6 +40,7 @@ async function start(){
     }
   })
   connectionManager.startHealthCheck(30000)
+  void connectionManager.connect().catch(() => {})
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <ErrorBoundary><QueryClientProvider client={queryClient}><HashRouter>

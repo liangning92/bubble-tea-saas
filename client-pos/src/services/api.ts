@@ -72,7 +72,7 @@ api.interceptors.request.use(async (config) => {
     config.posSnapshotComplete = snapshotPath(config.url || '') !== '/config' || !(config.params?.category || new URL(config.url!,window.location.href).searchParams.get('category'))
   }
   const cachedPath = config.method === 'get' && snapshotPath(config.url || '')
-  if (cachedPath && !readBackendAuth().token) {
+  if (cachedPath && (!navigator.onLine || !readBackendAuth().token)) {
     const storeId = readBackendAuth().user?.storeId
     if (!storeId) throw new Error('OFFLINE_INITIALIZATION_REQUIRED')
     const data = await readSnapshot(cachedPath,storeId)
