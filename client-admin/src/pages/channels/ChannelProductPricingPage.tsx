@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { useEmployeePermission } from "../../contexts/EmployeeAccess";
 import { useState } from "react";
@@ -343,7 +344,7 @@ export function ChannelProductPricingPage() {
                 "products will use this base price ratio:",
                 "produk akan memakai rasio harga dasar:",
               )}{" "}
-              {100 + bulk}%
+              {formatNumber(100 + bulk)}%
             </p>
             <p className="text-sm text-gray-500">
               {l(
@@ -380,7 +381,7 @@ export function ChannelProductPricingPage() {
                     filtered.forEach(
                       (p: any) =>
                         (next[p.productId] = {
-                          percent: String(100 + bulk),
+                          percent: formatNumber(100 + bulk),
                           enabled: draft(p).enabled,
                         }),
                     );

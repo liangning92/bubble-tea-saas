@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -296,7 +297,7 @@ export function FixedAssetsPage() {
                       {formatCurrency(asset.originalValue)}
                     </td>
                     <td className="px-4 py-3 text-sm text-right text-gray-600">
-                      {asset.usefulLife} {t('finance.months')}
+                      {formatNumber(asset.usefulLife)} {t('finance.months')}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
@@ -381,7 +382,7 @@ export function FixedAssetsPage() {
                       {formatCurrency(item.currentValue)}
                     </td>
                     <td className="px-4 py-3 text-center text-sm text-gray-600">
-                      {item.remainingMonths} {t('finance.months')}
+                      {formatNumber(item.remainingMonths)} {t('finance.months')}
                     </td>
                   </tr>
                 ))}

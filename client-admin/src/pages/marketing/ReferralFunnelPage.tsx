@@ -122,7 +122,7 @@ export function ReferralFunnelPage() {
               <div className="text-sm text-gray-500 mt-1">{t('marketing.rewardCost')}</div>
             </div>
             <div className="card text-center">
-              <div className="text-3xl font-bold text-info">{funnel.roi}%</div>
+              <div className="text-3xl font-bold text-info">{formatNumber(funnel.roi)}%</div>
               <div className="text-sm text-gray-500 mt-1">ROI</div>
             </div>
           </div>

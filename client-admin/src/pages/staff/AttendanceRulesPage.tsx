@@ -194,7 +194,7 @@ export function AttendanceRulesPage() {
                   )}
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  {rule.workStartTime} - {rule.workEndTime} ({t('staff.gracePeriod')}: {rule.gracePeriod}min)
+                  {rule.workStartTime} - {rule.workEndTime} ({t('staff.gracePeriod')}: {formatNumber(rule.gracePeriod)}min)
                 </p>
               </div>
               <div className="flex gap-2">

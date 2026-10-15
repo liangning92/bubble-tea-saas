@@ -597,7 +597,7 @@ export function InventoryCountPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm text-gray-500">
-                      {t("inventory.system")}: {item.systemQty}
+                      {t("inventory.system")}: {formatNumber(item.systemQty)}
                     </span>
                     <span className="text-sm text-gray-500">
                       {t("inventory.actual")}: {formatNumber(item.countedQty)}
