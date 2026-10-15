@@ -279,6 +279,34 @@ class UpgradeTests(unittest.TestCase):
             self.assertEqual(c.execute('SELECT totalDays FROM Leave').fetchone()[0], 2.5)
             self.assertEqual(c.execute('SELECT usedLeave,usedSick FROM LeaveBalance').fetchone(), (3.5, 4.5))
 
+    def test_historical_procurement_cost_affinity_and_new_nullable_columns(self):
+        template = self.root / 'empty.db'
+        with closing(sqlite3.connect(template)) as c, c:
+            c.execute('CREATE TABLE Batch (id TEXT PRIMARY KEY, unitCost REAL NOT NULL)')
+            for table, name in U.LEGACY_COST_FLOAT_COLUMNS:
+                if (table, name) not in [('Batch', 'unitCost'), ('PurchaseOrderItem', 'inputUnitCost')]:
+                    c.execute('ALTER TABLE '+U.quote(table)+' ADD COLUMN '+U.quote(name)+' REAL NOT NULL DEFAULT 0')
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('CREATE TABLE Batch (id TEXT PRIMARY KEY, unitCost INTEGER NOT NULL)')
+            c.execute('INSERT INTO Batch VALUES ("old-batch",123)')
+            for (table, name), affinity in U.LEGACY_COST_FLOAT_COLUMNS.items():
+                if (table, name) != ('Batch', 'unitCost'):
+                    suffix = '' if name == 'inputUnitCost' else ' NOT NULL DEFAULT 0'
+                    c.execute('ALTER TABLE '+U.quote(table)+' ADD COLUMN '+U.quote(name)+' '+affinity+suffix)
+            c.execute('INSERT INTO Inventory(id,avgCost) VALUES ("old-inventory",1234)')
+        self.catalog = U.catalog_from_empty(template, 'a' * 40)
+        receipt = self.prepare()
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        with closing(sqlite3.connect(self.db)) as c, c:
+            self.assertEqual(c.execute('SELECT unitCost,typeof(unitCost) FROM Batch').fetchone(), (123, 'integer'))
+            self.assertEqual(c.execute('SELECT avgCost,typeof(avgCost) FROM Inventory').fetchone(), (1234, 'integer'))
+            c.execute('UPDATE Batch SET unitCost=123.5')
+            c.execute('UPDATE Inventory SET avgCost=1234.5')
+            self.assertEqual(c.execute('SELECT unitCost FROM Batch').fetchone()[0], 123.5)
+            self.assertEqual(c.execute('SELECT avgCost FROM Inventory').fetchone()[0], 1234.5)
+            self.assertEqual(c.execute('SELECT name FROM pragma_table_info("PurchaseOrder") WHERE name="paidAt"').fetchone()[0], 'paidAt')
+            self.assertEqual(c.execute('SELECT name FROM pragma_table_info("PurchaseOrderItem") WHERE name="lineAmount"').fetchone()[0], 'lineAmount')
+
     def test_unapproved_type_and_constraint_drift_still_block_with_field_diagnostics(self):
         for declaration in ('TEXT NOT NULL', 'INTEGER'):
             with closing(sqlite3.connect(self.db)) as c, c:

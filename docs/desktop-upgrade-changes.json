@@ -22,8 +22,10 @@
   "PurchaseOrder.receivedBy TEXT",
   "PurchaseOrderItem.inputQuantity REAL",
   "PurchaseOrderItem.inputUnit TEXT",
-  "PurchaseOrderItem.inputUnitCost INTEGER",
+  "PurchaseOrderItem.inputUnitCost REAL",
   "PurchaseOrderItem.packageSnapshot TEXT",
+  "PurchaseOrder.paidAt DATETIME",
+  "PurchaseOrderItem.lineAmount INTEGER",
   "PaymentEvidence, LocalSchemaMigration and reusable media tables and indexes",
   "Order_pickupNumber_idx nonunique index",
   "Preserve compatible legacy INTEGER affinity for leave day Float columns",
@@ -31,5 +33,6 @@
   "Staff_employeeNumber_key unique index after duplicate-number validation",
   "OrderConsumptionSnapshot and ConsumptionAlert tables and indexes",
   "PurchaseOrder.supplierId nullable with historical rows and dependent records preserved",
-  "StockInLog_operationId_key, StockOutLog_operationId_key and PurchaseOrder_requestId_key unique indexes"
+  "StockInLog_operationId_key, StockOutLog_operationId_key and PurchaseOrder_requestId_key unique indexes",
+  "Preserve compatible legacy INTEGER/BIGINT affinity for procurement cost Float columns"
 ]

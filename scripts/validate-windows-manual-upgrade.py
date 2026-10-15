@@ -23,6 +23,7 @@ assert sys.platform == 'win32' and os.environ.get('GITHUB_ACTIONS') == 'true'
 SCOPE = os.environ.get('BTPS_VALIDATION_SCOPE', 'core')
 assert SCOPE in ('core', 'installer', 'legacy'), 'Unknown Windows validation scope'
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+LEGACY_COST_FLOAT_COLUMNS = runpy.run_path(str(ROOT / 'scripts/desktop-db-upgrade.py'))['LEGACY_COST_FLOAT_COLUMNS']
 HELPER = ROOT / 'build/upgrade-helper/btps-db-upgrade.exe'
 SEED = ROOT / 'server/prisma/seed.db'
 GUID = 'adc89314-e162-5542-b50f-86df40f517f2'
@@ -67,6 +68,9 @@ def fixture(collision=False, legacy_affinity=True):
             for (statement,) in ddl:
                 for name in ('totalDays', 'usedLeave', 'usedSick'):
                     statement = statement.replace('"'+name+'" REAL', '"'+name+'" INTEGER')
+                for (table, name), affinity in LEGACY_COST_FLOAT_COLUMNS.items():
+                    if statement.startswith('CREATE TABLE "'+table+'"'):
+                        statement = statement.replace('"'+name+'" REAL', '"'+name+'" '+affinity)
                 target.execute(statement)
     else:
         shutil.copy2(SEED, DB)
@@ -76,7 +80,7 @@ def fixture(collision=False, legacy_affinity=True):
         c.execute('DROP TABLE LocalSchemaMigration')
         c.execute('DROP INDEX StockInLog_inventoryId_ledgerSequence_key')
         c.execute('DROP INDEX StockOutLog_inventoryId_ledgerSequence_key')
-        for table,name in [('Order','pickupNumber'),('Order','requestFingerprint'),('Order','requestReceipt'),('Order','checkoutTaxAmount'),('Staff','baseSalary'),('Inventory','ledgerSequence'),('Inventory','ledgerEpoch'),('StockInLog','ledgerSequence'),('StockOutLog','ledgerSequence'),('RefundRequest','reasonCode'),('RefundRequest','selectedItemIds')]:
+        for table,name in [('Order','pickupNumber'),('Order','requestFingerprint'),('Order','requestReceipt'),('Order','checkoutTaxAmount'),('Staff','baseSalary'),('Inventory','ledgerSequence'),('Inventory','ledgerEpoch'),('StockInLog','ledgerSequence'),('StockOutLog','ledgerSequence'),('RefundRequest','reasonCode'),('RefundRequest','selectedItemIds'),('PurchaseOrder','paidAt'),('PurchaseOrderItem','lineAmount')]:
             c.execute('ALTER TABLE "'+table+'" DROP COLUMN "'+name+'"')
         c.execute('INSERT INTO Tenant (id,name,updatedAt) VALUES (?,?,?)', ('tenant', 'Owned synthetic tenant', 0))
         c.execute('INSERT INTO Store (id,tenantId,name,updatedAt) VALUES (?,?,?,?)', ('store', 'tenant', 'Owned synthetic store', 0))
@@ -84,6 +88,8 @@ def fixture(collision=False, legacy_affinity=True):
         c.execute('INSERT INTO Staff (id,userId,storeId,name,employeeNumber,updatedAt) VALUES (?,?,?,?,?,?)', ('staff', 'user', 'store', 'Owned synthetic staff', 'SYNTHETIC', 0))
         c.execute('INSERT INTO Leave (id,staffId,storeId,leaveType,startDate,endDate,totalDays,updatedAt) VALUES (?,?,?,?,?,?,?,?)', ('historical-leave', 'staff', 'store', 'annual', 0, 0, 2, 0))
         c.execute('INSERT INTO LeaveBalance (id,staffId,year,usedLeave,usedSick,updatedAt) VALUES (?,?,?,?,?,?)', ('historical-balance', 'staff', 2026, 3, 4, 0))
+        c.execute('INSERT INTO Inventory (id,storeId,name,category,unit,avgCost,updatedAt) VALUES (?,?,?,?,?,?,?)', ('historical-inventory', 'store', 'Synthetic tea', 'tea', 'kg', 1234, 0))
+        c.execute('INSERT INTO Batch (id,inventoryId,batchNumber,quantity,unitCost,updatedAt) VALUES (?,?,?,?,?,?)', ('historical-batch', 'historical-inventory', 'SYNTHETIC', 2, 123, 0))
         c.execute('INSERT INTO "Order" (id,storeId,staffId,orderNumber,totalAmount,finalAmount,paymentMethod,updatedAt) VALUES (?,?,?,?,?,?,?,?)', ('historical','store','staff','OLD-001',125000,125000,'cash',0))
         if collision:
             c.execute('CREATE VIEW Order_pickupNumber_idx AS SELECT 1')
@@ -274,7 +280,7 @@ try:
     receipt = json.loads((TEMP / 'result.json').read_text())
     assert result['historicalRowsPreserved'] and historic() == history
     assert receipt['columnAdded'] and receipt['indexAdded']
-    assert receipt['columnsAdded'] == ['Order.pickupNumber','Order.requestFingerprint','Order.requestReceipt','Order.checkoutTaxAmount','Staff.baseSalary','Inventory.ledgerSequence','Inventory.ledgerEpoch','StockInLog.ledgerSequence','StockOutLog.ledgerSequence','RefundRequest.reasonCode','RefundRequest.selectedItemIds']
+    assert receipt['columnsAdded'] == ['Order.pickupNumber','Order.requestFingerprint','Order.requestReceipt','Order.checkoutTaxAmount','Staff.baseSalary','Inventory.ledgerSequence','Inventory.ledgerEpoch','StockInLog.ledgerSequence','StockOutLog.ledgerSequence','RefundRequest.reasonCode','RefundRequest.selectedItemIds','PurchaseOrder.paidAt','PurchaseOrderItem.lineAmount']
     assert sha(pathlib.Path(receipt['databaseBackup'])) == receipt['databaseBackupSha256']
     invoke('verify')
     CASES.append('compiled-helper-old-database-upgrade-and-verified-backups')
@@ -283,7 +289,12 @@ try:
             field = next(row for row in c.execute('PRAGMA table_info("'+table+'")') if row[1] == name)
             assert field[2] == 'INTEGER'
     CASES.append('compiled-helper-historical-integer-leave-schema-preserved')
-    script = """const assert=require('node:assert/strict');const {PrismaClient}=require('./server/node_modules/@prisma/client');(async()=>{const p=new PrismaClient();try{assert.equal((await p.leave.findUnique({where:{id:'historical-leave'}})).totalDays,2);const b=await p.leaveBalance.findUnique({where:{id:'historical-balance'}});assert.equal(b.usedLeave,3);assert.equal(b.usedSick,4);await p.leave.update({where:{id:'historical-leave'},data:{totalDays:2.5,updatedAt:new Date(0)}});await p.leaveBalance.update({where:{id:'historical-balance'},data:{usedLeave:3.5,usedSick:4.5,updatedAt:new Date(0)}});assert.equal((await p.leave.findUnique({where:{id:'historical-leave'}})).totalDays,2.5);const half=await p.leaveBalance.findUnique({where:{id:'historical-balance'}});assert.equal(half.usedLeave,3.5);assert.equal(half.usedSick,4.5);await p.leave.update({where:{id:'historical-leave'},data:{totalDays:2,updatedAt:new Date(0)}});await p.leaveBalance.update({where:{id:'historical-balance'},data:{usedLeave:3,usedSick:4,updatedAt:new Date(0)}})}finally{await p.$disconnect()}})().catch(e=>{console.error(e);process.exitCode=1})"""
+    with closing(sqlite3.connect(DB)) as c:
+        for (table, name), affinity in LEGACY_COST_FLOAT_COLUMNS.items():
+            field = next(row for row in c.execute('PRAGMA table_info("'+table+'")') if row[1] == name)
+            assert field[2] == affinity
+    CASES.append('compiled-helper-historical-procurement-cost-schema-preserved')
+    script = """const assert=require('node:assert/strict');const {PrismaClient}=require('./server/node_modules/@prisma/client');(async()=>{const p=new PrismaClient();try{assert.equal((await p.leave.findUnique({where:{id:'historical-leave'}})).totalDays,2);const b=await p.leaveBalance.findUnique({where:{id:'historical-balance'}});assert.equal(b.usedLeave,3);assert.equal(b.usedSick,4);await p.leave.update({where:{id:'historical-leave'},data:{totalDays:2.5,updatedAt:new Date(0)}});await p.leaveBalance.update({where:{id:'historical-balance'},data:{usedLeave:3.5,usedSick:4.5,updatedAt:new Date(0)}});assert.equal((await p.leave.findUnique({where:{id:'historical-leave'}})).totalDays,2.5);const half=await p.leaveBalance.findUnique({where:{id:'historical-balance'}});assert.equal(half.usedLeave,3.5);assert.equal(half.usedSick,4.5);await p.leave.update({where:{id:'historical-leave'},data:{totalDays:2,updatedAt:new Date(0)}});await p.leaveBalance.update({where:{id:'historical-balance'},data:{usedLeave:3,usedSick:4,updatedAt:new Date(0)}});assert.equal((await p.inventory.findUnique({where:{id:'historical-inventory'}})).avgCost,1234);assert.equal((await p.batch.findUnique({where:{id:'historical-batch'}})).unitCost,123);await p.inventory.update({where:{id:'historical-inventory'},data:{avgCost:1234.5,updatedAt:new Date(0)}});await p.batch.update({where:{id:'historical-batch'},data:{unitCost:123.5,updatedAt:new Date(0)}});assert.equal((await p.inventory.findUnique({where:{id:'historical-inventory'}})).avgCost,1234.5);assert.equal((await p.batch.findUnique({where:{id:'historical-batch'}})).unitCost,123.5);await p.inventory.update({where:{id:'historical-inventory'},data:{avgCost:1234,updatedAt:new Date(0)}});await p.batch.update({where:{id:'historical-batch'},data:{unitCost:123,updatedAt:new Date(0)}})}finally{await p.$disconnect()}})().catch(e=>{console.error(e);process.exitCode=1})"""
     env = dict(os.environ, DATABASE_URL='file:'+DB.as_posix())
     subprocess.run(['node', '-e', script], cwd=ROOT, env=env, check=True, timeout=60)
     invoke('verify')
