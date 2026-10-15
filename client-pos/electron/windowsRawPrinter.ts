@@ -13,8 +13,8 @@ while ($null -ne ($line = [Console]::ReadLine())) {
   $job = $null
   try {
     $job = ConvertFrom-Json -InputObject $line
-    $success = [WinSpoolRaw]::SendFile($job.printer, $job.file)
-    [Console]::Out.WriteLine((ConvertTo-Json -Compress -InputObject @{id=$job.id;success=$success}))
+    $result = [WinSpoolRaw]::SubmitFile($job.printer, $job.file, $job.document)
+    [Console]::Out.WriteLine((ConvertTo-Json -Compress -InputObject @{id=$job.id;success=$result.Success;jobId=$result.JobId;bytesSubmitted=$result.BytesSubmitted;status=$result.Status;deliveryStatus=$result.DeliveryStatus;error=$result.Error;win32Error=$result.Win32Error}))
   } catch {
     [Console]::Out.WriteLine((ConvertTo-Json -Compress -InputObject @{id=$job.id;success=$false;error=$_.Exception.Message}))
   }
@@ -74,18 +74,25 @@ export class WindowsRawPrinter {
     return startup
   }
 
-  printFile(printer:string,file:string):Promise<void> {
+  printFile(printer:string,file:string,document='POS_RAW_JOB'):Promise<{jobId?:number;bytesSubmitted?:number;status?:number;deliveryStatus?:string}> {
     const result = this.queue.then(async()=>{
       await this.warm()
       const child=this.worker!
-      return new Promise<void>((resolve,reject)=>{
+      return new Promise<{jobId?:number;bytesSubmitted?:number;status?:number;deliveryStatus?:string}>((resolve,reject)=>{
         const id=++this.sequence
         const failWorker=this.abortWorker!
         const timer=setTimeout(()=>failWorker(Error('Print timeout; delivery unconfirmed')),this.timeoutMs)
-        const finish=(error?:Error)=>{clearTimeout(timer);this.onReply=null;this.failCurrent=null;error?reject(error):resolve()}
+        const finish=(error?:Error,reply?:any)=>{clearTimeout(timer);this.onReply=null;this.failCurrent=null;error?reject(error):resolve(reply || {})}
         this.failCurrent=error=>finish(error)
-        this.onReply=reply=>{if(reply.id===id)finish(reply.success===true?undefined:Error(reply.error || 'WinSpool write failed; delivery unconfirmed'))}
-        child.stdin.write(JSON.stringify({id,printer,file})+'\n',error=>{if(error)failWorker(error)})
+        this.onReply=reply=>{
+          if(reply.id!==id)return
+          if(reply.success===true){finish(undefined,reply);return}
+          const error=Object.assign(Error(`${reply.error || 'WinSpool write failed; delivery unconfirmed'}${reply.jobId ? ` job=${reply.jobId} status=${reply.status ?? 0}` : ''}`),{
+            deliveryStatus:reply.deliveryStatus==='not-sent'?'not-sent':'unconfirmed',jobId:reply.jobId,bytesSubmitted:reply.bytesSubmitted,status:reply.status,win32Error:reply.win32Error
+          })
+          finish(error)
+        }
+        child.stdin.write(JSON.stringify({id,printer,file,document})+'\n',error=>{if(error)failWorker(error)})
       })
     })
     this.queue=result.catch(()=>{})
