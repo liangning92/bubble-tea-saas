@@ -70,13 +70,14 @@ export async function completeInventoryCount(countId:string,staffId:string,store
   await lockCount(tx,countId,storeId,['in_progress','pending_review'])
   const count=await tx.inventoryCount.findUniqueOrThrow({where:{id:countId},include:{items:{include:{inventory:true}}}})
   if(count.period==='ad_hoc'&&count.status!=='pending_review')throw Error('COUNT_SUBMIT_REQUIRED')
-  if(!count.items.length||count.items.some(i=>i.countedQty===null||!i.countedAt))throw new Error('COUNT_INCOMPLETE')
-  for(const item of [...count.items].sort((a,b)=>a.inventoryId.localeCompare(b.inventoryId))){
+  const observed=count.items.filter(i=>i.countedQty!==null&&i.countedAt)
+  if(!observed.length)throw new Error('COUNT_INCOMPLETE')
+  for(const item of [...observed].sort((a,b)=>a.inventoryId.localeCompare(b.inventoryId))){
    if(item.inventory.storeId!==storeId)throw new Error('COUNT_ITEM_STORE_MISMATCH')
    const recorded=await tx.config.findUnique({where:{storeId_key:{storeId,key:COUNT_OBSERVATION_PREFIX+item.id}}})
    const observation=recorded?JSON.parse(recorded.value):null
    if(!observation||![1,2,3].includes(observation.version)||observation.countId!==countId||observation.systemQty!==item.systemQty||observation.countedQty!==item.countedQty||observation.actor!==item.countedBy||observation.observedAt!==item.countedAt!.toISOString()||observation.ledgerUnit!==item.inventory.unit)throw new Error('COUNT_REOBSERVATION_REQUIRED')
-   if(await tx.inventoryCountItem.findFirst({where:{inventoryId:item.inventoryId,inventoryCount:{storeId,status:'completed',updatedAt:{gte:item.countedAt!}}}}))throw new Error('COUNT_REOBSERVATION_REQUIRED')
+   if(await tx.inventoryCountItem.findFirst({where:{inventoryId:item.inventoryId,countedAt:{not:null},inventoryCount:{storeId,status:'completed',updatedAt:{gte:item.countedAt!}}}}))throw new Error('COUNT_REOBSERVATION_REQUIRED')
    const variance=item.countedQty!-item.systemQty
    if(item.variance===null||!Number.isFinite(item.variance)||Math.abs(variance-item.variance)>1e-7||!Number.isFinite(variance))throw new Error('INVALID_COUNT_OBSERVATION')
    if(!variance)continue
@@ -89,13 +90,15 @@ export async function completeInventoryCount(countId:string,staffId:string,store
 }
 export async function cancelInventoryCount(countId:string,storeId:string){return prisma.$transaction(async tx=>{await lockCount(tx,countId,storeId,['in_progress','pending_review']);return tx.inventoryCount.update({where:{id:countId},data:{status:'cancelled'},include})})}
 
-export async function submitInventoryCount(countId:string,storeId:string){
+export async function submitInventoryCount(countId:string,storeId:string,countedBy?:string,items:CountObservation[]=[]){
+ if(items.length>1000||new Set(items.map(i=>i.itemId)).size!==items.length||items.length&&!countedBy)throw Error('INVALID_COUNT_SELECTION')
  return prisma.$transaction(async tx=>{
   const existing=await tx.inventoryCount.findFirst({where:{id:countId,storeId},include})
   if(existing?.status==='pending_review')return view(existing)
   await lockCount(tx,countId,storeId)
+  for(const item of [...items].sort((a,b)=>a.itemId.localeCompare(b.itemId)))await recordObservation(tx,item.itemId,item.countedQty,countedBy!,item.note,{countId,storeId,expectedStock:item.expectedStock,observedVersion:item.observedVersion})
   const count=await tx.inventoryCount.findUniqueOrThrow({where:{id:countId},include})
-  if(!count.items.length||count.items.some(i=>i.countedQty===null||!i.countedAt))throw Error('COUNT_INCOMPLETE')
+  if(!count.items.some(i=>i.countedQty!==null&&i.countedAt))throw Error('COUNT_INCOMPLETE')
   return view(await tx.inventoryCount.update({where:{id:countId},data:{status:'pending_review'},include}))
- })
+ },{timeout:15000})
 }
