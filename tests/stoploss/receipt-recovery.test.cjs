@@ -1,0 +1,17 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+function setup(){let row={key:'receipt-print:store:paid-order',value:{status:'failed',payload:{orderNum:'paid-order',total:9000,openCashDrawer:true,printCopies:2},attemptedAt:new Date(0)},updatedAt:new Date()},lock=Promise.resolve(),deadline;
+ const db={config:{get:async()=>structuredClone(row),put:async value=>{row=structuredClone(value)}},transaction:(_mode,_table,fn)=>{const result=lock.then(fn);lock=result.catch(()=>{});return result}};
+ const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('client-pos/src/utils/receiptRecovery.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{exports,require:()=>({db}),Date,Promise,setTimeout:fn=>{deadline=fn;return 1},clearTimeout:()=>{}});return {...exports,row:()=>row,deadline:()=>deadline()}
+}
+test('recovery sends the saved paid receipt once, suppresses drawer and additional copies, and serializes competing requests',async()=>{
+ const ctx=setup();let release,calls=0;const sent=new Promise(resolve=>release=resolve),audit=[];
+ const first=ctx.submitSavedReceipt('key',async payload=>{calls++;assert.equal(payload.orderNum,'paid-order');assert.equal(payload.total,9000);assert.equal(payload.openCashDrawer,false);assert.equal(payload.printCopies,1);await sent;return {success:true}},status=>audit.push(status),true);
+ await new Promise(resolve=>setImmediate(resolve));await assert.rejects(ctx.submitSavedReceipt('key',()=>{calls++;return {success:true}},()=>{},true),/STILL_PROCESSING/);release();await first;assert.equal(calls,1);assert.equal(ctx.row().value.status,'sent');assert.deepEqual(audit,['pending','sent']);
+});
+test('a late native success replaces uncertain UI timeout; timeout never resubmits',async()=>{
+ const ctx=setup();let release,calls=0;const native=new Promise(resolve=>release=resolve);
+ const pending=ctx.submitSavedReceipt('key',()=>{calls++;return native},()=>{},true);await new Promise(resolve=>setImmediate(resolve));ctx.deadline();const result=await pending;assert.equal(result.deliveryStatus,'unconfirmed');assert.equal(ctx.row().value.status,'unknown');release({success:true});await new Promise(resolve=>setImmediate(resolve));assert.equal(ctx.row().value.status,'sent');assert.equal(calls,1)
+});
+test('partial or uncertain printer acceptance always requires paper verification, including old failed transport records',()=>{
+ const ctx=setup();assert.equal(ctx.receiptResultStatus({success:false,copiesSubmitted:1}),'unknown');assert.equal(ctx.receiptResultStatus({success:false,deliveryStatus:'unconfirmed'}),'unknown');assert.equal(ctx.receiptNeedsPaperCheck({status:'failed',error:'Print delivery unconfirmed: timeout'}),true);assert.equal(ctx.receiptNeedsPaperCheck({status:'failed',error:'RECEIPT_PAINT_TIMEOUT'}),false);assert.equal(ctx.receiptNeedsPaperCheck({status:'pending'}),true)
+});

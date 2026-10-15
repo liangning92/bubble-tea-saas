@@ -19,6 +19,8 @@
   "files": [
     "server/uploads/**/*",
     "node_modules/electron-pos-printer/**/*",
+    "node_modules/pdfjs-dist/**/*",
+    "node_modules/@napi-rs/canvas*/**/*",
     "client-pos/node_modules/electron-pos-printer/**/*",
     "server/node_modules/**/*",
     "client-pos/dist/**/*",
@@ -111,7 +113,9 @@
     "node_modules/electron-pos-printer/**/*",
     "client-pos/node_modules/electron-pos-printer/**/*",
     "server/node_modules/**/*",
-    "client-pos/dist-electron/**/*"
+    "client-pos/dist-electron/**/*",
+    "node_modules/pdfjs-dist/**/*",
+    "node_modules/@napi-rs/canvas*/**/*"
   ],
   "npmRebuild": true,
   "win": {

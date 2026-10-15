@@ -1117,6 +1117,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
   if (receiptPrintBusy) return { success: false, error: 'Receipt handover is still in progress' }
   receiptPrintBusy = true
   let copiesSubmitted = 0
+  let transportAttempted = false
   try {
     const printStarted = Date.now()
     const printerName = data.printerHost ? '' : await resolvePrinterName(data.printerName)
@@ -1223,6 +1224,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
       // 指令顺序安全化：ESC @ 初始化置于作业首部，钱箱脉冲紧随其后，接着输出全格式化 ESC/POS 数据，切纸
       const rawBytes = Buffer.concat([initCmd, firstDrawerCmd, receiptBuf, cutCmd])
       writeCrash(`[PRINT] copy=${c + 1}/${printCopies} rawBytes length=${rawBytes.length}`)
+      transportAttempted = true
       if (printerHost && printerPort) {
         await printViaNetworkRaw(rawBytes, printerHost, printerPort)
       } else if (/^COM\d+/i.test(printerName)) {
@@ -1242,7 +1244,7 @@ ipcMain.handle('print-receipt', async (_event, data) => {
 
   } catch (error: any) {
     writeCrash(`[PRINT] print-receipt error: ${error.message}`)
-    return { success: false, copiesSubmitted, error: error.message }
+    return { success: false, copiesSubmitted, deliveryStatus: transportAttempted ? 'unconfirmed' : 'not-sent', error: error.message }
   } finally {
     receiptPrintBusy = false
   }
