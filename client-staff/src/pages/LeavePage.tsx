@@ -561,7 +561,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
             <label className="block text-base font-medium text-gray-700 mb-1 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Paperclip size={15} className="text-gray-500" />
-                {t('leave.attachment', '证明/附件 (可选)')}
+                {selectedTypeObj?.requiresProof ? t('leave.proofRequired') : t('leave.attachment')}
               </span>
               {attachmentUrl && (
                 <button

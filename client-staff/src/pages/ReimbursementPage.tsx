@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
 import { staffApi } from '../services/api'
-import { Receipt, Plus, Clock, XCircle, Upload } from 'lucide-react'
+import { Receipt, ArrowLeft, Plus, Clock, XCircle, Upload } from 'lucide-react'
 import { formatDate, formatCurrency } from '../utils/helpers'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -121,10 +121,10 @@ export function ReimbursementPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate('/profile')}
+              aria-label={t('common.back')} onClick={() => navigate('/profile')}
               className="p-2 bg-white/20 rounded-full hover:bg-white/30"
             >
-              ✕
+              <ArrowLeft size={20} />
             </button>
             <Receipt size={28} />
             <div>
@@ -395,7 +395,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
           </div>
 
           <div>
-            <label className="block text-base font-medium text-gray-700 mb-1">{t('reimbursement.attachmentLabel')}</label>
+            <label className="block text-base font-medium text-gray-700 mb-1">{t(selectedTypeConfig?.requiresReceipt ? 'reimbursement.receiptRequired' : 'reimbursement.attachmentLabel')}</label>
             <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center">
               <input
                 type="file"
