@@ -391,7 +391,7 @@ const { chromium, expect } = require("@playwright/test"),
     await expect(page.getByRole("heading", {name:"Edit Recipe",exact:true})).toBeVisible();
     await expect(page.getByText("Rp 2.557",{exact:true})).toBeVisible();
     const quantities=page.getByRole("textbox",{name:"Quantity",exact:true});
-    await expect(quantities.first()).toHaveValue("0.12");
+    await expect(quantities.first()).toHaveValue("0.123456");
     await expect(quantities.first()).toHaveAttribute("title","0.123456");
     for (const width of [1024,768,390]) {
       await page.setViewportSize({width,height:900});
