@@ -194,7 +194,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEBUG: electron-builder
-        run: npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
+          # Preserve the 7z/blockmap update format but avoid LZMA decoding during
+          # store downtime. The full payload downloads before POS is stopped.
+          ELECTRON_BUILDER_COMPRESSION_LEVEL: '0'
+        run: |
+          node scripts/configure-windows-copy-payload.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Copy payload preparation failed' }
+          npx electron-builder --config "${{ github.workspace }}\electron-builder.json" --win --publish never
+          if ($LASTEXITCODE -ne 0) { throw 'Installer packaging failed' }
 
       - name: Verify exact packaged encrypted upgrade login handoff
         if: ${{ !inputs.skip_validation }}
@@ -310,3 +317,4 @@ jobs:
             upgrade-session-validation.json
             windows-spool-validation.json
             receipt-raster-validation.json
+            installer-payload-packaging.json
