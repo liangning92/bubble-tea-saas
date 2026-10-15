@@ -1,18 +1,23 @@
 import { createCanvas } from '@napi-rs/canvas'
 import { pathToFileURL } from 'url'
-import path from 'path'
 
 // Keep native ESM import: TypeScript's CommonJS rewrite cannot load PDF.js.
 const importModule = new Function('url', 'return import(url)') as (url:string)=>Promise<any>
 let pdfModule:Promise<any>|undefined
 
+export function receiptPdfResourceDirectory(entry:string):string{
+ const normalized=entry.replace(/\\/g,'/')
+ if(!normalized.endsWith('/legacy/build/pdf.mjs'))throw Error('RECEIPT_PDF_RESOURCE_PATH_INVALID')
+ return normalized.slice(0,-'legacy/build/pdf.mjs'.length)
+}
+
 /** CPU rasterization of Chromium's embedded-font PDF; never capture a GPU surface. */
 export async function receiptPdfRaster(pdf:Buffer,width:number,height:number):Promise<Buffer>{
  if (![384,576].includes(width)||!Number.isInteger(height)||height<1||height>19000)throw Error('RECEIPT_SIZE_UNSUPPORTED')
  const entry=require.resolve('pdfjs-dist/legacy/build/pdf.mjs').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1')
- const resources=path.resolve(path.dirname(entry),'../..')+path.sep
+ const resources=receiptPdfResourceDirectory(entry)
  const pdfjs=await (pdfModule??=importModule(pathToFileURL(entry).href))
- const task=pdfjs.getDocument({data:new Uint8Array(pdf),isEvalSupported:false,standardFontDataUrl:resources+'standard_fonts'+path.sep,cMapUrl:resources+'cmaps'+path.sep,cMapPacked:true,wasmUrl:resources+'wasm'+path.sep})
+ const task=pdfjs.getDocument({data:new Uint8Array(pdf),isEvalSupported:false,standardFontDataUrl:resources+'standard_fonts/',cMapUrl:resources+'cmaps/',cMapPacked:true,wasmUrl:resources+'wasm/'})
  try{
   const document=await task.promise
   if(document.numPages!==1)throw Error('RECEIPT_PDF_PAGINATED')
