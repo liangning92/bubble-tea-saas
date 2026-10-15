@@ -1,7 +1,7 @@
 import {beforeEach,expect,jest,test} from '@jest/globals'
 jest.mock('../src/config/env',()=>({config:{jwt:{secret:'synthetic'}}}))
 jest.mock('../src/config/database',()=>({__esModule:true,default:{config:{findMany:jest.fn(async()=>[]),findUnique:jest.fn(),upsert:jest.fn(),delete:jest.fn()},$transaction:jest.fn()}}))
-jest.mock('../src/services/InventoryCountService',()=>({getInventoryCounts:jest.fn(async()=>[{items:[{inventory:{avgCost:900,unit:'kg'},varianceAmountEstimate:500}]}]),getInventoryCountById:jest.fn(),createInventoryCount:jest.fn(),updateCountItem:jest.fn(async()=>({})),completeInventoryCount:jest.fn(),cancelInventoryCount:jest.fn()}))
+jest.mock('../src/services/InventoryCountService',()=>({getInventoryCounts:jest.fn(async()=>[{items:[{inventory:{avgCost:900,unit:'kg'},varianceAmountEstimate:500}]}]),getInventoryCountById:jest.fn(),createInventoryCount:jest.fn(),updateCountItems:jest.fn(async()=>[]),updateCountItem:jest.fn(async()=>({})),completeInventoryCount:jest.fn(),cancelInventoryCount:jest.fn()}))
 jest.mock('../src/services/InventoryAlertConfigService',()=>({saveInventoryAlertConfig:jest.fn(async()=>({autoCheckIntervalHours:6})),getInventoryAlertConfig:jest.fn(),DEFAULT_INVENTORY_ALERT_CONFIG:{}}))
 import {inventoryCountRouter} from '../src/routes/inventoryCount'
 import {inventoryRouter} from '../src/routes/inventory'
@@ -36,4 +36,11 @@ test('alert configuration literal route precedes generic inventory update and us
 })
 test.each([['get','/:storeId/:key',{}],['delete','/:storeId/:key',{}],['post','/',{storeId:'a',key:'inventoryCountObservation.item',value:{version:1},category:'inventory'}],['post','/batch',{storeId:'a',configs:[{key:'inventoryCountObservation.item',value:{version:1},category:'inventory'}]}]])('generic config %s %s cannot forge count observation evidence',async(method,path,body)=>{
  expect((await call(configRouter,method as string,path as string,'admin',body)).statusCode).toBe(403);expect(prisma.config.upsert).not.toHaveBeenCalled();expect(prisma.config.delete).not.toHaveBeenCalled()
+})
+
+test('batch observation uses authenticated identity and validates each quantity and revision',async()=>{
+ const item={itemId:'item',countedQty:0,expectedStock:10,observedVersion:'2026-01-01T00:00:00.000Z',note:''}
+ expect((await call(inventoryCountRouter,'put','/:id/items','staff',{items:[item],countedBy:'spoof'})).statusCode).toBe(200)
+ expect(service.updateCountItems).toHaveBeenCalledWith('count','a','actual-staff',[item])
+ for(const items of [[],[{...item,countedQty:-1}],[{...item,observedVersion:'bad'}]])expect((await call(inventoryCountRouter,'put','/:id/items','staff',{items})).statusCode).toBe(400)
 })

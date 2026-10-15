@@ -1,9 +1,11 @@
+import { InventoryCountEditor } from '../../../../shared/components/InventoryCountEditor'
+import { inventoryCountLabels } from '../../../../shared/inventoryCountLabels'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import dateLocaleI18n from '../../i18n'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { ActorName, CountOperators, InventoryActor } from '../../components/InventoryActor';
-import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor, inventoryLedgerQuantity } from "../../utils/inventoryInputUnits";
+import { inventoryInputUnits, inventoryUnitFactor, inventoryLedgerQuantity } from "../../utils/inventoryInputUnits";
 import { useStoreDateSettings } from "../../hooks/useStoreDateSettings";
 import { InventoryCountAdjustments } from "../../components/InventoryCountAdjustments";
 import { useSearchParams } from "react-router-dom";
@@ -30,7 +32,6 @@ import {
   X,
   Clock,
   AlertTriangle,
-  RotateCcw,
 } from "lucide-react";
 
 interface InventoryCount {
@@ -106,6 +107,7 @@ export function InventoryCountPage() {
       next.delete("itemId");
       return next;
     });
+  const [draftDirty,setDraftDirty] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newCountForm, setNewCountForm] = useState({
     period: "ad_hoc" as "ad_hoc" | "monthly" | "quarterly" | "annual",
@@ -176,26 +178,6 @@ export function InventoryCountPage() {
     },
   });
 
-  // Update count item mutation
-  const updateItemMutation = useMutation({
-    onError: showError,
-    mutationFn: ({
-      countId,
-      itemId,
-      data,
-    }: {
-      countId: string;
-      itemId: string;
-      data: any;
-    }) => inventoryApi.updateInventoryCountItem(countId, itemId, data),
-    onSuccess: () => {
-      refreshCounts();
-      queryClient.invalidateQueries({
-        queryKey: ["inventory-count", storeId, countId],
-      });
-    },
-  });
-
   const submitMutation = useMutation({
     mutationFn: (id: string) => inventoryApi.submitInventoryCount(id),
     onError: showError,
@@ -240,26 +222,6 @@ export function InventoryCountPage() {
       ...newCountForm,
       startDate: new Date(newCountForm.startDate).toISOString(),
       endDate: new Date(newCountForm.endDate).toISOString(),
-    });
-  };
-
-  const handleUpdateItem = (
-    item: InventoryCountItem,
-    countedQty: number,
-    note?: string,
-  ) => {
-    if (!selectedCount || !canEdit || selectedCount.status !== "in_progress")
-      return;
-    updateItemMutation.mutate({
-      countId: selectedCount.id,
-      itemId: item.id,
-      data: {
-        countedQty,
-        countedBy: user?.staff?.id || "",
-        note,
-        expectedStock: item.inventory?.currentStock,
-        observedVersion: item.inventory?.updatedAt,
-      },
     });
   };
 
@@ -480,24 +442,23 @@ export function InventoryCountPage() {
       ) || [];
 
     const busy =
-      updateItemMutation.isPending ||
       submitMutation.isPending ||
       completeMutation.isPending ||
       cancelMutation.isPending;
     const allCounted =
       countedItems.length === selectedCount.items.length &&
       countedItems.length > 0;
-    const reasonsPresent = varianceItems.every((item) => !!item.note?.trim());
 
     return (
       <div className="space-y-6">
-        <PageHelp>{t("countFlow.hint")}</PageHelp>
-        <button onClick={refreshCounts}>{t("countFlow.refresh")}</button>
+        <PageHelp>{inventoryCountLabels(i18n.language).hint}</PageHelp>
+        <button disabled={draftDirty || busy} onClick={refreshCounts}>{t("countFlow.refresh")}</button>
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <button
               onClick={showList}
+              disabled={draftDirty || busy}
               className="text-sm text-gray-500 hover:text-gray-700 mb-2"
             >
               ← {t("common.back")}
@@ -523,7 +484,7 @@ export function InventoryCountPage() {
                   {canApprove && (
                     <button
                       onClick={() => cancelMutation.mutate(selectedCount.id)}
-                      disabled={busy}
+                      disabled={busy || draftDirty}
                       className="btn btn-outline flex items-center gap-2"
                     >
                       <X size={16} />
@@ -534,7 +495,7 @@ export function InventoryCountPage() {
                     <button
                       type="button"
                       className="btn btn-primary"
-                      disabled={busy || !allCounted || !reasonsPresent}
+                      disabled={busy || !allCounted || draftDirty}
                       onClick={() => submitMutation.mutate(selectedCount.id)}
                     >
                       {t("inventoryCountWorkspace.submitReview")}
@@ -543,7 +504,7 @@ export function InventoryCountPage() {
                   {canApprove && selectedCount.status === "pending_review" && (
                     <button
                       onClick={handleComplete}
-                      disabled={busy || !allCounted || !reasonsPresent}
+                      disabled={busy || !allCounted || draftDirty}
                       className="btn btn-primary flex items-center gap-2"
                     >
                       {completeMutation.isPending ? (
@@ -659,15 +620,16 @@ export function InventoryCountPage() {
           </div>
         )}
 
-        {/* Items Table */}
-        <div className="card">
-          <h3 className="font-medium mb-4">
+        {canEdit && selectedCount.status==='in_progress' && <InventoryCountEditor key={selectedCount.id} items={selectedCount.items} language={i18n.language} name={formatItemName} units={inventoryInputUnits} factor={inventoryUnitFactor} ledger={inventoryLedgerQuantity} onDirtyChange={setDraftDirty} onSave={async changes=>{await inventoryApi.updateInventoryCountItems(selectedCount.id,changes);await detailQuery.refetch();refreshCounts();}} onReload={async()=>{const response=await detailQuery.refetch();if(response.error)throw response.error;return response.data?.data?.data?.items||[];}}/>}
+        {/* Saved observation details retain operators, movement, valuation and adjustment history. */}
+        <details className="card" open={selectedCount.status!=="in_progress"}>
+          <summary className="font-medium mb-4 cursor-pointer">
             {t(
               selectedCount.status === "completed"
                 ? "inventoryCountWorkspace.itemsAndAdjustments"
                 : "inventory.countItems",
             )}
-          </h3>
+          </summary>
           <div className="overflow-x-auto">
             <table className="inventory-responsive-table w-full md:min-w-[860px]">
               <thead className="whitespace-nowrap">
@@ -687,11 +649,7 @@ export function InventoryCountPage() {
                   <th>{t("countFlow.movement")}</th>
                   {canReadCost && <th className="text-right tabular-nums">{t("countFlow.amount")}</th>}
                   <th>{t("countFlow.reason")}</th>
-                  {canEdit && selectedCount.status === "in_progress" && (
-                    <th className="pb-3 text-center">
-                      {t("inventory.action")}
-                    </th>
-                  )}
+
                 </tr>
               </thead>
               <tbody>
@@ -776,28 +734,14 @@ export function InventoryCountPage() {
                       <td data-label={t("countFlow.reason")}>
                         {item.note || "—"}
                       </td>
-                      {canEdit && selectedCount.status === "in_progress" && (
-                        <td
-                          data-label={t("inventory.action")}
-                          className="py-3 text-center"
-                        >
-                          <CountItemInput
-                            item={item}
-                            key={item.id + item.inventory?.updatedAt}
-                            onUpdate={(qty, note) =>
-                              handleUpdateItem(item, qty, note)
-                            }
-                            isUpdating={updateItemMutation.isPending}
-                          />
-                        </td>
-                      )}
+
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-        </div>
+        </details>
       </div>
     );
   };
@@ -915,88 +859,6 @@ export function InventoryCountPage() {
       )}
       {countId && !detailQuery.isError && selectedCount && renderDetailView()}
       {showCreateModal && renderCreateModal()}
-    </div>
-  );
-}
-
-// Count Item Input Component
-function CountItemInput({
-  item,
-  onUpdate,
-  isUpdating,
-}: {
-  item: InventoryCountItem;
-  onUpdate: (qty: number, note: string) => void;
-  isUpdating: boolean;
-}) {
-  const { t } = useTranslation();
-  const material = item.inventory || { unit: "kg" };
-  const [inputUnit, setInputUnit] = useState(() => defaultInventoryInputUnit(material));
-  const [value, setValue] = useState(() => item.countedQty == null ? "" : String(item.countedQty / inventoryUnitFactor(material, defaultInventoryInputUnit(material))));
-  const [reason, setReason] = useState(item.note || "");
-  const [showInput, setShowInput] = useState(
-    item.countedQty === null || item.countedQty === undefined,
-  );
-
-  const handleSubmit = () => {
-    const qty = parseFloat(value);
-    if (Number.isFinite(qty) && qty >= 0) {
-      onUpdate(inventoryLedgerQuantity(qty, material, inputUnit), reason);
-      setShowInput(false);
-    }
-  };
-
-  if (showInput || item.countedQty === undefined || item.countedQty === null) {
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <select aria-label={t("inventoryUnits.input")} className="input input-sm w-24" value={inputUnit} disabled={isUpdating} onChange={e => {
-          if (value !== "" && Number.isFinite(Number(value))) setValue(String(inventoryLedgerQuantity(Number(value), material, inputUnit) / inventoryUnitFactor(material, e.target.value)));
-          setInputUnit(e.target.value);
-        }}>
-          {inventoryInputUnits(material).map(unit => <option key={unit}>{unit}</option>)}
-        </select>
-        <input
-          type="number"
-          aria-label={t("inventory.actualQty")}
-          step="any"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-          className="input input-sm w-20"
-          min={0}
-          placeholder="0"
-          disabled={isUpdating}
-        />
-        <input
-          aria-label={t("countFlow.reason")}
-          className="input input-sm w-32"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder={t("countFlow.reason")}
-          disabled={isUpdating}
-        />
-        <button
-          onClick={handleSubmit}
-          aria-label={t("common.save")}
-          disabled={isUpdating}
-          className="btn btn-sm btn-primary"
-        >
-          <Check size={14} />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-sm font-medium">{item.countedQty}</span>
-      <button
-        onClick={() => setShowInput(true)}
-        className="btn btn-sm btn-ghost"
-        title={t("inventory.editItem")}
-      >
-        <RotateCcw size={14} />
-      </button>
     </div>
   );
 }

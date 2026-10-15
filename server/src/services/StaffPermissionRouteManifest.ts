@@ -5046,6 +5046,20 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "PUT /api/inventory-counts/:id/items": {
+    "legacyRoles": [
+      "admin",
+      "manager",
+      "staff",
+      "cashier"
+    ],
+    "legacyPermission": "inventory.count",
+    "resource": null,
+    "permission": "inventory.count",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "PUT /api/inventory-counts/:id/item/:itemId": {
     "legacyRoles": [
       "admin",

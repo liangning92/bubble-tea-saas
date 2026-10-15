@@ -69,6 +69,14 @@ router.post('/', authenticate, authorize('admin', 'manager','staff'), validateBo
   }
 })
 
+// Atomic draft save; uses the same count permission and store boundary as single-row recording.
+router.put('/:id/items', authenticate, authorize('admin','manager','staff','cashier'), validateBody(z.object({items:z.array(updateItemSchema.extend({itemId:z.string().min(1)})).min(1).max(1000)})), async(req:AuthRequest,res)=>{
+ try {
+  const items=await InventoryCountService.updateCountItems(req.params.id,req.user!.storeId,req.user!.staffId||req.user!.id,req.body.items)
+  res.json({code:200,data:{items},timestamp:new Date().toISOString()})
+ } catch(error:any){res.status(409).json({code:409,message:error.message||'Failed to save count draft'})}
+})
+
 // PUT /api/inventory-counts/:id/item/:itemId
 router.put('/:id/item/:itemId', authenticate, authorize('admin', 'manager', 'staff', 'cashier'), validateBody(updateItemSchema), async (req: AuthRequest, res) => {
   try {

@@ -25,8 +25,9 @@ const output=path.resolve(process.env.INVENTORY_PAGE_OUTPUT||'output/inventory-f
   await p.getByRole('button').filter({hasText:'ONLINE-1001'}).click();await p.getByRole('dialog').waitFor();await p.getByRole('dialog').locator('input[data-picker=date]').fill('2026-10-15');await p.getByRole('dialog').getByRole('button',{name:'确认整单入库',exact:true}).click();await p.getByRole('status').filter({hasText:'整单已入库'}).waitFor();
   await p.goto(mobile.base+`/inventory?action=out&material=${f.teaId}`);await p.locator('form').getByRole('spinbutton').nth(0).fill('1');await p.getByText('操作后库存: 13 kg').waitFor();await p.getByRole('button',{name:'确认',exact:true}).click();await p.getByRole('status').filter({hasText:'库存操作已完成'}).waitFor();
   await p.goto(mobile.base+'/inventory/count');await p.getByRole('button',{name:'发起盘点',exact:false}).click();await p.locator('form').getByRole('button',{name:'发起盘点',exact:true}).click();await p.getByText('已录入 0 / 2 项').waitFor();
-  const rows=p.locator('section form');assert.equal(await rows.count(),2);
-  for(let i=0;i<2;i++){const row=rows.nth(i);const text=await row.innerText();await row.getByRole('spinbutton').fill(text.includes('Jasmine')?'12':'1');if(text.includes('Jasmine'))await row.getByRole('textbox').fill('重新核对');await row.getByRole('button',{name:'保存',exact:true}).click();await row.getByText('已保存',{exact:true}).waitFor();}
+  const rows=p.locator('[data-count-item]');assert.equal(await rows.count(),2);
+  for(let i=0;i<2;i++){const row=rows.nth(i);const text=await row.innerText();await row.getByRole('spinbutton').fill(text.includes('Jasmine')?'12':'1');}
+  await p.getByRole('button',{name:'保存已填写项',exact:true}).click();await p.getByText('草稿已保存，可继续盘点。',{exact:true}).waitFor();
   await p.getByRole('button',{name:'提交后台审核',exact:true}).click();await p.getByText('待审核',{exact:true}).waitFor();assert.equal(await p.getByRole('spinbutton').count(),0);
   await p.screenshot({path:path.join(output,'staff-count.png'),fullPage:true});
   const desktop=await open('admin',18083,{width:1440,height:1000}),a=desktop.page;

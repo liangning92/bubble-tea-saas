@@ -11,7 +11,7 @@ import {upgradeInventoryFlow} from '../src/utils/inventoryFlowUpgrade'
 import {pgLedgerDDL,assertLedgerInstalled} from '../src/utils/inventoryLedger'
 import {createPurchaseOrder,receivePurchaseOrder,getPurchaseOrderById} from '../src/services/PurchaseOrderService'
 import {stockOut,stockIn,updateInventory} from '../src/services/InventoryService'
-import {createInventoryCount,updateCountItem,submitInventoryCount,completeInventoryCount} from '../src/services/InventoryCountService'
+import {updateCountItems,createInventoryCount,updateCountItem,submitInventoryCount,completeInventoryCount} from '../src/services/InventoryCountService'
 import {createOrder,refundOrder,deductInventory} from '../src/services/OrderService'
 import {ensureInventoryFlow,FLOW_CUTOVER_KEY,reverseOrderConsumption} from '../src/services/OrderConsumptionService'
 import {employeeConsumption,checkConsumptionDay,getConsumptionAlerts,classifyEmployeeConsumption,checkClosedConsumptionDays} from '../src/services/EmployeeConsumptionService'
@@ -85,8 +85,7 @@ test('employee count selection, submit freeze, manager approval and subsequent s
  await expect(createInventoryCount({...data,inventoryIds:[other.inventory.id]})).rejects.toThrow('INVALID_COUNT_SELECTION')
  const count=await createInventoryCount(data)
  await expect(submitInventoryCount(count.id,f.store.id)).rejects.toThrow('COUNT_INCOMPLETE')
- await expect(updateCountItem(count.items[0].id,99,'employee','',{countId:count.id,storeId:f.store.id,expectedStock:100,observedVersion:f.inventory.updatedAt.toISOString()})).rejects.toThrow('REASON_REQUIRED')
- await updateCountItem(count.items[0].id,99,'employee','Recount',{countId:count.id,storeId:f.store.id,expectedStock:100,observedVersion:f.inventory.updatedAt.toISOString()})
+ await updateCountItem(count.items[0].id,99,'employee','',{countId:count.id,storeId:f.store.id,expectedStock:100,observedVersion:f.inventory.updatedAt.toISOString()})
  expect(await balance(f.inventory.id)).toBe(100)
  await expect(completeInventoryCount(count.id,'manager',f.store.id)).rejects.toThrow('COUNT_SUBMIT_REQUIRED')
  await submitInventoryCount(count.id,f.store.id);await submitInventoryCount(count.id,f.store.id)
@@ -220,3 +219,22 @@ test('fulfilled promotion gift has its own frozen theory without duplicating the
  const f=await fixture(),sale=await createOrder(f.sale);await prisma.$transaction(tx=>deductInventory(f.store.id,sale.id,[{productId:f.product.id,quantity:1}],tx,{allowNegative:false,consumptionKey:sale.id+':grant:gift',consumedAt:new Date()}))
  const rows=await prisma.orderConsumptionSnapshot.findMany({where:{storeId:f.store.id}});expect(rows).toHaveLength(2);expect(rows.every(row=>JSON.parse(row.materials)[0].quantity===0.025)).toBe(true);expect(await balance(f.inventory.id)).toBe(100);expect(await prisma.stockOutLog.count({where:{orderId:sale.id}})).toBe(0)
 })
+
+ test('batch count draft is atomic, rejects duplicates/stale/foreign items and keeps blank rows uncounted',async()=>{
+  const f=await fixture(),other=await fixture();const second=await prisma.inventory.create({data:{storeId:f.store.id,name:'Second batch material',category:'tea',unit:'kg',currentStock:10,avgCost:100}})
+  const count=await createInventoryCount({storeId:f.store.id,period:'ad_hoc',startDate:new Date(),endDate:new Date()})
+  const first=count.items.find((i:any)=>i.inventoryId===f.inventory.id)!,next=count.items.find((i:any)=>i.inventoryId===second.id)!
+  const row={itemId:first.id,countedQty:0,note:'',expectedStock:100,observedVersion:f.inventory.updatedAt.toISOString()}
+  const row2={itemId:next.id,countedQty:8,note:'',expectedStock:10,observedVersion:second.updatedAt.toISOString()}
+  await expect(updateCountItems(count.id,f.store.id,'employee',[row,row])).rejects.toThrow('INVALID_COUNT_SELECTION')
+  await expect(updateCountItems(count.id,other.store.id,'employee',[row])).rejects.toThrow('COUNT_NOT_ACTIVE')
+  await expect(updateCountItems(count.id,f.store.id,'employee',[row,{...row2,observedVersion:'2000-01-01T00:00:00.000Z'}])).rejects.toThrow('COUNT_REFRESH_REQUIRED')
+  expect((await prisma.inventoryCountItem.findUniqueOrThrow({where:{id:first.id}})).countedAt).toBeNull()
+  const saved=await updateCountItems(count.id,f.store.id,'employee',[row]);expect(saved[0].countedQty).toBe(0);expect(saved[0].note).toBeNull()
+  expect((await prisma.inventoryCountItem.findUniqueOrThrow({where:{id:next.id}})).countedAt).toBeNull()
+  await expect(submitInventoryCount(count.id,f.store.id)).rejects.toThrow('COUNT_INCOMPLETE')
+  expect(await balance(f.inventory.id)).toBe(100)
+  await updateCountItems(count.id,f.store.id,'employee',[row2]);await submitInventoryCount(count.id,f.store.id)
+  await expect(updateCountItems(count.id,f.store.id,'employee',[row])).rejects.toThrow('COUNT_NOT_ACTIVE')
+  await completeInventoryCount(count.id,'manager',f.store.id);expect(await balance(f.inventory.id)).toBe(0);expect(await balance(second.id)).toBe(8)
+ })

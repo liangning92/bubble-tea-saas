@@ -1,25 +1,28 @@
 import { formatQuantity } from '../utils/helpers'
-import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor, inventoryLedgerQuantity } from '../utils/inventoryInputUnits';
+import { inventoryInputUnits, inventoryUnitFactor, inventoryLedgerQuantity } from '../utils/inventoryInputUnits';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/auth';
-import { staffApi } from '../services/api';
+import { InventoryCountEditor } from '../../../shared/components/InventoryCountEditor';
+import { inventoryCountLabels } from '../../../shared/inventoryCountLabels';
 import { inventoryFlowApi, Material, jakartaDate, materialName } from '../services/inventoryFlow';
 export function InventoryCountPage() {
-    const { t, i18n } = useTranslation(), { user } = useAuthStore(), [counts, setCounts] = useState<any[]>([]), [items, setItems] = useState<Material[]>([]), [error, setError] = useState(''), [loading, setLoading] = useState(true), [creating, setCreating] = useState(false), [all, setAll] = useState(true), [selection, setSelection] = useState<string[]>([]), [busy, setBusy] = useState(false), lock = useRef(false);
+    const { t, i18n } = useTranslation(), { user } = useAuthStore(), [dirty, setDirty] = useState(false), [selectionSearch, setSelectionSearch] = useState(''), [counts, setCounts] = useState<any[]>([]), [items, setItems] = useState<Material[]>([]), [error, setError] = useState(''), [loading, setLoading] = useState(true), [creating, setCreating] = useState(false), [all, setAll] = useState(true), [selection, setSelection] = useState<string[]>([]), [busy, setBusy] = useState(false), lock = useRef(false);
     async function load() { setLoading(true); try {
         const [result, stock] = await Promise.all([inventoryFlowApi.counts(), inventoryFlowApi.list()]);
         setCounts(result.data.list || []);
         setItems((stock.data.list || []).filter((i:Material)=>i.type!=='semi_finished'||!i.processRecipeId));
         setError('');
+        return result.data.list || [];
     }
     catch {
         setError(t('inventoryFlow.failed'));
+        throw new Error('COUNT_LOAD_FAILED');
     }
     finally {
         setLoading(false);
     } }
-    useEffect(() => { void load(); }, [user?.storeId]);
+    useEffect(() => { void load().catch(() => {}); }, [user?.storeId]);
     async function start(event: React.FormEvent) { event.preventDefault(); if (lock.current)
         return; if (!all && !selection.length) {
         setError(t('inventoryFlow.invalid'));
@@ -48,39 +51,15 @@ export function InventoryCountPage() {
         lock.current = false;
         setBusy(false);
     } }
+    const labels=inventoryCountLabels(i18n.language);
+    const selectionItems=items.filter(i=>materialName(i.name,i18n.language).toLowerCase().includes(selectionSearch.toLowerCase().trim()));
     const active = counts.some(c => ['in_progress', 'pending_review'].includes(c.status));
-    return <main className="max-w-3xl mx-auto p-4 pb-24 space-y-4"><div className="flex justify-between items-center"><h1 className="text-2xl font-bold">{t('inventoryFlow.count')}</h1><button onClick={load} disabled={loading} className="text-primary-hover">{t('inventoryFlow.refresh')}</button></div><p className="text-sm text-gray-500">{t('inventoryFlow.reviewHint')}</p>
+    return <main className="max-w-3xl mx-auto p-4 pb-24 space-y-4"><div className="flex justify-between items-center"><h1 className="text-2xl font-bold">{t('inventoryFlow.count')}</h1><button onClick={() => { void load().catch(() => {}); }} disabled={loading || dirty || busy} className="text-primary-hover">{t('inventoryFlow.refresh')}</button></div><p className="text-sm text-gray-500">{t('inventoryFlow.reviewHint')}</p>
  {error && <p role="alert" className="text-red-700">{error}</p>}{loading && <p role="status">{t('inventoryFlow.loading')}</p>}
  <button onClick={() => setCreating(!creating)} disabled={active || loading || busy} className="bg-primary text-white rounded-xl p-3 disabled:opacity-50">+ {t('inventoryFlow.newCount')}</button>
  {active && <p role="status" className="text-sm text-gray-600">{t('ui.activeCountHint')}</p>}
- {creating && <form onSubmit={start} className="bg-white border rounded-2xl p-4 space-y-3"><fieldset disabled={busy} className="space-y-3"><label className="block"><input type="radio" checked={all} onChange={() => setAll(true)}/> {t('inventoryFlow.selectAll')}</label><label className="block"><input type="radio" checked={!all} onChange={() => setAll(false)}/> {t('inventoryFlow.selectSome')}</label>{!all && <div className="max-h-64 overflow-y-auto space-y-2">{items.map(i => <label key={i.id} className="block"><input type="checkbox" checked={selection.includes(i.id)} onChange={e => setSelection(e.target.checked ? [...selection, i.id] : selection.filter(id => id !== i.id))}/> {materialName(i.name, i18n.language)} ({i.unit})</label>)}</div>}<button className="bg-primary text-white rounded-lg p-3">{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.newCount')}</button></fieldset></form>}
+ {creating && <form onSubmit={start} className="bg-white border rounded-2xl p-4 space-y-3"><fieldset disabled={busy} className="space-y-3"><label className="block"><input type="radio" checked={all} onChange={() => setAll(true)}/> {t('inventoryFlow.selectAll')}</label><label className="block"><input type="radio" checked={!all} onChange={() => setAll(false)}/> {t('inventoryFlow.selectSome')}</label>{!all && <div className="space-y-2"><p className="text-sm text-gray-600">{labels.selectHint}</p><input aria-label={labels.search} placeholder={labels.search} className="border rounded-lg p-3 w-full" value={selectionSearch} onChange={e=>setSelectionSearch(e.target.value)}/><div className="flex flex-wrap gap-3 text-sm"><button type="button" className="text-primary-hover" onClick={()=>setSelection(Array.from(new Set([...selection,...selectionItems.map(i=>i.id)])))}>{labels.selectVisible}</button><button type="button" onClick={()=>setSelection([])}>{labels.clear}</button><span>{labels.selected.replace('{count}',String(selection.length))}</span></div><div className="max-h-64 overflow-y-auto space-y-2">{selectionItems.map(i => <label key={i.id} className="block"><input type="checkbox" checked={selection.includes(i.id)} onChange={e => setSelection(e.target.checked ? [...selection, i.id] : selection.filter(id => id !== i.id))}/> {materialName(i.name, i18n.language)} ({i.unit})</label>)}</div></div>}<button className="bg-primary text-white rounded-lg p-3">{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.newCount')}</button></fieldset></form>}
  {!counts.length && !loading && <p>{t('inventoryFlow.noCounts')}</p>}
- {counts.map(count => <section key={count.id} className="space-y-3 border rounded-2xl p-4 bg-gray-50"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-bold">{t(count.period === 'ad_hoc' ? 'inventoryFlow.adHoc' : 'countFlow.title')} · {new Date(count.createdAt).toLocaleDateString(i18n.language)}</h2><span className={`text-sm px-2 py-1 rounded ${count.status === 'completed' ? 'bg-green-50 text-green-700' : count.status === 'pending_review' ? 'bg-amber-50 text-amber-700' : count.status === 'cancelled' ? 'bg-gray-100 text-gray-600' : 'bg-primary-light text-primary-hover'}`}>{t('inventoryFlow.' + ({ in_progress: 'inProgress', pending_review: 'pendingReview', completed: 'completed', cancelled: 'cancelled' }[count.status as string] || 'inProgress'))}</span></div><p className="text-sm text-gray-500">{t('inventoryFlow.progress', { done: count.items.filter((i: any) => i.countedAt).length, total: count.items.length })}</p>{count.status === 'in_progress' ? count.items.map((item: any) => <CountRow key={item.id} countId={count.id} item={item} reload={load}/>) : <details><summary className="cursor-pointer py-3">{t('audit.countDetails')}</summary>{count.items.map((item: any) => <div key={item.id} className="bg-white rounded-xl p-3"><strong>{materialName(item.inventory.name, i18n.language)}</strong><p>{t('inventoryFlow.actualCount')}: {formatQuantity(item.countedQty, i18n.language)} {item.inventory.unit}</p><p className="text-sm text-gray-500">{item.note}</p></div>)}</details>}{count.status === 'in_progress' && <button onClick={() => submit(count.id)} disabled={busy || count.items.some((i: any) => !i.countedAt)} className="bg-primary text-white rounded-xl p-3 w-full disabled:opacity-50">{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.submitReview')}</button>}{count.status === 'pending_review' && <p className="text-sm text-gray-500">{t('inventoryFlow.frozen')}</p>}</section>)}
+ {counts.map(count => <section key={count.id} className="space-y-3 border rounded-2xl p-4 bg-gray-50"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-bold">{t(count.period === 'ad_hoc' ? 'inventoryFlow.adHoc' : 'countFlow.title')} · {new Date(count.createdAt).toLocaleDateString(i18n.language)}</h2><span className={`text-sm px-2 py-1 rounded ${count.status === 'completed' ? 'bg-green-50 text-green-700' : count.status === 'pending_review' ? 'bg-amber-50 text-amber-700' : count.status === 'cancelled' ? 'bg-gray-100 text-gray-600' : 'bg-primary-light text-primary-hover'}`}>{t('inventoryFlow.' + ({ in_progress: 'inProgress', pending_review: 'pendingReview', completed: 'completed', cancelled: 'cancelled' }[count.status as string] || 'inProgress'))}</span></div><p className="text-sm text-gray-500">{t('inventoryFlow.progress', { done: count.items.filter((i: any) => i.countedAt).length, total: count.items.length })}</p>{count.status === 'in_progress' ? <InventoryCountEditor key={count.id} items={count.items} language={i18n.language} name={materialName} units={inventoryInputUnits} factor={inventoryUnitFactor} ledger={inventoryLedgerQuantity} onDirtyChange={setDirty} onSave={async changes=>{await inventoryFlowApi.saveCount(count.id,changes);await load();}} onReload={async()=>{const fresh=await load();return fresh.find((c:any)=>c.id===count.id)?.items||[];}}/> : <details><summary className="cursor-pointer py-3">{t('audit.countDetails')}</summary>{count.items.map((item: any) => <div key={item.id} className="bg-white rounded-xl p-3"><strong>{materialName(item.inventory.name, i18n.language)}</strong><p>{t('inventoryFlow.actualCount')}: {formatQuantity(item.countedQty, i18n.language)} {item.inventory.unit}</p><p className="text-sm text-gray-500">{item.note}</p></div>)}</details>}{count.status === 'in_progress' && <button onClick={() => submit(count.id)} disabled={busy || dirty || count.items.some((i: any) => !i.countedAt)} className="bg-primary text-white rounded-xl p-3 w-full disabled:opacity-50">{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.submitReview')}</button>}{count.status === 'pending_review' && <p className="text-sm text-gray-500">{t('inventoryFlow.frozen')}</p>}</section>)}
  </main>;
-}
-function CountRow({ countId, item, reload }: {
-    countId: string;
-    item: any;
-    reload: () => Promise<void>;
-}) {
-    const { t, i18n } = useTranslation(), [inputUnit, setInputUnit] = useState(() => defaultInventoryInputUnit(item.inventory)), [quantity, setQuantity] = useState(() => item.countedQty == null ? '' : String(item.countedQty / inventoryUnitFactor(item.inventory, defaultInventoryInputUnit(item.inventory)))), [reason, setReason] = useState(item.note || ''), [error, setError] = useState(''), [busy, setBusy] = useState(false), lock = useRef(false);
-    async function submit(event: React.FormEvent) { event.preventDefault(); if (lock.current)
-        return; setError(''); const qty = inventoryLedgerQuantity(Number(quantity), item.inventory, inputUnit); if (quantity === '' || !Number.isFinite(qty) || qty < 0) {
-        setError(t('inventoryFlow.invalid'));
-        return;
-    } if (qty !== item.inventory.currentStock && !reason.trim()) {
-        setError(t('inventoryFlow.reasonRequired'));
-        return;
-    } lock.current = true; setBusy(true); try {
-        await staffApi.recordInventoryCount(countId, item.id, { countedQty: qty, note: reason, expectedStock: item.inventory.currentStock, observedVersion: item.inventory.updatedAt });
-        await reload();
-    }
-    catch {
-        setError(t('inventoryFlow.failed'));
-    }
-    finally {
-        lock.current = false;
-        setBusy(false);
-    } }
-    return <form onSubmit={submit} className="bg-white rounded-xl border p-3 space-y-3"><h3 className="font-medium">{materialName(item.inventory.name, i18n.language)} ({item.inventory.unit}) {item.countedAt && <span className="text-green-600 text-xs">{t('inventoryFlow.saved')}</span>}</h3><p className="text-sm text-gray-500">{t('countFlow.theory')}: {formatQuantity(item.countedAt ? item.systemQty : item.inventory.currentStock, i18n.language)} {item.inventory.unit}</p><label className="block">{t('inventoryFlow.unit')}<select aria-label={t('inventoryFlow.unit')} className="border rounded-lg p-3 w-full mt-1" value={inputUnit} disabled={busy} onChange={e => { if (quantity !== '' && Number.isFinite(Number(quantity))) setQuantity(String(inventoryLedgerQuantity(Number(quantity), item.inventory, inputUnit) / inventoryUnitFactor(item.inventory, e.target.value))); setInputUnit(e.target.value); }}>{inventoryInputUnits(item.inventory).map(unit => <option key={unit}>{unit}</option>)}</select></label><label className="block">{t('inventoryFlow.actualCount')} ({inputUnit})<input type="number" min="0" step="any" className="border rounded-lg p-3 w-full mt-1" required value={quantity} onChange={e => setQuantity(e.target.value)} disabled={busy}/></label><label className="block">{t('inventoryFlow.differenceReason')}<input className="border rounded-lg p-3 w-full mt-1" value={reason} onChange={e => setReason(e.target.value)} disabled={busy}/></label><button className="bg-primary text-white px-4 py-2 rounded-lg" disabled={busy}>{t(busy ? 'inventoryFlow.saving' : 'inventoryFlow.save')}</button>{error && <p role="alert" className="text-red-700">{error} <button type="button" className="underline" onClick={reload}>{t('inventoryFlow.refresh')}</button></p>}</form>;
 }

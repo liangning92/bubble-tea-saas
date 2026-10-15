@@ -1,6 +1,7 @@
 import {loadInventoryActors} from '../utils/inventoryActors'
 import {COUNT_OBSERVATION_PREFIX,captureCountBoundary} from '../utils/countObservation'
 import prisma from '../config/database'
+import {validatePackage} from '../utils/inventoryUnits'
 export interface CreateInventoryCountData {storeId:string;period:'monthly'|'quarterly'|'annual'|'ad_hoc';startDate:Date;endDate:Date;notes?:string;inventoryIds?:string[]}
 const include={items:{orderBy:{inventoryId:'asc' as const},include:{inventory:{select:{id:true,name:true,unit:true,currentStock:true,updatedAt:true,avgCost:true}}}}} as const
 function view(count:any){
@@ -8,8 +9,12 @@ function view(count:any){
  return {...count,items:count.items.map((item:any)=>({...item,inventory:{...item.inventory,avgCost:Number(item.inventory.avgCost)},movementSinceObservation:item.countedAt?item.inventory.currentStock-item.systemQty-(count.status==='completed'?(item.variance||0):0):null,varianceAmountEstimate:item.variance===null?null:Math.round(item.variance*Number(item.inventory.avgCost)),valuationBasis:'current_carrying_average_estimate'}))}
 }
 async function people(counts:any[],storeId:string){
- const actors=await loadInventoryActors(prisma,storeId,counts.flatMap(c=>c.items.map((i:any)=>i.countedBy)))
- return counts.map(c=>({...c,items:c.items.map((i:any)=>({...i,countedByActor:actors.get(i.countedBy)||null}))}))
+ const [actors,packages]=await Promise.all([
+  loadInventoryActors(prisma,storeId,counts.flatMap(c=>c.items.map((i:any)=>i.countedBy))),
+  prisma.config.findMany({where:{storeId,key:{startsWith:'inventoryPackage:'}}})
+ ])
+ const packageMap=new Map(packages.map(p=>[p.key,p.value]))
+ return counts.map(c=>({...c,items:c.items.map((i:any)=>{let packaging=null;try{const raw=packageMap.get('inventoryPackage:'+i.inventoryId);if(raw)packaging=validatePackage(JSON.parse(raw),i.inventory.unit)}catch{};return {...i,inventory:{...i.inventory,packaging},countedByActor:actors.get(i.countedBy)||null}})}))
 }
 export async function getInventoryCounts(storeId:string){return people((await prisma.inventoryCount.findMany({where:{storeId},include,orderBy:{createdAt:'desc'}})).map(view),storeId)}
 export async function getInventoryCountById(countId:string,storeId?:string){const count=view(await prisma.inventoryCount.findFirst({where:{id:countId,...(storeId?{storeId}:{})},include}));return count?(await people([count],count.storeId))[0]:null}
@@ -29,10 +34,9 @@ export async function createInventoryCount(data:CreateInventoryCountData){
   return view(await tx.inventoryCount.create({data:{...fields,status:'in_progress',items:{create:inventory.map(i=>({inventoryId:i.id,systemQty:i.currentStock}))}},include}))
  })
 }
-export async function updateCountItem(countItemId:string,countedQty:number,countedBy:string,note:string|undefined,context:{countId:string;storeId:string;expectedStock:number;observedVersion:string}){
- if(!context||!Number.isFinite(countedQty)||countedQty<0||!Number.isFinite(context.expectedStock))throw new Error('INVALID_COUNT_OBSERVATION')
- return prisma.$transaction(async tx=>{
-  await lockCount(tx,context.countId,context.storeId)
+export interface CountObservation {itemId:string;countedQty:number;note?:string;expectedStock:number;observedVersion:string}
+async function recordObservation(tx:any,countItemId:string,countedQty:number,countedBy:string,note:string|undefined,context:{countId:string;storeId:string;expectedStock:number;observedVersion:string}){
+ if(!Number.isFinite(countedQty)||countedQty<0||!Number.isFinite(context.expectedStock))throw new Error('INVALID_COUNT_OBSERVATION')
   const item=await tx.inventoryCountItem.findFirst({where:{id:countItemId,inventoryCountId:context.countId},include:{inventory:true}})
   if(!item||item.inventory.storeId!==context.storeId)throw new Error('COUNT_ITEM_STORE_MISMATCH')
   const version=new Date(context.observedVersion)
@@ -40,13 +44,25 @@ export async function updateCountItem(countItemId:string,countedQty:number,count
   const locked=await tx.inventory.updateMany({where:{id:item.inventoryId,storeId:context.storeId,currentStock:context.expectedStock,updatedAt:version},data:{currentStock:{increment:0}}})
   if(locked.count!==1)throw new Error('COUNT_REFRESH_REQUIRED')
   const variance=Math.round((countedQty-context.expectedStock)*1e9)/1e9
-  if(variance!==0&&!note?.trim())throw new Error('COUNT_VARIANCE_REASON_REQUIRED')
   const observedAt=new Date(),key=COUNT_OBSERVATION_PREFIX+countItemId
   const boundary=await captureCountBoundary(tx,item.inventoryId)
   const value=JSON.stringify({version:3,boundary,countId:context.countId,systemQty:context.expectedStock,countedQty,actor:countedBy,observedAt:observedAt.toISOString(),ledgerUnit:item.inventory.unit})
   await tx.config.upsert({where:{storeId_key:{storeId:context.storeId,key}},create:{storeId:context.storeId,key,value,category:'inventory'},update:{value}})
   return tx.inventoryCountItem.update({where:{id:countItemId},data:{systemQty:context.expectedStock,countedQty,variance,countedAt:observedAt,countedBy,note:note?.trim()||null}})
- })
+}
+export async function updateCountItems(countId:string,storeId:string,countedBy:string,items:CountObservation[]){
+ if(!items.length||items.length>1000||new Set(items.map(i=>i.itemId)).size!==items.length)throw Error('INVALID_COUNT_SELECTION')
+ // One transaction: a stale or foreign row rolls back every observation in the batch.
+ return prisma.$transaction(async tx=>{
+  await lockCount(tx,countId,storeId)
+  const saved=[]
+  for(const item of [...items].sort((a,b)=>a.itemId.localeCompare(b.itemId)))saved.push(await recordObservation(tx,item.itemId,item.countedQty,countedBy,item.note,{countId,storeId,expectedStock:item.expectedStock,observedVersion:item.observedVersion}))
+  return saved
+ },{timeout:15000})
+}
+export async function updateCountItem(countItemId:string,countedQty:number,countedBy:string,note:string|undefined,context:{countId:string;storeId:string;expectedStock:number;observedVersion:string}){
+ if(!context)throw Error('INVALID_COUNT_OBSERVATION')
+ return (await updateCountItems(context.countId,context.storeId,countedBy,[{itemId:countItemId,countedQty,note,expectedStock:context.expectedStock,observedVersion:context.observedVersion}]))[0]
 }
 export async function completeInventoryCount(countId:string,staffId:string,storeId:string){
  return prisma.$transaction(async tx=>{
@@ -64,7 +80,6 @@ export async function completeInventoryCount(countId:string,staffId:string,store
    const variance=item.countedQty!-item.systemQty
    if(item.variance===null||!Number.isFinite(item.variance)||Math.abs(variance-item.variance)>1e-7||!Number.isFinite(variance))throw new Error('INVALID_COUNT_OBSERVATION')
    if(!variance)continue
-   if(!item.note?.trim())throw new Error('COUNT_VARIANCE_REASON_REQUIRED')
    await tx.inventory.update({where:{id:item.inventoryId},data:{currentStock:{increment:variance}}})
    // Signed count adjustment is never classified as a sale, staff withdrawal or disciplinary action.
    await tx.stockOutLog.create({data:{inventoryId:item.inventoryId,quantity:-variance,reason:'count_adjustment',note:JSON.stringify({version:1,countId,countItemId:item.id,actor:staffId,ledgerUnit:item.inventory.unit,systemQty:item.systemQty,countedQty:item.countedQty,observedAt:item.countedAt,reason:item.note,valuation:'carrying_average_at_approval_estimate',varianceAmountEstimate:Math.round(variance*Number(item.inventory.avgCost))})}})
