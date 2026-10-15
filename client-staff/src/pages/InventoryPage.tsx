@@ -125,7 +125,7 @@ function PurchaseForm({items,suppliers,onDone,editing,onCancel}:{items:Material[
  const submit=async(e:React.FormEvent)=>{e.preventDefault();if(lock.current)return;
   if(rows.some(r=>!r.inventoryId||!items.some(i=>i.id===r.inventoryId)||!Number.isFinite(Number(r.quantity))||Number(r.quantity)<=0||r.paidAmount===''||!Number.isSafeInteger(Number(r.paidAmount))||Number(r.paidAmount)<0)||new Set(rows.map(r=>r.inventoryId)).size!==rows.length||(editing&&!reason.trim())){setError(t('inventoryFlow.invalid'));return}
   lock.current=true;setBusy(true);setError('');try{
-   const data={storeId:user?.storeId,source:'online',supplierId:supplierId||undefined,onlineOrderNumber:onlineOrderNumber||undefined,expectedDate:expectedDate||undefined,note,items:rows.map(r=>({...r,quantity:Number(r.quantity),paidAmount:Number(r.paidAmount),inputUnit:r.inputUnit||defaultInventoryInputUnit(items.find(i=>i.id===r.inventoryId)!)}))};
+   const data={storeId:user?.storeId,source:'online',supplierId:supplierId||undefined,onlineOrderNumber,expectedDate:expectedDate||undefined,note,items:rows.map(r=>({...r,quantity:Number(r.quantity),paidAmount:Number(r.paidAmount),inputUnit:r.inputUnit||defaultInventoryInputUnit(items.find(i=>i.id===r.inventoryId)!)}))};
    if(editing)await inventoryFlowApi.updatePurchase(editing.id,{...data,expectedVersion:editing.updatedAt,reason});else await inventoryFlowApi.purchase(data);
    await onDone(t('inventoryFlow.purchaseSaved'));
   }catch(e:any){setError(e.response?.data?.message||t('inventoryFlow.failed'))}finally{lock.current=false;setBusy(false)}
