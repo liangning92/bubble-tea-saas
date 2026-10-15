@@ -14,6 +14,7 @@ if(![WinSpoolRaw]::IsStalled(8208,31)){throw 'Observed stalled retained-printing
 if(![WinSpoolRaw]::HasProblem(1024)){throw 'Native UserIntervention bit not detected'}
 if(![WinSpoolRaw]::IsStalled(1024,1)){throw 'Device error must block immediately'}
 if([WinSpoolRaw]::IsStalled(8320,900)){throw 'Completed retained job must not block printing'}
+if([WinSpoolRaw]::IsStalled(8192,900)){throw 'An inactive retained job must not block printing'}
 $dir=Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($dir)|Out-Null
 try {
@@ -26,4 +27,4 @@ Write-Output 'PASS native WinSpool compile, observed queue flags, stale queue pr
 `;
 const result=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{encoding:'utf8',timeout:30000,windowsHide:true});
 if(result.stdout)process.stdout.write(result.stdout);if(result.stderr)process.stderr.write(result.stderr);if(result.error)throw result.error;if(result.status!==0)process.exit(result.status||1);
-fs.writeFileSync('windows-spool-validation.json',JSON.stringify({passed:true,entry,physicalPrinting:false,realPrinterSubmission:false,nativeStatusChecks:true,queueProtectionChecks:true,missingPrinterChecks:true},null,2));
+fs.writeFileSync('windows-spool-validation.json',JSON.stringify({passed:true,sourceSha:process.env.GITHUB_SHA,entry,physicalPrinting:false,realPrinterSubmission:false,nativeStatusChecks:true,queueProtectionChecks:true,missingPrinterChecks:true},null,2));

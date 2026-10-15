@@ -50,7 +50,10 @@ public class WinSpoolRaw {
         public string DeliveryStatus = "not-sent"; public string Error; public int Win32Error;
     }
     // Native JOB_STATUS values. Retained (8192) alone is not a device error.
-    public static bool IsCompleted(uint status) { return (status & (128u | 4096u)) != 0; }
+    public static bool IsCompleted(uint status) {
+        return (status & (128u | 4096u)) != 0 ||
+            ((status & 8192u) != 0 && (status & (8u | 16u)) == 0 && !HasProblem(status));
+    }
     public static bool HasProblem(uint status) { return (status & (1u | 2u | 4u | 32u | 64u | 256u | 512u | 1024u)) != 0; }
     public static bool IsStalled(uint status, double ageSeconds) { return !IsCompleted(status) && (HasProblem(status) || ageSeconds >= 30); }
 

@@ -308,3 +308,5 @@ jobs:
             desktop-upgrade-gate-report.json
             desktop-manual-upgrade-report.json
             upgrade-session-validation.json
+            windows-spool-validation.json
+            receipt-raster-validation.json
