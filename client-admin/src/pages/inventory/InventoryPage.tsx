@@ -1,3 +1,4 @@
+import { formatDisplayQuantity } from '../../utils/itemDisplayName'
 import { ConsumptionAlertsWidget } from '../../components/ConsumptionAlertsWidget'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
@@ -1136,12 +1137,12 @@ export function InventoryPage() {
                 </select>
               </label>
               <p>
-                {t("inventoryFlow.currentStock")}: {selectedItem.currentStock}{" "}
+                {t("inventoryFlow.currentStock")}: {formatDisplayQuantity(Number(selectedItem.currentStock))}{" "}
                 {selectedItem.unit}
               </p>
               <p>
                 {t("inventoryFlow.afterStock")}:{" "}
-                {selectedItem.currentStock - inventoryLedgerQuantity(Number(stockForm.quantity) || 0, selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem))}{" "}
+                {formatDisplayQuantity(selectedItem.currentStock - inventoryLedgerQuantity(Number(stockForm.quantity) || 0, selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)))}{" "}
                 {selectedItem.unit}
               </p>
               <div>
