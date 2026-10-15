@@ -9,6 +9,8 @@ test('receipts render without paint events; fresh renderer retries only a pre-tr
 });
 test('real PDF.js/native canvas converts PDF to dot-width ESC/POS with RGBA channels and safe strips',async()=>{
  const file=path.resolve('client-pos/electron/receiptPdf.ts');const mod=new Module(file,module);mod.filename=file;mod.paths=Module._nodeModulePaths(path.dirname(file));mod._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,file);
+ assert.equal(mod.exports.receiptPdfResourceDirectory('D:\\a\\resources\\app.asar.unpacked\\node_modules\\pdfjs-dist\\legacy\\build\\pdf.mjs'),'D:/a/resources/app.asar.unpacked/node_modules/pdfjs-dist/');
+ assert.equal(mod.exports.receiptPdfResourceDirectory('/app/node_modules/pdfjs-dist/legacy/build/pdf.mjs'),'/app/node_modules/pdfjs-dist/');
  const PDF=require('pdfkit'),document=new PDF({size:[288,1266],margin:0}),chunks=[];document.on('data',chunk=>chunks.push(chunk));const completed=new Promise(resolve=>document.on('end',resolve));document.rect(0,0,8,8).fill('black');document.rect(20,0,8,8).fill('white');document.fontSize(20).fillColor('black').text('Rp 9,000 QRIS',10,40);document.end();await completed;
  for(let attempt=0;attempt<3;attempt++){
   const raster=await mod.exports.receiptPdfRaster(Buffer.concat(chunks),384,1684);assert.deepEqual([...raster.subarray(0,3)],[27,97,0]);let offset=3,rows=0;
