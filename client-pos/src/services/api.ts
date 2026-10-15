@@ -6,6 +6,7 @@ import { offlineRead } from '../utils/offlineReads'
 import { currentOfflineShift, openOfflineShift, closeOfflineShift, createOfflineCashEvent, createOfflineExpense, offlineHandover, hasOfflineOperations } from '../utils/offlineOperations'
 import { serverUnavailable } from '../utils/serverUnavailable'
 import { readSnapshot, saveSnapshot, snapshotPath } from '../utils/offlineSale'
+import {refreshOfflineCredentialLease} from '../db/offline'
 import { assertBackendAuth, assertCheckoutBackend, backendIdentity, backendAuthHeaders, readBackendAuth } from '../utils/backendIdentity'
 import axios from 'axios'
 import { getApiUrl, setApiUrl, normalizeApiUrl } from '../config'
@@ -101,7 +102,10 @@ api.interceptors.response.use(
   async (response) => {
     const path = response.config.method === 'get' && snapshotPath(response.config.url || '')
     const auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state
-    if (path && !response.config.posCachedSnapshot && auth?.user?.storeId === response.config.posStoreId && auth?.user?.id === response.config.posActorId) await saveSnapshot(path,response.data,backendIdentity(response.config.baseURL!),auth.user.storeId,response.config.posSnapshotComplete === true)
+    if (path && !response.config.posCachedSnapshot && auth?.user?.storeId === response.config.posStoreId && auth?.user?.id === response.config.posActorId) {
+      await saveSnapshot(path,response.data,backendIdentity(response.config.baseURL!),auth.user.storeId,response.config.posSnapshotComplete === true)
+      if(path==='/pos-cash/shifts/current'&&response.data?.data?.offlineAuthorization?.actorId===auth.user.id&&response.config.headers?.Authorization===`Bearer ${auth.token}`)await refreshOfflineCredentialLease(backendIdentity(response.config.baseURL!),auth.user.id,auth.token)
+    }
     return response
   },
   async (error) => {
