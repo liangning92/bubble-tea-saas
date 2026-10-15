@@ -274,7 +274,7 @@ export async function adjustInventory(
           inventoryId,
           quantity: difference,
           unitCost: Number(inventory.avgCost),
-          totalAmount: difference * Number(inventory.avgCost),
+          totalAmount: Math.round(difference * Number(inventory.avgCost)),
           note: `Adjustment: ${reason}`
         }
       })

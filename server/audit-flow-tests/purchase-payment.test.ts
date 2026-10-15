@@ -185,3 +185,10 @@ test('legacy receipt reconstructs cost from original invoice quantity and preser
  const batch=await prisma.batch.findFirstOrThrow({where:{inventoryId:f.inv.id}}),log=await prisma.stockInLog.findFirstOrThrow({where:{purchaseOrderId:order.id}});
  expect(batch.unitCost).toBeCloseTo(46679/6900,9);expect(log.unitCost).toBeCloseTo(46679/6900,9);expect(log.totalAmount).toBe(46679);expect(await prisma.expense.count({where:{referenceId:order.id}})).toBe(0);
 });
+
+import {adjustInventory} from '../src/services/InventoryService'
+test('upward stock correction retains fractional unit cost and posts a whole-rupiah log total',async()=>{
+ const f=await fixture();await prisma.inventory.update({where:{id:f.inv.id},data:{currentStock:2300,avgCost:160000/2300}});
+ await adjustInventory(f.inv.id,2301,'verified physical stock correction','admin');
+ const log=await prisma.stockInLog.findFirstOrThrow({where:{inventoryId:f.inv.id}});expect(log.quantity).toBe(1);expect(log.unitCost).toBeCloseTo(160000/2300,9);expect(log.totalAmount).toBe(70);expect((await prisma.inventory.findUniqueOrThrow({where:{id:f.inv.id}})).currentStock).toBe(2301);
+});
