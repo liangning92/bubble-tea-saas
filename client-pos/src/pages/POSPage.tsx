@@ -1,3 +1,5 @@
+import { ReceiptRecovery } from '../components/ReceiptRecovery'
+import { submitSavedReceipt } from '../utils/receiptRecovery'
 import dateLocaleI18n from '../i18n'
 import { discoverPrinters } from '../utils/printerDiscovery'
 import {discountApprovalBasket} from '../../../shared/discountApprovalBasket'
@@ -3161,11 +3163,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         metadata:{orderNumber:orderNum,pickupNumber:orderData?.pickupNumber,appVersion,status,error},severity:status==='sent'?'info':'warning'})
     }
     const receiptKey = `receipt-print:${user?.storeId}:${orderNum}`
-    const saveResult = async (status: string, error?: string) => {
-      const record = await db.config.get(receiptKey)
-      if (record) await db.config.put({...record,value:{...record.value,status,error},updatedAt:new Date()})
-      audit(status,error)
-    }
     if (!electronAPI?.sendPrintReceipt) {
       audit('failed','PRINTER_API_UNAVAILABLE')
       return false
@@ -3237,21 +3234,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       }
       // Save the exact receipt before transport; uncertain jobs are never resent automatically.
       await db.config.put({key:receiptKey,value:{payload,status:'pending',attemptedAt:new Date()},updatedAt:new Date()})
-      audit('pending')
-      const printPromise = electronAPI.sendPrintReceipt(payload)
-      // Multi-copy printing waits for the employee to tear off each copy.
-      // Do not time out the handover while Electron is still waiting for confirmation.
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const timeoutPromise = new Promise<{ success: boolean; error?: string }>((resolve) => {
-        // A single receipt has no handover prompt; retain its transport timeout.
-        if ((posReceipt.printCopies || 1) <= 1) timer = setTimeout(() => resolve({ success: false, error: 'Print timeout' }), 10000)
-      })
-      const result = await Promise.race([printPromise, timeoutPromise]).finally(() => { if (timer) clearTimeout(timer) })
-      await saveResult(result?.success?'sent':result?.error==='Print timeout'?'unknown':'failed',result?.error)
+      const result = await submitSavedReceipt(receiptKey, electronAPI.sendPrintReceipt, audit)
       if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
       return result?.success ?? false
     } catch (err) {
-      await saveResult('unknown',String(err).slice(0,500)).catch(()=>audit('unknown',String(err).slice(0,500)))
+      audit('unknown',String(err).slice(0,500))
       console.warn('Print error:', err)
       return false
     }
@@ -3591,6 +3578,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             </div>
           </div>
         </header>
+        <ReceiptRecovery storeId={user?.storeId} target={()=>printerTarget('receipt')} audit={(orderNum,status,error)=>logPOSAction({action:'receipt_print',entityId:orderNum,description:'Receipt recovery: '+status,metadata:{orderNumber:orderNum,status,error,appVersion},severity:status==='sent'||status==='paper-confirmed'?'info':'warning'})}/>
 
       {/* 渠道选择弹窗 - 解锁后必须先选择 */}
       {showChannelModal && (
@@ -5321,7 +5309,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 <Lock size={32} className="text-primary" />
               </div>
               <h2 className="text-xl font-bold text-gray-900">{t('pos.locked')}</h2>
-              <p className="text-sm text-gray-500 mt-1">{t('pos.enterPinToUnlock')}</p>
+              <p className="text-sm text-gray-500 mt-1">{t('pos.enterPinToUnlock')}</p><p className="text-xs text-gray-500 mt-3">{t('receiptRecovery.lockHelp')}</p>
             </div>
             {displaySettings.lockScreenPin ? (
               <div className="space-y-4">

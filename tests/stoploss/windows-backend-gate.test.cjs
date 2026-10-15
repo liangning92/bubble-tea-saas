@@ -22,12 +22,12 @@ test('desktop-only source permits identical complete API context and dependencie
   const result = await checkWindowsBackend(health, source, get());
   assert.equal(result.mode, 'identical-backend-inputs');
   assert.equal(result.backendSha, backend);
-  assert.equal(Object.keys(result.matchedInputs).length, 3);
+  assert.equal(Object.keys(result.matchedInputs).length, 1);
 });
 test('shared UI changes do not require deploying an API whose complete context is identical', async () => {
   assert.equal((await checkWindowsBackend(health, source, get({changed:'shared'}))).mode, 'identical-backend-inputs');
 });
-for (const path of ['server', 'package.json', 'package-lock.json']) {
+for (const path of ['server']) {
   test(`changed ${path} requires deployment`, async () => {
     await assert.rejects(checkWindowsBackend(health, source, get({ changed: path })), /Deploy the matching backend first/);
   });
@@ -41,3 +41,5 @@ test('invalid backend identity or capabilities remain blocked', async () => {
   await assert.rejects(checkWindowsBackend({ ...health, capabilities: {} }, source, get()));
   await assert.rejects(checkWindowsBackend({ ...health, status: 'error' }, source, get()));
 });
+
+for(const path of ['package.json','package-lock.json'])test(`desktop dependencies ${path} are outside the API Docker context`,async()=>{assert.equal((await checkWindowsBackend(health,source,get({changed:path}))).mode,'identical-backend-inputs')});
