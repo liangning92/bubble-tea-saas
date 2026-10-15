@@ -1,3 +1,4 @@
+import { formatNumber } from '../utils/numberDisplay'
 import { AdminDialog } from "./AdminDialog";
 import { useEmployeePermission } from "../contexts/EmployeeAccess";
 import { useEffect, useState } from "react";
@@ -168,7 +169,7 @@ export function MediaLibrary({
       {busy && progress !== null && (
         <div role="status" className="space-y-1">
           <p className="text-sm">
-            {t("media.upload")} · {progress}%
+            {t("media.upload")} · {formatNumber(progress)}%
           </p>
           <progress
             aria-label={t("media.upload")}
@@ -215,8 +216,8 @@ export function MediaLibrary({
                   {asset.size < 1024
                     ? `${asset.size} B`
                     : asset.size < 1024 * 1024
-                      ? `${(asset.size / 1024).toFixed(1)} KB`
-                      : `${(asset.size / 1024 / 1024).toFixed(1)} MB`}
+                      ? `${(asset.size / 1024).toFixed(0)} KB`
+                      : `${(asset.size / 1024 / 1024).toFixed(0)} MB`}
                 </p>
                 {onSelect ? (
                   <button

@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
@@ -98,12 +99,12 @@ export function MaterialListPage() {
                 <div>
                   <div className="font-medium">{alert.name}</div>
                   <div className="text-sm text-gray-500">
-                    {t('material.currentStock') || 'Current Stock'}: {alert.currentStock} {alert.unit}
+                    {t('material.currentStock') || 'Current Stock'}: {formatNumber(alert.currentStock)} {alert.unit}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="text-sm text-gray-500">{t('material.safetyStock') || 'Safety Stock'}</div>
-                  <div className="font-medium text-orange-600">{alert.safetyStock} {alert.unit}</div>
+                  <div className="font-medium text-orange-600">{formatNumber(alert.safetyStock)} {alert.unit}</div>
                 </div>
               </div>
             ))}
@@ -146,7 +147,7 @@ export function MaterialListPage() {
                   </td>
                   <td className="py-3 text-right">
                     <span className={mat.currentStock <= mat.safetyStock ? 'text-red-500 font-medium' : ''}>
-                      {mat.currentStock.toFixed(2)} {mat.unit}
+                      {mat.currentStock.toFixed(0)} {mat.unit}
                     </span>
                   </td>
                   <td className="py-3 text-right text-gray-600">

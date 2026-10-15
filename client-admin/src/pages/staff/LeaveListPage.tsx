@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import {leaveRestrictionMessage} from '../../../../shared/staffRulePolicy'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
@@ -197,7 +198,7 @@ export function LeaveListPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Clock size={16} />
-                  <span>{leave.totalDays} {t('leave.days')}</span>
+                  <span>{formatNumber(leave.totalDays)} {t('leave.days')}</span>
                 </div>
                 {leave.reason && (
                   <p className="text-gray-500 mt-2">{t('leave.reason')}: {leave.reason}</p>
@@ -248,7 +249,7 @@ export function LeaveListPage() {
             <div className="mb-4 p-4 bg-gray-50 rounded-xl">
               <p className="font-medium">{selectedLeave.staff?.name}</p>
               <p className="text-sm text-gray-500">
-                {getLeaveTypeLabel(selectedLeave.leaveType)} - {selectedLeave.totalDays} {t('leave.days')}
+                {getLeaveTypeLabel(selectedLeave.leaveType)} - {formatNumber(selectedLeave.totalDays)} {t('leave.days')}
               </p>
               <p className="text-sm text-gray-500">
                 {formatDate(selectedLeave.startDate)} - {formatDate(selectedLeave.endDate)}

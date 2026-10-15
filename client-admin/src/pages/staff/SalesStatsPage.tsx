@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -48,7 +49,7 @@ export function SalesStatsPage() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
-      maximumFractionDigits: 20,
+      maximumFractionDigits: 0,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
@@ -164,7 +165,7 @@ export function SalesStatsPage() {
                 <div className="text-right">
                   <div className="font-bold text-lg">{formatCurrency(stat.revenue)}</div>
                   <div className="text-sm text-gray-500">
-                    {getTopPercentage(stat.revenue)}% {t('staff.ofTotal')}
+                    {formatNumber(getTopPercentage(stat.revenue))}% {t('staff.ofTotal')}
                   </div>
                 </div>
 

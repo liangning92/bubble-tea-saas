@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -156,7 +157,7 @@ export function AttendanceRulesPage() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
-      maximumFractionDigits: 20,
+      maximumFractionDigits: 0,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
@@ -193,7 +194,7 @@ export function AttendanceRulesPage() {
                   )}
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  {rule.workStartTime} - {rule.workEndTime} ({t('staff.gracePeriod')}: {rule.gracePeriod}min)
+                  {rule.workStartTime} - {rule.workEndTime} ({t('staff.gracePeriod')}: {formatNumber(rule.gracePeriod)}min)
                 </p>
               </div>
               <div className="flex gap-2">
@@ -233,11 +234,11 @@ export function AttendanceRulesPage() {
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-500 block">{t('staff.overtimeRate')}</span>
-                <span className="font-medium">{rule.overtimeRate}x</span>
+                <span className="font-medium">{formatNumber(rule.overtimeRate)}x</span>
               </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="text-gray-500 block">{t('staff.overtimeMinHours')}</span>
-                <span className="font-medium">{rule.overtimeMinHours}h</span>
+                <span className="font-medium">{formatNumber(rule.overtimeMinHours)}h</span>
               </div>
             </div>
           </div>

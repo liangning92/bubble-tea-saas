@@ -224,7 +224,7 @@ export function MessageSettingsPage() {
                   </div>
                   <div className="mt-4 pt-4 border-t flex justify-between items-center">
                     <div className="text-sm text-gray-500">
-                      <span>{t('marketing.costPerSms')}: Rp {channel.costPerSms?.toLocaleString() || 0}/SMS</span>
+                      <span>{t('marketing.costPerSms')}: Rp {channel.costPerSms?.toLocaleString(undefined, { maximumFractionDigits: 0 }) || 0}/SMS</span>
                       <span className="mx-2">|</span>
                       <span>{t('marketing.dailyLimit')}: {channel.dailyLimit || 1000}</span>
                     </div>
@@ -349,12 +349,12 @@ export function MessageSettingsPage() {
             <div className="card text-center p-4">
               <div className="text-3xl font-bold text-primary">{stats?.today?.count || 0}</div>
               <div className="text-sm text-gray-500">{t('marketing.todaySent')}</div>
-              <div className="text-xs text-gray-400 mt-1">Rp {(stats?.today?.cost || 0).toLocaleString()}</div>
+              <div className="text-xs text-gray-400 mt-1">Rp {(stats?.today?.cost || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
             </div>
             <div className="card text-center p-4">
               <div className="text-3xl font-bold text-blue-600">{stats?.month?.count || 0}</div>
               <div className="text-sm text-gray-500">{t('marketing.monthSent')}</div>
-              <div className="text-xs text-gray-400 mt-1">Rp {(stats?.month?.cost || 0).toLocaleString()}</div>
+              <div className="text-xs text-gray-400 mt-1">Rp {(stats?.month?.cost || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
             </div>
             <div className="card text-center p-4">
               <div className="text-3xl font-bold text-yellow-600">{stats?.pending || 0}</div>

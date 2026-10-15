@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { formatDisplayQuantity } from '../../utils/itemDisplayName'
 import { ConsumptionAlertsWidget } from '../../components/ConsumptionAlertsWidget'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
@@ -376,7 +377,7 @@ export function InventoryPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">{[["materials",inventory.length],["lowStock",inventory.filter(isLowItem).length],["outOfStock",inventory.filter((item:any)=>isStockItem(item)&&item.currentStock<=0).length]].map(([key,value])=><div className="rounded-xl border bg-white p-4" key={key}><p className="text-sm text-gray-500">{t("operations."+key)}</p><p className="text-2xl font-semibold tabular-nums mt-1">{isLoading||isError?'—':value}</p></div>)}</div>
+      <div className="grid grid-cols-3 gap-3">{[["materials",inventory.length],["lowStock",inventory.filter(isLowItem).length],["outOfStock",inventory.filter((item:any)=>isStockItem(item)&&item.currentStock<=0).length]].map(([key,value])=><div className="rounded-xl border bg-white p-4" key={key}><p className="text-sm text-gray-500">{t("operations."+key)}</p><p className="text-2xl font-semibold tabular-nums mt-1">{formatNumber(isLoading||isError?'—':value)}</p></div>)}</div>
       {isError&&<p role="alert" className="text-red-700"><button type="button" onClick={()=>refetch()}>{t("common.error")} · {t("operations.refresh")}</button></p>}
       <ConsumptionAlertsWidget compact />
       {/* 分类看板 */}
@@ -611,7 +612,7 @@ export function InventoryPage() {
                             item.effectiveSafetyStock ??
                             item.safetyStock ??
                             0
-                          ).toFixed(3),
+                          ).toFixed(0),
                         )}{" "}
                         {item.unit}
                       </td>

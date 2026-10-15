@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -13,7 +14,7 @@ import {
 export function RestockSuggestionPage() {
   const { t, i18n } = useTranslation();
   const [days, setDays] = useState(15);
-  const qty = (value: unknown) => value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 2 });
+  const qty = (value: unknown) => value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 0 });
   const category = (value: string) => ({ raw_material: t('material.typeRawMaterial'), semi_finished: t('material.typeSemiFinished'), finished_goods: t('material.typeFinishedGoods'), packaging: t('inventory.packaging') } as Record<string,string>)[value] || value;
 
   const { data: suggestionsData, isLoading } = useQuery({
@@ -190,7 +191,7 @@ export function RestockSuggestionPage() {
                   <div
                     className={`font-bold ${alert.daysUntilExpiry <= 3 ? "text-red-600" : "text-orange-600"}`}
                   >
-                    {alert.daysUntilExpiry} {t("material.days") || "days"}
+                    {formatNumber(alert.daysUntilExpiry)} {t("material.days") || "days"}
                   </div>
                 </div>
               </div>

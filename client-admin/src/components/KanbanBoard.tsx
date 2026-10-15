@@ -1,3 +1,4 @@
+import { formatNumber } from '../utils/numberDisplay'
 import React, { useState } from 'react'
 
 interface KanbanColumn {
@@ -149,7 +150,7 @@ function DefaultItem({ item }: { item: KanbanItem }) {
           {Object.entries(item.metadata).map(([key, value]) => (
             <div key={key} className="text-xs">
               <span className="text-gray-400">{key}: </span>
-              <span className="text-gray-600 font-medium">{value}</span>
+              <span className="text-gray-600 font-medium">{typeof value === 'number' ? formatNumber(value) : value}</span>
             </div>
           ))}
         </div>

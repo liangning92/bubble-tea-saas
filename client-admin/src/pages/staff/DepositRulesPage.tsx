@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
@@ -142,7 +143,7 @@ export function DepositRulesPage() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
-      maximumFractionDigits: 20,
+      maximumFractionDigits: 0,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
@@ -211,7 +212,7 @@ export function DepositRulesPage() {
               {rule.prorataPercent && (
                 <div>
                   <span className="text-gray-500">{t('staff.prorataPercent')}:</span>
-                  <span className="ml-2 font-medium">{rule.prorataPercent > 1 ? rule.prorataPercent : rule.prorataPercent * 100}%</span>
+                  <span className="ml-2 font-medium">{formatNumber(rule.prorataPercent > 1 ? rule.prorataPercent : rule.prorataPercent * 100)}%</span>
                 </div>
               )}
             </div>

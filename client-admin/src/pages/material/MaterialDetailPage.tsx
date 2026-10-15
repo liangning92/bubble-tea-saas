@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import dateLocaleI18n from '../../i18n'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -70,7 +71,7 @@ export function MaterialDetailPage() {
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="text-sm text-gray-500">{t('material.currentStock') || 'Current Stock'}</div>
             <div className={`text-2xl font-bold ${mat.currentStock <= mat.safetyStock ? 'text-red-500' : ''}`}>
-              {mat.currentStock.toFixed(2)} {mat.unit}
+              {mat.currentStock.toFixed(0)} {mat.unit}
             </div>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg">
@@ -82,7 +83,7 @@ export function MaterialDetailPage() {
           <div className="bg-gray-50 p-4 rounded-lg">
             <div className="text-sm text-gray-500">{t('material.safetyStock') || 'Safety Stock'}</div>
             <div className="text-2xl font-bold">
-              {mat.safetyStock} {mat.unit}
+              {formatNumber(mat.safetyStock)} {mat.unit}
             </div>
           </div>
           <div className="bg-gray-50 p-4 rounded-lg">
@@ -105,7 +106,7 @@ export function MaterialDetailPage() {
             {mat.currentStock <= mat.safetyStock && (
               <div className="flex items-center gap-2 text-orange-700">
                 <AlertTriangle size={16} />
-                {t('material.lowStockWarning', { stock: mat.safetyStock, unit: mat.unit })}
+                {t('material.lowStockWarning', { stock: formatNumber(mat.safetyStock), unit: mat.unit })}
               </div>
             )}
           </div>
@@ -130,7 +131,7 @@ export function MaterialDetailPage() {
               {mat.batches.map((batch: any) => (
                 <tr key={batch.id} className="border-b border-border">
                   <td className="py-2 font-mono text-sm">{batch.batchNumber}</td>
-                  <td className="text-right tabular-nums py-2">{batch.quantity} {mat.unit}</td>
+                  <td className="text-right tabular-nums py-2">{formatNumber(batch.quantity)} {mat.unit}</td>
                   <td className="py-2 text-sm text-gray-500">
                     {batch.manufacturingDate
                       ? new Date(batch.manufacturingDate).toLocaleDateString(dateLocaleI18n.language)
@@ -165,15 +166,15 @@ export function MaterialDetailPage() {
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div className="flex justify-between p-2 bg-gray-50 rounded">
             <span className="text-gray-500">{t('material.concentrateRatioLabel')}</span>
-            <span>{mat.concentrateRatio}x</span>
+            <span>{formatNumber(mat.concentrateRatio)}x</span>
           </div>
           <div className="flex justify-between p-2 bg-gray-50 rounded">
             <span className="text-gray-500">{t('material.minStock')}</span>
-            <span>{mat.minStock} {mat.unit}</span>
+            <span>{formatNumber(mat.minStock)} {mat.unit}</span>
           </div>
           <div className="flex justify-between p-2 bg-gray-50 rounded">
             <span className="text-gray-500">{t('material.maxStock')}</span>
-            <span>{mat.maxStock} {mat.unit}</span>
+            <span>{formatNumber(mat.maxStock)} {mat.unit}</span>
           </div>
           <div className="flex justify-between p-2 bg-gray-50 rounded">
             <span className="text-gray-500">{t('material.shelfLife')}</span>

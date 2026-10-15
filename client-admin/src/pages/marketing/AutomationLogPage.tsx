@@ -80,7 +80,7 @@ export function AutomationLogPage() {
     if (!end) return '-'
     const diff = new Date(end).getTime() - new Date(start).getTime()
     if (diff < 1000) return '<1s'
-    return `${(diff / 1000).toFixed(1)}s`
+    return `${(diff / 1000).toFixed(0)}s`
   }
 
   if (isError) return <MarketingError retry={() => refetch()} />

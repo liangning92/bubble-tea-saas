@@ -99,7 +99,7 @@ export function MemberBalancePage() {
     }
   }
 
-  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID')}`
+  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID', { maximumFractionDigits: 0 })}`
 
   const getTypeLabel = (type: string) => {
     switch (type) {

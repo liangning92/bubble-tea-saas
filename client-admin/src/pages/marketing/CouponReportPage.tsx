@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -46,7 +47,7 @@ export function CouponReportPage() {
 
   const overallUsageRate = summary.totalIssued > 0 ? Math.round((summary.totalUsed / summary.totalIssued) * 100) : 0
 
-  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID')}`
+  const formatCurrency = (value: number) => `Rp ${value.toLocaleString('id-ID', { maximumFractionDigits: 0 })}`
 
   const getTypeLabel = (type: string) => {
     switch (type) {
@@ -91,15 +92,15 @@ export function CouponReportPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="card text-center">
-          <div className="text-3xl font-bold text-primary">{summary.totalIssued.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-primary">{summary.totalIssued.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           <div className="text-sm text-gray-500 mt-1">{t('marketing.totalIssued')}</div>
         </div>
         <div className="card text-center">
-          <div className="text-3xl font-bold text-green-600">{summary.totalUsed.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-green-600">{summary.totalUsed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           <div className="text-sm text-gray-500 mt-1">{t('marketing.totalUsed')}</div>
         </div>
         <div className="card text-center">
-          <div className="text-3xl font-bold text-info">{overallUsageRate}%</div>
+          <div className="text-3xl font-bold text-info">{formatNumber(overallUsageRate)}%</div>
           <div className="text-sm text-gray-500 mt-1">{t('marketing.usageRate')}</div>
         </div>
         <div className="card text-center">
@@ -153,7 +154,7 @@ export function CouponReportPage() {
                             style={{ width: `${report.usageRate}%` }}
                           />
                         </div>
-                        <span className="text-sm w-10">{report.usageRate}%</span>
+                        <span className="text-sm w-10">{formatNumber(report.usageRate)}%</span>
                       </div>
                     </td>
                     <td className="py-3 text-right font-medium">{formatCurrency(report.totalDiscount)}</td>

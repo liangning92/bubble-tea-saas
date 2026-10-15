@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import {formatStoreDate} from '../../utils/storeDateTime'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod,queryCalendarRange} from '../../utils/queryPeriods'
@@ -80,7 +81,7 @@ export function HygieneStatsPage() {
               <div className="text-sm text-gray-500 mt-1">{t('hygiene.completedTasks')}</div>
             </div>
             <div className="card text-center">
-              <div className="text-3xl font-bold text-primary">{overallRate}%</div>
+              <div className="text-3xl font-bold text-primary">{formatNumber(overallRate)}%</div>
               <div className="text-sm text-gray-500 mt-1">{t('hygiene.overallCompletionRate')}</div>
             </div>
             <div className="card text-center">
@@ -100,7 +101,7 @@ export function HygieneStatsPage() {
               <div className="card bg-green-50 border-green-200">
                 <div className="text-sm text-green-600 font-medium">{t('hygiene.bestPerformance')}</div>
                 <div className="text-lg font-bold text-green-700 mt-1">
-                  {formatDate(bestDay.date)} - {bestDay.completionRate}%
+                  {formatDate(bestDay.date)} - {formatNumber(bestDay.completionRate)}%
                 </div>
                 <div className="text-sm text-green-600 mt-1">
                   {bestDay.completed}/{bestDay.total} {t('hygiene.tasks')}
@@ -111,7 +112,7 @@ export function HygieneStatsPage() {
               <div className="card bg-red-50 border-red-200">
                 <div className="text-sm text-red-600 font-medium">{t('hygiene.needsImprovement')}</div>
                 <div className="text-lg font-bold text-red-700 mt-1">
-                  {formatDate(worstDay.date)} - {worstDay.completionRate}%
+                  {formatDate(worstDay.date)} - {formatNumber(worstDay.completionRate)}%
                 </div>
                 <div className="text-sm text-red-600 mt-1">
                   {worstDay.completed}/{worstDay.total} {t('hygiene.tasks')}
@@ -128,8 +129,8 @@ export function HygieneStatsPage() {
                 <div key={day.date} className="flex-1 flex flex-col items-center">
                   <div
                     className="w-full bg-primary/20 hover:bg-primary/30 transition-colors rounded-t"
-                    style={{ height: `${day.completionRate}%` }}
-                    title={`${day.date}: ${day.completionRate}%`}
+                    style={{ height: `${formatNumber(day.completionRate)}%` }}
+                    title={`${day.date}: ${formatNumber(day.completionRate)}%`}
                   />
                   {idx % Math.ceil(stats.length / 7) === 0 && (
                     <div className="text-xs text-gray-500 mt-1">

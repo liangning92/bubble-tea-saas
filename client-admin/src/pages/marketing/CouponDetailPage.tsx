@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -30,11 +31,11 @@ export function CouponDetailPage() {
 
   const formatValue = (c: any) => {
     switch (c.type) {
-      case 'discount_percent': return `${c.value}%`
-      case 'discount_fixed': return `Rp ${c.value?.toLocaleString()}`
+      case 'discount_percent': return `${formatNumber(c.value)}%`
+      case 'discount_fixed': return `Rp ${c.value?.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
       case 'free_product': return t('marketing.freeProduct')
       case 'free_delivery': return t('marketing.freeDelivery')
-      default: return c.value
+      default: return formatNumber(c.value)
     }
   }
 
@@ -91,12 +92,12 @@ export function CouponDetailPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">{t('marketing.minOrder')}</span>
-              <span>{coupon.minOrder ? `Rp ${coupon.minOrder.toLocaleString()}` : '-'}</span>
+              <span>{coupon.minOrder ? `Rp ${coupon.minOrder.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}</span>
             </div>
             {coupon.maxDiscount > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">{t('marketing.maxDiscount')}</span>
-                <span>Rp {coupon.maxDiscount.toLocaleString()}</span>
+                <span>Rp {coupon.maxDiscount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
               </div>
             )}
             <div className="flex justify-between">

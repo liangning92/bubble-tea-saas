@@ -205,7 +205,7 @@ export function ImportPage() {
             <FileText size={24} className="text-primary" />
             <div className="flex-1">
               <p className="font-medium text-gray-900">{file.name}</p>
-              <p className="text-sm text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+              <p className="text-sm text-gray-500">{(file.size / 1024).toFixed(0)} KB</p>
             </div>
             <button
               onClick={() => { setFile(null); setPreview([]) }}

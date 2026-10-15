@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -89,7 +90,7 @@ export function ReferralDetailPage() {
               {(() => {
                 try {
                   const r = JSON.parse(referral.inviterReward || '{}')
-                  return `${r.value} ${r.type}`
+                  return `${formatNumber(r.value)} ${r.type}`
                 } catch { return '-' }
               })()}
             </span>
@@ -100,7 +101,7 @@ export function ReferralDetailPage() {
               {(() => {
                 try {
                   const r = JSON.parse(referral.rewardeeReward || '{}')
-                  return `${r.value} ${r.type}`
+                  return `${formatNumber(r.value)} ${r.type}`
                 } catch { return '-' }
               })()}
             </span>

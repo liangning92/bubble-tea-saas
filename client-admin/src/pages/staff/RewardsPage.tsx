@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
@@ -229,9 +230,9 @@ export function RewardsPage() {
                       <td className="px-4 py-3 font-medium">{reward.name}</td>
                       <td className="px-4 py-3 text-gray-500">{reward.description}</td>
                       <td className="px-4 py-3 text-right">
-                        <span className="text-lg font-bold text-primary">{reward.pointsCost}</span>
+                        <span className="text-lg font-bold text-primary">{formatNumber(reward.pointsCost)}</span>
                       </td>
-                      <td className="px-4 py-3 text-right">{reward.stock}</td>
+                      <td className="px-4 py-3 text-right">{formatNumber(reward.stock)}</td>
                       <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => handleToggleActive(reward)}
@@ -297,7 +298,7 @@ export function RewardsPage() {
                       <td className="px-4 py-3 font-medium">{r.staffName}</td>
                       <td className="px-4 py-3">{r.rewardName}</td>
                       <td className="px-4 py-3 text-right">
-                        <span className="text-lg font-bold text-primary">{r.pointsCost}</span>
+                        <span className="text-lg font-bold text-primary">{formatNumber(r.pointsCost)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${

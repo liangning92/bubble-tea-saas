@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import dateLocaleI18n from '../../i18n'
 import { ProductDisplayPicker } from '../../components/ProductDisplayPicker'
@@ -1686,7 +1687,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                         onMouseUp={() => handleSave('soundSettings', soundSettings)}
                         className="flex-1"
                       />
-                      <span className="text-sm w-12">{soundSettings[sound.key as keyof typeof soundSettings]?.volume ?? 100}{t('posSettings.percent')}</span>
+                      <span className="text-sm w-12">{formatNumber(soundSettings[sound.key as keyof typeof soundSettings]?.volume ?? 100)}{t('posSettings.percent')}</span>
                     </div>
                   </div>
                 ))}

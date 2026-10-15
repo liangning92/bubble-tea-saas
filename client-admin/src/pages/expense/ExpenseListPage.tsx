@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -571,7 +572,7 @@ export function ExpenseListPage() {
     if (expense.referenceType === 'salary') return
     setSelectedExpense(expense)
     // Format amount with thousand separators for display
-    const displayAmount = (expense.amount / 100).toLocaleString('id-ID')
+    const displayAmount = (expense.amount / 100).toLocaleString('id-ID', { maximumFractionDigits: 0 })
     setFormData({
       category: expense.category,
       amount: displayAmount,
@@ -584,7 +585,7 @@ export function ExpenseListPage() {
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
-      maximumFractionDigits: 20,
+      maximumFractionDigits: 0,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
@@ -719,7 +720,7 @@ export function ExpenseListPage() {
 
   const formatReimbCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
-      maximumFractionDigits: 20,
+      maximumFractionDigits: 0,
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0
@@ -959,7 +960,7 @@ export function ExpenseListPage() {
                           </span>
                           <span className="text-xs text-gray-400">{formatDate(expense.date)}</span>
                         </div>
-                        {expense.quantity !== undefined && <p className="text-sm text-gray-600">{t('expense.purchaseQuantity')}: {expense.quantity}</p>}
+                        {expense.quantity !== undefined && <p className="text-sm text-gray-600">{t('expense.purchaseQuantity')}: {formatNumber(expense.quantity)}</p>}
                         {expense.description && (
                           <p className="text-sm text-gray-600 mt-1">{expense.description}</p>
                         )}

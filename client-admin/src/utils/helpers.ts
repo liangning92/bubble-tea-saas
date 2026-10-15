@@ -1,3 +1,4 @@
+import { formatNumber } from './numberDisplay'
 import { formatExactCurrency } from './moneyDisplay'
 import { itemDisplayName } from './itemDisplayName'
 import {formatStoreDate} from './storeDateTime'
@@ -59,7 +60,7 @@ export function normalizeInventoryUnit(quantity: number, unit: string): { quanti
  */
 export function formatStockDisplay(quantity: number, unit: string): string {
   const normalized = normalizeInventoryUnit(quantity, unit)
-  const qty = Math.round(normalized.quantity * 100) / 100
+  const qty = formatNumber(normalized.quantity)
   return `${qty} ${normalized.unit}`
 }
 

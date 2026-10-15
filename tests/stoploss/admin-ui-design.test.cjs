@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
-function load(file){const module={exports:{}};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;new Function('exports','module',code)(module.exports,module);return module.exports}
+function load(file){const module={exports:{}};const code=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;new Function('exports','module','require',code)(module.exports,module,(name)=>name.startsWith('.')?load(require('node:path').resolve(require('node:path').dirname(file),name)+'.ts'):require(name));return module.exports}
 const names=load('client-admin/src/utils/itemDisplayName.ts'),costs=load('client-admin/src/utils/recipeCost.ts');
 test('legacy names shorten only a clear Chinese segment and retain size',()=>{
  assert.equal(names.itemDisplayName('Bubuk Vanilla / Vanilla Powder (香草粉)','zh'),'香草粉');
@@ -10,7 +10,7 @@ test('legacy names shorten only a clear Chinese segment and retain size',()=>{
  assert.equal(names.itemDisplayName({name:'Original',nameEn:'Cup'},'en-US'),'Cup');
  assert.equal(names.itemDisplayName({name:'Cup 500ml',nameZh:'杯'},'zh'),'杯 500ml');
 });
-test('display rounding leaves source precision unchanged',()=>{const value=85.71428571428572;assert.equal(names.formatDisplayQuantity(value),'85.71');assert.equal(names.formatDisplayQuantity(2),'2');assert.equal(names.formatDisplayQuantity(NaN),'—');assert.equal(value,85.71428571428572)});
+test('display rounding leaves source precision unchanged',()=>{const value=85.71428571428572;assert.equal(names.formatDisplayQuantity(value),'86');assert.equal(names.formatDisplayQuantity(2),'2');assert.equal(names.formatDisplayQuantity(NaN),'—');assert.equal(value,85.71428571428572)});
 test('initialized processed rows without costBreakdown.cost use costPerUnit safely',()=>{
  const row={inventoryId:'processed',quantityStr:'120',cost:2057/120,costBreakdown:{breakdown:[]}};
  assert.ok(Math.abs(costs.recipeRowCost(row)-2057)<1e-8);
@@ -42,12 +42,12 @@ test('refund policy awaits confirmation and blocks invalid legacy or partial req
 
 test('unknown API cost responses are not displayed as free inventory',()=>{assert.equal(costs.readBreakdownCost({type:'unknown',cost:0}),null);assert.equal(costs.readBreakdownCost({type:'semi_finished'}),null);assert.equal(costs.readBreakdownCost({type:'raw_material',cost:0}),0);assert.equal(costs.recipeRowCost({inventoryId:'x',quantityStr:'2',cost:1.234,rowTotal:2}),2)});
 
-test('full currency values retain decimal amounts and large totals',()=>{
+test('currency values round for display while retaining complete large totals',()=>{
  const {formatExactCurrency}=load('client-admin/src/utils/moneyDisplay.ts');
  for(const value of [0,12.35,-1234.56,9876543210123.75,3943/230]){
   const text=formatExactCurrency(value);
   const restored=Number(text.replace(/[^0-9,-]/g,'').replace(',','.'));
-  assert.equal(restored,value);
+  assert.equal(restored,Math.sign(value)*Math.round(Math.abs(value)));
   assert.ok(!/K|M|B/.test(text));
  }
 });

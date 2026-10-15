@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
@@ -180,10 +181,10 @@ export function StaffPointsPage() {
                   <tr key={sp.staffId} className="border-t">
                     <td className="px-4 py-3 font-medium">{sp.staffName}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-xl font-bold text-primary">{sp.balance}</span>
+                      <span className="text-xl font-bold text-primary">{formatNumber(sp.balance)}</span>
                     </td>
-                    <td className="px-4 py-3 text-right text-green-600">+{sp.totalEarned}</td>
-                    <td className="px-4 py-3 text-right text-red-600">-{sp.totalRedeemed}</td>
+                    <td className="px-4 py-3 text-right text-green-600">+{formatNumber(sp.totalEarned)}</td>
+                    <td className="px-4 py-3 text-right text-red-600">-{formatNumber(sp.totalRedeemed)}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
@@ -236,7 +237,7 @@ export function StaffPointsPage() {
                         <p className="text-xs text-gray-400 mt-1">{formatDate(log.createdAt)}</p>
                       </div>
                       <span className={`text-xl font-bold ${log.points > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {log.points > 0 ? '+' : ''}{log.points}
+                        {log.points > 0 ? '+' : ''}{formatNumber(log.points)}
                       </span>
                     </div>
                   </div>

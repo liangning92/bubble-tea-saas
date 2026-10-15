@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { OrderItemRows, OrderItemColumns } from '../../components/OrderItemsTable'
 import { useState } from 'react'
 import { useParams, Link, useLocation } from 'react-router-dom'
@@ -79,7 +80,7 @@ export function MemberDetailPage() {
               <div><span className="text-gray-500">{t('members.phone')}:</span> <span className="font-medium">{member.phone}</span></div>
               <div><span className="text-gray-500">{t('members.birthday')}:</span> <span className="font-medium">{member.birthday || '-'}</span></div>
               <div><span className="text-gray-500">{t('members.email', 'Email')}:</span> <span className="font-medium">{member.email || '-'}</span></div>
-              <div><span className="text-gray-500">{t('members.points')}:</span> <span className="font-medium text-primary">{member.points?.toLocaleString()}</span></div>
+              <div><span className="text-gray-500">{t('members.points')}:</span> <span className="font-medium text-primary">{member.points?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span></div>
               <div><span className="text-gray-500">{t('members.totalSpent')}:</span> <span className="font-medium">{formatCurrency(member.totalSpent || 0)}</span></div>
               <div><span className="text-gray-500">{t('members.balance', 'Balance')}:</span> <span className="font-medium">{formatCurrency(member.balance || 0)}</span></div>
               <div><span className="text-gray-500">{t('members.status', 'Status')}:</span> <span className="font-medium">{member.status || '-'}</span></div>
@@ -96,7 +97,7 @@ export function MemberDetailPage() {
                   <div key={entry.id} className="py-3 flex items-center justify-between gap-4 text-sm">
                     <div>
                       <p className="font-medium">{entry.coupon?.code || '-'}</p>
-                      <p className="text-gray-500">{entry.coupon?.type || '-'} · {entry.coupon?.value ?? '-'}</p>
+                      <p className="text-gray-500">{entry.coupon?.type || '-'} · {formatNumber(entry.coupon?.value ?? '-')}</p>
                       <p className="text-xs text-gray-400">{entry.coupon?.validUntil ? formatDateTime(entry.coupon.validUntil) : '-'}</p>
                     </div>
                     <span className={`badge ${entry.status === 'unused' ? 'badge-success' : 'badge'}`}>{entry.status}</span>
@@ -152,7 +153,7 @@ export function MemberDetailPage() {
                     {log.orderId && <p className="text-gray-400 text-xs">Order: {log.orderId.slice(0, 8)}...</p>}
                   </div>
                   <span className={`font-medium ${log.points > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {log.points > 0 ? '+' : ''}{log.points}
+                    {log.points > 0 ? '+' : ''}{formatNumber(log.points)}
                   </span>
                 </div>
               )) : (

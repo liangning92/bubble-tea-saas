@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -277,7 +278,7 @@ export function KDSPage() {
                       isOverdue ? 'text-red-600 font-bold' : 'text-gray-500'
                     }`}>
                       <Clock size={14} />
-                      <span>{order.elapsedMinutes} {t('kds.minutes')}</span>
+                      <span>{formatNumber(order.elapsedMinutes)} {t('kds.minutes')}</span>
                       {isOverdue && <AlertCircle size={14} className="text-red-600" />}
                    </div>
                     )}
@@ -288,7 +289,7 @@ export function KDSPage() {
                     {order.items.map((item, idx) => (
                       <div key={idx} className="flex items-start gap-2">
                         <span className="w-7 h-7 rounded-full bg-primary text-white text-xs flex items-center justify-center font-bold flex-shrink-0">
-                          {item.quantity}
+                          {formatNumber(item.quantity)}
                         </span>
                         <div className="flex-1">
                           <p className="font-medium">{item.productName}</p>

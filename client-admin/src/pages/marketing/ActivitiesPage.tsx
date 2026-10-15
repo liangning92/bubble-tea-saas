@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { useEffect, useState } from "react";
@@ -255,7 +256,7 @@ export function ActivitiesPage() {
       (p.specs || []).map((s: any) => ({
         id: s.id,
         name: p.name + " / " + s.name,
-        subtitle: "Rp " + s.price.toLocaleString("id-ID"),
+        subtitle: "Rp " + s.price.toLocaleString("id-ID", { maximumFractionDigits: 0 }),
       })),
     );
   const numeric = (key: string, label: string, min = 0, max = 1000000000) => (
@@ -386,7 +387,7 @@ export function ActivitiesPage() {
             <span key={key} className="badge badge-gray">
               {label}:{" "}
               {["price", "amount", "minAmount"].includes(key) ? "Rp " : ""}
-              {a.rule[key]}
+              {formatNumber(a.rule[key])}
               {key === "percent" ? "%" : ""}
             </span>
           ))}
@@ -427,7 +428,7 @@ export function ActivitiesPage() {
               (c: any) =>
                 (products.find((p: any) => p.id === c.productId)?.name || "—") +
                 " × " +
-                c.quantity,
+                formatNumber(c.quantity),
             )
             .join(" / ")}
         </p>
@@ -438,9 +439,9 @@ export function ActivitiesPage() {
             .map(
               (t: any) =>
                 "Rp " +
-                t.minAmount +
+                formatNumber(t.minAmount) +
                 " → " +
-                (t.percent !== undefined ? t.percent + "%" : "Rp " + t.amount),
+                (t.percent !== undefined ? formatNumber(t.percent) + "%" : "Rp " + formatNumber(t.amount)),
             )
             .join(" / ")}
         </p>

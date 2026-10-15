@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { AdminDialog } from '../../components/AdminDialog'
 import {staffAccessLabels,staffRoleLabel} from '../../../../shared/staffAccessLabels'
 import {useEmployeePermission} from '../../contexts/EmployeeAccess'
@@ -219,11 +220,11 @@ export function StaffDetailPage() {
           <div className="space-y-4">
             {canSalary&&<div className="flex justify-between">
               <span className="text-gray-500">{t('salary.baseSalary')}</span>
-              <span className="font-medium">{staff.baseSalary == null ? '-' : `Rp ${Number(staff.baseSalary).toLocaleString('id-ID')}`}</span>
+              <span className="font-medium">{staff.baseSalary == null ? '-' : `Rp ${Number(staff.baseSalary).toLocaleString('id-ID', { maximumFractionDigits: 0 })}`}</span>
             </div>}
             <div className="flex justify-between">
               <span className="text-gray-500">{t('salary.baseSalary')}</span>
-              <span className="font-medium">{staff.baseSalary == null ? '-' : `Rp ${Number(staff.baseSalary).toLocaleString('id-ID')}`}</span>
+              <span className="font-medium">{staff.baseSalary == null ? '-' : `Rp ${Number(staff.baseSalary).toLocaleString('id-ID', { maximumFractionDigits: 0 })}`}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">{t('staff.hireDate')}</span>
@@ -244,13 +245,13 @@ export function StaffDetailPage() {
             {staff.weeklyHours != null && (
               <div className="flex justify-between">
                 <span className="text-gray-500">{t('staff.weeklyHours')}</span>
-                <span className="font-medium">{staff.weeklyHours}h</span>
+                <span className="font-medium">{formatNumber(staff.weeklyHours)}h</span>
               </div>
             )}
             {staff.hourlyRate != null && (
               <div className="flex justify-between">
                 <span className="text-gray-500">{t('staff.hourlyRate')}</span>
-                <span className="font-medium">Rp {staff.hourlyRate.toLocaleString('id-ID')}/jam</span>
+                <span className="font-medium">Rp {staff.hourlyRate.toLocaleString('id-ID', { maximumFractionDigits: 0 })}/jam</span>
               </div>
             )}
           </div>
@@ -317,7 +318,7 @@ export function StaffDetailPage() {
               {staff.salaries.slice(0, 3).map((s: any) => (
                 <div key={s.id} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
                   <span className="text-sm text-gray-600">{s.month}</span>
-                  <span className="font-medium">Rp {s.finalAmount?.toLocaleString('id-ID') || 0}</span>
+                  <span className="font-medium">Rp {s.finalAmount?.toLocaleString('id-ID', { maximumFractionDigits: 0 }) || 0}</span>
                 </div>
               ))}
             </div>

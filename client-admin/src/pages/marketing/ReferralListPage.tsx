@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -174,7 +175,7 @@ export function ReferralListPage() {
   const formatRewardDisplay = (reward: string | object) => {
     const r = parseReward(reward)
     if (r.type === 'coupon') return `🎟️ Coupon`
-    return `${r.value} pts`
+    return `${formatNumber(r.value)} pts`
   }
 
   if (isError) return <MarketingError retry={() => refetch()} />
@@ -233,7 +234,7 @@ export function ReferralListPage() {
                         </div>
                       </td>
                       <td className="py-3 text-sm">
-                        {r.minOrderAmount > 0 ? `Rp ${r.minOrderAmount.toLocaleString()}` : '-'}
+                        {r.minOrderAmount > 0 ? `Rp ${r.minOrderAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '-'}
                       </td>
                       <td className="py-3">
                         <span className="text-gray-600">

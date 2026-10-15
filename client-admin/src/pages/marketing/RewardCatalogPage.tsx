@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { MarketingError, useMarketingCopy } from '../../components/marketing/MarketingLayout'
@@ -186,9 +187,9 @@ export function RewardCatalogPage() {
                       {t(REWARD_TYPES.find(rewardType => rewardType.key === r.type)?.labelKey || 'marketing.' + r.type)}
                     </span>
                   </td>
-                  <td className="py-3 font-medium text-primary">{r.pointsCost}</td>
-                  <td className="py-3">Rp {r.value?.toLocaleString()}</td>
-                  <td className="py-3">{r.stock ?? '∞'}</td>
+                  <td className="py-3 font-medium text-primary">{formatNumber(r.pointsCost)}</td>
+                  <td className="py-3">Rp {r.value?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                  <td className="py-3">{formatNumber(r.stock ?? '∞')}</td>
                   <td className="py-3 text-sm text-gray-500">
                     {formatDate(r.validFrom)} - {formatDate(r.validUntil)}
                   </td>

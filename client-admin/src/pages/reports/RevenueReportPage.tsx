@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -99,8 +100,8 @@ export function RevenueReportPage() {
               <BarChart data={hourlyData?.data?.data?.list || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="hour" />
-                <YAxis />
-                <Tooltip />
+                <YAxis allowDecimals={false} tickFormatter={formatNumber} />
+                <Tooltip formatter={(value: number) => formatNumber(value)} />
                 <Bar dataKey="orders" fill="#22c55e" name={t('reports.orders')} />
               </BarChart>
             </ResponsiveContainer>

@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { useState } from 'react'
@@ -237,7 +238,7 @@ export function HygieneTodayTasksPage() {
           <div className="text-sm text-gray-500">{t('hygiene.overdueTasks')}</div>
         </div>
         <div className="card text-center">
-          <div className="text-2xl font-bold text-primary">{stats.completionRate}%</div>
+          <div className="text-2xl font-bold text-primary">{formatNumber(stats.completionRate)}%</div>
           <div className="text-sm text-gray-500">{t('hygiene.completionRate')}</div>
         </div>
       </div>

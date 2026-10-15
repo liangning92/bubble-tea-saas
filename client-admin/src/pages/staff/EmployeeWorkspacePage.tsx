@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import {useTranslation} from 'react-i18next'
 import {attendanceNavigationLabels} from '../../../../shared/attendanceNavigationLabels'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -264,8 +265,8 @@ export function EmployeeWorkspacePage({mode='all'}:{mode?:'review'|'lateness'|'a
             </p>
             {preview.changes?.map((c: any) => (
               <p key={c.staffId}>
-                {c.staffName} · {c.minutes} 分钟 · Rp {c.previousAmount} → Rp{" "}
-                {c.amount} · {c.payrollStatus}
+                {c.staffName} · {formatNumber(c.minutes)} 分钟 · Rp {formatNumber(c.previousAmount)} → Rp{" "}
+                {formatNumber(c.amount)} · {c.payrollStatus}
               </p>
             ))}
             <label>

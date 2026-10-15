@@ -1,3 +1,4 @@
+import { formatNumber } from '../../utils/numberDisplay'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod} from '../../utils/queryPeriods'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
@@ -85,19 +86,19 @@ export function MessageStatsPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div className="card text-center">
-          <div className="text-3xl font-bold text-primary">{stats.totalSent.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-primary">{stats.totalSent.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           <div className="text-sm text-gray-500 mt-1">{t('marketing.totalSent')}</div>
         </div>
         <div className="card text-center">
-          <div className="text-3xl font-bold text-green-600">{stats.totalDelivered.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-green-600">{stats.totalDelivered.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           <div className="text-sm text-gray-500 mt-1">{t('marketing.totalDelivered')}</div>
         </div>
         <div className="card text-center">
-          <div className="text-3xl font-bold text-red-600">{stats.totalFailed.toLocaleString()}</div>
+          <div className="text-3xl font-bold text-red-600">{stats.totalFailed.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           <div className="text-sm text-gray-500 mt-1">{t('marketing.totalFailed')}</div>
         </div>
         <div className="card text-center">
-          <div className="text-3xl font-bold text-info">{stats.deliveryRate}%</div>
+          <div className="text-3xl font-bold text-info">{formatNumber(stats.deliveryRate)}%</div>
           <div className="text-sm text-gray-500 mt-1">{t('marketing.deliveryRate')}</div>
         </div>
       </div>
@@ -125,7 +126,7 @@ export function MessageStatsPage() {
                     <div className="flex items-center gap-6 text-sm">
                       <span className="text-gray-500">{ch.sent} sent</span>
                       <span className="text-green-600">{ch.delivered} delivered</span>
-                      <span className="text-gray-600">{ch.deliveryRate}%</span>
+                      <span className="text-gray-600">{formatNumber(ch.deliveryRate)}%</span>
                     </div>
                   </div>
                 ))}

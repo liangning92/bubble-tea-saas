@@ -231,7 +231,7 @@ export function MarketingChannelsPage() {
       style: 'currency',
       currency: 'IDR',
       minimumFractionDigits: 0,
-      maximumFractionDigits: 20,
+      maximumFractionDigits: 0,
     }).format(amount)
   }
 
