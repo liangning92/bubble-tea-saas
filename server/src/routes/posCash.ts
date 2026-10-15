@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { shiftHandoverFinancials } from '../services/ShiftHandoverFinancials'
 import { parseDateBoundary } from '../utils/businessDate'
-import { calculateShiftCash, cashWarningFor, CASH_WARNING_PREFIX } from '../services/ShiftCashReconciliation'
+import { calculateShiftCash, applyHandoverQris, cashWarningFor, CASH_WARNING_PREFIX } from '../services/ShiftCashReconciliation'
 import { manualReceiptsSchema } from '../services/ShiftManualReceipts'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
@@ -152,26 +152,11 @@ router.post('/shifts/open', authenticate, authorize('admin', 'manager', 'cashier
       return res.status(400).json({ code: 400, message: 'There is already an open shift' })
     }
 
-    const session = await prisma.shiftSession.create({
-      data: {
-        storeId,
-        staffId,
-        shift,
-        openFloat: Math.round(openFloat),
-        status: 'open'
-      }
-    })
-
-    // 同时记录开班零钱事件
-    await prisma.cashEvent.create({
-      data: {
-        storeId,
-        staffId,
-        type: 'float',
-        amount: Math.round(openFloat),
-        shift,
-        note: '开班零钱'
-      }
+    const session = await prisma.$transaction(async tx => {
+      const opened = await tx.shiftSession.create({data:{storeId,staffId,shift,openFloat:Math.round(openFloat),status:'open'}})
+      const event = await tx.cashEvent.create({data:{storeId,staffId,type:'float',amount:Math.round(openFloat),shift,note:'开班零钱'}})
+      await tx.config.create({data:{storeId,key:'pos.shift.float-event:'+opened.id,category:'shift_report',value:JSON.stringify({version:1,eventId:event.id})}})
+      return opened
     })
 
     res.status(201).json({ code: 201, data: session })
@@ -224,11 +209,12 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
       await tx.store.update({ where: { id: storeId }, data: { updatedAt: new Date() } })
       const captured = await loadShiftSummaryEvidence(tx, storeId, closedAt, currentShift)
       const evidence = captured.summaryEvidence
-      const cashReconciliation = await calculateShiftCash(tx, storeId, currentShift, closedAt)
+      const recordedCashReconciliation = await calculateShiftCash(tx, storeId, currentShift, closedAt)
+      const cashReconciliation = applyHandoverQris(recordedCashReconciliation, manualReceipts?.qris)
       if (reviewed?.success) {
         const latest = await tx.shiftSession.findUniqueOrThrow({where:{id:currentShift.id}})
         const snapshot = reviewed.data
-        if (latest.status !== 'open' || snapshot.sessionId !== latest.id || snapshot.updatedAt !== latest.updatedAt.toISOString() || snapshot.openFloat !== latest.openFloat || snapshot.revenue !== cashReconciliation.revenue || snapshot.expenses !== cashReconciliation.expenses || snapshot.qris !== cashReconciliation.qris) throw Error('SHIFT_PREVIEW_CHANGED')
+        if (latest.status !== 'open' || snapshot.sessionId !== latest.id || snapshot.updatedAt !== latest.updatedAt.toISOString() || snapshot.openFloat !== latest.openFloat || snapshot.revenue !== cashReconciliation.revenue || snapshot.expenses !== cashReconciliation.expenses || snapshot.qris !== recordedCashReconciliation.qris) throw Error('SHIFT_PREVIEW_CHANGED')
       }
       const recordedBalance = cashReconciliation.expectedCash
       const expectedCash = cashReconciliation.expectedCash
