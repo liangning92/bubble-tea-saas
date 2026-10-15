@@ -106,7 +106,7 @@ export function MaterialDetailPage() {
             {mat.currentStock <= mat.safetyStock && (
               <div className="flex items-center gap-2 text-orange-700">
                 <AlertTriangle size={16} />
-                {t('material.lowStockWarning', { stock: mat.safetyStock, unit: mat.unit })}
+                {t('material.lowStockWarning', { stock: formatNumber(mat.safetyStock), unit: mat.unit })}
               </div>
             )}
           </div>

@@ -58,7 +58,7 @@ function StatCard({
           {trend !== undefined && trend !== 0 && (
             <p className={`text-xs mt-1 flex items-center gap-1 ${trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
               {trend > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-              {trend > 0 ? '+' : ''}{trend}% {trendKey ? t(trendKey) : t('dashboard.vsYesterday')}
+              {trend > 0 ? '+' : ''}{formatNumber(trend)}% {trendKey ? t(trendKey) : t('dashboard.vsYesterday')}
             </p>
           )}
         </div>

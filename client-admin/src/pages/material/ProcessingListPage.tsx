@@ -220,7 +220,7 @@ function ProcessingHistory() {
                 <div className="flex items-center gap-2">
                   <Clock size={16} className="text-gray-400" />
                   <span className="font-medium">{log.recipe?.name || t('material.recipe')}</span>
-                  <span className="text-sm text-gray-500">{t('material.multiplier', { value: log.multiplier })}</span>
+                  <span className="text-sm text-gray-500">{t('material.multiplier', { value: formatNumber(log.multiplier) })}</span>
                 </div>
                 <span className="text-sm text-gray-500">
                   {new Date(log.createdAt).toLocaleString(dateLocaleI18n.language)}
