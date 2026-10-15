@@ -5,135 +5,18 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { bomApi, inventoryApi } from '../../services/api'
 import { formatItemName } from '../../utils/helpers'
-import { Loader2, AlertTriangle, Package } from 'lucide-react'
-
-export function MaterialForecastPage() {
-  const { t, i18n } = useTranslation()
-  const context=useDashboardContext()
-  const [showAll,setShowAll]=useState(true)
-  const [forecastDays, setForecastDays] = useState([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)
-
-  useEffect(()=>{setForecastDays([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)},[context.forecastDays])
-
-  const {data:settings}=useQuery({queryKey:['inventory-alert-config',context.storeId],enabled:context.valid,queryFn:()=>inventoryApi.getAlertConfig()})
-  const config=settings?.data?.data
-  const fmt=(v:number|null)=>v===null?t('media.unavailable'):Number(v.toFixed(3))
-  // 低库存预警
-  const { data: alertsData, isLoading, isError, refetch } = useQuery({
-    queryKey: ['bom-alerts',context.storeId,forecastDays,showAll],
-    enabled:context.valid,
-    queryFn: async () => {const response=await (showAll?bomApi.getMaterialUsage(forecastDays):bomApi.getLowStockAlerts(forecastDays));return requireRead(response,Array.isArray(response.data?.data))},
-    refetchInterval: 30000 // Auto-refresh every 30 seconds
-  })
-
-  // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }
-  const alertsList = (alertsData?.data?.data || []).map((item:any)=>({...item,urgency:showAll&&config?.enableLowStockAlert?(item.currentStock<=0||item.daysUntilStockOut!==null&&item.daysUntilStockOut<=config.lowStockCriticalDays?'critical':item.daysUntilStockOut!==null&&item.daysUntilStockOut<=config.lowStockWarningDays?'warning':undefined):item.urgency}))
-
-  if (!context.valid) return <DashboardReadFailure scope />
-  if (isError) return <DashboardReadFailure retry={()=>refetch()} />
-  if (isLoading) return <p>{t('common.loading')}</p>
-  return (
-    <div className="space-y-6">
-      <DashboardContextNotice current /><h1 className="text-2xl font-bold">{t('inventoryFlow.forecast')}</h1>
-      <p>{t('inventoryAlerts.formula')}</p>
-      {config&&<p>{t(config.enableLowStockAlert?'varianceFlow.enabled':'varianceFlow.disabled')} · {t('varianceFlow.warning')} {config.lowStockWarningDays} d · {t('varianceFlow.critical')} {config.lowStockCriticalDays} d · {config.autoCheckIntervalHours} h</p>}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">{[false,true].map(all=><button key={String(all)} type="button" className={`btn ${showAll===all?'btn-primary':''}`} onClick={()=>setShowAll(all)}>{t(all?'media.allMaterials':'media.alertOnly')}</button>)}</div>
-        <select
-          value={forecastDays}
-          onChange={(e) => setForecastDays(parseInt(e.target.value))}
-          className="input w-32"
-        >
-          <option value={7}>{t('bom.days7')}</option>
-          <option value={30}>{t('bom.days30')}</option>
-          <option value={90}>{t('bom.days90')}</option>
-        </select>
-      </div>
-
-      {/* Alert Summary */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="card bg-red-50 border-red-200">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-red-100 text-red-600">
-              <AlertTriangle size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">{t('inventory.critical')}</p>
-              <p className="text-2xl font-bold text-red-600">
-                {alertsList.filter((a: any) => a.urgency === 'critical').length}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="card bg-orange-50 border-orange-200">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-orange-100 text-orange-600">
-              <AlertTriangle size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">{t('inventory.warning')}</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {alertsList.filter((a: any) => a.urgency === 'warning').length}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="card bg-gray-50 border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-gray-100 text-gray-600">
-              <Package size={24} />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">{t('inventory.total')}</p>
-              <p className="text-2xl font-bold text-gray-600">{alertsList.length}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Alert List */}
-      <div className="space-y-4">
-        {isLoading ? (
-          <div className="text-center py-12">
-            <Loader2 className="animate-spin mx-auto" size={32} />
-          </div>
-        ) : alertsList.length === 0 ? (
-          <div className="card text-center text-gray-500 py-12">
-            <Package size={48} className="mx-auto mb-4 text-gray-300" />
-            <p>{t('bom.noAlerts')}</p>
-          </div>
-        ) : (
-          alertsList.map((alert: any) => (
-            <div
-              key={alert.inventoryId}
-              className={`card flex items-center gap-4 ${
-                alert.urgency === 'critical' ? 'border-red-500 bg-red-50' :
-                alert.urgency === 'warning' ? 'border-orange-500 bg-orange-50' : ''
-              }`}
-            >
-              <div className={`p-3 rounded-full ${
-                alert.urgency === 'critical' ? 'bg-red-100 text-red-600' :
-                alert.urgency === 'warning' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100'
-              }`}>
-                <AlertTriangle size={24} />
-              </div>
-              <div className="flex-1">
-                <div className="font-medium">{formatItemName(alert, i18n.language)}</div>
-                <div className="text-sm text-gray-500">
-                  {t('inventory.currentStock')}: {alert.currentStock} {alert.unit} | {t('bom.dailyUsage')}: {fmt(alert.dailyUsage)} {alert.unit} |
-                  {t('inventory.daysLeft')}: {fmt(alert.daysUntilStockOut)} {t('bom.days')}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-sm text-gray-500">{t('inventory.suggestOrder')}</div>
-                <div className="text-lg font-bold text-orange-600">
-                  {fmt(alert.suggestedReorderQty)} {alert.unit}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )
+export function MaterialForecastPage(){
+ const {t,i18n}=useTranslation(),context=useDashboardContext()
+ const [showAll,setShowAll]=useState(true),[days,setDays]=useState([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30)
+ useEffect(()=>setDays([7,30,90].includes(Number(context.forecastDays))?Number(context.forecastDays):30),[context.forecastDays])
+ const settings=useQuery({queryKey:['inventory-alert-config',context.storeId],enabled:context.valid,queryFn:()=>inventoryApi.getAlertConfig()}),config=settings.data?.data?.data
+ const query=useQuery({queryKey:['bom-alerts',context.storeId,days,showAll],enabled:context.valid,queryFn:async()=>{const response=await(showAll?bomApi.getMaterialUsage(days):bomApi.getLowStockAlerts(days));return requireRead(response,Array.isArray(response.data?.data))},refetchInterval:30000})
+ const rows=(query.data?.data?.data||[]).map((row:any)=>({...row,urgency:showAll?(config?.enableLowStockAlert?(row.currentStock<=0||row.daysUntilStockOut!==null&&row.daysUntilStockOut<=config.lowStockCriticalDays?'critical':row.daysUntilStockOut!==null&&row.daysUntilStockOut<=config.lowStockWarningDays?'warning':null):null):row.urgency}))
+ const qty=(value:unknown)=>value==null||!Number.isFinite(Number(value))?'—':Number(value).toLocaleString(i18n.language,{maximumFractionDigits:2})
+ if(!context.valid)return <DashboardReadFailure scope/>
+ if(query.isError)return <DashboardReadFailure retry={()=>query.refetch()}/>
+ return <section className="space-y-4"><DashboardContextNotice current/><header className="flex flex-wrap gap-3 justify-between items-center"><h1>{t('operations.forecast')}</h1><label className="flex gap-2 items-center text-sm text-gray-600">{t('operations.sample')}<select className="input w-auto" value={days} onChange={e=>setDays(Number(e.target.value))}>{[7,30,90].map(value=><option value={value} key={value}>{value} {t('bom.days')}</option>)}</select></label></header><p className="text-sm text-gray-500">{t('operations.sampleHint')}</p>
+ <div className="flex flex-wrap items-center justify-between gap-3"><div className="inline-flex rounded-lg bg-white border p-1 gap-1">{[true,false].map(all=><button type="button" className={`px-3 py-2 ${all===showAll?'bg-primary text-white':'text-gray-600'}`} key={String(all)} onClick={()=>setShowAll(all)}>{t(all?'media.allMaterials':'media.alertOnly')}</button>)}</div><div className="flex flex-wrap gap-4 text-sm"><span>{t('inventory.total')} <strong>{query.isPending?'—':rows.length}</strong></span><span className="text-red-700">{t('inventory.critical')} <strong>{query.isPending?'—':rows.filter((r:any)=>r.urgency==='critical').length}</strong></span><span className="text-amber-700">{t('inventory.warning')} <strong>{query.isPending?'—':rows.filter((r:any)=>r.urgency==='warning').length}</strong></span></div></div>
+ <div className="admin-table-scroll border rounded-xl bg-white"><table className="operations-table admin-wide-table w-full text-sm whitespace-nowrap"><thead><tr><th>{t('inventoryFlow.material')}</th>{['currentStock','dailyUsage','coverage','suggestOrder','history','state'].map(key=><th key={key} className={key==='state'?'':'text-right'}>{t(key==='coverage'||key==='history'?'operations.'+key:key==='dailyUsage'?'bom.dailyUsage':key==='state'?'inventoryFlow.state':'inventory.'+key)}</th>)}</tr></thead><tbody>{rows.map((row:any)=><tr className="border-t" key={row.inventoryId}><td className="font-medium">{formatItemName(row,i18n.language)} <span className="text-xs text-gray-500">({row.unit})</span></td><td className="text-right tabular-nums">{qty(row.currentStock)}</td><td className="text-right tabular-nums">{row.noUsageHistory?'—':qty(row.dailyUsage)}</td><td className="text-right tabular-nums">{qty(row.daysUntilStockOut)}</td><td className="text-right tabular-nums font-medium">{qty(row.suggestedReorderQty)}</td><td className="text-right tabular-nums">{row.historyDays??'—'} / {days}</td><td><span className={row.urgency==='critical'?'text-red-700':row.urgency==='warning'?'text-amber-700':'text-gray-500'}>{row.urgency?t('inventory.'+(row.urgency==='critical'?'critical':'warning')):'—'}</span>{row.insufficientHistory&&<p className="text-xs text-gray-500">{t('operations.insufficient')}</p>}</td></tr>)}</tbody></table>{query.isPending?<p role="status" className="p-5">{t('common.loading')}</p>:!rows.length?<p className="p-5 text-gray-500">{t('bom.noAlerts')}</p>:null}</div>
+ <details className="rounded-xl border bg-white p-4 text-sm"><summary className="cursor-pointer font-medium">{t('operations.reportBasis')}</summary><p className="text-gray-500 mt-3">{t('operations.sample')} {days} {t('bom.days')} · {t('operations.sampleHint')}</p>{config&&<p className="text-gray-500 mt-2">{t(config.enableLowStockAlert?'varianceFlow.enabled':'varianceFlow.disabled')} · {t('varianceFlow.warning')} {config.lowStockWarningDays} d · {t('varianceFlow.critical')} {config.lowStockCriticalDays} d · {config.autoCheckIntervalHours} h</p>}</details></section>
 }

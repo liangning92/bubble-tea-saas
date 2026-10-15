@@ -43,7 +43,7 @@ export function RestockSuggestionPage() {
         <h1 className="text-2xl font-bold text-gray-900">
           {t("material.restockSuggestion") || "Smart Restock Suggestion"}
         </h1>
-        <select
+        <label className="flex gap-2 items-center text-sm text-gray-500">{t("operations.stockDays")}<select
           value={days}
           onChange={(e) => setDays(parseInt(e.target.value))}
           className="input w-40"
@@ -51,8 +51,9 @@ export function RestockSuggestionPage() {
           <option value={7}>7 {t("material.days") || "days"}</option>
           <option value={15}>15 {t("material.days") || "days"}</option>
           <option value={30}>30 {t("material.days") || "days"}</option>
-        </select>
+        </select></label>
       </div>
+      <p className="text-sm text-gray-500">{t("operations.restockHint")}</p>
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -101,7 +102,7 @@ export function RestockSuggestionPage() {
             </p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="admin-table-scroll"><table className="w-full text-sm">
             <thead>
               <tr className="text-left text-sm text-gray-500 border-b">
                 <th className="pb-3">{t("material.name") || "Name"}</th>
@@ -154,11 +155,12 @@ export function RestockSuggestionPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 
-      {/* Expiry Alerts */}
+      {/* Expiry details stay available without overtaking the purchasing table. */}
+      <details className="rounded-xl border bg-white p-4 text-sm"><summary className="cursor-pointer font-medium">{t("operations.expirySummary")} ({expiryAlerts.length})</summary>
       {expiryAlerts.length > 0 && (
         <div className="card border-red-200">
           <h3 className="font-semibold mb-4 flex items-center gap-2 text-red-600">
@@ -194,6 +196,7 @@ export function RestockSuggestionPage() {
           </div>
         </div>
       )}
+      </details>
     </div>
   );
 }

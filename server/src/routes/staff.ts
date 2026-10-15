@@ -1,3 +1,4 @@
+import { getAttendanceReport } from '../services/AttendanceReportService'
 import { ensureOnboardingDeposit } from '../services/SalaryDepositPlan'
 import { readPayslip } from '../services/SalaryPayslipService'
 import { calculateSalary } from '../services/StaffService'
@@ -604,6 +605,20 @@ router.get('/attendance/list', authenticate, async (req: AuthRequest, res) => {
       where.checkInTime = {}
       if (startDate) where.checkInTime.gte = parseDateBoundary(startDate as string)
       if (endDate) where.checkInTime.lte = parseDateBoundary(endDate as string, true)
+    }
+
+    if (req.query.report === 'true') {
+      const query = z.object({ date: z.string(), period: z.enum(['day','week','month']).default('month'), staffId:z.string().optional() }).safeParse(req.query)
+      if (!query.success) return res.status(400).json({code:400,message:'INVALID_ATTENDANCE_QUERY'})
+      const canReadAll = req.user!.accessRole?.version===2 ? req.user!.accessRole.modes?.['attendance.read']==='allow' : ['admin','manager'].includes(req.user!.role)
+      if (!canReadAll && !req.user!.staffId) return res.status(403).json({code:403,message:'Access denied'})
+      try {
+        const data = await getAttendanceReport(req.user!.storeId, query.data.date, query.data.period, where.staffId)
+        return res.json({code:200,data,timestamp:new Date().toISOString()})
+      } catch (error:any) {
+        if (['INVALID_ATTENDANCE_DATE','INVALID_ATTENDANCE_PERIOD'].includes(error.message)) return res.status(400).json({code:400,message:error.message})
+        throw error
+      }
     }
 
     const attendances = await prisma.attendance.findMany({
