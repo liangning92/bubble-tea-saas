@@ -12,13 +12,13 @@ module.exports = async function staffUI(browser) {
     sessionStorage.setItem('staff-auth-storage', JSON.stringify({ state: { token: 'synthetic-ui-only', user: { id: 'u', staffId: 'e', storeId: 's', name: 'UI Employee', role: 'admin' }, isAuthenticated: true }, version: 0 }));
   });
   const materials = [{ id: 'm', name: 'Test Water', unit: 'ml', category: 'raw_material', currentStock: 88799.99999999994, safetyStock: 100, updatedAt: '2026-10-15T00:00:00Z' }];
-  const purchase = { id: 'p', orderNumber: 'UI-PURCHASE', status: 'awaiting_receipt', createdAt: '2026-10-15T00:00:00Z', items: [{ id: 'pi', inventory: materials[0], quantity: 10 }] };
+  const purchase = { id: 'p', orderNumber: 'UI-PURCHASE', status: 'awaiting_receipt', totalAmount:10000, updatedAt:'2026-10-15T00:00:00Z', createdAt: '2026-10-15T00:00:00Z', items: [{ id: 'pi', inventoryId:'m', inventory: materials[0], quantity: 10, unitCost:1000, inputQuantity:10, inputUnit:'ml', inputUnitCost:1000, lineAmount:10000 }] };
   const course = { key: 'onboarding', reviewed: true, title: { en: 'UI Course', id: 'UI Course', zh: '测试课程' }, subtitle: { en: 'UI subtitle', id: 'UI subtitle', zh: '测试说明' }, minutes: 5, sections: [{ title: { en: 'Section', id: 'Section' }, points: [{ en: 'Step', id: 'Step' }] }], quiz: [], practical: [], sources: [] };
   let failInventory = false, failOvertime = false, confirmedSwap = false, failLeaveRules = false;
   await context.route('**/api/**', async route => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname, method = req.method();
     let data = [], extra = {};
-    if (method !== 'GET') writes.push({ p, method });
+    if (method !== 'GET') writes.push({ p, method, data:req.postDataJSON() });
     if (failInventory && p === '/api/inventory') return route.fulfill({ status: 503, json: { code: 503, message: 'Synthetic inventory failure' } });
     if (failOvertime && p === '/api/overtime') return route.fulfill({ status: 503, json: { code: 503, message: 'Synthetic overtime failure' } });
     if (p === '/api/shift-swap/pending-confirm') data = confirmedSwap ? [] : [{id:'swap-invite',originalDate:'2026-10-15',targetDate:'2026-10-16',originalShift:'morning',targetShift:'evening',status:'pending',reason:'UI swap invitation'}];
@@ -90,6 +90,15 @@ module.exports = async function staffUI(browser) {
     await page.goto(origin + '/inventory?action=purchase');
     await expect(page.getByRole('option', {name:'UI Supplier',exact:true})).toHaveCount(1);
     await expect(page.getByRole('alert')).toHaveCount(0);
+    const purchaseForm=page.locator('form');
+    await purchaseForm.getByLabel('Material', {exact:true}).selectOption('m');
+    await purchaseForm.getByLabel('Purchase quantity', {exact:true}).fill('2.3');
+    await purchaseForm.getByLabel('Purchase unit', {exact:true}).selectOption('L');
+    await purchaseForm.getByLabel('Amount actually paid (Rp)', {exact:true}).fill('160000');
+    await expect(purchaseForm).toContainText('69,565.217391');
+    await expect(purchaseForm).toContainText('69.565217');
+    await purchaseForm.getByRole('button',{name:'Record purchase payment',exact:true}).click();
+    await expect.poll(()=>writes.find(w=>w.p==='/api/purchase-orders'&&w.method==='POST')?.data?.items?.[0]).toEqual({inventoryId:'m',quantity:2.3,inputUnit:'L',paidAmount:160000});
     await page.goto(origin + '/inventory/count');
     const count = page.getByRole('button', { name: /Start.*count|New.*count/i });
     await expect(count).toBeEnabled();
@@ -100,7 +109,7 @@ module.exports = async function staffUI(browser) {
     await page.getByPlaceholder(/Search/i).fill('not-a-material');
     await expect(page.getByText('No data', { exact: true })).toBeVisible();
     await page.goto(origin + '/inventory?action=in');
-    await page.getByRole('button', { name: /UI-PURCHASE/ }).click();
+    await page.getByRole('button', { name: /Test Water.*10 ml/ }).click();
     const receive = page.getByRole('dialog'); await expect(receive).toBeVisible();
     assert.ok(await receive.evaluate(el => Number(getComputedStyle(el).zIndex) > 60));
     assert.equal(await page.locator('#root').evaluate(el => el.inert), true);
