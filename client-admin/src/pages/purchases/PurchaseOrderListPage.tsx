@@ -429,7 +429,7 @@ export function PurchaseOrderListPage() {
                  <label className="text-sm min-w-0">{t('entryFix.quantity')}<input aria-label={t('entryFix.quantity')} type="number" className="input w-full" min="0.000000001" step="any" value={item.quantity} onChange={e=>updateItem(index,'quantity',e.target.value)}/></label>
                  <label className="text-sm min-w-0">{t('entryFix.unit')}<select aria-label={t('entryFix.unit')} className="input w-full" value={unit} onChange={e=>updateItem(index,'inputUnit',e.target.value)}>{(material?inventoryInputUnits(material):[]).map(u=><option key={u}>{u}</option>)}</select></label>
                  <label className="col-span-2 text-sm">{t('entryFix.paidAmount')} (Rp)<input aria-label={t('entryFix.paidAmount')} type="number" className="input w-full" min="0" step="1" value={item.paidAmount} onChange={e=>updateItem(index,'paidAmount',e.target.value)}/></label>
-                 <div className="col-span-2"><PurchasePrices quantity={Number(item.quantity)} paidAmount={Number(item.paidAmount)} ledgerQuantity={material?inventoryLedgerQuantity(Number(item.quantity),material,unit):0} unit={unit} ledgerUnit={material?.unit||''}/></div>
+                 <div className="col-span-2"><PurchasePrices quantity={Number(item.quantity)} paidAmount={item.paidAmount===''?NaN:Number(item.paidAmount)} ledgerQuantity={material?inventoryLedgerQuantity(Number(item.quantity),material,unit):0} unit={unit} ledgerUnit={material?.unit||''}/></div>
                  <button className="text-red-600 text-sm justify-self-start" disabled={formData.items.length===1} onClick={()=>removeItem(index)}>{t('inventoryFlow.remove')}</button>
                 </section>})}</div>
               </div>
