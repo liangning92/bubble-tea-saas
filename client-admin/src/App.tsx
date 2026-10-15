@@ -237,7 +237,8 @@ function App() {
             <Route path="correction" element={<AttendanceCorrectionListPage />} />
             <Route path="shift-swap" element={<ShiftSwapListPage />} />
             <Route path="overtime" element={<OvertimeRequestListPage />} />
-            <Route path="workspace" element={<EmployeeWorkspacePage />} />
+            <Route path="workspace" element={<EmployeeWorkspacePage mode="review" />} />
+            <Route path="late-rules" element={<EmployeeWorkspacePage mode="lateness" />} />
             <Route path="rules" element={<AttendanceRulesPage />} />
           </Route>
 
