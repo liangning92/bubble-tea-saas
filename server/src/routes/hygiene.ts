@@ -1,3 +1,4 @@
+import prisma from '../config/database'
 import { formatDate } from '../utils/dateUtils'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -554,3 +555,9 @@ async function getStaffName(staffId: string): Promise<string> {
 }
 
 export { router as hygieneRouter }
+
+router.put('/tasks/:id',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
+ try{const input=z.object({name:z.string().trim().min(1).max(150),staffId:z.string().nullable().optional(),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),time:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),priority:z.number().int().min(1).max(3),note:z.string().max(1000).optional(),reason:z.string().trim().min(1).max(1000),expectedVersion:z.string().datetime()}).parse(req.body);
+ const result=await prisma.$transaction(async tx=>{const old=await tx.hygieneTask.findFirst({where:{id:req.params.id,storeId:req.user!.storeId}});if(!old||!['pending','overdue'].includes(old.status))throw new Error('ONLY_UNSTARTED_TASKS_EDITABLE');if(input.staffId&&!await tx.staff.findFirst({where:{id:input.staffId,storeId:old.storeId}}))throw new Error('TASK_STAFF_STORE_MISMATCH');const {reason,expectedVersion,...data}=input;const changed=await tx.hygieneTask.updateMany({where:{id:old.id,status:old.status,updatedAt:new Date(expectedVersion)},data:{...data,dueTime:new Date(`${input.date}T${input.time}:00+07:00`)}});if(changed.count!==1)throw new Error('TASK_CHANGED_REFRESH');await tx.hygieneTaskLog.create({data:{taskId:old.id,action:'assigned',performedBy:req.user!.id,note:reason,oldValue:JSON.stringify(old),newValue:JSON.stringify(data)}});return tx.hygieneTask.findUniqueOrThrow({where:{id:old.id}})});res.json({code:200,data:result})
+ }catch(e:any){res.status(e instanceof z.ZodError?400:409).json({code:e instanceof z.ZodError?400:409,message:e.message})}
+});

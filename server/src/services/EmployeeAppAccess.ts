@@ -12,6 +12,7 @@ export const EMPLOYEE_APP_WORK_ROUTES = new Set([
   'GET /api/inventory/alerts/low-stock',
   'POST /api/inventory/stock-in', 'POST /api/inventory/stock-out',
   'GET /api/purchase-orders', 'GET /api/purchase-orders/pending', 'GET /api/purchase-orders/:id',
+  'PUT /api/purchase-orders/:id', 'DELETE /api/purchase-orders/:id',
   'POST /api/purchase-orders', 'POST /api/purchase-orders/:id/receive', 'GET /api/suppliers',
   'POST /api/inventory-counts', 'POST /api/inventory-counts/:id/submit',
   'GET /api/inventory-counts', 'GET /api/inventory-counts/:id',

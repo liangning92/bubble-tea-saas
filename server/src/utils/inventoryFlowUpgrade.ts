@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'crypto';
 import { mkdir } from 'fs/promises';
 import path from 'path';
 import { ensureInventoryFlow } from '../services/OrderConsumptionService';
+export const purchasePaymentAdditions = [["PurchaseOrder", "paidAt", "DATETIME"], ["PurchaseOrderItem", "lineAmount", "INTEGER"]] as const;
 export const inventoryFlowModels = ["OrderConsumptionSnapshot", "ConsumptionAlert"] as const;
 export const inventoryFlowAdditions = [["StockInLog", "operationId", "TEXT"], ["StockInLog", "purchaseOrderId", "TEXT"], ["StockOutLog", "operationId", "TEXT"], ["StockOutLog", "staffId", "TEXT"], ["PurchaseOrder", "requestId", "TEXT"], ["PurchaseOrder", "requestFingerprint", "TEXT"], ["PurchaseOrder", "source", "TEXT NOT NULL DEFAULT 'admin'"], ["PurchaseOrder", "onlineOrderNumber", "TEXT"], ["PurchaseOrder", "createdBy", "TEXT"], ["PurchaseOrder", "receivedBy", "TEXT"], ["PurchaseOrderItem", "inputQuantity", "REAL"], ["PurchaseOrderItem", "inputUnit", "TEXT"], ["PurchaseOrderItem", "inputUnitCost", "INTEGER"], ["PurchaseOrderItem", "packageSnapshot", "TEXT"]] as const;
 const newTables = ["CREATE TABLE \"OrderConsumptionSnapshot\" (\n    \"id\" TEXT NOT NULL PRIMARY KEY,\n    \"storeId\" TEXT NOT NULL,\n    \"orderId\" TEXT NOT NULL,\n    \"materials\" TEXT NOT NULL,\n    \"issues\" TEXT NOT NULL,\n    \"reversedAt\" DATETIME,\n    \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n);", "CREATE TABLE \"ConsumptionAlert\" (\n    \"id\" TEXT NOT NULL PRIMARY KEY,\n    \"storeId\" TEXT NOT NULL,\n    \"inventoryId\" TEXT NOT NULL,\n    \"businessDate\" TEXT NOT NULL,\n    \"status\" TEXT NOT NULL,\n    \"detail\" TEXT NOT NULL,\n    \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n    \"updatedAt\" DATETIME NOT NULL\n);"];
@@ -61,10 +62,17 @@ export async function upgradeInventoryFlow(db: PrismaClient, databaseUrl: string
         if (columns.find(c => c.name === 'supplierId')?.notnull)
             throw Error('INVENTORY_FLOW_SUPPLIER_NOT_NULL');
     }
+    // SQLite retains numeric precision dynamically; these nullable columns preserve old orders.
+    if(databaseUrl.startsWith('file:')){
+        const orders=await db.$queryRawUnsafe<any[]>('PRAGMA table_info("PurchaseOrder")');
+        if(!orders.some(c=>c.name==='paidAt'))await db.$executeRawUnsafe('ALTER TABLE "PurchaseOrder" ADD COLUMN "paidAt" DATETIME');
+        const items=await db.$queryRawUnsafe<any[]>('PRAGMA table_info("PurchaseOrderItem")');
+        if(!items.some(c=>c.name==='lineAmount'))await db.$executeRawUnsafe('ALTER TABLE "PurchaseOrderItem" ADD COLUMN "lineAmount" INTEGER');
+    }
     // Fail startup before accepting sales if the deployment migration is missing.
     await db.orderConsumptionSnapshot.findFirst({ select: { id: true } });
     await db.consumptionAlert.findFirst({ select: { id: true } });
-    await db.purchaseOrder.findFirst({ select: { id: true, source: true, requestId: true, receivedBy: true } });
+    await db.purchaseOrder.findFirst({ select: { id: true, source: true, requestId: true, receivedBy: true,paidAt:true } });
     await db.stockOutLog.findFirst({ select: { id: true, operationId: true, staffId: true } });
     if (!databaseUrl.startsWith('file:')) {
         const columns = await db.$queryRawUnsafe<any[]>(`SELECT is_nullable FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='PurchaseOrder' AND column_name='supplierId'`);

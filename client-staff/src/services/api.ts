@@ -30,6 +30,8 @@ async function loadShiftSettings() {
 }
 
 export const staffApi = {
+  editRequest:async(path:string,id:string,data:any)=>(await http.put(`${API_BASE}/${path}/${id}`,data,{headers:getAuthHeader()})).data,
+  withdrawRequest:async(path:string,id:string)=>(await http.put(`${API_BASE}/${path}/${id}/withdraw`,{},{headers:getAuthHeader()})).data,
  reportTaskIssue: async(id:string,description:string)=>(await http.put(`${API_BASE}/hygiene/tasks/${id}/issue`,{description},{headers:getAuthHeader()})).data,
   getInventoryCounts:async()=> (await http.get(`${API_BASE}/inventory-counts`,{headers:getAuthHeader()})).data,
   recordInventoryCount:async(countId:string,itemId:string,data:any)=>(await http.put(`${API_BASE}/inventory-counts/${countId}/item/${itemId}`,data,{headers:getAuthHeader()})).data,
@@ -184,6 +186,7 @@ export const staffApi = {
 
   // Leave
   applyLeave: async (data: {
+    editingId?:string;expectedVersion?:string;
     leaveType: string
     startDate: string
     endDate: string
@@ -231,6 +234,7 @@ export const staffApi = {
   },
 
   applyReimbursement: async (data: {
+    editingId?:string;expectedVersion?:string;
     type: string
     amount: number
     description: string

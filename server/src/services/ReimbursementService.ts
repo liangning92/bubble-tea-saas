@@ -10,8 +10,12 @@ export interface ReimbursementApplication {
 }
 
 // Apply for reimbursement
-export async function applyReimbursement(data: ReimbursementApplication) {
-  return prisma.reimbursement.create({
+export async function applyReimbursement(data: ReimbursementApplication, editing?:{id:string;expectedVersion:string}) {
+  const persist=async(options:any)=>{
+   if(!editing)return prisma.reimbursement.create(options);
+   return prisma.$transaction(async tx=>{const old=await tx.reimbursement.findFirst({where:{id:editing.id,staffId:data.staffId,storeId:data.storeId,status:'pending'}});if(!old)throw new Error('REQUEST_CHANGED_OR_NOT_OWNED');const changed=await tx.reimbursement.updateMany({where:{id:old.id,status:'pending',updatedAt:new Date(editing.expectedVersion)},data:options.data});if(changed.count!==1)throw new Error('REQUEST_CHANGED_REFRESH');await tx.financeAuditLog.create({data:{storeId:data.storeId,userId:data.staffId,action:'update',entityType:'reimbursement',entityId:old.id,description:'Owner revised pending reimbursement',oldValue:JSON.stringify(old),newValue:JSON.stringify(options.data)}});return tx.reimbursement.findUniqueOrThrow({where:{id:old.id}})})
+  };
+  return persist({
     data: {
       staffId: data.staffId,
       storeId: data.storeId,

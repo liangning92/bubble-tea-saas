@@ -732,7 +732,7 @@ model Inventory {
   ledgerSequence      BigInt               @default(0)
   ledgerEpoch         BigInt               @default(0)
   currentStock        Float                @default(0)
-  avgCost             BigInt               @default(0) // 均价(分/kg或分/ml)
+  avgCost             Float               @default(0) // 均价(分/kg或分/ml)
   concentrateRatio    Float                @default(1) // 浓缩比例(比如茶叶浓缩10倍)
   safetyStock         Float                @default(0)
   minStock            Float                @default(0) // 最低库存阈值
@@ -759,7 +759,7 @@ model StockInLog {
   purchaseOrderId String?
   batchId     String? // 可选：关联批次
   quantity    Float
-  unitCost    Int // 入库单价(分)
+  unitCost    Float // 入库单价(分)
   totalAmount Int // 总金额(分)
   supplierId  String?
   supplier    Supplier? @relation(fields: [supplierId], references: [id])
@@ -828,6 +828,7 @@ model PurchaseOrder {
   totalAmount  Int                 @default(0)
   expectedDate DateTime?
   receivedDate DateTime?
+  paidAt       DateTime? // Actual payment date; null for unconfirmed legacy orders
   note         String?
   items        PurchaseOrderItem[]
   createdAt    DateTime            @default(now())
@@ -840,11 +841,12 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   inventoryId     String
   quantity        Float
-  unitCost        Int
+  unitCost        Float
+  lineAmount      Int? // Exact amount paid in whole rupiah
   receivedQty     Float         @default(0)
   inputQuantity   Float?
   inputUnit       String?
-  inputUnitCost   Int?
+  inputUnitCost   Float?
   packageSnapshot String?
   createdAt       DateTime      @default(now())
 }
@@ -859,7 +861,7 @@ model Batch {
   inventory         Inventory @relation(fields: [inventoryId], references: [id])
   batchNumber       String
   quantity          Float
-  unitCost          Int
+  unitCost          Float
   manufacturingDate DateTime?
   expiryDate        DateTime?
   status            String    @default("active") // active | used | expired

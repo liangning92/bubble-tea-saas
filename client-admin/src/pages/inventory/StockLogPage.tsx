@@ -1,3 +1,4 @@
+import { ReferenceDetails } from '../../components/ReferenceDetails'
 import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
@@ -299,14 +300,14 @@ export function StockLogPage() {
                 #{orderInfo.pickupNumber}
               </span>
             )}
-            <span className="text-gray-700">{orderInfo.orderNumber}</span>
+            <ReferenceDetails value={orderInfo.orderNumber}/>
           </div>
         )
       }
-      return <span className="font-mono text-sm">{log.orderId.slice(-8).toUpperCase()}</span>
+      return <ReferenceDetails value={log.orderId}/>
     }
     if (log.batchId) {
-      return <span className="font-mono text-sm">{log.batchId}</span>
+      return <ReferenceDetails value={log.batchId}/>
     }
     return <span className="text-gray-400">-</span>
   }

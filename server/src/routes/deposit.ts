@@ -214,3 +214,32 @@ router.post('/refund', authenticate, authorize('admin', 'manager'), validateBody
 })
 
 export { router as depositRouter }
+router.put('/staff/:id',authenticate,authorize('admin'),validateBody(z.object({totalAmount:amount,reason:z.string().trim().min(1).max(1000),expectedVersion:z.string().datetime()})),async(req:AuthRequest,res)=>{
+ try{const result=await prisma.$transaction(async tx=>{
+  const old=await tx.staffDeposit.findFirst({where:{id:req.params.id,storeId:req.user!.storeId}});if(!old)throw new Error('DEPOSIT_NOT_FOUND');
+  if(req.body.totalAmount<old.deductedAmount||old.refundedAmount>0)throw new Error('DEPOSIT_AMOUNT_BELOW_PAID_OR_REFUNDED');
+  const changed=await tx.staffDeposit.updateMany({where:{id:old.id,updatedAt:new Date(req.body.expectedVersion)},data:{totalAmount:req.body.totalAmount,status:req.body.totalAmount===old.deductedAmount?'completed':'active'}});if(changed.count!==1)throw new Error('DEPOSIT_CHANGED_REFRESH');
+  await tx.financeAuditLog.create({data:{storeId:old.storeId,userId:req.user!.id,action:'update',entityType:'deposit',entityId:old.id,description:req.body.reason,oldValue:JSON.stringify(old),newValue:JSON.stringify(req.body)}});return tx.staffDeposit.findUniqueOrThrow({where:{id:old.id}})
+ });res.json({code:200,data:result})}catch(e:any){res.status(409).json({code:409,message:e.message})}
+});
+router.post('/staff/:id/reverse/:kind/:logId',authenticate,authorize('admin'),validateBody(z.object({reason:z.string().trim().min(1).max(1000)})),async(req:AuthRequest,res)=>{
+ try{const result=await prisma.$transaction(async tx=>{
+  const old=await tx.staffDeposit.findFirst({where:{id:req.params.id,storeId:req.user!.storeId}});if(!old||!['deduction','refund'].includes(req.params.kind))throw new Error('DEPOSIT_NOT_FOUND');
+  const locked=await tx.staffDeposit.updateMany({where:{id:old.id,updatedAt:old.updatedAt},data:{updatedAt:new Date()}});if(locked.count!==1)throw new Error('DEPOSIT_CHANGED_REFRESH');
+  const key=`deposit.reversal.${req.params.kind}.${req.params.logId}`;
+  if(await tx.config.findUnique({where:{storeId_key:{storeId:old.storeId,key}}}))throw new Error('DEPOSIT_LOG_ALREADY_REVERSED');
+  const isDeduct=req.params.kind==='deduction',log:any=isDeduct?await tx.staffDepositDeduction.findFirst({where:{id:req.params.logId,staffDepositId:old.id}}):await tx.staffDepositRefund.findFirst({where:{id:req.params.logId,staffDepositId:old.id}});
+  if(!log||log.amount<=0)throw new Error('DEPOSIT_LOG_NOT_REVERSIBLE');
+  // Salary deductions are reconciled by payroll; never silently change paid salaries.
+  if(log.salaryId)throw new Error('SALARY_LINKED_DEDUCTION_USE_PAYROLL_CORRECTION');
+  if(isDeduct&&old.deductedAmount-log.amount<old.refundedAmount)throw new Error('DEDUCTION_ALREADY_REFUNDED');
+  const update=isDeduct?{deductedAmount:old.deductedAmount-log.amount,deductionCount:Math.max(0,old.deductionCount-1)}:{refundedAmount:old.refundedAmount-log.amount};
+  if(!isDeduct&&update.refundedAmount!<0)throw new Error('REFUND_BALANCE_INVALID');
+  if(isDeduct)await tx.staffDepositDeduction.create({data:{staffDepositId:old.id,amount:-log.amount,note:`[REVERSAL:${log.id}] ${req.body.reason}`}});
+  else await tx.staffDepositRefund.create({data:{staffDepositId:old.id,amount:-log.amount,reason:'correction',processedBy:req.user!.id,note:`[REVERSAL:${log.id}] ${req.body.reason}`}});
+  await tx.config.create({data:{storeId:old.storeId,key,category:'staff',value:JSON.stringify({actor:req.user!.id,reason:req.body.reason})}});
+  const refunded=isDeduct?old.refundedAmount:update.refundedAmount!,deducted=isDeduct?update.deductedAmount!:old.deductedAmount;
+  const result=await tx.staffDeposit.update({where:{id:old.id},data:{...update,status:refunded>0&&refunded===deducted?'refunded':deducted>=old.totalAmount?'completed':'active',endDate:null}});
+  await tx.financeAuditLog.create({data:{storeId:old.storeId,userId:req.user!.id,action:'update',entityType:'deposit',entityId:old.id,description:req.body.reason,oldValue:JSON.stringify(old),newValue:JSON.stringify({result,reversedLogId:log.id})}});return result
+ });res.json({code:200,data:result})}catch(e:any){res.status(409).json({code:409,message:e.message})}
+});

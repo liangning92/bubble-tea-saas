@@ -1,3 +1,4 @@
+import { ReferenceDetails } from '../../components/ReferenceDetails'
 import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { OrderSummaryCards } from '../../components/OrderSummaryCards'
@@ -333,7 +334,7 @@ export function OrderListPage() {
                 <tbody>
                   {refundRequests.map((req) => (
                     <tr key={req.id} className="border-b last:border-0 hover:bg-gray-50">
-                      <td className="p-4"><OrderItemsTable items={req.order?.items} /><p className="text-xs text-gray-400">{req.orderNumber}</p></td>
+                      <td className="p-4"><OrderItemsTable items={req.order?.items} /><ReferenceDetails value={req.orderNumber}/></td>
                       <td className="p-4 text-sm">{req.reason}</td>
                       <td className="p-4 text-sm">{req.requestedByName || '-'}</td>
                       <td className="p-4 text-sm">{formatDateTime(req.createdAt)}</td>
@@ -377,7 +378,7 @@ export function OrderListPage() {
         <AdminDialog title={refundAction === 'approve' ? t('orders.approveRefund') : t('orders.rejectRefund')} onClose={() => { setSelectedRefund(null); setRefundAction(null); setRefundNote('') }} className="max-w-md" busy={false} trackChanges chrome>
 
             <div className="bg-gray-50 rounded-xl p-4 mb-4">
-              <p className="font-medium">{selectedRefund.orderNumber}</p>
+              <OrderItemsTable items={selectedRefund.order?.items}/><ReferenceDetails value={selectedRefund.orderNumber}/>
               <p className="text-sm text-gray-500">{selectedRefund.reason}</p>
               <RefundPolicyReview request={selectedRefund} />
             </div>

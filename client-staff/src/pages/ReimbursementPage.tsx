@@ -55,6 +55,7 @@ export function ReimbursementPage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showApplyModal, setShowApplyModal] = useState(false)
+  const [editing,setEditing]=useState<any>(null)
 
   useEffect(() => {
     if (user?.staffId) {
@@ -127,7 +128,7 @@ export function ReimbursementPage() {
           <button
             disabled={isLoading || !availableTypes.length}
             aria-label={t('reimbursement.title')}
-            onClick={() => setShowApplyModal(true)}
+            onClick={() => {setEditing(null);setShowApplyModal(true)}}
             className="bg-white text-primary p-2 rounded-full"
           >
             <Plus size={24} />
@@ -179,6 +180,7 @@ export function ReimbursementPage() {
                     <span>{formatDate(item.createdAt, 'long')}</span>
                   </div>
 
+                  {item.status==='pending'&&<button className="text-primary text-sm mt-2" onClick={()=>{setEditing(item);setShowApplyModal(true)}}>{t('entryFix.edit')}</button>}
                   {item.status === 'pending' && (
                     <button
                       onClick={() => handleCancelReimbursement(item.id)}
@@ -197,6 +199,7 @@ export function ReimbursementPage() {
       {/* Apply Modal */}
       {showApplyModal && (
         <ApplyReimbursementModal
+          editing={editing}
           availableTypes={availableTypes}
           onClose={() => setShowApplyModal(false)}
           onSuccess={() => {
@@ -210,12 +213,13 @@ export function ReimbursementPage() {
 }
 
 interface ApplyReimbursementModalProps {
+  editing?:any
   availableTypes: ReimbursementType[]
   onClose: () => void
   onSuccess: () => void
 }
 
-function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyReimbursementModalProps) {
+function ApplyReimbursementModal({ availableTypes, onClose, onSuccess,editing }: ApplyReimbursementModalProps) {
   const dialogs = useDialogs()
 
   const { t } = useTranslation()
@@ -226,6 +230,8 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
   const [previewUrls, setPreviewUrls] = useMemoryDraft<string[]>('reimbursement.preview', [])
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const existingReceipts:string[]=(()=>{try{return editing?.receiptUrls?(typeof editing.receiptUrls==='string'?JSON.parse(editing.receiptUrls):editing.receiptUrls):[]}catch{return []}})()
+  useEffect(()=>{if(editing){setReimbType(editing.type);setAmount(String(editing.amount));setDescription(editing.description)}},[editing?.id])
   const selectedTypeConfig = availableTypes.find(t => t.code === reimbType) || availableTypes[0]
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,22 +262,23 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
       return
     }
 
-    if (selectedTypeConfig?.requiresReceipt && files.length === 0) {
+    if (selectedTypeConfig?.requiresReceipt && files.length === 0 && !existingReceipts.length) {
       await dialogs.alert(t('reimbursement.receiptRequired') || 'Wajib melampirkan nota/bukti foto untuk jenis ini')
       return
     }
 
     setIsSubmitting(true)
     try {
-      let receiptUrls: string[] = []
+      let receiptUrls: string[] = existingReceipts
 
-      // Upload files first if any
+      // Preserve saved receipts unless replacement files are selected.
       if (files.length > 0) {
         const uploadRes = await staffApi.uploadReceipts(files)
         receiptUrls = uploadRes.data?.receiptUrls || []
       }
 
       await staffApi.applyReimbursement({
+        editingId:editing?.id,expectedVersion:editing?.updatedAt,
         type: reimbType,
         amount: numericAmount, // Native currency (IDR)
         description,
@@ -306,6 +313,7 @@ function ApplyReimbursementModal({ availableTypes, onClose, onSuccess }: ApplyRe
         </div>
 
         <div className="space-y-4">
+          {existingReceipts.length>0&&<div className="flex flex-wrap gap-2">{existingReceipts.map(url=><a key={url} href={url} target="_blank" rel="noreferrer" className="text-primary underline text-sm">{t('entryFix.savedReceipt')}</a>)}</div>}
           <div>
             <label className="block text-base font-medium text-gray-700 mb-2">{t('reimbursement.typeLabel')}</label>
             {/* Quick chips */}

@@ -78,6 +78,7 @@ export function LeavePage() {
   const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showApplyModal, setShowApplyModal] = useState(false)
+  const [editing,setEditing]=useState<any>(null)
   const [activeTab, setActiveTab] = useState<'history' | 'balance'>('history')
 
   useEffect(() => {
@@ -129,7 +130,7 @@ export function LeavePage() {
             </div>
           </div>
           <button
-            onClick={() => setShowApplyModal(true)}
+            onClick={() => {setEditing(null);setShowApplyModal(true)}}
             className="bg-white text-primary px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform"
           >
             <Plus size={18} />
@@ -223,6 +224,7 @@ export function LeavePage() {
                     )}
                   </div>
 
+                  {leave.status==='pending'&&<button className="text-primary text-sm mt-2 mr-4" onClick={()=>{setEditing(leave);setShowApplyModal(true)}}>{t('entryFix.edit')}</button>}
                   {leave.status === 'pending' && (
                     <button
                       onClick={() => handleCancelLeave(leave.id)}
@@ -301,6 +303,7 @@ export function LeavePage() {
       {/* Apply Modal */}
       {showApplyModal && (
         <ApplyLeaveModal
+          editing={editing}
           onClose={() => setShowApplyModal(false)}
           onSuccess={() => {
             setShowApplyModal(false)
@@ -313,11 +316,12 @@ export function LeavePage() {
 }
 
 interface ApplyLeaveModalProps {
+  editing?:any
   onClose: () => void
   onSuccess: () => void
 }
 
-function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
+function ApplyLeaveModal({ onClose, onSuccess,editing }: ApplyLeaveModalProps) {
   const dialogs = useDialogs()
 
   const { t, i18n } = useTranslation()
@@ -329,6 +333,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
   const [reason, setReason] = useSessionDraft('LeavePage.tsx.reason', '')
   const [halfDay, setHalfDay] = useSessionDraft('LeavePage.tsx.halfDay', false)
   const [attachmentUrl, setAttachmentUrl] = useSessionDraft('LeavePage.tsx.attachmentUrl', '')
+  useEffect(()=>{if(editing){setLeaveType(editing.leaveType);setStartDate(editing.startDate.slice(0,10));setEndDate(editing.endDate.slice(0,10));setTotalDays(editing.totalDays);setReason(editing.reason||'');setHalfDay(!!editing.halfDay);setAttachmentUrl(editing.attachmentUrl||'')}},[editing?.id])
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [, setLoadingTypes] = useState(true)
@@ -405,6 +410,7 @@ function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
     setIsSubmitting(true)
     try {
       await staffApi.applyLeave({
+        editingId:editing?.id,expectedVersion:editing?.updatedAt,
         leaveType,
         startDate,
         endDate,

@@ -1,3 +1,5 @@
+import { CorrectionDialog } from '../../components/CorrectionDialog'
+import { useAuthStore } from '../../stores/auth'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -24,6 +26,7 @@ interface FinanceAccount {
 }
 
 interface Transfer {
+  reversed?:boolean
   id: string
   fromAccountId: string
   toAccountId: string
@@ -60,6 +63,8 @@ const ICON_MAP: Record<string, any> = {
 
 export function AccountsPage() {
   const { t, i18n } = useTranslation()
+  const {user}=useAuthStore()
+  const [reverseId,setReverseId]=useState<string|null>(null)
   const [accounts, setAccounts] = useState<FinanceAccount[]>([])
   const [transfers, setTransfers] = useState<Transfer[]>([])
   const [accountTypes, setAccountTypes] = useState<AccountType[]>([])
@@ -511,6 +516,7 @@ export function AccountsPage() {
                         <span className="font-semibold text-gray-900">
                           {formatCurrency(transfer.amount)}
                         </span>
+                        {user?.role==='admin'&&!transfer.reversed&&!transfer.note?.startsWith('[REVERSAL:')&&<button className="block text-sm text-amber-700 mt-1" onClick={()=>setReverseId(transfer.id)}>{t('entryFix.reverseTransfer')}</button>}
                         {transfer.note && (
                           <div className="text-xs text-gray-500 mt-1">{transfer.note}</div>
                         )}
@@ -712,6 +718,7 @@ export function AccountsPage() {
           t={t}
         />
       )}
+      {reverseId&&<CorrectionDialog title={t('entryFix.reverseTransfer')} hint={t('entryFix.reverseTransferHint')} onClose={()=>setReverseId(null)} onSave={async data=>{await accountApi.reverseTransfer(reverseId,data.reason);await fetchTransfers();await fetchAccounts()}}/>}
     </div>
   )
 }

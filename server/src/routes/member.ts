@@ -22,9 +22,11 @@ const createMemberSchema = z.object({
 })
 
 const updateMemberSchema = z.object({
-  name: z.string().min(1).max(50).optional(),
-  level: z.string().optional(),
-  points: z.number().int().optional()
+  name:z.string().trim().min(1).max(50),
+  phone:z.string().regex(/^\+?[0-9]{10,15}$/),
+  email:z.union([z.string().email().max(150),z.literal('')]),
+  birthday:z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value=>{const date=new Date(value);return !isNaN(date.getTime())&&date.toISOString().slice(0,10)===value},'INVALID_BIRTHDAY'),z.literal('')]),
+  expectedVersion:z.string().datetime()
 })
 
 const redeemPointsSchema = z.object({
@@ -322,14 +324,16 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
 })
 
 // PUT /api/members/:id
-router.put('/:id', authenticate, resourceAccess, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/:id', authenticate, resourceAccess, authorize('admin', 'manager'), validateBody(updateMemberSchema), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const { name, level, points } = req.body
-
-    const member = await prisma.member.update({
-      where: { id },
-      data: { name, level, ...(points !== undefined && { points }) }
+    const {name,phone,email,birthday,expectedVersion}=req.body
+    const member=await prisma.$transaction(async tx=>{
+      const old=await tx.member.findUniqueOrThrow({where:{id}});
+      const changed=await tx.member.updateMany({where:{id,storeId:req.user!.storeId,updatedAt:new Date(expectedVersion)},data:{name,phone,email:email||null,birthday:birthday?new Date(birthday):null}});
+      if(changed.count!==1)throw Object.assign(new Error('MEMBER_CHANGED_REFRESH'),{statusCode:409});
+      await tx.financeAuditLog.create({data:{storeId:old.storeId,userId:req.user!.id,action:'update',entityType:'member',entityId:id,description:'Member profile correction',oldValue:JSON.stringify({name:old.name,phone:old.phone,email:old.email,birthday:old.birthday}),newValue:JSON.stringify({name,phone,email,birthday})}});
+      return tx.member.findUniqueOrThrow({where:{id}})
     })
 
     res.json({
@@ -338,9 +342,8 @@ router.put('/:id', authenticate, resourceAccess, authorize('admin', 'manager'), 
       data: member,
       timestamp: new Date().toISOString()
     })
-  } catch (error) {
-    console.error('Update member error:', error)
-    res.status(500).json({ code: 500, message: 'Failed to update member' })
+  } catch (error:any) {
+    const status=error.code==='P2002'?409:error.statusCode||500;res.status(status).json({code:status,message:error.code==='P2002'?'PHONE_ALREADY_REGISTERED':error.message})
   }
 })
 

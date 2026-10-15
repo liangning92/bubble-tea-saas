@@ -123,7 +123,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
   try {
     const oldExpense = await ExpenseService.getExpenseById(req.params.id)
     if (!oldExpense || oldExpense.storeId !== req.user!.storeId) return res.status(404).json({code:404,message:'Expense not found'})
-    if (oldExpense.referenceType === 'salary') return res.status(409).json({code:409,message:'PAYROLL_EXPENSE_MANAGED_BY_SALARY'})
+    if (['salary','purchase','purchase_refund'].includes(oldExpense.referenceType||'')) return res.status(409).json({code:409,message:'LINKED_EXPENSE_EDIT_AT_SOURCE'})
     const expense = await ExpenseService.updateExpense(req.params.id, req.body)
     await FinanceAuditService.createAuditLog({
       storeId: req.user!.storeId,
@@ -219,7 +219,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
   try {
     const expense = await ExpenseService.getExpenseById(req.params.id)
     if (!expense || expense.storeId !== req.user!.storeId) return res.status(404).json({code:404,message:'Expense not found'})
-    if (expense.referenceType === 'salary') return res.status(409).json({code:409,message:'PAYROLL_EXPENSE_MANAGED_BY_SALARY'})
+    if (['salary','purchase','purchase_refund'].includes(expense.referenceType||'')) return res.status(409).json({code:409,message:'LINKED_EXPENSE_EDIT_AT_SOURCE'})
     await ExpenseService.deleteExpense(req.params.id)
     if (expense) {
       await FinanceAuditService.createAuditLog({

@@ -159,3 +159,6 @@ router.get('/transfers/list', authenticate, authorize('admin', 'manager'), async
 })
 
 export { router as financeAccountRouter }
+router.post('/transfers/:id/reverse',authenticate,authorize('admin'),async(req:AuthRequest,res)=>{
+ try{if(typeof req.body.reason!=='string'||!req.body.reason.trim()||req.body.reason.length>1000)return res.status(400).json({code:400,message:'CORRECTION_REASON_REQUIRED'});res.json({code:200,data:await FinanceAccountService.reverseTransfer(req.params.id,req.user!.storeId,req.user!.id,req.body.reason)})}catch(e:any){res.status(409).json({code:409,message:e.message})}
+});

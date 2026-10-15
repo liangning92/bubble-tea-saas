@@ -1930,7 +1930,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
   },
   "DELETE /api/purchase-orders/:id": {
     "legacyRoles": [
-      "admin"
+      "admin", "manager", "staff"
     ],
     "legacyPermission": "purchases.write",
     "resource": {
@@ -1938,7 +1938,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
       "param": "id"
     },
     "permission": "purchases.write",
-    "ownerOnly": true,
+    "ownerOnly": false,
     "export": false,
     "personal": false
   },
@@ -4151,7 +4151,10 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
       "staff"
     ],
     "legacyPermission": "personal.schedule",
-    "resource": { "model": "shiftSwap", "param": "id" },
+    "resource": {
+      "model": "shiftSwap",
+      "param": "id"
+    },
     "permission": "personal.schedule",
     "ownerOnly": false,
     "export": false,
@@ -8452,5 +8455,182 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     ],
     "legacyPermission": null,
     "resource": null
+  },
+  "PUT /api/staff-correction/:id": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.attendance",
+    "resource": null,
+    "permission": "personal.attendance",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "PUT /api/staff-correction/:id/withdraw": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.attendance",
+    "resource": null,
+    "permission": "personal.attendance",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "PUT /api/overtime/:id": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.attendance",
+    "resource": null,
+    "permission": "personal.attendance",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "PUT /api/overtime/:id/withdraw": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.attendance",
+    "resource": null,
+    "permission": "personal.attendance",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "PUT /api/shift-swap/:id": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.schedule",
+    "resource": null,
+    "permission": "personal.schedule",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "PUT /api/shift-swap/:id/withdraw": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "personal.schedule",
+    "resource": null,
+    "permission": "personal.schedule",
+    "ownerOnly": false,
+    "export": false,
+    "personal": true
+  },
+  "PUT /api/purchase-orders/:id": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "purchases.write",
+    "resource": {
+      "model": "purchaseOrder",
+      "param": "id"
+    },
+    "permission": "purchases.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/purchase-orders/:id/reverse-receipt": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "purchases.write",
+    "resource": {
+      "model": "purchaseOrder",
+      "param": "id"
+    },
+    "permission": "purchases.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/purchase-orders/:id/refund": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "purchases.write",
+    "resource": {
+      "model": "purchaseOrder",
+      "param": "id"
+    },
+    "permission": "finance.write",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/finance/accounts/transfers/:id/reverse": {
+    "permission": "finance.write",
+    "legacyPermission": "finance.write",
+    "legacyRoles": [
+      "admin"
+    ],
+    "resource": null,
+    "ownerOnly": true,
+    "export": false,
+    "personal": false
+  },
+  "PUT /api/deposit/staff/:id": {
+    "permission": "deposits.write",
+    "legacyPermission": "deposits.write",
+    "legacyRoles": [
+      "admin"
+    ],
+    "resource": {
+      "model": "staffDeposit",
+      "param": "id"
+    },
+    "ownerOnly": true,
+    "export": false,
+    "personal": false
+  },
+  "POST /api/deposit/staff/:id/reverse/:kind/:logId": {
+    "permission": "deposits.write",
+    "legacyPermission": "deposits.write",
+    "legacyRoles": [
+      "admin"
+    ],
+    "resource": {
+      "model": "staffDeposit",
+      "param": "id"
+    },
+    "ownerOnly": true,
+    "export": false,
+    "personal": false
+  },
+  "PUT /api/hygiene/tasks/:id": {
+    "permission": "hygiene.write",
+    "legacyPermission": "hygiene.write",
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "resource": {
+      "model": "hygieneTask",
+      "param": "id"
+    },
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
   }
 }

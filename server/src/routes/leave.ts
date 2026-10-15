@@ -13,6 +13,7 @@ const staffStore = requireResourceStore(req => prisma.staff.findUnique({where:{i
 
 // Validation schemas
 const applyLeaveSchema = z.object({
+  editingId:z.string().optional(),expectedVersion:z.string().datetime().optional(),
   leaveType: z.string().trim().min(1).max(100),
   startDate: z.string().transform(parseBusinessDate),
   endDate: z.string().transform(parseBusinessDate),
@@ -74,7 +75,7 @@ router.post('/apply', authenticate, async (req: AuthRequest, res) => {
       halfDay: validated.halfDay,
       contactPhone: validated.contactPhone,
       attachmentUrl: validated.attachmentUrl
-    })
+    },true,validated.editingId?{id:validated.editingId,expectedVersion:validated.expectedVersion||''}:undefined)
 
     res.status(201).json({
       code: 201,

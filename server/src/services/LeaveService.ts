@@ -26,7 +26,7 @@ export interface LeaveBalanceUpdate {
 }
 
 // Apply for leave
-export async function applyLeave(data: LeaveApplication, autoInitBalance: boolean = true) {
+export async function applyLeave(data: LeaveApplication, autoInitBalance: boolean = true, editing?:{id:string;expectedVersion:string}) {
   const { staffId, leaveType, totalDays, startDate, endDate } = data
   await assertWeekdayLeave(prisma,data.storeId,startDate,endDate)
   const rules = await getPayrollRules(prisma,data.storeId)
@@ -70,11 +70,18 @@ export async function applyLeave(data: LeaveApplication, autoInitBalance: boolea
   return prisma.$transaction(async tx => {
     const key = `leave.period.${staffId}.${year}`
     await tx.config.upsert({ where: { storeId_key: { storeId: data.storeId, key } }, create: { storeId: data.storeId, key, category: 'staff', value: new Date().toISOString() }, update: { value: new Date().toISOString() } })
-    const active = await tx.leave.findMany({ where: { staffId, status: { in: ['pending', 'approved'] }, startDate: { lt: new Date(`${year + 1}-01-01T00:00:00+07:00`) }, endDate: { gte: new Date(`${year}-01-01T00:00:00+07:00`) } } })
+    let previous:any=null;
+    if(editing){previous=await tx.leave.findFirst({where:{id:editing.id,staffId,storeId:data.storeId,status:'pending'}});if(!previous)throw new Error('REQUEST_CHANGED_OR_NOT_OWNED');const locked=await tx.leave.updateMany({where:{id:editing.id,staffId,status:'pending',updatedAt:new Date(editing.expectedVersion)},data:{updatedAt:new Date()}});if(locked.count!==1)throw new Error('REQUEST_CHANGED_REFRESH')}
+    const active = await tx.leave.findMany({ where: { ...(editing?{id:{not:editing.id}}:{}),staffId, status: { in: ['pending', 'approved'] }, startDate: { lt: new Date(`${year + 1}-01-01T00:00:00+07:00`) }, endDate: { gte: new Date(`${year}-01-01T00:00:00+07:00`) } } })
     if (active.some(leave => leave.startDate <= endDate && leave.endDate >= startDate)) throw new Error('Selected dates overlap an existing leave application')
     if (configuredType?.maxDaysPerYear != null && active.filter(leave => leave.leaveType === leaveType).reduce((sum, leave) => sum + leave.totalDays, 0) + totalDays > configuredType.maxDaysPerYear) throw new Error('Leave exceeds the configured yearly limit')
   // Create leave application
-  return tx.leave.create({
+  const persist=async(options:any)=>{
+   if(!editing)return tx.leave.create(options);
+   const updated=await tx.leave.update({where:{id:editing.id},...options});
+   await tx.financeAuditLog.create({data:{storeId:data.storeId,userId:staffId,action:'update',entityType:'leave',entityId:editing.id,description:'Owner revised pending leave',oldValue:JSON.stringify(previous),newValue:JSON.stringify(updated)}});return updated
+  };
+  return persist({
     data: {
       staffId,
       storeId: data.storeId,

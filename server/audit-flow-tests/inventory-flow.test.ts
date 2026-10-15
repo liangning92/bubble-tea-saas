@@ -145,14 +145,14 @@ async function token(f:Awaited<ReturnType<typeof fixture>>,role='staff'){
  const user=await prisma.user.create({data:{storeId:f.store.id,phone:randomUUID(),password:'synthetic',role}})
  return jwt.sign({id:user.id,phone:user.phone,role,storeId:f.store.id,staffId:'',issuedAtMs:Date.now()+1000},config.jwt.secret)
 }
-test('HTTP employee routes enforce store isolation, allow supplier-free purchases and counts, deny approval/cancellation',async()=>{
+test('HTTP employee routes enforce store isolation, allow supplier-free purchases and counts, deny management approval and cancellation of another owner',async()=>{
  httpServer=http.createServer(app);await new Promise<void>(resolve=>httpServer.listen(0,'127.0.0.1',resolve))
  const f=await fixture(),foreign=await fixture(),authorization='Bearer '+await token(f)
  expect((await request(httpServer).get('/api/inventory').query({storeId:foreign.store.id}).set('Authorization',authorization)).status).toBe(403)
  const list=await request(httpServer).get('/api/inventory').set('Authorization',authorization);expect(list.status).toBe(200);expect(list.body.data.list.map((i:any)=>i.id)).toEqual([f.inventory.id])
  expect((await request(httpServer).post('/api/purchase-orders').set('Authorization',authorization).send({storeId:foreign.store.id,items:[{inventoryId:f.inventory.id,quantity:1,unitCost:1000}]})).status).toBe(403)
  const created=await request(httpServer).post('/api/purchase-orders').set('Authorization',authorization).send({storeId:f.store.id,items:[{inventoryId:f.inventory.id,quantity:1,unitCost:1000}]});expect(created.status).toBe(201);expect(created.body.data.storeId).toBe(f.store.id);expect(created.body.data.status).toBe('awaiting_receipt')
- const id=created.body.data.id;expect((await request(httpServer).delete(`/api/purchase-orders/${id}`).set('Authorization',authorization)).status).toBe(403)
+ const id=created.body.data.id;await prisma.purchaseOrder.update({where:{id},data:{createdBy:'another-owner'}});expect((await request(httpServer).delete(`/api/purchase-orders/${id}`).set('Authorization',authorization)).status).toBe(404)
  expect((await request(httpServer).post(`/api/purchase-orders/${id}/receive`).set('Authorization',authorization)).status).toBe(200)
  const foreignPurchase=await createPurchaseOrder({storeId:foreign.store.id,items:[{inventoryId:foreign.inventory.id,quantity:1,unitCost:1}]})
  expect((await request(httpServer).get(`/api/purchase-orders/${foreignPurchase.id}`).set('Authorization',authorization)).status).toBe(404)
@@ -217,7 +217,7 @@ test('declared employee-channel inventory operations work while management actio
  expect((await client.post(`/api/purchase-orders/${created.body.data.id}/receive`).set('Authorization',authorization).set('X-Client-App','employee')).status).toBe(200)
  expect((await client.get('/api/purchase-orders').query({storeId:foreign.store.id}).set('Authorization',authorization).set('X-Client-App','employee')).status).toBe(403)
  expect((await client.get('/api/inventory/alert-center').set('Authorization',authorization).set('X-Client-App','employee')).status).toBe(403)
- expect((await client.delete(`/api/purchase-orders/${created.body.data.id}`).set('Authorization',authorization).set('X-Client-App','employee')).status).toBe(403)
+ expect((await client.delete(`/api/purchase-orders/${created.body.data.id}`).set('Authorization',authorization).set('X-Client-App','employee')).status).toBe(409)
 })
 
 test('fulfilled promotion gift has its own frozen theory without duplicating the paid sale or physical deductions',async()=>{
