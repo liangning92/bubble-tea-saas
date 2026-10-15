@@ -1712,12 +1712,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     return () => { cancelled = true }
   }, [user?.storeId, scanRequestVersion, showScanModal])
 
-  // 同步状态
-  useEffect(() => {
-    syncManager.startSync(30000)
-    return () => syncManager.destroy()
-  }, [])
-
   // 检查服务器API配置 (Admin可在后台修改，POS自动获取)
   useEffect(() => {
     const checkServerApiUrl = async () => {
