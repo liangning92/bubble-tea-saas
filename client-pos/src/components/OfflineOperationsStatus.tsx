@@ -1,3 +1,4 @@
+import {offlineQrKey} from '../utils/offlineAttendanceQR'
 import {db} from '../db/offline'
 import {localIdentity} from '../utils/offlineSale'
 import {POS_OFFLINE_TTL_MS} from '../../../shared/utils/offlinePolicy'
@@ -21,6 +22,7 @@ export function OfflineOperationsStatus(){
   let expires=Date.parse(grant.expiresAt),ready=required.every(path=>{const row=rows.find(r=>r.key==='offline.snapshot:'+base+path);if(!row?.value.complete)return false;expires=Math.min(expires,new Date(row.updatedAt).getTime()+POS_OFFLINE_TTL_MS);if(path==='/marketing/activities/offline-snapshot')expires=Math.min(expires,Date.parse(row.value.data?.data?.expiresAt));return true})
   if(grant.permissions?.includes('members.read')){const complete=await db.config.get('offline.members:'+base+actorId+':$complete');ready=ready&&!!complete?.value?.registration;expires=Math.min(expires,Date.parse(complete?.value?.registration?.expiresAt))}
   if(grant.permissions?.some((p:string)=>['personal.tasks','personal.attendance'].includes(p))){const work=await db.config.get(`offline.work:${encodeURIComponent(backend)}:${storeId}:${actorId}`);ready=ready&&!!work;expires=Math.min(expires,Date.parse(work?.value?.expiresAt))}
+  if(grant.permissions?.includes('personal.attendance')){const qr=await db.config.get(offlineQrKey(storeId,storeId));ready=ready&&!!qr?.value?.codes;expires=Math.min(expires,qr?.value?.expiresAt??0)}
   return {ready:ready&&Number.isFinite(expires)&&expires>Date.now(),expires}
  },[storeId,actorId])
  const preparation=readiness&&<details data-testid="offline-preparation" className={'shrink-0 border-b px-4 py-1 text-xs '+(readiness.ready?'bg-green-50 text-green-900':'bg-amber-50 text-amber-950')}><summary>{t(readiness.ready?'offlineOperations.prepared':'offlineOperations.preparing',{date:readiness.ready?new Date(readiness.expires).toLocaleString():''})}</summary><p className="py-1">{t('offlineOperations.retain')}</p></details>

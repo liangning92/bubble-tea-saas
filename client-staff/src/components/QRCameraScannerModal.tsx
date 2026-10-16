@@ -94,7 +94,7 @@ export function QRCameraScannerModal({
     try {
       await onScan(cleanValue, mode)
     } catch (error: any) {
-      setScanError(error.response?.data?.message || t('common.loadFailed'))
+      setScanError(error.response?.data?.message || (error.message?.startsWith('offlineAttendance.') ? t(error.message) : t('common.loadFailed')))
       // Pause decoding until the employee explicitly retries.
     }
   }, [hasScanned, isLoading, mode, onScan])

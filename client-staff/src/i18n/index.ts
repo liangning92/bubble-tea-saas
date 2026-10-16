@@ -164,6 +164,7 @@ const resources = {
         leave: 'Cuti',
         reimbursement: 'Pengeluaran'
       },
+      offlineAttendance: {title:'Absensi offline',working:'Sudah masuk',notWorking:'Belum masuk',notPrepared:'Siapkan absensi dengan masuk saat server tersedia pada perangkat ini.',pending:'Catatan menunggu sinkronisasi: {{count}}',review:'Catatan lokal tetap disimpan. Perlu pemeriksaan; jangan mencatat ulang.',saved:'Tersimpan di perangkat. Akan disinkronkan saat server pulih.',scanIn:'Pindai untuk masuk',scanOut:'Pindai untuk pulang',retry:'Coba sinkronkan',failed:'Gagal menyimpan absensi. Coba lagi.',invalidQR:'Kode tidak cocok dengan toko atau sudah kedaluwarsa. Pindai kode POS saat ini.',alreadyRecorded:'Jam masuk sudah tercatat. Jangan mencatat ulang.',noOpen:'Tidak ada jam masuk aktif.'},
       auth: {
         offlineMissing: 'Perangkat ini belum menyiapkan login offline untuk akun ini. Masuk sekali saat server tersedia.',
         offlineExpired: 'Izin offline sudah berakhir. Masuk saat server tersedia untuk memperbaruinya.',
@@ -172,7 +173,7 @@ const resources = {
         offlineDescription: 'Kata sandi telah diverifikasi di perangkat ini. Server belum memverifikasi sesi online baru.',
         offlineStore: 'Toko',
         offlineUntil: 'Batas akses offline',
-        offlineOperations: 'Data dan tindakan karyawan tetap membutuhkan server. Absensi, cuti, persetujuan dan perubahan belum dikirim. Menu tetap tersedia; masuk online untuk melanjutkan.',
+        offlineOperations: 'Data dan tindakan karyawan tetap membutuhkan server. Absensi dapat disimpan di perangkat. Cuti, persetujuan dan perubahan lain memerlukan server. Menu tetap tersedia; masuk online untuk melanjutkan.',
         offlineReconnect: 'Masuk online kembali',
         offlineSetupFailed: 'Login online berhasil, tetapi penyimpanan offline tidak tersedia. Login offline belum siap pada perangkat ini.',
 
@@ -840,6 +841,7 @@ const resources = {
         leave: 'Leave',
         reimbursement: 'Expense'
       },
+      offlineAttendance: {title:'Offline attendance',working:'Clocked in',notWorking:'Not clocked in',notPrepared:'Prepare attendance by signing in while the server is available on this device.',pending:'Records awaiting sync: {{count}}',review:'Local records are retained and need review. Do not record them again.',saved:'Saved on this device. Syncs when the server returns.',scanIn:'Scan to clock in',scanOut:'Scan to clock out',retry:'Retry sync',failed:'Could not save attendance. Please retry.',invalidQR:'Wrong store or expired code. Scan the current POS code.',alreadyRecorded:'Clock-in already recorded. Do not record it again.',noOpen:'No active clock-in.'},
       auth: {
         offlineMissing: 'This device has no offline login prepared for this account. Sign in once while the server is available.',
         offlineExpired: 'Offline access has expired. Sign in while the server is available to renew it.',
@@ -848,7 +850,7 @@ const resources = {
         offlineDescription: 'Your password was verified on this device. A new online session has not been validated by the server.',
         offlineStore: 'Store',
         offlineUntil: 'Offline access expires',
-        offlineOperations: 'Employee data and actions still require the server. Attendance, leave, approvals and changes have not been submitted. All menus remain available; sign in online to continue.',
+        offlineOperations: 'Employee data and actions still require the server. Attendance can be saved on this device. Leave, approvals and other changes require the server. All menus remain available; sign in online to continue.',
         offlineReconnect: 'Sign in online again',
         offlineSetupFailed: 'Online sign-in succeeded, but offline storage is unavailable. Offline login is not ready on this device.',
 
@@ -1512,6 +1514,7 @@ const resources = {
         leave: '请假',
         reimbursement: '报销'
       },
+      offlineAttendance: {title:'离线考勤',working:'已上班',notWorking:'尚未上班',notPrepared:'请先在本机服务器可用时登录，准备离线考勤。',pending:'待同步记录：{{count}} 笔',review:'本机记录已保留，需要核对；请勿重复打卡。',saved:'已保存到本机，服务器恢复后自动同步。',scanIn:'扫码上班',scanOut:'扫码下班',retry:'重试同步',failed:'考勤保存失败，请重试。',invalidQR:'二维码不属于本店或已过期，请扫描收银机当前的码。',alreadyRecorded:'已记录上班，请勿重复打卡。',noOpen:'没有尚未结束的上班记录。'},
       auth: {
         offlineMissing: '本机尚未为此账号准备离线登录，请在服务器可用时先登录一次。',
         offlineExpired: '离线授权已过期，请在服务器可用时登录更新。',
@@ -1520,7 +1523,7 @@ const resources = {
         offlineDescription: '已在本机校验密码，尚未建立新的服务器登录会话。',
         offlineStore: '门店',
         offlineUntil: '离线授权有效期至',
-        offlineOperations: '员工数据和业务操作仍需服务器。打卡、请假、审批及修改尚未提交。各菜单均保留，联网登录后可继续使用。',
+        offlineOperations: '员工数据和业务操作仍需服务器。考勤可先保存在本机；请假、审批及其他修改仍需服务器。各菜单均保留，联网登录后可继续使用。',
         offlineReconnect: '重新在线登录',
         offlineSetupFailed: '在线登录成功，但本机离线缓存不可用，尚未准备好离线登录。',
 

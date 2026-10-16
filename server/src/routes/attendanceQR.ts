@@ -2,20 +2,17 @@ import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { Router } from 'express'
 import { authenticate, AuthRequest } from '../middlewares/auth'
 import { prisma } from '../config/database'
-import crypto from 'crypto'
+import { attendanceQR, onlineAttendanceQR, attendanceQRBundle, verifyOnlineAttendanceQR, ATTENDANCE_QR_WINDOW } from '../services/AttendanceQRService'
+import { authorize } from '../middlewares/auth'
 
 const router = Router()
 
-// QR Code secret key - in production, this should be in environment variables
-const QR_SECRET = process.env.QR_SECRET || 'bubble-tea-attendance-secret-key-2024'
-const QR_VALID_MINUTES = 5 // QR code valid for 5 minutes
-
 // Generate QR code payload for POS
-router.post('/generate', authenticate, async (req: AuthRequest, res) => {
+router.post('/generate', authenticate, authorize('admin','manager','cashier'), async (req: AuthRequest, res) => {
   try {
     const { posId } = req.body
 
-    if (!posId) {
+    if (typeof posId!=='string'||!posId||posId.length>100) {
       return res.status(400).json({ code: 400, message: 'POS ID is required' })
     }
 
@@ -28,27 +25,9 @@ router.post('/generate', authenticate, async (req: AuthRequest, res) => {
       return res.status(404).json({ code: 404, message: 'Store not found' })
     }
 
-    // Generate timestamp (current minute floored)
-    const timestamp = Math.floor(Date.now() / (QR_VALID_MINUTES * 60 * 1000)) * (QR_VALID_MINUTES * 60 * 1000)
-
-    // Create signature: HMAC-SHA256(storeId + posId + timestamp)
-    const dataToSign = `${req.user!.storeId}:${posId}:${timestamp}`
-    const signature = crypto
-      .createHmac('sha256', QR_SECRET)
-      .update(dataToSign)
-      .digest('hex')
-      .substring(0, 16)
-
-    // QR payload - simple format for easy scanning
-    const qrPayload = {
-      s: req.user!.storeId,  // storeId
-      p: posId,              // posId
-      t: timestamp,           // timestamp
-      sig: signature          // signature
-    }
-
-    // Encode as JSON string then base64
-    const qrData = Buffer.from(JSON.stringify(qrPayload)).toString('base64')
+    const rotating = req.body.formatVersion === 2
+    const timestamp = rotating ? Math.floor(Date.now()/ATTENDANCE_QR_WINDOW)*ATTENDANCE_QR_WINDOW : Date.now()
+    const qrData = rotating ? attendanceQR(req.user!.storeId, posId, timestamp) : onlineAttendanceQR(req.user!.storeId, posId, timestamp)
 
     res.json({
       code: 200,
@@ -56,8 +35,8 @@ router.post('/generate', authenticate, async (req: AuthRequest, res) => {
         qrData,
         storeName: store.name,
         posId,
-        expiresAt: timestamp + QR_VALID_MINUTES * 60 * 1000,
-        refreshInterval: QR_VALID_MINUTES * 60 * 1000
+        expiresAt: timestamp + ATTENDANCE_QR_WINDOW,
+        refreshInterval: ATTENDANCE_QR_WINDOW
       },
       timestamp: new Date().toISOString()
     })
@@ -65,6 +44,16 @@ router.post('/generate', authenticate, async (req: AuthRequest, res) => {
     console.error('Generate QR error:', error)
     res.status(500).json({ code: 500, message: 'Failed to generate QR code' })
   }
+})
+
+// Only a store POS operator receives future codes; employee phones receive hashes only.
+router.post('/offline-prepare', authenticate, authorize('admin','manager','cashier'), async(req:AuthRequest,res)=>{
+ try {
+  const posId=req.user!.storeId
+  const store=await prisma.store.findUnique({where:{id:req.user!.storeId},select:{name:true}})
+  if(!store)return res.status(404).json({code:404,message:'Store not found'})
+  return res.json({code:200,data:{...attendanceQRBundle(req.user!.storeId,posId),storeName:store.name}})
+ } catch { return res.status(500).json({code:500,message:'Offline attendance preparation failed'}) }
 })
 
 // Verify QR code and check in
@@ -76,56 +65,10 @@ router.post('/verify', authenticate, async (req: AuthRequest, res) => {
       return res.status(400).json({ code: 400, message: 'QR data is required' })
     }
 
-    // Decode QR data
-    let payload: { s: string; p: string; t: number; sig: string }
-    try {
-      payload = JSON.parse(Buffer.from(qrData, 'base64').toString('utf8'))
-    } catch {
-      return res.status(400).json({ code: 400, message: 'Invalid QR code format' })
-    }
-
-    const { s: storeId, p: posId, t: timestamp, sig: providedSignature } = payload
-
-    // Verify timestamp is within valid range (5 minutes window)
-    const now = Date.now()
-    const qrTimestamp = Number(timestamp)
-    if (isNaN(qrTimestamp)) {
-      return res.status(400).json({ code: 400, message: 'Invalid QR timestamp' })
-    }
-
-    const timeDiff = Math.abs(now - qrTimestamp)
-    const maxValidTime = QR_VALID_MINUTES * 60 * 1000
-    if (timeDiff > maxValidTime) {
-      return res.status(400).json({
-        code: 400,
-        message: 'QR code expired. Please scan the new QR code on the POS.',
-        expired: true
-      })
-    }
-
-    // Verify signature
-    const dataToSign = `${storeId}:${posId}:${qrTimestamp}`
-    const expectedSignature = crypto
-      .createHmac('sha256', QR_SECRET)
-      .update(dataToSign)
-      .digest('hex')
-      .substring(0, 16)
-
-    if (providedSignature !== expectedSignature) {
-      return res.status(400).json({
-        code: 400,
-        message: 'Invalid QR code. Please scan the current QR from the POS.',
-        invalid: true
-      })
-    }
-
-    // Verify store matches
-    if (storeId !== req.user!.storeId) {
-      return res.status(400).json({
-        code: 400,
-        message: 'QR code is not for this store'
-      })
-    }
+    let payload: ReturnType<typeof verifyOnlineAttendanceQR>
+    try { payload=verifyOnlineAttendanceQR(qrData,req.user!.storeId) }
+    catch { return res.status(400).json({code:400,message:'Invalid or expired QR code. Scan the current POS code.'}) }
+    const {s:storeId,p:posId,t:qrTimestamp}=payload
 
     // Get store info for response
     const store = await prisma.store.findFirst({

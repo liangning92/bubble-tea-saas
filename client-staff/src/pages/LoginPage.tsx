@@ -1,3 +1,4 @@
+import {saveAttendancePreparation} from '../utils/offlineAttendance'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -70,6 +71,7 @@ export function LoginPage() {
         try { await prepareOfflineLogin(loginBackend(API_BASE), normalizedUser, password); sessionStorage.removeItem('employee-offline-setup-failed') }
         catch { sessionStorage.setItem('employee-offline-setup-failed', 'true') }
         login(response.data.token, normalizedUser)
+        try { const prepared=await staffApi.prepareOfflineAttendance();await saveAttendancePreparation(loginBackend(API_BASE),normalizedUser.id,prepared.data) } catch { /* Online login remains available; the attendance panel explains missing preparation. */ }
 
         // Handle remember me - only store phone number, never password
         if (rememberMe) {
