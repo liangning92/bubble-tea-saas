@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ staffOffline:{paths:/(?:^client-staff\/.*(?:offlineAuth|OfflineSession|employee-sw)|staff-offline-login)/i,tests:/staff-offline-login/i},
  attendanceReport:{paths:/(?:AttendanceReportService|attendanceReport|AttendanceDashboardPage|inventory-attendance-layout)/i,tests:/attendance-report/i},
  adminUi:{paths:/(?:AdminDialog|MainLayout|client-admin\/src\/stores\/auth\.|client-admin\/src\/pages\/LoginPage|client-admin\/src\/index\.css|ChannelProductPricingPage|client-admin\/src\/pages\/SettingsPage|InventoryIndexPage|admin-session-reuse|admin-ui-optimization)/i,tests:/admin-ui-optimization|admin-session-reuse/i},
  tv:{paths:/(?:tv-android-app|server\/public\/tv|TvSignage|tvSchema|\/routes\/tv\.|\/pages\/tv\/|tv-signage|sync-tv-player)/i,tests:/tv-signage/i},
@@ -59,6 +60,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ staffOffline:{scripts:['tests/stoploss/staff-offline-login-page-check.cjs'],components:['staff']},
  attendanceReport:{scripts:['tests/stoploss/inventory-attendance-layout-page-check.cjs'],components:['admin']},
  adminUi:{scripts:['tests/stoploss/admin-ui-optimization-page-check.cjs','tests/stoploss/admin-session-reuse-page-check.cjs','tests/stoploss/store-date-settings-page-check.cjs'],components:['admin']},
  tv:{scripts:['tests/stoploss/tv-signage-page-check.cjs','tests/stoploss/tv-signage-admin-page-check.cjs'],components:['admin']},
@@ -86,7 +88,7 @@ const httpChecks={
 };
 function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}){
  const all=sources(root),reverse=reverseDependencies(root,all,files),affected=impactedFiles(files,reverse);
- const selectedDomains=Object.entries(domains).filter(([name,rule])=>files.some(file=>rule.paths.test(file)&&(name==='ci'||!domains.ci.paths.test(file))&&!(name==='offline'&&domains.tv.paths.test(file)))).map(([name])=>name);
+ const selectedDomains=Object.entries(domains).filter(([name,rule])=>files.some(file=>rule.paths.test(file)&&(name==='ci'||!domains.ci.paths.test(file))&&!(name==='offline'&&(domains.tv.paths.test(file)||/^client-staff\/|staff-offline-login/.test(file))))).map(([name])=>name);
  const services=new Set(),typecheck=new Set(),i18n=new Set();
  for(const file of affected){const client=file.match(/^client-(admin|pos|staff)\//);if(client){typecheck.add(client[1]);if(files.includes(file))services.add(client[1])}if(/^server\/(?:src|prisma|package|tsconfig|Dockerfile)/.test(file)){typecheck.add('api');if(files.includes(file))services.add('api')}}
  // Shared code affects the clients that import it; standalone shared assets affect all clients.

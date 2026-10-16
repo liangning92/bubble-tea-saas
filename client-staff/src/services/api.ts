@@ -1,17 +1,24 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
+import { forgetOfflineLogin, loginBackend } from '../utils/offlineAuth'
 
 function getApiBase(): string {
   const configured = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
   return configured.endsWith('/api') ? configured : `${configured}/api`
 }
 
-const API_BASE = getApiBase()
+export const API_BASE = getApiBase()
 
 export const http = axios.create({ timeout: 15000 })
+http.interceptors.request.use(config => {
+  if (useAuthStore.getState().offlineUntil && !config.url?.endsWith('/auth/login')) return Promise.reject(new Error('EMPLOYEE_OFFLINE'))
+  return config
+})
 http.interceptors.response.use(response => response, error => {
   const token = useAuthStore.getState().token
   if (error.response?.status === 401 && token && error.config?.headers?.Authorization === `Bearer ${token}`) {
+    const user = useAuthStore.getState().user
+    if (user) forgetOfflineLogin(loginBackend(API_BASE), user.phone)
     sessionStorage.setItem('staff-login-notice', 'expired')
     useAuthStore.getState().logout()
   }
@@ -38,7 +45,7 @@ export const staffApi = {
 
   // Auth
   login: async (phone: string, password: string) => {
-    const response = await http.post(`${API_BASE}/auth/login`, { phone, password })
+    const response = await http.post(`${API_BASE}/auth/login`, { phone, password }, { timeout: 5000 })
     return response.data
   },
 

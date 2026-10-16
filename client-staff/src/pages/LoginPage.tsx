@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../stores/auth'
-import { staffApi } from '../services/api'
+import { staffApi, API_BASE } from '../services/api'
+import { forgetOfflineLogin, loginBackend, prepareOfflineLogin, temporaryLoginFailure, unlockOfflineLogin } from '../utils/offlineAuth'
 import { Lock, Phone, Loader2, Globe, Eye, EyeOff } from 'lucide-react'
 
 const LANGUAGES = [
@@ -14,7 +15,7 @@ const LANGUAGES = [
 export function LoginPage() {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
-  const { login } = useAuthStore()
+  const { login, loginOffline } = useAuthStore()
 
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
@@ -53,19 +54,22 @@ export function LoginPage() {
     setIsLoading(true)
 
     try {
-      const response = await staffApi.login(phone, password)
+      const response = await staffApi.login(phone.trim(), password)
       if (response.code === 200) {
         const rawUser = response.data.user
         if (!(rawUser.staffId || rawUser.staff?.id)) { setError(t('auth.staffMissing')); return }
         // The API returns the employee profile under `staff`; page requests use
         // a flat `staffId`, so normalize once when establishing the session.
-        login(response.data.token, {
+        const normalizedUser = {
           ...rawUser,
           staffId: rawUser.staffId || rawUser.staff?.id || '',
           name: rawUser.name || rawUser.staff?.name || '',
           storeName: rawUser.store?.name || '',
           position: rawUser.position || rawUser.staff?.position || ''
-        })
+        }
+        try { await prepareOfflineLogin(loginBackend(API_BASE), normalizedUser, password); sessionStorage.removeItem('employee-offline-setup-failed') }
+        catch { sessionStorage.setItem('employee-offline-setup-failed', 'true') }
+        login(response.data.token, normalizedUser)
 
         // Handle remember me - only store phone number, never password
         if (rememberMe) {
@@ -81,7 +85,16 @@ export function LoginPage() {
         setError(response.message || t('auth.loginFailed'))
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || t(err.response ? 'auth.invalidCredentials' : 'common.loadFailed'))
+      if (temporaryLoginFailure(err)) {
+        try {
+          const result = await unlockOfflineLogin(loginBackend(API_BASE), phone.trim(), password)
+          loginOffline(result.user, result.expiresAt)
+          navigate('/', { replace: true })
+        } catch (offlineError) { setError(t(offlineError instanceof Error && ['auth.offlineMissing', 'auth.offlineExpired', 'auth.invalidCredentials'].includes(offlineError.message) ? offlineError.message : 'auth.offlineMissing')) }
+      } else {
+        if ([401, 403].includes(err.response?.status)) forgetOfflineLogin(loginBackend(API_BASE), phone.trim())
+        setError(err.response?.data?.message || t('auth.invalidCredentials'))
+      }
     } finally {
       setIsLoading(false)
     }
@@ -136,6 +149,7 @@ export function LoginPage() {
           <p className="text-gray-500 mt-1">{t('auth.loginTitle')}</p>
         </div>
 
+        <p className="mb-4 text-sm text-gray-500">{t('auth.offlineHelp')}</p>
         {/* Login Form */}
         <form onSubmit={handleLogin} className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
           {error && (

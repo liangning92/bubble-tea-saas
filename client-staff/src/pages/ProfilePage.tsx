@@ -1,3 +1,5 @@
+import { forgetOfflineLogin, loginBackend } from '../utils/offlineAuth';
+import { API_BASE } from '../services/api';
 import { ModuleLinks } from "../components/ModuleLinks";
 import { PushSettings } from "../components/PushSettings";
 import { useState, useEffect } from "react";
@@ -62,6 +64,7 @@ export function ProfilePage() {
     try {
       const response = await staffApi.changePassword(oldPassword, newPassword);
       if (response.code === 200) {
+        if (user) forgetOfflineLogin(loginBackend(API_BASE), user.phone);
         sessionStorage.setItem("staff-login-notice", "passwordChanged");
         logout();
         setOldPassword("");
