@@ -205,7 +205,8 @@ router.put('/coupons/:id', authenticate, authorize('admin'), async (req: AuthReq
     const coupon = await MarketingService.updateCoupon(id, {
       ...req.body,
       validFrom: req.body.validFrom ? new Date(req.body.validFrom) : undefined,
-      validUntil: req.body.validUntil ? new Date(req.body.validUntil) : undefined
+      validUntil: req.body.validUntil ? new Date(req.body.validUntil) : undefined,
+      usageLimit: 1
     })
     res.json({ code: 200, message: 'Coupon updated', data: coupon, timestamp: new Date().toISOString() })
   } catch (error) {

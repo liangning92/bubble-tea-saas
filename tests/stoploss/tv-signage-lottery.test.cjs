@@ -1,11 +1,11 @@
 const {test}=require('node:test'),assert=require('node:assert/strict');
 const {model}=require('../../server/public/tv/lottery.js');
-test('all configured prize positions stop under the fixed pointer, including 30 sectors',()=>{
+test('all prize pool sizes keep the authoritative highlighted result, including 30 prizes',()=>{
  for(let count=1;count<=30;count++)for(let index=0;index<count;index++){
   const prizes=Array.from({length:count},(_,i)=>({id:'p'+i,name:'Prize '+i,color:'#abcdef'}));
   const m=model({prizeName:prizes[index].name,prizeId:prizes[index].id,prizeIndex:index,prizes});
   assert.equal(m.index,index);assert.equal(m.prizes.length,count);
-  assert.ok(Math.abs((((index+.5)*360/count+m.rotation)%360))<0.000001 || Math.abs((((index+.5)*360/count+m.rotation)%360)-360)<0.000001);
+  assert.equal(m.prizes[m.index].id,prizes[index].id);
  }
 });
 test('duplicate names use authoritative ID, stale index is corrected and legacy results never invent prizes',()=>{
@@ -17,7 +17,7 @@ test('duplicate names use authoritative ID, stale index is corrected and legacy 
  assert.throws(()=>model({prizeName:''}));
 });
 
-test('configured sector colors are preserved exactly, never recolored by brand styling',()=>{
+test('configured card colors are preserved exactly, never recolored by brand styling',()=>{
  const prizes=[{id:'pink',name:'Pink',color:'#F8BFD0'},{id:'mint',name:'Mint',color:'#BFE2CE'}];
  assert.deepEqual(model({prizeId:'mint',prizeIndex:1,prizeName:'Mint',prizes}).prizes.map(p=>p.color),prizes.map(p=>p.color));
 });

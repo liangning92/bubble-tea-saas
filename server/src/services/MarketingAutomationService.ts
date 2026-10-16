@@ -113,7 +113,7 @@ export async function createCoupon(data: {
       maxDiscount: data.maxDiscount || 0,
       validFrom: data.validFrom,
       validUntil: data.validUntil,
-      usageLimit: data.usageLimit ?? 1
+      usageLimit: 1
     }
   })
 }

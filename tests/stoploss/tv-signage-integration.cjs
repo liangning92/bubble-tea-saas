@@ -260,7 +260,7 @@ async function main() {
     ).status,
     404,
   );
-  const newCoupon=await http(app).post('/api/marketing/coupons').set('Authorization','Bearer '+token).send({storeId:'foreign',code:'',type:'discount_fixed',value:5000,validFrom:new Date(Date.now()-1000).toISOString(),validUntil:new Date(Date.now()+86400000).toISOString()});
+  const newCoupon=await http(app).post('/api/marketing/coupons').set('Authorization','Bearer '+token).send({storeId:'foreign',code:'',usageLimit:100,type:'discount_fixed',value:2000,minOrder:16000,validFrom:new Date(Date.now()-1000).toISOString(),validUntil:'9999-12-31T23:59:59.999Z'});
   assert.equal(newCoupon.status,201);assert.equal(newCoupon.body.data.storeId,'store');assert.equal(newCoupon.body.data.usageLimit,1);
   assert.match(newCoupon.body.data.code,/^YOUME-(?:[0-9A-F]{4}-){3}[0-9A-F]{4}$/);
   const verified=await http(app).post('/api/marketing/coupons/verify').set('Authorization','Bearer '+token).send({code:newCoupon.body.data.code.toLowerCase()});
