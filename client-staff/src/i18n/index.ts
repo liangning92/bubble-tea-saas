@@ -165,6 +165,17 @@ const resources = {
         reimbursement: 'Pengeluaran'
       },
       auth: {
+        offlineMissing: 'Perangkat ini belum menyiapkan login offline untuk akun ini. Masuk sekali saat server tersedia.',
+        offlineExpired: 'Izin offline sudah berakhir. Masuk saat server tersedia untuk memperbaruinya.',
+        offlineHelp: 'Setelah berhasil masuk online di perangkat ini, Anda dapat masuk offline selama 30 hari. Kata sandi tidak disimpan.',
+        offlineTitle: 'Masuk dalam mode offline',
+        offlineDescription: 'Kata sandi telah diverifikasi di perangkat ini. Server belum memverifikasi sesi online baru.',
+        offlineStore: 'Toko',
+        offlineUntil: 'Batas akses offline',
+        offlineOperations: 'Data dan tindakan karyawan tetap membutuhkan server. Absensi, cuti, persetujuan dan perubahan belum dikirim. Menu tetap tersedia; masuk online untuk melanjutkan.',
+        offlineReconnect: 'Masuk online kembali',
+        offlineSetupFailed: 'Login online berhasil, tetapi penyimpanan offline tidak tersedia. Login offline belum siap pada perangkat ini.',
+
         staffMissing: 'Akun belum terhubung ke profil karyawan. Hubungi pengelola.',
         sessionExpired: 'Sesi berakhir. Silakan masuk lagi.',
         resetHelp: 'Hubungi pengelola untuk mengatur ulang kata sandi.',
@@ -830,6 +841,17 @@ const resources = {
         reimbursement: 'Expense'
       },
       auth: {
+        offlineMissing: 'This device has no offline login prepared for this account. Sign in once while the server is available.',
+        offlineExpired: 'Offline access has expired. Sign in while the server is available to renew it.',
+        offlineHelp: 'After signing in online on this device, offline login is available for 30 days. Your password is never stored.',
+        offlineTitle: 'Signed in offline',
+        offlineDescription: 'Your password was verified on this device. A new online session has not been validated by the server.',
+        offlineStore: 'Store',
+        offlineUntil: 'Offline access expires',
+        offlineOperations: 'Employee data and actions still require the server. Attendance, leave, approvals and changes have not been submitted. All menus remain available; sign in online to continue.',
+        offlineReconnect: 'Sign in online again',
+        offlineSetupFailed: 'Online sign-in succeeded, but offline storage is unavailable. Offline login is not ready on this device.',
+
         staffMissing: 'This account has no employee profile. Contact your manager.',
         sessionExpired: 'Session expired. Please sign in again.',
         resetHelp: 'Contact your manager to reset your password.',
@@ -1491,6 +1513,17 @@ const resources = {
         reimbursement: '报销'
       },
       auth: {
+        offlineMissing: '本机尚未为此账号准备离线登录，请在服务器可用时先登录一次。',
+        offlineExpired: '离线授权已过期，请在服务器可用时登录更新。',
+        offlineHelp: '在本机在线登录成功后，30 天内可离线登录；不保存明文密码。',
+        offlineTitle: '已离线登录',
+        offlineDescription: '已在本机校验密码，尚未建立新的服务器登录会话。',
+        offlineStore: '门店',
+        offlineUntil: '离线授权有效期至',
+        offlineOperations: '员工数据和业务操作仍需服务器。打卡、请假、审批及修改尚未提交。各菜单均保留，联网登录后可继续使用。',
+        offlineReconnect: '重新在线登录',
+        offlineSetupFailed: '在线登录成功，但本机离线缓存不可用，尚未准备好离线登录。',
+
         staffMissing: '此账号尚未关联员工资料，请联系管理员。',
         sessionExpired: '登录已过期，请重新登录。',
         resetHelp: '请联系管理员重置密码。',
@@ -1502,7 +1535,7 @@ const resources = {
         hidePassword: '隐藏密码',
         loginTitle: '员工登录',
         appName: 'YOUME',
-        rememberMe: '记住密码',
+        rememberMe: '记住手机号',
         forgotPassword: '忘记密码？',
         phonePlaceholder: '示例: 081234567890',
         passwordPlaceholder: '输入密码',

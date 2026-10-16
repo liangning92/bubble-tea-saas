@@ -112,3 +112,13 @@ test('additive TV models do not select unrelated sales/payroll checks, existing 
   f.write('server/prisma/schema.prisma','model Store {\n id String @id\n salary Int\n}\nmodel TvScreen {\n id String @id\n}\n');git('add','.');git('commit','-m','existing field');p=planRange(base,git('rev-parse','HEAD'),f);assert.equal(p.tvSchemaOnly,false);assert.ok(p.domains.includes('payroll'));
  }finally{f.close()}
 });
+
+test('employee offline login selects its own browser check without POS offline regressions',()=>{
+ const f=fixture();try{
+  f.write('client-staff/src/utils/offlineAuth.ts','export const offline = true');
+  const p=selectScope(['client-staff/src/utils/offlineAuth.ts','tests/stoploss/staff-offline-login.test.cjs'],f);
+  assert.deepEqual(p.components,['staff']);assert.ok(p.domains.includes('staffOffline'));assert.ok(!p.domains.includes('offline'));
+  assert.ok(p.browser.some(check=>check.scripts.includes('tests/stoploss/staff-offline-login-page-check.cjs')));
+  assert.ok(!p.http.includes('tests/stoploss/offline-operations-http-check.cjs'));
+ }finally{f.close()}
+});
