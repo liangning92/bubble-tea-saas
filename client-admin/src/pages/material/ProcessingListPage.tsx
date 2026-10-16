@@ -176,7 +176,7 @@ export function ProcessingListPage() {
 }
 
 function ProcessingHistory() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { data: historyData, isLoading } = useQuery({
     queryKey: ['processing-history'],
     queryFn: () => materialApi.processHistory(20)

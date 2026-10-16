@@ -1,3 +1,4 @@
+import { purchaseDescriptionDisplay } from '../../../../shared/utils/localizedItemName'
 import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
@@ -966,7 +967,7 @@ export function ExpenseListPage() {
                         </div>
                         {expense.quantity !== undefined && <p className="text-sm text-gray-600">{t('expense.purchaseQuantity')}: {formatNumber(expense.quantity)}</p>}
                         {expense.description && (
-                          <p className="text-sm text-gray-600 mt-1">{expense.description}</p>
+                          <p className="text-sm text-gray-600 mt-1">{expense.referenceType==='purchase'?purchaseDescriptionDisplay(expense.description,i18n.language):expense.description}</p>
                         )}
                       </div>
                       <div className="text-right">

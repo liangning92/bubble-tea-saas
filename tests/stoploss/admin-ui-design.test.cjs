@@ -59,3 +59,10 @@ test('Indonesian display chooses recognized names and retains identifying sizes'
  assert.equal(names.itemDisplayName({name:'Cup 700ml',nameId:'Gelas'},'id'),'Gelas 700ml');
  assert.equal(names.itemDisplayName('Blue / Red (蓝红)','id'),'Blue / Red');
 });
+
+test('structured purchase descriptions retain every item and quantity',()=>{
+ const {purchaseDescriptionDisplay}=load('shared/utils/localizedItemName.ts');
+ const description='Selai Mangga / Mango Jam (芒果果酱) · 6.9 kg; Cup 700ml / Gelas 700ml (700ml塑料杯) · 100 pcs';
+ assert.equal(purchaseDescriptionDisplay(description,'id'),'Selai Mangga · 6.9 kg; Gelas 700ml · 100 pcs');
+ assert.equal(purchaseDescriptionDisplay('Catatan bebas · periksa nota','id'),'Catatan bebas · periksa nota');
+});
