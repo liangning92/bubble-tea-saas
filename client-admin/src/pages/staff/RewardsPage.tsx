@@ -1,6 +1,7 @@
 import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
+import { useSearchParams } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
@@ -35,7 +36,9 @@ interface Redemption {
 export function RewardsPage() {
   const { t } = useTranslation()
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<'catalog' | 'redemptions'>('catalog')
+  const [params, setParams] = useSearchParams()
+  const activeTab = params.get('tab') === 'redemptions' ? 'redemptions' : 'catalog'
+  const setActiveTab = (tab: 'catalog' | 'redemptions') => setParams(current => { const next = new URLSearchParams(current); next.set('tab', tab); return next })
   const [rewards, setRewards] = useState<Reward[]>([])
   const [redemptions, setRedemptions] = useState<Redemption[]>([])
   const [isLoading, setIsLoading] = useState(true)

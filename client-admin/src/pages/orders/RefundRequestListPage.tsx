@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 interface RefundRequest {
   id: string
   orderId: string
+  amount: number
   orderNumber: string
   reason: string
   reasonCode?: string
@@ -63,13 +64,13 @@ export function RefundRequestListPage() {
     setSubmitting(true)
     try {
       await adminApi.approveRefund(selectedRequest.id, { verifiedPrepared: selectedRequest.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRequest.reasonCode === 'paid_unprepared', note: actionNote })
-      await queryClient.invalidateQueries()
       notifyAdmin(t('orders.refundApproved'))
       setSelectedRequest(null)
       setActionNote('')
-      loadRequests()
-    } catch (err) {
-      notifyAdmin(t('common.error'))
+      void queryClient.invalidateQueries()
+      void loadRequests()
+    } catch (err: any) {
+      notifyAdmin(err?.response?.data?.message || t('common.error'))
     } finally {
       setSubmitting(false)
     }
@@ -87,9 +88,10 @@ export function RefundRequestListPage() {
       notifyAdmin(t('orders.refundRejected'))
       setSelectedRequest(null)
       setActionNote('')
-      loadRequests()
-    } catch (err) {
-      notifyAdmin(t('common.error'))
+      void queryClient.invalidateQueries()
+      void loadRequests()
+    } catch (err: any) {
+      notifyAdmin(err?.response?.data?.message || t('common.error'))
     } finally {
       setSubmitting(false)
     }
@@ -183,7 +185,7 @@ export function RefundRequestListPage() {
                 <div>
                   <p className="text-gray-500">{t('orders.refundAmount')}</p>
                   <p className="font-bold text-lg text-red-500">
-                    {formatCurrency(selectedRequest.order?.finalAmount || 0)}
+                    {formatCurrency(selectedRequest.amount ?? selectedRequest.order?.finalAmount ?? 0)}
                   </p>
                 </div>
                 <div>

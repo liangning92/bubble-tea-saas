@@ -41,6 +41,7 @@ export function ShiftReviewPage() {
   const [selection, setSelection] = useState<string | null>(sessionId || null)
   const [tab, setTab] = useState<Tab>('overview')
   const [page, setPage] = useState(1)
+  const [orderStatus, setOrderStatus] = useState('active')
   const [reviewNote,setReviewNote]=useState('')
   const [reviewSaving,setReviewSaving]=useState(false)
   const [reviewError,setReviewError]=useState('')
@@ -54,10 +55,10 @@ export function ShiftReviewPage() {
       return result
     } })
   useEffect(() => { setSelection(sessionId || null); setPage(1); setTab('overview') }, [range.startDate, range.endDate, sessionId])
-  useEffect(() => { setPage(1);setReviewNote('');setReviewError('') }, [selection, tab])
+  useEffect(() => { setPage(1);setReviewNote('');setReviewError('') }, [selection, tab, orderStatus])
   const data = query.data
   const unmatched = data?.unassigned
-  const hasUnmatched = unmatched && (unmatched.summary.orders + unmatched.summary.expenses + unmatched.summary.warnings > 0)
+  const hasUnmatched = unmatched && (unmatched.orders.length + unmatched.summary.expenses + unmatched.summary.warnings > 0)
   const selected = sessionId ? data?.sessions.find(s=>s.id===sessionId) : selection === 'unassigned' && hasUnmatched ? unmatched : data?.sessions.find(s => s.id === selection) || data?.sessions[data.sessions.length - 1] || (hasUnmatched ? unmatched : undefined)
   const instant=(value:string)=>formatStoreDate(value,dateSettings,true)
   const title = (row: Review) => row.session ? (i18n.language === 'zh' ? row.session.definition?.nameZh : i18n.language === 'id' ? row.session.definition?.nameId : row.session.definition?.name) || t(`shiftReview.${row.session.shift}`, { defaultValue: row.session.shift }) : t('shiftReview.unassigned')
@@ -78,7 +79,8 @@ export function ShiftReviewPage() {
   if (user?.role !== 'admin' && access.isPending) return <p role="status">{t('common.loading')}</p>
   if (!allowed) return <p role="alert">{t('shiftReview.denied')}</p>
   const warningRows = selected ? [...selected.warnings, ...(selected.cashWarning?.status === 'pending' ? [{id:'cash-warning:'+selected.id,staffName:selected.session?.opener.name || '—',severity:'warning',description:t('cashReconciliation.warning',{difference:money(selected.cashWarning.difference)}),action:'cash_reconciliation',createdAt:selected.session?.closedAt || selected.windowEnd}] : [])] : []
-  const rows = selected && tab !== 'overview' ? tab === 'warnings' ? warningRows : selected[tab] : []
+  const orderRows = selected?.orders.filter(o => orderStatus === 'all' || (orderStatus === 'active' ? ['completed','paid'].includes(o.status) : o.status === 'refunded')) || []
+  const rows = selected && tab !== 'overview' ? tab === 'warnings' ? warningRows : tab === 'orders' ? orderRows : selected[tab] : []
   const paged = rows.slice((page - 1) * 20, page * 20)
   return <div className="space-y-5" data-testid="shift-review-page">
     <Link to={`/finance/revenue?${searchParams.get('returnQuery') || new URLSearchParams({period:'custom',startDate:searchParams.get('returnStartDate') || range.startDate,endDate:searchParams.get('returnEndDate') || range.endDate}).toString()}`} className="inline-flex items-center gap-2 text-sm text-primary hover:underline"><ArrowLeft size={16} />{t('revenueLayout.title')}</Link>
@@ -109,7 +111,8 @@ export function ShiftReviewPage() {
 
         <p className="text-sm text-gray-500">{t('shiftReview.attribution')}</p>
         {selected.overlapping && <p role="alert" className="text-amber-700">{t('shiftReview.overlap')}</p>}
-        <nav className="flex flex-wrap gap-1 border-b" aria-label={t('shiftReview.details')}>{(['overview', 'orders', 'warnings', 'expenses', 'employees'] as Tab[]).map(key => <button key={key} aria-pressed={tab === key} className={`px-4 py-3 font-medium ${tab === key ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`} onClick={() => setTab(key)}>{t(`shiftReview.${key}`)}{key !== 'overview' && ` (${key === 'warnings' ? warningRows.length : selected[key].length})`}</button>)}</nav>
+        <nav className="flex flex-wrap gap-1 border-b" aria-label={t('shiftReview.details')}>{(['overview', 'orders', 'warnings', 'expenses', 'employees'] as Tab[]).map(key => <button key={key} aria-pressed={tab === key} className={`px-4 py-3 font-medium ${tab === key ? 'text-primary border-b-2 border-primary' : 'text-gray-500'}`} onClick={() => setTab(key)}>{t(`shiftReview.${key}`)}{key !== 'overview' && ` (${key === 'warnings' ? warningRows.length : key === 'orders' ? orderRows.length : selected[key].length})`}</button>)}</nav>
+        {tab === 'orders' && <div className="flex flex-wrap items-center gap-3 p-3 bg-white border rounded-xl"><label htmlFor="shift-order-status" className="text-sm font-medium">{t('orders.status')}</label><select id="shift-order-status" className="input w-auto" value={orderStatus} onChange={e => setOrderStatus(e.target.value)}><option value="active">{t('orderVoid.activeOrders')}</option><option value="all">{t('common.all')}</option><option value="refunded">{t('orders.refunded')}</option></select></div>}
         {tab === 'overview' ? <div className="bg-white rounded-xl border p-5 grid md:grid-cols-2 gap-4">
           {selected.session && <><div><span className="text-gray-500">{t('shiftReview.opener')}</span><p className="font-semibold">{selected.session.opener.name}</p></div><div><span className="text-gray-500">{t('shiftReview.handover')}</span><p className="font-semibold">{selected.session.nextStaff?.name || '—'}</p></div><div><span className="text-gray-500">{t('shiftReview.closeNote')}</span><p>{selected.session.closeNote || '—'}</p></div></>}
           <div><span className="text-gray-500">{t('shiftReview.completedOrders')}</span><p className="font-semibold">{selected.summary.completedOrders}</p></div><div><span className="text-gray-500">{t('shiftReview.refunded')}</span><p className="font-semibold">{selected.summary.refundedOrders} · {money(selected.summary.refundedAmount)}</p></div>

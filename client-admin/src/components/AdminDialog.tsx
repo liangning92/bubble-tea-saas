@@ -6,8 +6,8 @@ import { X } from 'lucide-react'
 const AdminDialogDirtyContext = createContext<() => void>(() => {})
 export const useAdminDialogDirty = () => useContext(AdminDialogDirtyContext)
 
-export function AdminDialog({ title, children, onClose, className = 'max-w-4xl', busy = false, trackChanges = false, chrome = false }: {
-  title: string; children: ReactNode; onClose: () => void; className?: string; busy?: boolean; trackChanges?: boolean; chrome?: boolean
+export function AdminDialog({ title, children, onClose, className = 'max-w-4xl', busy = false, trackChanges = false, chrome = false, priority = false }: {
+  title: string; children: ReactNode; onClose: () => void; className?: string; busy?: boolean; trackChanges?: boolean; chrome?: boolean; priority?: boolean
 }) {
   const { t } = useTranslation()
   const ref = useRef<HTMLDivElement>(null), close = useRef(onClose), pending = useRef(busy), dirty = useRef(false)
@@ -74,7 +74,7 @@ export function AdminDialog({ title, children, onClose, className = 'max-w-4xl',
     }
     return cloneElement(node, props)
   })
-  return createPortal(<div className="admin-dialog-overlay fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-3 sm:p-5" onMouseDown={e => { if (e.target === e.currentTarget) requestClose.current() }}>
+  return createPortal(<div className={`admin-dialog-overlay fixed inset-0 ${priority ? 'z-[90]' : 'z-[80]'} bg-black/50 flex items-center justify-center p-3 sm:p-5`} onMouseDown={e => { if (e.target === e.currentTarget) requestClose.current() }}>
     <div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={discard ? copy.title : title} aria-busy={working} className={`admin-workspace admin-dialog w-full max-h-[92dvh] overflow-y-auto overscroll-contain rounded-xl bg-white shadow-xl ${className}`}
       onChangeCapture={e => { if (!ref.current?.contains(e.target as Node)) return; const field = e.target as HTMLInputElement; if (field.type !== 'search' && !field.closest('[data-dialog-search]')) dirty.current = true }}
       onClickCapture={e => {

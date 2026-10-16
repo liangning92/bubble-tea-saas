@@ -1716,6 +1716,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "GET /api/reports/pending-actions": {permission:"dashboard.read",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"dashboard.read",resource:null},
   "GET /api/reports/dashboard": {
     "legacyRoles": [
       "admin",

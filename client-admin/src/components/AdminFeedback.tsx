@@ -22,7 +22,7 @@ export function AdminFeedback() {
   const queue=useSyncExternalStore(subscribe,()=>confirmations), messages=useSyncExternalStore(subscribe,()=>notices)
   const request=queue[0], message=messages[0]
   return <>
-    {request&&<AdminDialog title={t('common.confirm')} onClose={()=>settle(request.id,false)} className="max-w-md" chrome>
+    {request&&<AdminDialog title={t('common.confirm')} onClose={()=>settle(request.id,false)} className="max-w-md" priority chrome>
       <p className="whitespace-pre-wrap break-words">{request.message}</p>
       <div className="admin-dialog-footer"><button type="button" className="btn-secondary" onClick={()=>settle(request.id,false)} data-dialog-close="true">{t('common.cancel')}</button><button type="button" className="btn-primary" onClick={()=>settle(request.id,true)}>{t('common.confirm')}</button></div>
     </AdminDialog>}

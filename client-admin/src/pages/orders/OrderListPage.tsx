@@ -9,9 +9,9 @@ import { useDashboardContext, requireRead, dashboardLink } from '../../utils/das
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState'
 import { RefundPolicyReview, confirmPreparedRefund } from '../../components/RefundPolicyReview'
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { orderApi, channelApi, adminApi, financeApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
@@ -42,7 +42,10 @@ export function OrderListPage() {
   const navigate = useNavigate()
   const { user: _user } = useAuthStore()
   const context=useDashboardContext()
-  const [subTab, setSubTab] = useState<OrderSubTab>('orders')
+  const queryClient = useQueryClient()
+  const [params, setParams] = useSearchParams()
+  const subTab: OrderSubTab = params.get('tab') === 'refunds' ? 'refunds' : 'orders'
+  const setSubTab = (tab: OrderSubTab) => setParams(current => { const next = new URLSearchParams(current); next.set('tab', tab); return next })
   const [statusFilter, setStatusFilter] = useState('')
   const [channelFilter, setChannelFilter] = useState('')
   const [search, setSearch] = useState('')
@@ -85,7 +88,6 @@ export function OrderListPage() {
   }
 
   // Refund requests state
-  const [refundRequests, setRefundRequests] = useState<RefundRequest[]>([])
   const [selectedRefund, setSelectedRefund] = useState<RefundRequest | null>(null)
   const [refundAction, setRefundAction] = useState<'approve' | 'reject' | null>(null)
   const [refundNote, setRefundNote] = useState('')
@@ -106,20 +108,15 @@ export function OrderListPage() {
 
   const orders = data?.data?.data?.list || []
 
-  // Load pending refund requests
-  const loadRefundRequests = async () => {
-    if (!context.valid) return
-    try {
-      const res = await adminApi.getRefundRequests('pending')
-      setRefundRequests(res.data?.data?.list || [])
-    } catch (err) {
-      console.error('Failed to load refund requests:', err)
-    }
-  }
-
-  useEffect(() => {
-    loadRefundRequests()
-  }, [])
+  const refundQuery = useQuery({
+    queryKey: ['refund-requests', context.storeId, 'pending'],
+    enabled: context.valid,
+    queryFn: async () => { const res = await adminApi.getRefundRequests('pending'); return requireRead(res, Array.isArray(res.data?.data?.list)).data.data.list as RefundRequest[] },
+    refetchInterval: 30000,
+    refetchOnWindowFocus: 'always'
+  })
+  const refundRequests = refundQuery.data || []
+  const refreshRefundData = () => queryClient.invalidateQueries()
 
   const handleApproveRefund = async () => {
     if (!selectedRefund) return
@@ -130,9 +127,9 @@ export function OrderListPage() {
       setSelectedRefund(null)
       setRefundAction(null)
       setRefundNote('')
-      loadRefundRequests()
-    } catch (err) {
-      notifyAdmin(t('common.error'))
+      void refreshRefundData()
+    } catch (err: any) {
+      notifyAdmin(err?.response?.data?.message || t('common.error'))
     }
   }
 
@@ -147,9 +144,9 @@ export function OrderListPage() {
       setSelectedRefund(null)
       setRefundAction(null)
       setRefundNote('')
-      loadRefundRequests()
-    } catch (err) {
-      notifyAdmin(t('common.error'))
+      void refreshRefundData()
+    } catch (err: any) {
+      notifyAdmin(err?.response?.data?.message || t('common.error'))
     }
   }
 
@@ -181,9 +178,6 @@ export function OrderListPage() {
           }`}
         >
           {t('orders.list') || 'Orders'}
-          {pendingRefundCount > 0 && (
-            <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{pendingRefundCount}</span>
-          )}
         </button>
         <button
           onClick={() => setSubTab('refunds')}
@@ -192,6 +186,9 @@ export function OrderListPage() {
           }`}
         >
           {t('orders.refunds') || 'Refunds'}
+          {pendingRefundCount > 0 && (
+            <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{pendingRefundCount}</span>
+          )}
         </button>
       </div>
       {subTab === 'orders' && <div className="flex flex-wrap items-center gap-3 ml-auto" data-testid="order-date-filters">
@@ -314,7 +311,7 @@ export function OrderListPage() {
       {/* Refunds Tab */}
       {subTab === 'refunds' && (
         <div className="space-y-4">
-          {refundRequests.length === 0 ? (
+          {refundQuery.isError ? <DashboardReadFailure retry={() => refundQuery.refetch()} /> : refundQuery.isPending ? <p>{t('common.loading')}</p> : refundRequests.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-xl">
               <p className="text-gray-500">{t('orders.noRefunds') || 'No refund requests'}</p>
             </div>
