@@ -96,9 +96,9 @@ export function ProcessingListPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <h4 className="font-semibold">{formatItemName(recipe.name, i18n.language)}</h4>
-                      <p className="text-sm text-gray-500">
+                      {recipe.outputName && <p className="text-sm text-gray-500">
                         → {formatItemName(recipe.outputName, i18n.language)} ({recipe.outputUnit})
-                      </p>
+                      </p>}
                     </div>
                     <div className="flex gap-2">
                       <button
