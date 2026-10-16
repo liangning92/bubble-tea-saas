@@ -6,9 +6,7 @@ export function itemDisplayName(item: NamedItem, language = 'id'): string {
   const lang = language.split('-')[0]
   const explicit = typeof item === 'object' ? ({ zh: item.nameZh, en: item.nameEn, id: item.nameId } as Record<string, string | undefined>)[lang] : undefined
   if (explicit?.trim()) {
-    const specs = [...name.matchAll(/\b\d+(?:\.\d+)?\s*(?:ml|kg|g|l|pcs|cup)\b/gi)].map(m => m[0])
-    const missing = specs.filter(spec => !explicit.toLowerCase().includes(spec.toLowerCase()))
-    return [explicit.trim(), ...missing].join(' ')
+    return withSpecifications(explicit.trim(), name)
   }
   if (!name.trim()) return '-'
   const match = name.match(/^(.+?)\s+\/\s+([^()]+?)\s*\(([^()]*[\u4e00-\u9fff][^()]*)\)\s*$/)
@@ -20,8 +18,7 @@ export function itemDisplayName(item: NamedItem, language = 'id'): string {
     const indonesian = /\b(gelas|bubuk|irisan|susu|teh|sirup|selai|sedotan|tutup|kantong|gula|buah|biji|kacang|krim|air|es|plastik|kertas|cokelat|stroberi|mangga|leci|jeruk|kopi|hitam|hijau|merah|sari|sendok|wadah|saus|botol|pipet|remah|remahan|nata)\b/i
     const candidates = parts.filter(part => indonesian.test(part))
     const candidate = candidates.length === 1 ? candidates[0] : clean
-    const specs = [...new Set([...name.matchAll(/\b\d+(?:\.\d+)?\s*(?:ml|kg|g|l|pcs|cup)\b/gi)].map(m => m[0]))]
-    return [candidate, ...specs.filter(spec => !candidate.toLowerCase().includes(spec.toLowerCase()))].join(' ')
+    return withSpecifications(candidate, name)
   }
   if (!match) return name
   const [original, , , chinese] = match
@@ -38,4 +35,17 @@ export function purchaseDescriptionDisplay(description: string, language: string
     const match = segment.match(/^(.*) · (\d+(?:\.\d+)?\s+\S*)$/)
     return match ? `${itemDisplayName(match[1], language)} · ${match[2]}` : segment
   }).join('; ')
+}
+
+function withSpecifications(candidate: string, original: string): string {
+  const normalize = (text: string) => text.toLowerCase().replace(/\s+/g, '')
+  const specs = [...original.matchAll(/\b(\d+(?:\.\d+)?)\s*(ml|kg|g|l|pcs|cup)\b/gi)]
+  let result = candidate
+  for (const [spec, number] of specs) {
+    if (normalize(result).includes(normalize(spec))) continue
+    // Legacy bag names already end in the cup count: "Kantong Plastik 2".
+    const suffix = new RegExp('\\b' + number.replace('.', '\\.') + '$')
+    result = suffix.test(result) ? result.replace(suffix, spec) : `${result} ${spec}`
+  }
+  return result
 }
