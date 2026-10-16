@@ -199,6 +199,7 @@ async function main() {
     status: "published",
     rule: { minAmount: 50000, amount: 40000 },
   });
+  await activities.saveActivity('store',{name:'Draw preview',type:'lottery',status:'published',showOnTv:true,rule:{prizes:[{id:'preview-tea',name:'Tea',color:'#227755',weight:10,remaining:4}]}});
   const a = await svc.signageSnapshot(screen),
     b = await svc.signageSnapshot(screen);
   assert.equal(a.version, b.version);
@@ -226,6 +227,7 @@ async function main() {
     jwt = require("../../server/node_modules/jsonwebtoken"),
     http = require("../../server/node_modules/supertest");
   app.use(express.json());
+  app.use("/api/marketing",require("../../server/src/routes/marketing.ts").marketingRouter);
   app.use(
     "/api/tv",
     require("../../server/src/middlewares/staffAccessV2.ts").declareAccessRoutes(
@@ -258,6 +260,20 @@ async function main() {
     ).status,
     404,
   );
+  const newCoupon=await http(app).post('/api/marketing/coupons').set('Authorization','Bearer '+token).send({storeId:'foreign',code:'',type:'discount_fixed',value:5000,validFrom:new Date(Date.now()-1000).toISOString(),validUntil:new Date(Date.now()+86400000).toISOString()});
+  assert.equal(newCoupon.status,201);assert.equal(newCoupon.body.data.storeId,'store');assert.equal(newCoupon.body.data.usageLimit,1);
+  assert.match(newCoupon.body.data.code,/^YOUME-(?:[0-9A-F]{4}-){3}[0-9A-F]{4}$/);
+  const verified=await http(app).post('/api/marketing/coupons/verify').set('Authorization','Bearer '+token).send({code:newCoupon.body.data.code.toLowerCase()});
+  assert.equal(verified.status,200);assert.equal((await db.coupon.findUnique({where:{id:newCoupon.body.data.id}})).usedCount,0);
+  await db.coupon.update({where:{id:newCoupon.body.data.id},data:{usedCount:1}});
+  assert.equal((await http(app).post('/api/marketing/coupons/verify').set('Authorization','Bearer '+token).send({code:newCoupon.body.data.code})).status,400);
+  const oldCoupon=await db.coupon.create({data:{storeId:'store',code:'ACT-aabb-ccdd-1234',type:'discount_fixed',value:1000,validFrom:new Date(Date.now()-1000),validUntil:new Date(Date.now()+86400000)}});
+  assert.equal((await http(app).post('/api/marketing/coupons/verify').set('Authorization','Bearer '+token).send({code:oldCoupon.code.toUpperCase()})).status,200);
+  const beforePreview={orders:await db.order.count(),grants:await db.config.count({where:{key:{startsWith:activities.ACTIVITY_PREFIX+'grant.'}}})};
+  const previewResponse=await http(app).get('/api/tv/screens/'+screen.id+'/preview').set('Authorization','Bearer '+token);
+  assert.equal(previewResponse.status,200);assert.equal(previewResponse.body.data.drawPreview.name,'Draw preview');
+  assert.deepEqual(previewResponse.body.data.drawPreview.prizes,[{id:'preview-tea',name:'Tea',color:'#227755'}]);
+  assert.deepEqual({orders:await db.order.count(),grants:await db.config.count({where:{key:{startsWith:activities.ACTIVITY_PREFIX+'grant.'}}})},beforePreview);
   const content = await http(app)
     .get("/api/tv/device/content")
     .set("X-TV-Device-Token", paired.token);
@@ -323,7 +339,10 @@ async function main() {
     {
       id: "synthetic",
       status: "ready",
-      prize: { name: "Tea" },
+      prize: { id: "tea", name: "Tea" },
+      coupon: {code:"YOUME-0000-1111-2222-3333",type:"discount_fixed",value:5000,minOrder:0,validUntil:new Date(Date.now()+86400000).toISOString()},
+      prizeIndex: 1,
+      prizes: [{id:"thanks",name:"Thanks",color:"#111111",weight:90,remaining:100},{id:"tea",name:"Tea",color:"#227755",weight:10,remaining:3,couponId:"private"}],
       orderNumber: "Synthetic",
       eventExpiresAt: new Date(Date.now() + 60000).toISOString(),
     },
@@ -332,7 +351,12 @@ async function main() {
     where: { id: claimed.deviceId },
     include: { screen: true },
   });
-  assert.equal((await svc.tvEvents(device)).length, 1);
+  const drawEvents = await svc.tvEvents(device);
+  assert.equal(drawEvents.length, 1);
+  assert.equal(drawEvents[0].coupon.code,'YOUME-0000-1111-2222-3333');
+  assert.equal(drawEvents[0].prizeId,'tea');assert.equal(drawEvents[0].prizeIndex,1);
+  assert.deepEqual(drawEvents[0].prizes,[{id:'thanks',name:'Thanks',color:'#111111'},{id:'tea',name:'Tea',color:'#227755'}]);
+  assert.ok(!JSON.stringify(drawEvents).includes('weight')&&!JSON.stringify(drawEvents).includes('remaining')&&!JSON.stringify(drawEvents).includes('couponId'));
   assert.equal((await svc.tvEvents({ ...device, id: another.id })).length, 0);
   await svc.acknowledgeTvEvents(device, ["synthetic"]);
   assert.equal((await svc.tvEvents(device)).length, 0);

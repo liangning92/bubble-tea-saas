@@ -34,14 +34,14 @@ const createCampaignSchema = z.object({
 const createCouponSchema = z.object({
   storeId: z.string(),
   campaignId: z.string().optional(),
-  code: z.string().min(3),
+  code: z.string().trim().max(128).refine(value=>!value||value.length>=3).optional(),
   type: z.enum(['discount_percent', 'discount_fixed', 'free_product', 'free_delivery']),
   value: z.number().int().positive(),
   minOrder: z.number().int().optional().default(0),
   maxDiscount: z.number().int().optional().default(0),
   validFrom: z.string(),
   validUntil: z.string(),
-  usageLimit: z.number().int().optional().default(0)
+  usageLimit: z.number().int().min(0).optional().default(1)
 })
 
 // ==================== CAMPAIGNS ====================
@@ -166,6 +166,7 @@ router.post('/coupons', authenticate, authorize('admin', 'manager'), validateBod
   try {
     const coupon = await MarketingService.createCoupon({
       ...req.body,
+      storeId: req.user!.storeId,
       validFrom: new Date(req.body.validFrom),
       validUntil: new Date(req.body.validUntil)
     })
@@ -239,7 +240,7 @@ router.post('/coupons/verify', authenticate, async (req: AuthRequest, res) => {
 
     // 1. 查询优惠券母券
     const coupon = await prisma.coupon.findFirst({
-      where: { code: trimmedCode, storeId: req.user!.storeId }
+      where: { code: { in: [...new Set([trimmedCode, String(code).trim(), ...(trimmedCode.startsWith('ACT-') ? ['ACT-'+trimmedCode.slice(4).toLowerCase()] : [])])] }, storeId: req.user!.storeId }
     })
 
     if (!coupon) {

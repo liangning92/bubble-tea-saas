@@ -17,6 +17,7 @@ import {
   records,
   putRecord,
   ACTIVITY_PREFIX,
+  displayPrizes,
 } from "./ActivityService";
 import {
   activityEligible,
@@ -506,6 +507,10 @@ export async function tvEvents(device: any) {
       eventId: g.id,
       orderNumber: g.orderNumber,
       prizeName: g.prize.name,
+      coupon: g.coupon ? { code: g.coupon.code, type: g.coupon.type, value: g.coupon.value, minOrder: g.coupon.minOrder, validUntil: g.coupon.validUntil } : undefined,
+      prizeId: g.prize.id,
+      prizeIndex: g.prizeIndex,
+      prizes: displayPrizes(g.prizes),
       expiresAt: g.eventExpiresAt || g.expiresAt,
     }));
 }

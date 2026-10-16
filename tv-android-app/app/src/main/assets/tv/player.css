@@ -188,19 +188,46 @@ dialog {
 dialog::backdrop {
   background: #000b;
 }
+#lottery[hidden], #lottery [hidden] { display: none !important; }
 #lottery {
-  position: fixed;
-  inset: 12vh 10vw;
-  z-index: 20;
-  background: #173850;
-  border: 6px solid #e9ca74;
-  border-radius: 24px;
-  text-align: center;
-  padding: 12vh 2vw;
+  position: fixed; inset: 0; z-index: 30; padding: 4vh 5vw; overflow: hidden;
+  background: radial-gradient(ellipse at 22% 35%, #fff3f6 0, #f8ccd8 28%, #f3a9be 75%);
+  color: #511f35; isolation: isolate;
 }
-#lottery strong {
-  font-size: 2.3em;
+.draw-topline {display:flex;justify-content:space-between;gap:1em;align-items:center;color:#692440;font-size:clamp(12px,2vmin,26px);font-weight:700;letter-spacing:.14em;height:7vh;}
+#draw-preview {letter-spacing:0;background:#f5d58b;color:#692440;padding:.4em .8em;border-radius:2em;}
+.draw-layout {height:82vh;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);align-items:center;gap:6vw;max-width:1800px;margin:auto;}
+.draw-wheel-wrap {position:relative;aspect-ratio:1;width:min(100%,76vh);justify-self:center;border-radius:50%;background:#152c36;box-shadow:0 0 0 1.2vmin #ddb773,0 0 0 2vmin #7b623b,0 0 8vmin #d6bc6550;}
+#draw-wheel {display:block;width:100%;height:100%;will-change:transform;transform-origin:50% 50%;}
+.draw-pointer {position:absolute;z-index:3;left:50%;top:-1.6%;transform:translateX(-50%);border-left:2.5vmin solid transparent;border-right:2.5vmin solid transparent;border-top:6vmin solid #fff1c7;filter:drop-shadow(0 4px 2px #0008);}
+.draw-hub {position:absolute;inset:36%;border-radius:50%;background:#fff0cb;color:#692440;box-shadow:0 0 0 .7vmin #c79b55,0 1vmin 3vmin #0007;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+#draw-countdown {font-size:clamp(30px,8vmin,115px);font-weight:900;line-height:1;}
+#draw-hub-label {font-size:clamp(10px,1.5vmin,22px);font-weight:800;letter-spacing:.08em;margin-top:.5em;}
+.draw-copy {min-width:0;}
+#lottery-order {font-size:clamp(18px,3vmin,42px);font-weight:700;color:#692440;letter-spacing:.05em;margin:0 0 1.2em;overflow-wrap:anywhere;}
+#draw-heading {font-size:clamp(24px,5.3vmin,76px);line-height:1.12;margin:0 0 .5em;letter-spacing:-.035em;overflow-wrap:anywhere;}
+#draw-description {font-size:clamp(14px,2.2vmin,32px);line-height:1.6;color:#702d48;max-width:30em;margin:0;}
+#lottery-prize {display:block;font-size:clamp(22px,6vmin,86px);font-weight:900;line-height:1.1;color:#5d1e36;margin:.45em 0 0;overflow-wrap:anywhere;max-height:40vh;overflow:auto;}
+#draw-footer {font-size:clamp(12px,1.8vmin,25px);color:#692440;margin-top:1.5em;}
+.draw-progress {height:4px;background:#8d315c25;border-radius:4px;margin-top:2em;overflow:hidden;}
+.draw-progress i {display:block;height:100%;background:#852b50;transform-origin:left;transform:scaleX(var(--draw-progress,0));}
+#draw-confetti {position:absolute;inset:0;pointer-events:none;z-index:-1;}
+#draw-confetti i {display:none;position:absolute;left:var(--x);top:-10%;width:1vmin;height:2vmin;border-radius:2px;}
+#lottery[data-phase="result"] #draw-confetti i {display:block;animation:draw-fall 4s var(--delay) ease-in infinite;}
+#lottery[data-phase="countdown"] #draw-countdown {animation:draw-pulse 1s ease-in-out infinite;}
+@keyframes draw-pulse {50% {transform:scale(1.14);}}
+@keyframes draw-fall {to {transform:translateY(110vh) rotate(var(--turn));opacity:.15;}}
+@media(max-aspect-ratio: 1/1) {
+ .draw-layout {height:83vh;grid-template-columns:1fr;grid-template-rows:minmax(0,1.2fr) minmax(0,1fr);gap:3vh;text-align:center;}
+ .draw-wheel-wrap {width:min(68vw,43vh);}
+ #lottery-order {margin:0 0 .5em;}
+ #draw-description {margin:0 auto;}
+ #draw-heading {font-size:clamp(22px,5.6vmin,68px);}
+ #lottery-prize {font-size:clamp(24px,6.5vmin,76px);max-height:18vh;}
+ #draw-footer {margin-top:.6em;}
+ .draw-progress {margin-top:1em;}
 }
+@media(prefers-reduced-motion:reduce){#draw-confetti i,#draw-countdown{animation:none!important;}}
 .portrait #content {
   grid-template-columns: 1fr;
   grid-template-rows: 42% 58%;
@@ -290,3 +317,17 @@ article h3 {
 }
 
 .media-failed #content{grid-template-rows:1fr}
+
+.draw-brand {font-size:clamp(18px,3vmin,40px);letter-spacing:.05em;font-weight:900;}
+#draw-kicker {margin-right:auto;}
+#draw-coupon {background:#fff9f4;border:2px solid #fff4ed;border-radius:1.2vmin;padding:1.6vmin 2vmin;margin-top:1.5vmin;box-shadow:0 1vmin 3vmin #932d4930;}
+#draw-coupon p {margin:.4em 0;font-size:clamp(12px,1.7vmin,24px);color:#702d48;}
+#draw-coupon-code {display:block;font:800 clamp(18px,3.2vmin,46px)/1.3 ui-monospace,monospace;color:#511f35;overflow-wrap:anywhere;letter-spacing:.04em;}
+.draw-has-coupon #lottery-prize {font-size:clamp(22px,4.5vmin,64px);}
+.draw-has-coupon #draw-heading {font-size:clamp(22px,4vmin,58px);}
+.draw-has-coupon #lottery-order {margin-bottom:.6em;}
+.draw-has-coupon #draw-description {display:none;}
+#lottery[data-phase="spinning"] .draw-pointer {animation:draw-pointer-tick .12s steps(2) infinite;}
+#lottery[data-phase="result"] .draw-wheel-wrap {box-shadow:0 0 0 1.2vmin #ffe7ad,0 0 0 2vmin #e4ac69,0 0 8vmin #fff1cba0;}
+@keyframes draw-pointer-tick {50%{transform:translateX(-50%) rotate(-8deg);}}
+@media(max-aspect-ratio:1/1){.draw-topline{letter-spacing:0;gap:.7em;} .draw-brand{font-size:18px;}#draw-kicker{font-size:11px;}.draw-has-coupon .draw-layout{grid-template-rows:minmax(0,.9fr) minmax(0,1.3fr);}.draw-has-coupon .draw-wheel-wrap{width:min(53vw,32vh);}.draw-has-coupon #draw-footer{display:none;}.draw-has-coupon #draw-coupon-code{font-size:clamp(17px,4.4vmin,34px);}}

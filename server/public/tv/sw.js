@@ -1,10 +1,10 @@
-const SHELL = "tv-shell-v2";
+const SHELL = "tv-shell-v3";
 self.addEventListener("install", (event) =>
   event.waitUntil(
     caches
       .open(SHELL)
       .then((cache) =>
-        cache.addAll(["./", "./index.html", "./player.js", "./build.js", "./player.css"]),
+        cache.addAll(["./", "./index.html", "./player.js", "./lottery.js", "./build.js", "./player.css"]),
       )
       .then(() => self.skipWaiting()),
   ),

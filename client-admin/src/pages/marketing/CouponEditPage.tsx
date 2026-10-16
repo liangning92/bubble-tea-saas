@@ -1,4 +1,5 @@
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
+import { useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -10,6 +11,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 
 export function CouponEditPage() {
   const { t } = useTranslation()
+  const l = useMarketingCopy()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -24,7 +26,7 @@ export function CouponEditPage() {
     maxDiscount: 0,
     validFrom: '',
     validUntil: '',
-    usageLimit: 0,
+    usageLimit: 1,
     status: 'active',
     storeId: user?.storeId || ''
   })
@@ -58,14 +60,14 @@ export function CouponEditPage() {
       if (isEdit) return marketingApi.updateCoupon(id!, data)
       return marketingApi.createCoupon(data)
     },
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ['coupons'] })
-      navigate('/marketing/promotions/coupons')
+      navigate(!isEdit&&response.data?.data?.id?'/marketing/promotions/coupons/'+response.data.data.id:'/marketing/promotions/coupons')
     }
   })
 
   const handleSubmit = () => {
-    if (!form.code || !form.value || !form.validFrom || !form.validUntil) return
+    if (!form.value || !form.validFrom || !form.validUntil) return
     // Ensure storeId is set for new coupons
     const dataToSave = isEdit ? form : { ...form, storeId: user?.storeId }
     saveMutation.mutate(dataToSave)
@@ -92,8 +94,9 @@ export function CouponEditPage() {
       <div className="card max-w-2xl">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">{t('marketing.couponCode')} *</label>
-            <input type="text" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} className="input" placeholder={t('marketing.couponCodePlaceholder')} disabled={isEdit} />
+            <label className="block text-sm font-medium mb-1">{t('marketing.couponCode')}</label>
+            <input type="text" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} className="input" placeholder={l('留空自动生成独立券码','Leave blank to generate a unique code','Kosongkan untuk kode unik otomatis')} disabled={isEdit} />
+            {!isEdit&&<p className="text-xs text-gray-500 mt-1">{l('保存后自动显示券码，顾客可拍照保存，下次消费时向收银员出示。新券默认限用一次。','The code appears after saving. Customers can photograph it and show the cashier next time. New coupons default to one use.','Kode tampil setelah disimpan. Pelanggan dapat memotret dan menunjukkannya kepada kasir pada kunjungan berikutnya. Kupon baru default satu kali pakai.')}</p>}
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t('marketing.couponType')}</label>
