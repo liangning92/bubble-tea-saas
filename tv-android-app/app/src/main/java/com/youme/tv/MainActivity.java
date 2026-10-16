@@ -42,6 +42,7 @@ public class MainActivity extends Activity {
     private final ExecutorService downloads = Executors.newSingleThreadExecutor();
     private SharedPreferences prefs;
     private WebView web;
+    private AppUpdater updater;
     private File cache;
     private volatile String downloading = "";
     private volatile int generation = 0;
@@ -87,13 +88,14 @@ public class MainActivity extends Activity {
             }
         });
         web.loadUrl(LOCAL + "/tv/index.html"); hideUI();
+        updater = new AppUpdater(this);
     }
     private WebResourceResponse empty() { return new WebResourceResponse("text/plain", "UTF-8", 404, "Not Found", Collections.<String,String>emptyMap(), new ByteArrayInputStream(new byte[0])); }
     private void hideUI() { getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN); }
     @Override public void onWindowFocusChanged(boolean focus) { super.onWindowFocusChanged(focus); if(focus)hideUI(); }
-    @Override public void onResume() { super.onResume(); if(web!=null)web.onResume(); hideUI(); }
+    @Override public void onResume() { super.onResume(); if(web!=null)web.onResume(); if(updater!=null)updater.resumed(); hideUI(); }
     @Override public void onPause() { super.onPause(); if(web!=null)web.onPause(); }
-    @Override public void onDestroy() { unregisterReceiver(clockChanged); generation++; handler.removeCallbacksAndMessages(null); requests.shutdownNow(); downloads.shutdownNow(); if(web!=null){web.removeJavascriptInterface("TVNative");web.destroy();} super.onDestroy(); }
+    @Override public void onDestroy() { if(settingsMenu!=null)settingsMenu.dismiss(); if(updater!=null)updater.close(); unregisterReceiver(clockChanged); generation++; handler.removeCallbacksAndMessages(null); requests.shutdownNow(); downloads.shutdownNow(); if(web!=null){web.removeJavascriptInterface("TVNative");web.destroy();} super.onDestroy(); }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if(event.getKeyCode()==KeyEvent.KEYCODE_MENU || event.getKeyCode()==KeyEvent.KEYCODE_M) { if(event.getAction()==KeyEvent.ACTION_DOWN&&event.getRepeatCount()==0)openSettings(); return true; }
         if(event.getKeyCode()==KeyEvent.KEYCODE_DPAD_CENTER) {
@@ -103,7 +105,19 @@ public class MainActivity extends Activity {
         if(event.getKeyCode()==KeyEvent.KEYCODE_BACK){if(event.getAction()==KeyEvent.ACTION_UP)openSettings();return true;}
         return super.dispatchKeyEvent(event);
     }
-    private void openSettings() { js("window.TVOpenSettings && window.TVOpenSettings()"); }
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request,result,data);
+        if(request==AppUpdater.INSTALL_REQUEST&&updater!=null)updater.installationReturned(result);
+    }
+    private android.app.AlertDialog settingsMenu;
+    private void openSettings() {
+        if(updater==null || (settingsMenu!=null&&settingsMenu.isShowing()))return;
+        settingsMenu=new android.app.AlertDialog.Builder(this)
+                .setTitle(updater.text("电视设置", "TV settings", "Pengaturan TV"))
+                .setItems(new String[]{updater.text("连接设置", "Connection settings", "Pengaturan koneksi"),updater.menuLabel()},
+                    (dialog,which)->{if(which==1)updater.show();else js("window.TVOpenSettings && window.TVOpenSettings()");})
+                .setNegativeButton(updater.text("关闭", "Close", "Tutup"),(dialog,which)->{}).show();
+    }
     private void js(final String source) { handler.post(new Runnable(){public void run(){if(!isFinishing()&&web!=null)web.evaluateJavascript(source,null);}}); }
     private String serverOrigin() { return prefs.getString("server",BuildConfig.DEFAULT_SERVER); }
     private boolean allowedServer(String value, boolean allowHttp) {

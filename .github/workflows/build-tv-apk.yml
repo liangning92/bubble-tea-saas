@@ -21,7 +21,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: tv-apk-${{ github.sha }}
+  group: tv-apk-release
   cancel-in-progress: false
 jobs:
   verify-build:
@@ -61,6 +61,7 @@ jobs:
         with:
           java-version: '17'
           distribution: temurin
+      - run: node --test tests/stoploss/tv-signage-update.test.cjs
       - uses: android-actions/setup-android@v3
         with:
           packages: 'platforms;android-34 build-tools;34.0.0'
@@ -84,7 +85,7 @@ jobs:
           mkdir verified-tv
           cp tv-android-app/app/build/outputs/apk/release/app-release.apk verified-tv/Store-TV.apk
           sha256sum verified-tv/Store-TV.apk > verified-tv/SHA256SUMS
-          printf '{"sourceSha":"%s","versionCode":%s,"versionName":"%s"}\n' "$SOURCE_SHA" "$TV_VERSION_CODE" "$TV_VERSION_NAME" > verified-tv/manifest.json
+          node scripts/tv-update-manifest.cjs verified-tv/Store-TV.apk
           rm "$TV_KEYSTORE_FILE"
       - uses: actions/upload-artifact@v4
         with:
@@ -97,4 +98,12 @@ jobs:
           SOURCE_SHA: ${{ github.sha }}
         run: |
           TAG="tv-v2.0.$GITHUB_RUN_NUMBER"
-          gh release create "$TAG" --latest=false verified-tv/Store-TV.apk verified-tv/SHA256SUMS verified-tv/manifest.json --target "$SOURCE_SHA" --title "Store TV 2.0.$GITHUB_RUN_NUMBER" --notes "Store-scoped pairing, product and activity display, verified offline media. Source: $SOURCE_SHA"
+          gh release create "$TAG" --latest=false verified-tv/Store-TV.apk verified-tv/SHA256SUMS verified-tv/manifest.json --target "$SOURCE_SHA" --title "Store TV 2.0.$GITHUB_RUN_NUMBER" --notes "Store-scoped pairing, product and activity display, verified offline media and in-app updates. Source: $SOURCE_SHA"
+          # Update discovery only after the immutable version assets were published.
+          if gh release view tv-updates >/dev/null 2>&1; then
+            gh release download tv-updates --pattern manifest.json --dir previous-channel
+            node -e 'const fs=require("fs"),a=JSON.parse(fs.readFileSync("previous-channel/manifest.json")),b=JSON.parse(fs.readFileSync("verified-tv/manifest.json"));if(a.versionCode>=b.versionCode)throw Error("TV channel must advance monotonically")'
+          else
+            gh release create tv-updates --latest=false --target "$SOURCE_SHA" --title "Store TV update channel" --notes "Stable TV update manifest. APK links point to immutable version releases."
+          fi
+          gh release upload tv-updates verified-tv/manifest.json --clobber
