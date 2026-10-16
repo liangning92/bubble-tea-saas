@@ -753,7 +753,7 @@ export function TVScreensPage() {
             <iframe
               ref={previewFrame}
               title={tr("preview")}
-              className="w-full h-[65vh]"
+              className="w-full h-[65vh] md:h-[min(65vh,50vw)]"
               srcDoc={previewDocument}
               onLoad={(e) => {
                 e.currentTarget.contentWindow?.postMessage(
