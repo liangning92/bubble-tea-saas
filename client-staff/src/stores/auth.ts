@@ -2,7 +2,7 @@ import { clearMemoryDrafts } from '../utils/draftMemory'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 
-interface StaffUser {
+export interface StaffUser {
   id: string
   phone: string
   name: string
@@ -17,6 +17,8 @@ interface AuthState {
   token: string | null
   user: StaffUser | null
   isAuthenticated: boolean
+  offlineUntil: number | null
+  loginOffline: (user: StaffUser, expiresAt: number) => void
   login: (token: string, user: StaffUser) => void
   logout: () => void
   updateUser: (user: Partial<StaffUser>) => void
@@ -28,9 +30,11 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       isAuthenticated: false,
+      offlineUntil: null,
+      loginOffline: (user, expiresAt) => { clearMemoryDrafts(); set({ token: null, user, isAuthenticated: true, offlineUntil: expiresAt }) },
 
       login: (token: string, user: StaffUser) => {
-        set({ token, user, isAuthenticated: true })
+        set({ token, user, isAuthenticated: true, offlineUntil: null })
       },
 
       logout: () => {
@@ -41,7 +45,7 @@ export const useAuthStore = create<AuthState>()(
         void navigator.serviceWorker?.getRegistration().then(async registration=>{await(await registration?.pushManager.getSubscription())?.unsubscribe()}).catch(()=>{})
         Object.keys(sessionStorage).filter(k=>k.startsWith('employee-draft.')).forEach(k=>sessionStorage.removeItem(k))
         sessionStorage.removeItem('employee-push-id')
-        set({ token: null, user: null, isAuthenticated: false })
+        set({ token: null, user: null, isAuthenticated: false, offlineUntil: null })
       },
 
       updateUser: (userUpdate: Partial<StaffUser>) => {
@@ -56,7 +60,8 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         token: state.token,
         user: state.user,
-        isAuthenticated: state.isAuthenticated
+        isAuthenticated: state.isAuthenticated,
+        offlineUntil: state.offlineUntil
       })
     }
   )
