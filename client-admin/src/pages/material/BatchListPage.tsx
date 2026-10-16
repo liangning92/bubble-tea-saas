@@ -1,3 +1,4 @@
+import { formatItemName } from '../../utils/helpers'
 import { formatNumber } from '../../utils/numberDisplay'
 import dateLocaleI18n from '../../i18n'
 import { useState } from 'react'
@@ -7,7 +8,7 @@ import { materialApi } from '../../services/api'
 import { Loader2, Package, Clock } from 'lucide-react'
 
 export function BatchListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [daysFilter, setDaysFilter] = useState(7)
 
   // 获取7天内过期的批次
@@ -91,7 +92,7 @@ export function BatchListPage() {
             <tbody>
               {batches.map((batch: any) => (
                 <tr key={batch.id} className="border-b border-border hover:bg-gray-50">
-                  <td className="py-3 font-medium">{batch.inventoryName}</td>
+                  <td className="py-3 font-medium">{formatItemName(batch.inventoryName, i18n.language)}</td>
                   <td className="py-3 font-mono text-sm">{batch.batchNumber}</td>
                   <td className="py-3 text-right">{formatNumber(batch.quantity)} {batch.unit}</td>
                   <td className="py-3 text-right text-gray-600">

@@ -119,7 +119,7 @@ export function ProductCostPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="font-medium">{product.name}</p>
+                      <p className="font-medium">{formatItemName(product, i18n.language)}</p>
                       <p className="text-sm text-gray-500">{product.code}</p>
                     </div>
                     <div className="text-right">
@@ -151,7 +151,7 @@ export function ProductCostPage() {
           ) : selectedProduct ? (
             <div className="p-4">
               <div className="mb-4">
-                <h3 className="font-bold text-lg">{selectedProduct.name}</h3>
+                <h3 className="font-bold text-lg">{formatItemName(selectedProduct, i18n.language)}</h3>
                 <p className="text-gray-500">{selectedProduct.code}</p>
               </div>
 

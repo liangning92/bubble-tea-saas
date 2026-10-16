@@ -177,7 +177,7 @@ export function RestockSuggestionPage() {
                 className="flex flex-wrap gap-3 items-center justify-between bg-red-50 p-3 rounded-lg"
               >
                 <div>
-                  <div className="font-medium">{alert.inventoryName}</div>
+                  <div className="font-medium">{formatItemName(alert.inventoryName, i18n.language)}</div>
                   <div className="text-sm text-gray-500">
                     Batch: {alert.batchNumber} |{" "}
                     {t("material.quantity") || "Quantity"}: {qty(alert.quantity)}{" "}
