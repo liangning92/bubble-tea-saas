@@ -1,5 +1,4 @@
 import {offlineWorkSnapshot} from '../services/POSOfflineWorkService'
-import {readPolicyV2} from '../services/StaffPermissionV2Service'
 import { POS_MANUAL_PAYMENT_METHODS } from '../utils/offlinePolicy'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
 import { offlineAuthorization, applyOfflineOperation, OfflineOperationError } from '../services/POSOfflineOperationService'
@@ -97,7 +96,7 @@ for (const path of ['/balance', '/shifts/current']) {
         prisma.config.findUnique({where:{storeId_key:{storeId:req.user!.storeId,key:'shiftSettings'}}}),
         getExpenseCategories(req.user!.storeId)
       ])
-      const policy={independentRefundApproval:!!(await readPolicyV2(req.user!.storeId))?.active,shiftKeys:shifts.filter(s=>s.key!=='off').map(s=>s.key),requireSupervisorConfirm:!!(settingsRow&&JSON.parse(settingsRow.value).requireSupervisorConfirm),expenseCategoryKeys:categoriesRow.filter((c:any)=>c.posVisible!==false).map((c:any)=>c.key)}
+      const policy={independentRefundApproval:req.user!.role!=='admin',shiftKeys:shifts.filter(s=>s.key!=='off').map(s=>s.key),requireSupervisorConfirm:!!(settingsRow&&JSON.parse(settingsRow.value).requireSupervisorConfirm),expenseCategoryKeys:categoriesRow.filter((c:any)=>c.posVisible!==false).map((c:any)=>c.key)}
       res.json({code:200,data:{...result,offlineAuthorization:offlineAuthorization(req.user!,allowedPayments,policy)}})
     } catch (error) {
       console.error('Get shift evidence error:', error)
