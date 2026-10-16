@@ -134,3 +134,11 @@ test('employee attendance camera is separate from POS product barcode camera',()
   assert.ok(p.browser.some(check=>check.scripts.includes('tests/stoploss/barcode-page-check.cjs')));
  }finally{f.close()}
 });
+
+test('native TV activities and updater names do not select Windows or marketing regressions',()=>{
+ const f=fixture();try{
+  for(const name of ['tv-signage-update','desktop-updater-gate','activity-pricing'])f.write(`tests/stoploss/${name}.test.cjs`);
+  const p=selectScope(['tv-android-app/app/src/main/java/com/youme/tv/MainActivity.java','tv-android-app/app/src/main/java/com/youme/tv/AppUpdater.java'],f);
+  assert.deepEqual(p.domains,['tv']);assert.deepEqual(p.components,[]);assert.deepEqual(p.python,[]);assert.deepEqual(p.unitTests,['tests/stoploss/tv-signage-update.test.cjs']);
+ }finally{f.close()}
+});
