@@ -745,6 +745,19 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "GET /api/inventory/logs/today-stock-out": {
+    "legacyRoles": [
+      "manager",
+      "cashier",
+      "staff"
+    ],
+    "legacyPermission": "inventory.read",
+    "resource": null,
+    "permission": "inventory.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "POST /api/inventory": {
     "legacyRoles": [
       "admin",
