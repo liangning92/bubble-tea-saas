@@ -90,7 +90,7 @@ const httpChecks={
 };
 function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}){
  const all=sources(root),reverse=reverseDependencies(root,all,files),affected=impactedFiles(files,reverse);
- const selectedDomains=Object.entries(domains).filter(([name,rule])=>files.some(file=>rule.paths.test(file)&&(name==='ci'||!domains.ci.paths.test(file))&&!(name==='offline'&&(domains.tv.paths.test(file)||/^client-staff\/|staff-offline-login|employee-offline-attendance/.test(file))))).map(([name])=>name);
+ const selectedDomains=Object.entries(domains).filter(([name,rule])=>files.some(file=>rule.paths.test(file)&&(!file.startsWith('tv-android-app/')||name==='tv')&&(name==='ci'||!domains.ci.paths.test(file))&&!(name==='offline'&&(domains.tv.paths.test(file)||/^client-staff\/|staff-offline-login|employee-offline-attendance/.test(file))))).map(([name])=>name);
  const services=new Set(),typecheck=new Set(),i18n=new Set();
  for(const file of affected){const client=file.match(/^client-(admin|pos|staff)\//);if(client){typecheck.add(client[1]);if(files.includes(file))services.add(client[1])}if(/^server\/(?:src|prisma|package|tsconfig|Dockerfile)/.test(file)){typecheck.add('api');if(files.includes(file))services.add('api')}}
  // Shared code affects the clients that import it; standalone shared assets affect all clients.
