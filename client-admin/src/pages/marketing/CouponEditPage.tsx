@@ -26,6 +26,7 @@ export function CouponEditPage() {
     maxDiscount: 0,
     validFrom: '',
     validUntil: '',
+    noExpiry: false,
     usageLimit: 1,
     status: 'active',
     storeId: user?.storeId || ''
@@ -47,7 +48,8 @@ export function CouponEditPage() {
         minOrder: c.minOrder || 0,
         maxDiscount: c.maxDiscount || 0,
         validFrom: c.validFrom ? c.validFrom.split('T')[0] : '',
-        validUntil: c.validUntil ? c.validUntil.split('T')[0] : '',
+        validUntil: c.validUntil && !c.validUntil.startsWith('9999-') ? c.validUntil.split('T')[0] : '',
+        noExpiry: !!c.validUntil?.startsWith('9999-'),
         usageLimit: c.usageLimit || 0,
         status: c.status || 'active',
         storeId: c.storeId || user?.storeId || ''
@@ -67,9 +69,10 @@ export function CouponEditPage() {
   })
 
   const handleSubmit = () => {
-    if (!form.value || !form.validFrom || !form.validUntil) return
+    if (!form.value || !form.validFrom || (!form.noExpiry&&!form.validUntil)) return
     // Ensure storeId is set for new coupons
-    const dataToSave = isEdit ? form : { ...form, storeId: user?.storeId }
+    const {noExpiry,...fields}=form
+    const dataToSave = {...fields,usageLimit:1,validUntil:noExpiry?'9999-12-31T23:59:59.999Z':form.validUntil,...(!isEdit?{storeId:user?.storeId}:{})}
     saveMutation.mutate(dataToSave)
   }
 
@@ -121,19 +124,21 @@ export function CouponEditPage() {
               <input type="number" value={form.maxDiscount} onChange={e => setForm({ ...form, maxDiscount: Number(e.target.value) })} className="input" min={0} />
             </div>
           )}
-          <div className="grid grid-cols-2 gap-4">
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.noExpiry} onChange={e=>setForm({...form,noExpiry:e.target.checked})}/>{l('不限有效期','No expiry','Tanpa kedaluwarsa')}</label>
+          <p className="text-xs text-gray-500">{l('凭券码使用，可转赠；限用次数按设置执行。','Redeem by code; transferable. The configured usage limit applies.','Gunakan kode; dapat dipindahtangankan. Batas pemakaian tetap berlaku.')}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">{t('marketing.validFrom')} *</label>
               <LocalizedDateTimeInput type="date" value={form.validFrom} onChange={e => setForm({ ...form, validFrom: e.target.value })} className="input" />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">{t('marketing.validUntil')} *</label>
-              <LocalizedDateTimeInput type="date" value={form.validUntil} onChange={e => setForm({ ...form, validUntil: e.target.value })} className="input" />
+              <LocalizedDateTimeInput type="date" disabled={form.noExpiry} value={form.validUntil} onChange={e => setForm({ ...form, validUntil: e.target.value })} className="input" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">{t('marketing.usageLimit')}</label>
-            <input type="number" value={form.usageLimit} onChange={e => setForm({ ...form, usageLimit: Number(e.target.value) })} className="input" min={0} placeholder={t('marketing.usageLimitPlaceholder')} />
+            <input type="number" value={1} readOnly onChange={e => setForm({ ...form, usageLimit: Number(e.target.value) })} className="input" min={0} placeholder={t('marketing.usageLimitPlaceholder')} />
           </div>
           {isEdit && (
             <div>
@@ -147,7 +152,7 @@ export function CouponEditPage() {
           )}
         </div>
         <div className="flex gap-3 mt-6">
-          <button onClick={handleSubmit} disabled={!form.code || !form.value || !form.validFrom || !form.validUntil || saveMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
+          <button onClick={handleSubmit} disabled={!form.value || !form.validFrom || (!form.noExpiry&&!form.validUntil) || saveMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
             {saveMutation.isPending && <Loader2 size={16} className="animate-spin" />}
             {t('common.save')}
           </button>

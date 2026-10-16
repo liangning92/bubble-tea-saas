@@ -43,6 +43,7 @@ export function CouponDetailPage() {
 
   const formatDate = (date?: string) => {
     if (!date) return '-'
+    if(date.startsWith('9999-'))return l('长期有效','No expiry','Tanpa kedaluwarsa')
     return new Date(date).toLocaleDateString('id-ID')
   }
 
@@ -73,14 +74,16 @@ export function CouponDetailPage() {
         <button onClick={() => navigate('/marketing/promotions/coupons')} className="btn-ghost">
           <ArrowLeft size={20} />
         </button>
-        <h1 className="text-2xl font-bold font-mono">{coupon.code}</h1>
+        <h1 className="text-xl sm:text-2xl font-bold font-mono break-all min-w-0">{coupon.code}</h1>
         <span className={`badge ${coupon.status === 'active' ? 'badge-success' : 'badge-gray'}`}>{coupon.status}</span>
       </div>
 
       <section className="card border border-primary/20 bg-primary-light/30 mb-5 text-center">
         <p className="text-sm text-gray-600">{l('请拍照保存券码','Photograph and save this code','Foto dan simpan kode ini')}</p>
+        <p className="font-semibold text-lg mt-2">{formatValue(coupon)}</p>
+        <p className="text-sm my-2">{t('marketing.minOrder')}: Rp {formatNumber(coupon.minOrder||0)} · {formatDate(coupon.validUntil)} · {l('仅可核销一次','One use only','Sekali pakai')}</p>
         <p className="font-mono font-bold text-xl sm:text-3xl break-all my-3 select-all">{coupon.code}</p>
-        <p className="text-sm text-gray-600">{l('下次消费向收银员出示，按券面条件核销；付款成功后才计为使用。','Show the cashier next time. Terms apply; the coupon is consumed after successful payment.','Tunjukkan kepada kasir pada kunjungan berikutnya. Syarat berlaku; kupon terpakai setelah pembayaran berhasil.')}</p>
+        <p className="text-sm text-gray-600">{l('可转赠，凭券码使用。下次消费向收银员出示，按券面条件核销；付款成功后才计为使用。','Transferable; redeem by code. Show the cashier next time. Terms apply; consumed after successful payment.','Dapat dipindahtangankan; gunakan kode. Tunjukkan kepada kasir. Syarat berlaku; terpakai setelah pembayaran berhasil.')}</p>
       </section>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card">

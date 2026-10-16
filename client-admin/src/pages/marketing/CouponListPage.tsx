@@ -34,6 +34,7 @@ const defaultForm: {
   maxDiscount: number
   validFrom: string
   validUntil: string
+  noExpiry: boolean
   usageLimit: number
 } = {
   code: '',
@@ -43,7 +44,8 @@ const defaultForm: {
   maxDiscount: 0,
   validFrom: '',
   validUntil: '',
-  usageLimit: 0
+  noExpiry: false,
+  usageLimit: 1
 }
 
 export function CouponListPage() {
@@ -69,9 +71,10 @@ export function CouponListPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: any) => marketingApi.createCoupon(data),
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ['coupons'] })
       closeModal()
+      if(response.data?.data?.id)navigate('/marketing/promotions/coupons/'+response.data.data.id)
     },
     onError: (error: any) => {
       notifyAdmin(error?.message || t('common.error'))
@@ -118,7 +121,8 @@ export function CouponListPage() {
       minOrder: coupon.minOrder || 0,
       maxDiscount: coupon.maxDiscount || 0,
       validFrom: coupon.validFrom ? coupon.validFrom.split('T')[0] : '',
-      validUntil: coupon.validUntil ? coupon.validUntil.split('T')[0] : '',
+      validUntil: coupon.validUntil && !coupon.validUntil.startsWith('9999-') ? coupon.validUntil.split('T')[0] : '',
+      noExpiry: !!coupon.validUntil?.startsWith('9999-'),
       usageLimit: coupon.usageLimit || 0
     })
     setShowEdit(true)
@@ -126,11 +130,13 @@ export function CouponListPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    const {noExpiry,...fields}=form
     const payload = {
-      ...form,
+      ...fields,
+      usageLimit:1,
       storeId,
       validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
-      validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
+      validUntil: noExpiry?'9999-12-31T23:59:59.999Z':form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
     }
     if (showEdit && editingCoupon) {
       updateMutation.mutate({ id: editingCoupon.id, data: payload })
@@ -246,7 +252,7 @@ export function CouponListPage() {
                     </td>
                     <td className="py-3 text-sm text-gray-600">
                       {coupon.validFrom && coupon.validUntil
-                        ? `${formatDate(coupon.validFrom)} - ${formatDate(coupon.validUntil)}`
+                        ? `${formatDate(coupon.validFrom)} - ${coupon.validUntil.startsWith('9999-')?l('长期有效','No expiry','Tanpa kedaluwarsa'):formatDate(coupon.validUntil)}`
                         : coupon.validFrom
                           ? `${formatDate(coupon.validFrom)} - ...`
                           : '-'}
@@ -288,14 +294,13 @@ export function CouponListPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">{t('marketing.couponCode')} *</label>
+                <label className="block text-sm font-medium mb-1">{t('marketing.couponCode')}</label>
                 <input
                   type="text"
                   value={form.code}
                   onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
                   className="input font-mono"
-                  placeholder={t('marketing.couponCodePlaceholder')}
-                  required
+                  placeholder={l('留空自动生成独立券码','Leave blank to generate a unique code','Kosongkan untuk kode unik otomatis')}
                 />
               </div>
               <div>
@@ -340,7 +345,9 @@ export function CouponListPage() {
                   />
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.noExpiry} onChange={e=>setForm({...form,noExpiry:e.target.checked})}/>{l('不限有效期','No expiry','Tanpa kedaluwarsa')}</label>
+              <p className="text-xs text-gray-500">{l('凭券码使用，可转赠；限用次数按设置执行。','Redeem by code; transferable. The configured usage limit applies.','Gunakan kode; dapat dipindahtangankan. Batas pemakaian tetap berlaku.')}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.validFrom')}</label>
                   <LocalizedDateTimeInput
@@ -354,6 +361,7 @@ export function CouponListPage() {
                   <label className="block text-sm font-medium mb-1">{t('marketing.validUntil')}</label>
                   <LocalizedDateTimeInput
                     type="date"
+                    disabled={form.noExpiry}
                     value={form.validUntil}
                     onChange={e => setForm({ ...form, validUntil: e.target.value })}
                     className="input"
@@ -364,7 +372,7 @@ export function CouponListPage() {
                 <label className="block text-sm font-medium mb-1">{t('marketing.usageLimit')}</label>
                 <input
                   type="number"
-                  value={form.usageLimit}
+                  value={1} readOnly
                   onChange={e => setForm({ ...form, usageLimit: Number(e.target.value) })}
                   className="input"
                   min={0}
@@ -373,7 +381,7 @@ export function CouponListPage() {
               </div>
               <div className="admin-dialog-footer flex gap-3 pt-4">
                 <button type="button" onClick={closeModal} className="btn-secondary" data-dialog-close="true">{t('common.cancel')}</button>
-                <button type="submit" disabled={!form.code || !form.validFrom || !form.validUntil || createMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
+                <button type="submit" disabled={!form.value || !form.validFrom || (!form.noExpiry&&!form.validUntil) || createMutation.isPending} className="btn-primary flex-1 flex items-center justify-center gap-2">
                   {createMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                   {t('common.save')}
                 </button>
@@ -439,7 +447,9 @@ export function CouponListPage() {
                   />
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-3">
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.noExpiry} onChange={e=>setForm({...form,noExpiry:e.target.checked})}/>{l('不限有效期','No expiry','Tanpa kedaluwarsa')}</label>
+              <p className="text-xs text-gray-500">{l('凭券码使用，可转赠；限用次数按设置执行。','Redeem by code; transferable. The configured usage limit applies.','Gunakan kode; dapat dipindahtangankan. Batas pemakaian tetap berlaku.')}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">{t('marketing.validFrom')}</label>
                   <LocalizedDateTimeInput
@@ -453,6 +463,7 @@ export function CouponListPage() {
                   <label className="block text-sm font-medium mb-1">{t('marketing.validUntil')}</label>
                   <LocalizedDateTimeInput
                     type="date"
+                    disabled={form.noExpiry}
                     value={form.validUntil}
                     onChange={e => setForm({ ...form, validUntil: e.target.value })}
                     className="input"
@@ -463,7 +474,7 @@ export function CouponListPage() {
                 <label className="block text-sm font-medium mb-1">{t('marketing.usageLimit')}</label>
                 <input
                   type="number"
-                  value={form.usageLimit}
+                  value={1} readOnly
                   onChange={e => setForm({ ...form, usageLimit: Number(e.target.value) })}
                   className="input"
                   min={0}
