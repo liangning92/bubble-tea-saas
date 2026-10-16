@@ -26,3 +26,20 @@ test('raw receipt notes mentioning processing do not become processed-output mov
  assert.equal(isProcessingInbound(inventoryLogDisplay({type:'stock_in',quantity:1,note:'加工产出: 红茶汤'})),true);
  assert.equal(isProcessingInbound(inventoryLogDisplay({type:'stock_out',reason:'process',quantity:1,note:'加工: 红茶汤'})),false);
 });
+
+test('count bookkeeping JSON without a human reason never appears as a business note',()=>{
+ for(const reason of [null,undefined,'']){
+  const source={type:'stock_out',reason:'count_adjustment',quantity:246,note:JSON.stringify({countId:'count',countItemId:'cup',actor:'reviewer',systemQty:381,countedQty:135,reason,varianceAmountEstimate:-123000})};
+  const row=display(source);assert.equal(row.note,'');assert.equal(row.countId,'count');assert.equal(row.countItemId,'cup');assert.equal(row.staffId,'reviewer');assert.equal(row.stockDelta,-246);assert.equal(row.adjustmentValue,-123000);assert.equal(source.note.includes('systemQty'),true);
+ }
+ assert.equal(display({reason:'count_adjustment',quantity:1,note:'Ordinary legacy explanation'}).note,'Ordinary legacy explanation');
+ assert.equal(display({reason:'count_adjustment',quantity:1,note:JSON.stringify({note:'Recount requested'})}).note,'Recount requested');
+ assert.equal(display({reason:'withdrawal',quantity:1,note:'User-provided ordinary note'}).note,'User-provided ordinary note');
+});
+
+test('technical sale and receipt metadata is not a note, human and unknown JSON text is preserved',()=>{
+ assert.equal(display({reason:'sold',quantity:5,note:'{"version":1,"ledgerUnit":"g","ledgerQuantity":5}'}).note,'');
+ assert.equal(display({reason:'withdrawal',quantity:1,note:'{"kind":"manual-out","unitCost":300}'}).note,'');
+ assert.equal(display({reason:'withdrawal',quantity:1,note:'{"kind":"manual-out","note":"For afternoon shift"}'}).note,'For afternoon shift');
+ assert.equal(display({reason:'other',quantity:1,note:'{"delivery":"fragile"}'}).note,'{"delivery":"fragile"}');
+});
