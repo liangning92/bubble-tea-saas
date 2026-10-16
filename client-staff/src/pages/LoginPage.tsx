@@ -57,7 +57,7 @@ export function LoginPage() {
       const response = await staffApi.login(phone.trim(), password)
       if (response.code === 200) {
         const rawUser = response.data.user
-        if (!(rawUser.staffId || rawUser.staff?.id)) { setError(t('auth.staffMissing')); return }
+        if (!(rawUser.staffId || rawUser.staff?.id)) { forgetOfflineLogin(loginBackend(API_BASE), phone.trim()); setError(t('auth.staffMissing')); return }
         // The API returns the employee profile under `staff`; page requests use
         // a flat `staffId`, so normalize once when establishing the session.
         const normalizedUser = {

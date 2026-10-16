@@ -3,7 +3,7 @@ const fs = require('node:fs'), path = require('node:path'), http = require('node
 const { chromium } = require('playwright')
 const root = path.resolve('client-staff/dist'), out = path.resolve(process.env.STAFF_OFFLINE_TEST_OUTPUT || 'output/staff-offline-login')
 fs.mkdirSync(out, { recursive: true })
-let loginStatus = 200, authCalls = 0
+let loginStatus = 200, authCalls = 0, missingStaff = false
 const server = http.createServer(async (req,res) => {
   const url = new URL(req.url, 'http://localhost')
   if (url.pathname.startsWith('/api/')) {
@@ -13,7 +13,7 @@ const server = http.createServer(async (req,res) => {
       const input = JSON.parse(body)
       const status = loginStatus === 200 && input.password !== 'fixture-secret' ? 401 : loginStatus
       res.statusCode = status
-      return res.end(JSON.stringify(status === 200 ? { code:200, data:{ token:'fixture-local-only', user:{ id:'local-test-user',phone:'080000000001',role:'admin',storeId:'local-test-store',store:{name:'Local fixture store'},staff:{id:'local-test-staff',name:'Offline acceptance fixture',position:'cashier'} } } } : {code:status,message:status===401?'Invalid phone or password':'Server unavailable'}))
+      return res.end(JSON.stringify(status === 200 ? { code:200, data:{ token:'fixture-local-only', user:{ id:'local-test-user',phone:'080000000001',role:'admin',storeId:'local-test-store',store:{name:'Local fixture store'},staff:missingStaff?null:{id:'local-test-staff',name:'Offline acceptance fixture',position:'cashier'} } } } : {code:status,message:status===401?'Invalid phone or password':'Server unavailable'}))
     }
     res.statusCode = 503; return res.end(JSON.stringify({code:503,message:'No fixture business endpoint'}))
   }
@@ -62,6 +62,11 @@ const server = http.createServer(async (req,res) => {
     assert.ok((await denied.url()).endsWith('/login'))
     await denied.screenshot({path:path.join(out,'online-denied.png'),fullPage:true})
     loginStatus=200; await signIn(denied); await denied.waitForURL(origin+'/')
+    missingStaff=true
+    await denied.goto(origin+'/login'); await signIn(denied)
+    await denied.getByText('Akun belum terhubung ke profil karyawan. Hubungi pengelola.',{exact:true}).waitFor()
+    assert.equal(await denied.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('employee-offline-login.v1:')).length),0)
+    missingStaff=false; await signIn(denied); await denied.waitForURL(origin+'/')
     await context.setOffline(true)
     const disconnected=await context.newPage()
     await disconnected.goto(origin+'/login')
