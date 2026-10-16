@@ -72,3 +72,7 @@ test('localized specifications are retained once, including legacy bag capacitie
  assert.equal(names.itemDisplayName({name:'Cup 700ml / Gelas 700ml (700ml塑料杯)',nameId:'Gelas'},'id'),'Gelas 700ml');
  assert.equal(names.itemDisplayName({name:'Cup 700ml',nameId:'Gelas 700 ml'},'id'),'Gelas 700 ml');
 });
+
+test('missing legacy names remain readable without crashing detail or recipe selectors',()=>{
+ for(const language of ['id','en','zh'])for(const value of [undefined,null,'',{}])assert.equal(names.itemDisplayName(value,language),'-');
+});

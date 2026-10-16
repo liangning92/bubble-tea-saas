@@ -121,7 +121,7 @@ export function MaterialFormPage() {
                 <option value="">{t('material.selectRecipe')}</option>
                 {recipes.map((r: any) => (
                   <option key={r.id} value={r.id}>
-                    {formatItemName(r.name, i18n.language)} → {formatItemName(r.outputName, i18n.language)} ({r.outputUnit})
+                    {formatItemName(r.name, i18n.language)} {r.outputName ? '→ '+formatItemName(r.outputName, i18n.language) : ''} ({r.outputUnit})
                   </option>
                 ))}
               </select>

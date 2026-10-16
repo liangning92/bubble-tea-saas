@@ -1,10 +1,10 @@
 type NamedItem = string | { name?: string; nameZh?: string; nameEn?: string; nameId?: string }
 
 /** Display-only legacy parsing. The original name remains the search/save value. */
-export function itemDisplayName(item: NamedItem, language = 'id'): string {
-  const name = typeof item === 'string' ? item : item.name || ''
+export function itemDisplayName(item: NamedItem | null | undefined, language = 'id'): string {
+  const name = typeof item === 'string' ? item : item?.name || ''
   const lang = language.split('-')[0]
-  const explicit = typeof item === 'object' ? ({ zh: item.nameZh, en: item.nameEn, id: item.nameId } as Record<string, string | undefined>)[lang] : undefined
+  const explicit = item && typeof item === 'object' ? ({ zh: item.nameZh, en: item.nameEn, id: item.nameId } as Record<string, string | undefined>)[lang] : undefined
   if (explicit?.trim()) {
     return withSpecifications(explicit.trim(), name)
   }
