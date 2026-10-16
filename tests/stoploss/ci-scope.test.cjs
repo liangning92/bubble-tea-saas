@@ -142,3 +142,5 @@ test('native TV activities and updater names do not select Windows or marketing 
   assert.deepEqual(p.domains,['tv']);assert.deepEqual(p.components,[]);assert.deepEqual(p.python,[]);assert.deepEqual(p.unitTests,['tests/stoploss/tv-signage-update.test.cjs']);
  }finally{f.close()}
 });
+
+test('TV public player assets select API image and TV browser checks',()=>{const f=fixture();try{const p=selectScope(['server/public/tv/player.css'],f);assert.deepEqual(p.components,['api']);assert.deepEqual(p.typecheck,['api']);assert.deepEqual(p.browser.map(b=>b.domain),['tv']);assert.ok(p.browser[0].scripts.includes('tests/stoploss/tv-signage-catalog-page-check.cjs'));assert.deepEqual(p.http,['tests/stoploss/tv-signage-integration.cjs']);assert.ok(!p.components.includes('pos'));}finally{f.close()}});
