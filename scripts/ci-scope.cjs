@@ -17,7 +17,7 @@ const domains={
  finance:{paths:/(?:\/pages\/finance\/|\/routes\/(?:finance|revenue)\.|FinanceService|RevenueService|revenue|dashboardNavigation)/i,tests:/finance|revenue/i},
  payroll:{paths:/(?:salary|payroll|attendance|probation|workingDays|leave|roster)/i,tests:/salary|payroll|probation|attendance|staff-offboarding/i},
  staff:{paths:/(?:\/pages\/staff\/|\/routes\/staff\.|StaffService|EmployeeNumber|employeeNumber|\/client-staff\/|^client-staff\/)/i,tests:/staff|employee-number/i},
- access:{paths:/(?:\/middlewares\/auth\.|\/routes\/auth\.|AuthService|StaffPermission|staffAccess|EmployeeAccess|\/stores\/auth\.|access.manifest|configAccess)/i,tests:/access|permission|boundary|staff-app-flow|resource-middleware/i},
+ access:{paths:/(?:\/middlewares\/auth\.|\/routes\/auth\.|AuthService|StaffPermission|StaffActionApproval|refundApprovalAccess|staffAccess|EmployeeAccess|\/stores\/auth\.|access.manifest|configAccess)/i,tests:/access|permission|boundary|staff-app-flow|resource-middleware/i},
  marketing:{paths:/(?:marketing|activity|voucher|coupon|reward|lottery|tvScreen|TVScreen|tv-screen|tvMarketing)/i,tests:/activity|voucher|reward|tv-marketing/i},
  inventory:{paths:/(?:inventory|purchase|supplier|stock|Inventory|Purchase|Supplier|Stock)/i,tests:/inventory|count-boundary/i},
  training:{paths:/training/i,tests:/training/i},

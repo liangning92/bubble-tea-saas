@@ -144,3 +144,5 @@ test('native TV activities and updater names do not select Windows or marketing 
 });
 
 test('TV public player assets select API image and TV browser checks',()=>{const f=fixture();try{const p=selectScope(['server/public/tv/player.css'],f);assert.deepEqual(p.components,['api']);assert.deepEqual(p.typecheck,['api']);assert.deepEqual(p.browser.map(b=>b.domain),['tv']);assert.ok(p.browser[0].scripts.includes('tests/stoploss/tv-signage-catalog-page-check.cjs'));assert.deepEqual(p.http,['tests/stoploss/tv-signage-integration.cjs']);assert.ok(!p.components.includes('pos'));}finally{f.close()}});
+
+test('refund approval authorization changes select permission HTTP regressions',()=>{const f=fixture();try{for(const name of ['server/src/services/StaffActionApprovalService.ts','server/src/utils/refundApprovalAccess.ts']){const p=selectScope([name],f);assert.ok(p.domains.includes('access'));assert.ok(p.http.includes('tests/stoploss/staff-access-v2-http-check.cjs'));assert.ok(p.http.includes('tests/stoploss/employee-workspace-http-check.cjs'));assert.deepEqual(p.components,['api']);assert.deepEqual(p.browser,[])}}finally{f.close()}});
