@@ -1,5 +1,5 @@
 import { verifyOfflineSale } from '../services/POSOfflineOperationService'
-import {readPolicyV2} from '../services/StaffPermissionV2Service'
+import {blocksSelfApproval} from '../utils/refundApprovalAccess'
 import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure } from '../services/ReceivedReceiptService'
 import { findOrderReplay, orderRequestFingerprint, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
@@ -453,8 +453,8 @@ router.post('/refund-requests/:id/approve', authenticate, authorize('admin', 'ma
 
     if (!checkOrderAccess(req, res, request.order)) return
 
-    if((await readPolicyV2(request.order.storeId))?.active&&request.requestedBy===(req.user!.staffId||req.user!.id))return res.status(403).json({code:403,message:'STAFF_ACCESS_SELF_APPROVAL'});
-    if(req.user!.accessRole?.version===2){if(request.requestedBy===(req.user!.staffId||req.user!.id))return res.status(403).json({code:403,message:'STAFF_ACCESS_SELF_APPROVAL'});if(req.user!.accessRole.modes?.['orders.refund']!=='allow'||req.user!.accessRole.modes?.['approvals.approve']!=='allow')return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED'})}
+    if(blocksSelfApproval(req.user!,request.requestedBy,'orders.refund'))return res.status(403).json({code:403,message:'STAFF_ACCESS_SELF_APPROVAL'});
+    if(req.user!.accessRole?.version===2){if(req.user!.accessRole.modes?.['orders.refund']!=='allow'||req.user!.accessRole.modes?.['approvals.approve']!=='allow')return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED'})}
     if(itemRefundRecord(request.selectedItemIds)){
       const result=await approveItemRefund(request.id,{storeId:request.order.storeId,id:req.user!.staffId||req.user!.id,role:req.user!.accessRole?.version===2&&req.user!.role!=='admin'?'manager':req.user!.role},req.body.verifiedPrepared===true,note)
       return res.json({code:200,data:result,message:'Refund accounting approved; external payment is manual'})
@@ -519,6 +519,7 @@ router.post('/refund-requests/:id/reject', authenticate, authorize('admin', 'man
 
     const request = await prisma.refundRequest.findUnique({ where: { id }, include: { order: { include: { items: true } } } })
     if (!checkOrderAccess(req, res, request?.order || null)) return
+    if(blocksSelfApproval(req.user!,request.requestedBy,'orders.refund'))return res.status(403).json({code:403,message:'STAFF_ACCESS_SELF_APPROVAL'});
     if (request.status !== 'pending') return res.status(409).json({ code: 409, message: 'Refund request already processed' })
     const rejected = await prisma.refundRequest.updateMany({
       where: { id, status: 'pending' },
