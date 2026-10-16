@@ -28,7 +28,7 @@ for(const [width,height,lang] of [[1440,1000,'zh'],[820,1180,'en'],[390,844,'id'
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'responsive dashboard must fit viewport');await page.screenshot({path:path.join(out,`${lang}-${width}-pending.png`),fullPage:false});
  await panel.locator('a[href="/finance/orders?tab=refunds"]').click();await expect(page.getByText('Synthetic only',{exact:true})).toBeVisible();
  // The red count belongs to the refund tab; deep linking survives reload.
- await page.reload();await expect(page.getByText('Synthetic only',{exact:true})).toBeVisible();
+ await page.reload();await expect(page.getByText('Synthetic only',{exact:true})).toBeVisible();assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'refund table must scroll within its own panel');assert.ok(await page.locator('table').first().evaluate(el=>el.getBoundingClientRect().width)>=960,'refund columns must keep readable width');
  const approve=page.locator('button').filter({has:page.locator('svg.lucide-check-circle')}).first();await approve.click();
  const approval=page.getByRole('dialog');await expect(approval).toHaveCount(1);await approval.locator('.admin-dialog-footer button').last().click();
  await expect(page.getByRole('dialog')).toHaveCount(2);
