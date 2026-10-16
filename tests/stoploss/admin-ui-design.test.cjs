@@ -66,3 +66,9 @@ test('structured purchase descriptions retain every item and quantity',()=>{
  assert.equal(purchaseDescriptionDisplay(description,'id'),'Selai Mangga · 6.9 kg; Gelas 700ml · 100 pcs');
  assert.equal(purchaseDescriptionDisplay('Catatan bebas · periksa nota','id'),'Catatan bebas · periksa nota');
 });
+
+test('localized specifications are retained once, including legacy bag capacities',()=>{
+ assert.equal(names.itemDisplayName('Plastic Bag 2 Cup / Kantong Plastik 2 (双杯袋)','id'),'Kantong Plastik 2 Cup');
+ assert.equal(names.itemDisplayName({name:'Cup 700ml / Gelas 700ml (700ml塑料杯)',nameId:'Gelas'},'id'),'Gelas 700ml');
+ assert.equal(names.itemDisplayName({name:'Cup 700ml',nameId:'Gelas 700 ml'},'id'),'Gelas 700 ml');
+});
