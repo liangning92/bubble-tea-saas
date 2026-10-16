@@ -4,15 +4,15 @@ import {allocateRefundTotal,unitRangeAmount} from '../utils/refundAllocation'
 import {approveItemRefund,itemRefundRecord} from './ItemRefundService'
 import {refundOrder} from './OrderService'
 import {validateRefundApproval} from '../utils/refundPolicy'
-import {readPolicyV2} from './StaffPermissionV2Service'
+import {blocksSelfApproval} from '../utils/refundApprovalAccess'
 export const offlineRefundDecisionSchema=z.object({requestId:z.string().uuid(),decision:z.enum(['approve','reject']),amount:z.number().int().nonnegative().max(2147483647),payoutMethod:z.enum(['cash','external']),verifiedPrepared:z.boolean(),verifiedUnprepared:z.boolean(),note:z.string().trim().min(1).max(2000),localEvidence:z.record(z.unknown())}).strict()
-export async function applyOfflineRefundDecision(tx:any,storeId:string,input:any,actor:any,authorization:any){
+export async function applyOfflineRefundDecision(tx:any,storeId:string,input:any,actor:any,_authorization:any){
  const parent=await tx.config.findUnique({where:{storeId_key:{storeId,key:'pos.offline.operation:'+input.data.requestId}}})
  const saved=parent?JSON.parse(parent.value):null
  if(saved?.kind!=='refund'||saved.result?.id!==input.data.requestId)throw Error('OFFLINE_REFUND_REQUEST_PENDING')
  const request=await tx.refundRequest.findUnique({where:{id:input.data.requestId},include:{order:{include:{items:true}}}})
  if(!request||request.order.storeId!==storeId||request.status!=='pending')throw Error('REFUND_REQUEST_ALREADY_PROCESSED')
- if((authorization.independentRefundApproval||(await readPolicyV2(storeId,tx))?.active)&&request.requestedBy===(actor.staffId||actor.id))throw Error('STAFF_ACCESS_SELF_APPROVAL')
+ if(blocksSelfApproval(actor,request.requestedBy,'orders.refund'))throw Error('STAFF_ACCESS_SELF_APPROVAL')
  if(input.data.decision==='reject'){
   if(input.data.amount!==0)throw Error('OFFLINE_REFUND_AMOUNT_CHANGED')
   return tx.refundRequest.update({where:{id:request.id},data:{status:'rejected',note:input.data.note}})
