@@ -42,7 +42,7 @@ export function InventoryCountPage() {
         setBusy(false);
     } }
     const labels=inventoryCountLabels(i18n.language);
-    const selectionItems=items.filter(i=>materialName(i.name,i18n.language).toLowerCase().includes(selectionSearch.toLowerCase().trim()));
+    const selectionItems=items.filter(i=>[i.name,materialName(i.name,i18n.language)].join(' ').toLowerCase().includes(selectionSearch.toLowerCase().trim()));
     const active = counts.some(c => ['in_progress', 'pending_review'].includes(c.status));
     return <main className="max-w-3xl mx-auto p-4 pb-24 space-y-4"><div className="flex justify-between items-center"><h1 className="text-2xl font-bold">{t('inventoryFlow.count')}</h1><button onClick={() => { void load().catch(() => {}); }} disabled={loading || dirty || busy} className="text-primary-hover">{t('inventoryFlow.refresh')}</button></div><p className="text-sm text-gray-500">{t('inventoryFlow.reviewHint')}</p>
  {error && <p role="alert" className="text-red-700">{error}</p>}{loading && <p role="status">{t('inventoryFlow.loading')}</p>}

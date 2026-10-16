@@ -305,3 +305,17 @@ body {
 }
 
 .operations-table.admin-wide-table th:first-child, .operations-table.admin-wide-table td:first-child { width: 240px; white-space: normal; overflow-wrap: anywhere; }
+
+/* Keep names readable instead of letting long translated headings consume the row. */
+.admin-workspace .count-results-table { table-layout: fixed; }
+.admin-workspace .count-results-table th { white-space: normal; overflow-wrap: break-word; }
+.admin-workspace .count-results-table th:first-child { width: 40%; }
+.admin-workspace .count-results-table td { overflow-wrap: break-word; }
+.admin-workspace .count-results-table .count-audit { vertical-align: top; }
+.admin-workspace .count-results-table .count-audit details[open] { min-width: 140px; }
+@media (max-width: 767px) {
+  .admin-workspace .count-results-table .count-material { text-align: left; align-items: flex-start; flex-wrap: nowrap; }
+  .admin-workspace .count-results-table .count-material::before { display: none; }
+  .admin-workspace .count-results-table .count-audit { display: block; text-align: left; }
+  .admin-workspace .count-results-table .count-audit::before { display: none; }
+}

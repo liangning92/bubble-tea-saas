@@ -1,3 +1,4 @@
+import { itemDisplayName } from '../../../shared/utils/localizedItemName';
 import { inventoryInputUnits, defaultInventoryInputUnit, inventoryLedgerQuantity } from '../utils/inventoryInputUnits';
 export { defaultInventoryInputUnit };
 import { http } from './api';
@@ -49,4 +50,4 @@ export function stockQuantity(material: Material | undefined, quantity: string, 
 }
 export function materialUnits(material?: Material) { return material ? inventoryInputUnits(material) : []; }
 export function jakartaDate() { return new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10); }
-export function materialName(name: string, language: string) { return language === 'zh' ? name : name.replace(/\s*\([^)]*[\u4e00-\u9fff]+[^)]*\)/g, '').trim(); }
+export function materialName(name: string, language: string) { return itemDisplayName(name, language); }

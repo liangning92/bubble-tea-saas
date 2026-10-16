@@ -26,7 +26,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { inventoryApi } from "../../services/api";
 import { useAuthStore } from "../../stores/auth";
-import { formatItemName, formatDateTime } from "../../utils/helpers";
+import { formatItemName, formatDateTime, formatCurrency } from "../../utils/helpers";
 import {
   Loader2,
   Plus,
@@ -445,7 +445,7 @@ export function InventoryCountPage() {
     const labels = inventoryCountLabels(i18n.language);
     const totals = countProgress(selectedCount.items);
     const pendingItems = selectedCount.items.filter(item=>!isCounted(item));
-    const savedVisible = selectedCount.items.filter(item=>matchesCountFilter(item,itemFilter)&&formatItemName(item.inventory?.name||'',i18n.language).toLocaleLowerCase().includes(itemSearch.toLocaleLowerCase().trim()));
+    const savedVisible = selectedCount.items.filter(item=>matchesCountFilter(item,itemFilter)&&[item.inventory?.name,formatItemName(item.inventory?.name||'',i18n.language)].join(' ').toLocaleLowerCase().includes(itemSearch.toLocaleLowerCase().trim()));
 
     const busy =
       submitMutation.isPending ||
@@ -474,10 +474,6 @@ export function InventoryCountPage() {
             <CountOperators items={selectedCount.items || []}/>
             <div className="flex items-center gap-4 mt-2">
               {getStatusBadge(selectedCount.status)}
-              <span className="text-sm text-gray-500">
-                {countedItems.length} / {selectedCount.items?.length || 0}{" "}
-                {t("inventory.counted")}
-              </span>
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -613,8 +609,8 @@ export function InventoryCountPage() {
           </summary>
           <div className="space-y-3 mb-3"><input aria-label={labels.search} placeholder={labels.search} value={itemSearch} onChange={e=>setItemSearch(e.target.value)} className="input w-full"/><div className="flex flex-wrap gap-2" role="group" aria-label={labels.batchProgress}>{(['all','pending','counted','difference'] as const).map(key=><button key={key} type="button" aria-pressed={itemFilter===key} onClick={()=>setItemFilter(key)} className={`border rounded-lg px-3 py-2 text-sm ${itemFilter===key?'bg-primary-light border-primary':'bg-white border-gray-200'}`}>{labels[key]} {key==='all'?totals.total:totals[key]}</button>)}</div>{!savedVisible.length&&<p className="text-gray-500">{labels.empty}</p>}</div>
           <div className="overflow-x-auto">
-            <table className="inventory-responsive-table w-full md:min-w-[860px]">
-              <thead className="whitespace-nowrap">
+            <table className="inventory-responsive-table count-results-table w-full">
+              <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3">{t("inventory.material")}</th>
                   <th className="pb-3 text-right">{t("countFlow.theory")}</th>
@@ -628,9 +624,7 @@ export function InventoryCountPage() {
                         : "inventory.varianceCol",
                     )}
                   </th>
-                  <th>{t("countFlow.movement")}</th>
-                  {canReadCost && <th className="text-right tabular-nums">{t("countFlow.amount")}</th>}
-                  <th>{t("countFlow.reason")}</th>
+                  <th>{t("operations.details")}</th>
 
                 </tr>
               </thead>
@@ -647,8 +641,8 @@ export function InventoryCountPage() {
                       id={"count-item-" + item.id}
                       className={`border-b last:border-0 ${searchParams.get("itemId") === item.id ? "bg-blue-50" : ""}`}
                     >
-                      <td data-label={t("inventory.material")} className="py-3">
-                        <span className="font-medium">
+                      <td data-label={t("inventory.material")} className="py-3 count-material">
+                        <div className="min-w-0"><span className="font-medium">
                           {formatItemName(
                             item.inventory?.name || "Unknown",
                             i18n.language,
@@ -658,7 +652,7 @@ export function InventoryCountPage() {
                           ({item.inventory?.unit})
                         </span>
                         <p className={`text-xs mt-1 ${isCounted(item)?'text-green-700':'text-amber-800'}`}>{isCounted(item)?'✓ '+labels.counted:labels.pending}</p>
-                        {item.countedAt && <p className="text-xs text-gray-500 mt-1">{t('inventoryActors.counter')}: <ActorName actor={item.countedByActor} id={item.countedBy}/> · {formatDateTime(item.countedAt)}</p>}
+                        </div>
                       </td>
                       <td
                         data-label={t("countFlow.theory")}
@@ -706,16 +700,16 @@ export function InventoryCountPage() {
                           <span className="text-gray-400">-</span>
                         )}
                       </td>
-                      <td data-label={t("countFlow.movement")}>
-                        {item.movementSinceObservation ?? "—"}
-                      </td>
-                      {canReadCost && (
-                        <td data-label={t("countFlow.amount")}>
-                          {formatNumber(item.varianceAmountEstimate ?? "—")}
-                        </td>
-                      )}
-                      <td data-label={t("countFlow.reason")}>
-                        {item.note || "—"}
+                      <td data-label={t("operations.details")} className="count-audit">
+                        <details>
+                          <summary className="cursor-pointer text-primary-hover text-sm">{t("operations.details")}</summary>
+                          <dl className="mt-2 space-y-2 text-xs text-gray-600">
+                            {item.countedAt && <div><dt>{t('inventoryActors.counter')}</dt><dd><ActorName actor={item.countedByActor} id={item.countedBy}/> · {formatDateTime(item.countedAt)}</dd></div>}
+                            <div><dt>{t("countFlow.movement")}</dt><dd>{formatNumber(item.movementSinceObservation)}</dd></div>
+                            {canReadCost && <div><dt>{t("countFlow.amount")}</dt><dd>{item.varianceAmountEstimate == null ? '—' : formatCurrency(item.varianceAmountEstimate)}</dd></div>}
+                            {item.note && <div><dt>{t("countFlow.reason")}</dt><dd>{item.note}</dd></div>}
+                          </dl>
+                        </details>
                       </td>
 
                     </tr>

@@ -37,7 +37,7 @@ export function InventoryCountEditor({hideProgress=false,formatQuantity,items,la
   try{if(onSubmit)await onSubmit(changes);else await onSave(changes);setDirty({});setSaved(true)}catch(e:any){setError(e?.response?.data?.message==='COUNT_REFRESH_REQUIRED'?l.conflict:onSubmit?l.submitFailed:l.failed)}finally{lock.current=false;setBusy(false)}
  }
  async function refresh(){if(lock.current)return;lock.current=true;setBusy(true);try{const rows=await onReload();setDrafts(previous=>Object.fromEntries(rows.filter(i=>i.inventory).map(i=>[i.id,dirty[i.id]&&previous[i.id]?{...previous[i.id],expectedStock:i.inventory!.currentStock,observedVersion:i.inventory!.updatedAt}:fresh(i)])));setError('')}catch{setError(l.retryFailed)}finally{lock.current=false;setBusy(false)}}
- const visible=items.filter(item=>item.inventory&&drafts[item.id]&&name(item.inventory.name,language).toLocaleLowerCase().includes(search.toLocaleLowerCase().trim())&&matchesCountFilter(item,filter))
+ const visible=items.filter(item=>item.inventory&&drafts[item.id]&&[item.inventory.name,name(item.inventory.name,language)].join(' ').toLocaleLowerCase().includes(search.toLocaleLowerCase().trim())&&matchesCountFilter(item,filter))
  const progress=l.progress.replace('{saved}',String(items.filter(isCounted).length)).replace('{total}',String(items.length)).replace('{dirty}',String(dirtyCount))
  const totals=countProgress(items)
  const submitPending=items.filter(i=>{const d=drafts[i.id];return !d||d.quantity.trim()===''})
