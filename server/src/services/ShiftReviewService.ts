@@ -73,7 +73,7 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
       participants.set(p.id, row)
     }
     if (b.session) { add(b.session.staffId, 'opener'); if (b.session.nextStaffId) add(b.session.nextStaffId, 'handover') }
-    for (const o of b.orders) add(o.staffId, 'cashier', 'orders')
+    for (const o of b.orders) add(o.staffId, 'cashier', ['completed','paid'].includes(o.status) ? 'orders' : undefined)
     for (const e of b.expenses) if (e.referenceId) add(e.referenceId.split(':')[0], 'purchaser', 'expenses')
     for (const w of b.warnings) add(w.staffId, 'operator', 'warnings')
     const completed = b.orders.filter(o => ['completed','paid'].includes(o.status))
@@ -85,8 +85,8 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
       receipts?.qris ?? null,nightlyIds.has(b.id) ? receipts?.shopeefood || 0 : 0,nightlyIds.has(b.id) ? receipts?.gofood || 0 : 0,orderRevenue) : null
     const financials=calculated ? {...calculated,reported:!!receipts,onlineRevenueCounted:nightlyIds.has(b.id)} : null
     return { ...b, manualReceiptsCashBasis:receiptBases.get(b.id) || 'cash_receipts', handoverFinancials:financials, cashReconciliation:cashReviews.get(b.id)?.cashReconciliation || null, cashWarning:cashReviews.get(b.id)?.cashWarning || null, manualReceipts: manualReceipts.get(b.id) || null, attribution: 'recorded_time_window', overlapping: overlap,
-      summary: { revenue: financials?.totalRevenue ?? orderRevenue, completedOrders: completed.length, orders: b.orders.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
-      orders: b.orders.map(o => ({ ...o, amount: o.finalAmount, staffName: person(o.staffId).name })),
+      summary: { revenue: financials?.totalRevenue ?? orderRevenue, completedOrders: completed.length, orders: completed.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
+      orders: b.orders.map(o => ({ ...o, amount: netReceivedAmount(o), originalAmount: o.finalAmount, staffName: person(o.staffId).name })),
       expenses: b.expenses.map(e => ({ id: e.id, category: e.category, amount: e.amount / 100, quantity: e.quantity ?? null, description: e.description, createdAt: e.createdAt, staffName: e.referenceId ? person(e.referenceId.split(':')[0]).name : null })),
       employees: [...participants.values()] }
   }

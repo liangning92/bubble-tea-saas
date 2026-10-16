@@ -1,3 +1,4 @@
+import { DashboardPendingActions } from '../components/DashboardPendingActions'
 import { formatNumber } from '../utils/numberDisplay'
 import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
 import {queryInstantRange} from '../utils/queryPeriods'
@@ -173,12 +174,12 @@ export function DashboardPage() {
   const dashboard = data?.data?.data
 
   if (!context.valid) return <DashboardReadFailure scope />
-  if (isError) return <DashboardReadFailure retry={()=>refetch()} />
+  if (isError) return <><DashboardPendingActions storeId={context.storeId!} /><DashboardReadFailure retry={()=>refetch()} /></>
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div><DashboardPendingActions storeId={context.storeId!} /><div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
+      </div></div>
     )
   }
 
@@ -195,6 +196,8 @@ export function DashboardPage() {
       <h1 className="text-2xl font-bold text-gray-900 mb-6">
         {t('dashboard.title')}
       </h1>
+
+      <DashboardPendingActions storeId={storeId} />
 
       {/* ========== 今日核心数据 ========== */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

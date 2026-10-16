@@ -1,3 +1,4 @@
+import { loadDashboardPendingActions } from '../services/DashboardPendingActions'
 import {inventoryForecast} from '../services/InventoryForecastService'
 import { loadStoreDateSettings } from '../utils/storeDateSettings'
 import { revenuePeriodRange } from '../utils/revenueDateRange'
@@ -273,6 +274,16 @@ router.get('/staff', authenticate, authorize('admin', 'manager'), async (req: Au
   } catch (error) {
     console.error('Get staff report error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get staff report' })
+  }
+})
+
+// Keep pending approvals available even when revenue data needs reconciliation.
+router.get('/pending-actions', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    res.json({ code: 200, data: await loadDashboardPendingActions(prisma, req.user!.storeId) })
+  } catch (error) {
+    console.error('Get pending actions error:', error)
+    res.status(500).json({ code: 500, message: 'Failed to get pending actions' })
   }
 })
 
