@@ -255,7 +255,7 @@ export const posApi = {
   // Attendance QR
   prepareOfflineAttendanceQR: (posId:string)=>prepareOfflineAttendanceQR(posId,()=>api.post('/attendance-qr/offline-prepare',{}, {timeout:15000})),
   generateAttendanceQR: async(posId: string) => {
-    try { if(!navigator.onLine||!readBackendAuth().token) return await cachedAttendanceQR(posId); return await api.post('/attendance-qr/generate', {posId}, {timeout:4000}) }
+    try { if(!navigator.onLine||!readBackendAuth().token) return await cachedAttendanceQR(posId); return await api.post('/attendance-qr/generate', {posId,formatVersion:2}, {timeout:4000}) }
     catch(error){if(!serverUnavailable(error))throw error;return cachedAttendanceQR(posId)}
   },
   verifyAttendanceQR: (qrData: string, type: 'check_in' | 'check_out' | 'verify', attendanceId?: string) =>

@@ -2,7 +2,7 @@ import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { Router } from 'express'
 import { authenticate, AuthRequest } from '../middlewares/auth'
 import { prisma } from '../config/database'
-import { attendanceQR, attendanceQRBundle, verifyAttendanceQR, ATTENDANCE_QR_WINDOW } from '../services/AttendanceQRService'
+import { attendanceQR, onlineAttendanceQR, attendanceQRBundle, verifyOnlineAttendanceQR, ATTENDANCE_QR_WINDOW } from '../services/AttendanceQRService'
 import { authorize } from '../middlewares/auth'
 
 const router = Router()
@@ -25,8 +25,9 @@ router.post('/generate', authenticate, authorize('admin','manager','cashier'), a
       return res.status(404).json({ code: 404, message: 'Store not found' })
     }
 
-    const timestamp = Math.floor(Date.now()/ATTENDANCE_QR_WINDOW)*ATTENDANCE_QR_WINDOW
-    const qrData = attendanceQR(req.user!.storeId, String(posId), timestamp)
+    const rotating = req.body.formatVersion === 2
+    const timestamp = rotating ? Math.floor(Date.now()/ATTENDANCE_QR_WINDOW)*ATTENDANCE_QR_WINDOW : Date.now()
+    const qrData = rotating ? attendanceQR(req.user!.storeId, posId, timestamp) : onlineAttendanceQR(req.user!.storeId, posId, timestamp)
 
     res.json({
       code: 200,
@@ -64,8 +65,8 @@ router.post('/verify', authenticate, async (req: AuthRequest, res) => {
       return res.status(400).json({ code: 400, message: 'QR data is required' })
     }
 
-    let payload: ReturnType<typeof verifyAttendanceQR>
-    try { payload=verifyAttendanceQR(qrData,req.user!.storeId) }
+    let payload: ReturnType<typeof verifyOnlineAttendanceQR>
+    try { payload=verifyOnlineAttendanceQR(qrData,req.user!.storeId) }
     catch { return res.status(400).json({code:400,message:'Invalid or expired QR code. Scan the current POS code.'}) }
     const {s:storeId,p:posId,t:qrTimestamp}=payload
 

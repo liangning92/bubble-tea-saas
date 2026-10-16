@@ -30,7 +30,7 @@ async function run(){try{
  assert.equal((await request('/attendance-qr/offline-prepare',{method:'POST',body:{}})).status,401)
  assert.equal((await request('/attendance-qr/offline-prepare',{method:'POST',body:{},actor:'employee',employee:true})).status,403)
  const bundle=(await request('/attendance-qr/offline-prepare',{method:'POST',body:{},actor:'cashier'}));assert.equal(bundle.status,200)
- const generated=await request('/attendance-qr/generate',{method:'POST',actor:'cashier',body:{posId:'store'}});assert.equal(generated.status,200);assert.equal((await request('/attendance-qr/generate',{method:'POST',actor:'employee',employee:true,body:{posId:'store'}})).status,403)
+ const generated=await request('/attendance-qr/generate',{method:'POST',actor:'cashier',body:{posId:'store'}});assert.equal(generated.status,200);assert.equal(generated.body.data.expiresAt,clock+300000);assert.equal(JSON.parse(Buffer.from(generated.body.data.qrData,'base64').toString()).timestamp,clock);const rotating=await request('/attendance-qr/generate',{method:'POST',actor:'cashier',body:{posId:'store',formatVersion:2}});assert.equal(rotating.status,200);assert.equal(JSON.parse(Buffer.from(rotating.body.data.qrData,'base64').toString()).v,2);assert.equal((await request('/attendance-qr/generate',{method:'POST',actor:'employee',employee:true,body:{posId:'store'}})).status,403)
  const prep=(await request('/auth/employee-offline-attendance',{actor:'employee',employee:true}));assert.equal(prep.status,200);assert.ok(!prep.body.data.codes)
  const other=(await request('/auth/employee-offline-attendance',{actor:'other',employee:true})).body.data
  const authorization=prep.body.data.authorization,qrAt=at=>bundle.body.data.codes[String(Math.floor(at/300000)*300000)]

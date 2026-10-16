@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
- staffOffline:{paths:/(?:^client-staff\/.*(?:offlineAuth|OfflineSession|employee-sw)|staff-offline-login|OfflineAttendance|AttendanceQRService|attendanceQR\.ts|employee-offline-attendance)/i,tests:/staff-offline-login/i},
+ staffOffline:{paths:/(?:^client-staff\/.*(?:offlineAuth|OfflineSession|employee-sw)|staff-offline-login|QRCameraScannerModal|OfflineAttendance|AttendanceQRService|attendanceQR\.ts|employee-offline-attendance)/i,tests:/staff-offline-login/i},
  attendanceReport:{paths:/(?:AttendanceReportService|attendanceReport|AttendanceDashboardPage|inventory-attendance-layout)/i,tests:/attendance-report/i},
  adminUi:{paths:/(?:AdminDialog|MainLayout|client-admin\/src\/stores\/auth\.|client-admin\/src\/pages\/LoginPage|client-admin\/src\/index\.css|ChannelProductPricingPage|client-admin\/src\/pages\/SettingsPage|InventoryIndexPage|admin-session-reuse|admin-ui-optimization)/i,tests:/admin-ui-optimization|admin-session-reuse/i},
  tv:{paths:/(?:tv-android-app|server\/public\/tv|TvSignage|tvSchema|\/routes\/tv\.|\/pages\/tv\/|tv-signage|sync-tv-player)/i,tests:/tv-signage/i},
@@ -22,7 +22,7 @@ const domains={
  training:{paths:/training/i,tests:/training/i},
  dashboard:{paths:/(?:Dashboard|dashboard|operationsAdvisor)/i,tests:/dashboard|operations-advisor/i},
  offline:{paths:/(?:offline|sync|CloudOrderSync)/i,tests:/offline|sync/i},
- barcode:{paths:/(?:barcode|Barcode|camera)/i,tests:/barcode/i},
+ barcode:{paths:/(?:barcode|^client-pos\/.*camera)/i,tests:/barcode/i},
  display:{paths:/(?:CustomerDisplay|customer-display|dualScreen|DisplayCanvas|independent.*logo)/i,tests:/display|logo/i},
  desktop:{paths:/(?:^client-pos\/electron\/|electron-builder|installer\.nsh|desktop-db-|desktop-template|windows-validation|validate-windows|UpdateNotification|onlineUpdate|updater)/i,tests:/desktop|windows|update-version/i},
  routes:{paths:/(?:^server\/src\/index\.|\/App\.tsx$|\/lazyRoute\.|route.?split)/i,tests:/route-reachability|collection-route|staff-routing/i},

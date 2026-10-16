@@ -5,7 +5,7 @@ jest.mock('../src/services/EmployeeAttendanceService',()=>({createEmployeeAttend
 jest.mock('../src/services/EmployeeWorkspaceStore',()=>({workLock:jest.fn(),readWork:jest.fn(),writeWork:jest.fn()}))
 import prisma from '../src/config/database'
 import {createEmployeeAttendance} from '../src/services/EmployeeAttendanceService'
-import {attendanceQR,attendanceQRBundle,attendanceQRHashes,verifyAttendanceQR,ATTENDANCE_QR_WINDOW} from '../src/services/AttendanceQRService'
+import {attendanceQR,onlineAttendanceQR,verifyOnlineAttendanceQR,attendanceQRBundle,attendanceQRHashes,verifyAttendanceQR,ATTENDANCE_QR_WINDOW} from '../src/services/AttendanceQRService'
 import {prepareEmployeeOfflineAttendance,syncEmployeeOfflineAttendance} from '../src/services/EmployeeOfflineAttendanceService'
 import {randomUUID,createHash} from 'crypto'
 import {POS_OFFLINE_TTL_MS} from '../src/utils/offlinePolicy'
@@ -63,4 +63,13 @@ test('30-day grants authorize only the original employee and are revoked by acco
  db.user.findUnique.mockResolvedValue(employee);jest.setSystemTime(start+POS_OFFLINE_TTL_MS+60000)
  const expired=new Date(start+POS_OFFLINE_TTL_MS).toISOString()
  await expect(syncEmployeeOfflineAttendance({...input,occurredAt:expired,qrData:attendanceQR('store','store',Date.parse(expired))})).rejects.toThrow('EMPLOYEE_OFFLINE_AUTHORIZATION_INVALID')
+})
+
+test('legacy online POS keeps its full TTL while new POS opts into signed rotation',()=>{
+ const at=start+123456,code=onlineAttendanceQR('store','pos',at)
+ expect(verifyOnlineAttendanceQR(code,'store',at+ATTENDANCE_QR_WINDOW-1)).toMatchObject({s:'store',p:'pos',t:at})
+ expect(()=>verifyOnlineAttendanceQR(code,'store',at+ATTENDANCE_QR_WINDOW)).toThrow()
+ expect(()=>verifyOnlineAttendanceQR(code,'other',at)).toThrow()
+ expect(()=>verifyAttendanceQR(code,'store',at)).toThrow()
+ const rotating=attendanceQR('store','pos',at);expect(verifyOnlineAttendanceQR(rotating,'store',at)).toMatchObject({v:2,s:'store',p:'pos'})
 })

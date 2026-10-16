@@ -122,3 +122,15 @@ test('employee offline login selects its own browser check without POS offline r
   assert.ok(!p.http.includes('tests/stoploss/offline-operations-http-check.cjs'));
  }finally{f.close()}
 });
+
+test('employee attendance camera is separate from POS product barcode camera',()=>{
+ const f=fixture();try{
+  f.write('client-staff/src/components/QRCameraScannerModal.tsx','export const staffCamera=true');
+  f.write('client-pos/src/components/CameraScanner.tsx','export const posCamera=true');
+  let p=selectScope(['client-staff/src/components/QRCameraScannerModal.tsx'],f);
+  assert.deepEqual(p.typecheck,['staff']);assert.ok(p.domains.includes('staffOffline'));assert.ok(!p.domains.includes('barcode'));
+  assert.ok(!p.browser.some(check=>check.scripts.includes('tests/stoploss/barcode-page-check.cjs')));
+  p=selectScope(['client-pos/src/components/CameraScanner.tsx'],f);assert.ok(p.domains.includes('barcode'));
+  assert.ok(p.browser.some(check=>check.scripts.includes('tests/stoploss/barcode-page-check.cjs')));
+ }finally{f.close()}
+});
