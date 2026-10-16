@@ -1,7 +1,7 @@
 import tvPlayerDocument from "../../../../server/public/tv/index.html?raw";
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { useEmployeePermission } from "../../contexts/EmployeeAccess";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { AdminDialog } from "../../components/AdminDialog";
@@ -54,6 +54,12 @@ export function TVScreensPage() {
     [preview, setPreview] = useState<any>(null),
     [legacy, setLegacy] = useState<any[]>([]);
   const previewFrame = useRef<HTMLIFrameElement>(null);
+  const previewDocument = useMemo(() => {
+    const revision = Date.now();
+    return tvPlayerDocument.replace('<head>', `<head><base href="${window.location.origin}/tv/">`)
+      .replace('<body>', '<body data-preview="1">')
+      .replace(/((?:src|href)="\.\/[^"?]+\.(?:js|css))"/g, `$1?previewBuild=${revision}"`);
+  }, [preview]);
   const [previewPrize,setPreviewPrize] = useState(0), [previewDrawing,setPreviewDrawing] = useState(false), [previewReady,setPreviewReady] = useState(false), [previewFailed,setPreviewFailed] = useState(false);
   useEffect(()=>{
     const receive=(event:MessageEvent)=>{
@@ -748,7 +754,7 @@ export function TVScreensPage() {
               ref={previewFrame}
               title={tr("preview")}
               className="w-full h-[65vh]"
-              srcDoc={tvPlayerDocument.replace('<head>',`<head><base href="${window.location.origin}/tv/">`).replace('<body>','<body data-preview="1">')}
+              srcDoc={previewDocument}
               onLoad={(e) => {
                 e.currentTarget.contentWindow?.postMessage(
                   { type: "tv-preview", snapshot: preview },
