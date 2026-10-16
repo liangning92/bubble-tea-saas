@@ -1,3 +1,5 @@
+import { InventoryCountProgress } from '../../../../shared/components/InventoryCountProgress'
+import { countProgress, isCounted, hasCountVariance, matchesCountFilter, CountItemFilter } from '../../../../shared/inventoryCountProgress'
 import { formatNumber } from '../../utils/numberDisplay'
 import { InventoryCountEditor } from '../../../../shared/components/InventoryCountEditor'
 import { inventoryCountLabels } from '../../../../shared/inventoryCountLabels'
@@ -109,6 +111,10 @@ export function InventoryCountPage() {
       return next;
     });
   const [draftDirty,setDraftDirty] = useState(false);
+  const [itemFilter,setItemFilter] = useState<CountItemFilter>('all');
+  const [itemSearch,setItemSearch] = useState('');
+  const [reviewSubmit,setReviewSubmit] = useState(false);
+  useEffect(()=>{setItemFilter('all');setItemSearch('');setReviewSubmit(false)},[countId]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newCountForm, setNewCountForm] = useState({
     period: "ad_hoc" as "ad_hoc" | "monthly" | "quarterly" | "annual",
@@ -422,6 +428,7 @@ export function InventoryCountPage() {
                   </span>
                 </div>
               </div>
+              <div className="mt-3"><InventoryCountProgress items={count.items||[]} language={i18n.language} compact/></div>
             </button>
           ))}
         </div>
@@ -433,14 +440,12 @@ export function InventoryCountPage() {
   const renderDetailView = () => {
     if (!selectedCount) return null;
 
-    const varianceItems =
-      selectedCount.items?.filter(
-        (i) => typeof i.variance === "number" && i.variance !== 0,
-      ) || [];
-    const countedItems =
-      selectedCount.items?.filter(
-        (i) => i.countedQty !== undefined && i.countedQty !== null,
-      ) || [];
+    const varianceItems = selectedCount.items.filter(hasCountVariance);
+    const countedItems = selectedCount.items.filter(isCounted);
+    const labels = inventoryCountLabels(i18n.language);
+    const totals = countProgress(selectedCount.items);
+    const pendingItems = selectedCount.items.filter(item=>!isCounted(item));
+    const savedVisible = selectedCount.items.filter(item=>matchesCountFilter(item,itemFilter)&&formatItemName(item.inventory?.name||'',i18n.language).toLocaleLowerCase().includes(itemSearch.toLocaleLowerCase().trim()));
 
     const busy =
       submitMutation.isPending ||
@@ -496,7 +501,7 @@ export function InventoryCountPage() {
                       type="button"
                       className="btn btn-primary"
                       disabled={busy || !hasCountedItems || draftDirty}
-                      onClick={() => submitMutation.mutate(selectedCount.id)}
+                      onClick={() => setReviewSubmit(true)}
                     >
                       {t("inventoryCountWorkspace.submitReview")}
                     </button>
@@ -520,6 +525,8 @@ export function InventoryCountPage() {
           </div>
         </div>
 
+        <InventoryCountProgress items={selectedCount.items} language={i18n.language}/>
+
         {selectedCount.status === "completed" && (
           <div
             className="card border-green-200 bg-green-50"
@@ -540,45 +547,17 @@ export function InventoryCountPage() {
           </div>
         )}
 
-        {/* Summary Cards */}
-        {["in_progress", "pending_review"].includes(selectedCount.status) && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="card bg-green-50 border-green-200">
-              <div className="text-2xl font-bold text-green-600">
-                {countedItems.length}
-              </div>
-              <div className="text-sm text-gray-500">
-                {t("inventory.counted")}
-              </div>
-            </div>
-            <div className="card bg-red-50 border-red-200">
-              <div className="text-2xl font-bold text-red-600">
-                {(selectedCount.items?.length || 0) - countedItems.length}
-              </div>
-              <div className="text-sm text-gray-500">
-                {t("inventory.pending")}
-              </div>
-            </div>
-            <div className="card bg-orange-50 border-orange-200">
-              <div className="text-2xl font-bold text-orange-600">
-                {varianceItems.length}
-              </div>
-              <div className="text-sm text-gray-500">
-                {t("inventory.hasVariance")}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {selectedCount.items.some(item=>item.countedQty==null) && <section className="card space-y-3" data-testid="count-uncounted-items"><h2 className="font-semibold">{inventoryCountLabels(i18n.language).pending} · {selectedCount.items.filter(item=>item.countedQty==null).length}</h2><p className="text-sm text-gray-500">{inventoryCountLabels(i18n.language).uncountedHint}</p><ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">{selectedCount.items.filter(item=>item.countedQty==null).map(item=><li key={item.id} className="rounded-lg bg-gray-50 p-3 break-words">{formatItemName(item.inventory?.name || "Unknown",i18n.language)}</li>)}</ul></section>}
+        {canEdit && selectedCount.status==='in_progress' && <InventoryCountEditor hideProgress formatQuantity={formatNumber} key={selectedCount.id} items={selectedCount.items} language={i18n.language} name={formatItemName} units={inventoryInputUnits} factor={inventoryUnitFactor} ledger={inventoryLedgerQuantity} onDirtyChange={setDraftDirty} onSave={async changes=>{await inventoryApi.updateInventoryCountItems(selectedCount.id,changes);await detailQuery.refetch();refreshCounts();}} onReload={async()=>{const response=await detailQuery.refetch();if(response.error)throw response.error;return response.data?.data?.data?.items||[];}}/>}
+        {pendingItems.length>0&&<details className="card space-y-3" data-testid="count-uncounted-items"><summary className="font-semibold cursor-pointer">{labels.pending} · {pendingItems.length}</summary><p className="text-sm text-gray-500">{labels.uncountedHint}</p><ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">{pendingItems.map(item=><li key={item.id} className="rounded-lg bg-gray-50 p-3 break-words">{formatItemName(item.inventory?.name || "Unknown",i18n.language)}</li>)}</ul></details>}
+        {reviewSubmit&&<AdminDialog title={labels.reviewSubmit} onClose={()=>setReviewSubmit(false)} className="max-w-lg" busy={submitMutation.isPending} chrome><p className="text-sm">{labels.counted}: {totals.counted} / {totals.total} · {labels.pending}: {totals.pending}</p><p className="text-sm text-gray-600 mt-2">{labels.partialHint}</p><ul className="max-h-60 overflow-auto list-disc pl-5 my-3">{pendingItems.map(item=><li key={item.id}>{formatItemName(item.inventory?.name||'',i18n.language)}</li>)}</ul><div className="flex flex-wrap gap-2"><button className="btn btn-outline" onClick={()=>{setReviewSubmit(false);document.getElementById('count-batch-editor')?.scrollIntoView({block:'start'})}}>{labels.continueCount}</button><button className="btn btn-primary" disabled={busy||draftDirty} onClick={()=>{submitMutation.mutate(selectedCount.id);setReviewSubmit(false)}}>{labels.confirmPartial}</button></div></AdminDialog>}
 
         {/* Variance Alert */}
         {varianceItems.length > 0 && (
-          <div className="card bg-orange-50 border-orange-200">
-            <div className="flex items-center gap-2 text-orange-700 font-medium mb-3">
+          <details className="card bg-orange-50 border-orange-200">
+            <summary className="flex items-center gap-2 text-orange-700 font-medium cursor-pointer">
               <AlertTriangle size={20} />
-              {t("inventory.varianceItems")}
-            </div>
+              {t("inventory.varianceItems")} · {varianceItems.length}
+            </summary>
             <div className="space-y-2">
               {varianceItems.slice(0, 5).map((item) => (
                 <div
@@ -619,10 +598,10 @@ export function InventoryCountPage() {
                 </div>
               )}
             </div>
-          </div>
+          </details>
         )}
 
-        {canEdit && selectedCount.status==='in_progress' && <InventoryCountEditor formatQuantity={formatNumber} key={selectedCount.id} items={selectedCount.items} language={i18n.language} name={formatItemName} units={inventoryInputUnits} factor={inventoryUnitFactor} ledger={inventoryLedgerQuantity} onDirtyChange={setDraftDirty} onSave={async changes=>{await inventoryApi.updateInventoryCountItems(selectedCount.id,changes);await detailQuery.refetch();refreshCounts();}} onReload={async()=>{const response=await detailQuery.refetch();if(response.error)throw response.error;return response.data?.data?.data?.items||[];}}/>}
+
         {/* Saved observation details retain operators, movement, valuation and adjustment history. */}
         <details className="card" open={selectedCount.status!=="in_progress"}>
           <summary className="font-medium mb-4 cursor-pointer">
@@ -632,6 +611,7 @@ export function InventoryCountPage() {
                 : "inventory.countItems",
             )}
           </summary>
+          <div className="space-y-3 mb-3"><input aria-label={labels.search} placeholder={labels.search} value={itemSearch} onChange={e=>setItemSearch(e.target.value)} className="input w-full"/><div className="flex flex-wrap gap-2" role="group" aria-label={labels.batchProgress}>{(['all','pending','counted','difference'] as const).map(key=><button key={key} type="button" aria-pressed={itemFilter===key} onClick={()=>setItemFilter(key)} className={`border rounded-lg px-3 py-2 text-sm ${itemFilter===key?'bg-primary-light border-primary':'bg-white border-gray-200'}`}>{labels[key]} {key==='all'?totals.total:totals[key]}</button>)}</div>{!savedVisible.length&&<p className="text-gray-500">{labels.empty}</p>}</div>
           <div className="overflow-x-auto">
             <table className="inventory-responsive-table w-full md:min-w-[860px]">
               <thead className="whitespace-nowrap">
@@ -655,7 +635,7 @@ export function InventoryCountPage() {
                 </tr>
               </thead>
               <tbody>
-                {selectedCount.items?.map((item) => {
+                {savedVisible.map((item) => {
                   const variance =
                     item.countedQty !== undefined && item.countedQty !== null
                       ? item.countedQty - item.systemQty
@@ -677,6 +657,7 @@ export function InventoryCountPage() {
                         <span className="text-sm text-gray-500 ml-2">
                           ({item.inventory?.unit})
                         </span>
+                        <p className={`text-xs mt-1 ${isCounted(item)?'text-green-700':'text-amber-800'}`}>{isCounted(item)?'✓ '+labels.counted:labels.pending}</p>
                         {item.countedAt && <p className="text-xs text-gray-500 mt-1">{t('inventoryActors.counter')}: <ActorName actor={item.countedByActor} id={item.countedBy}/> · {formatDateTime(item.countedAt)}</p>}
                       </td>
                       <td
