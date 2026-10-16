@@ -92,7 +92,7 @@ function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}
  const all=sources(root),reverse=reverseDependencies(root,all,files),affected=impactedFiles(files,reverse);
  const selectedDomains=Object.entries(domains).filter(([name,rule])=>files.some(file=>rule.paths.test(file)&&(!file.startsWith('tv-android-app/')||name==='tv')&&(name==='ci'||!domains.ci.paths.test(file))&&!(name==='offline'&&(domains.tv.paths.test(file)||/^client-staff\/|staff-offline-login|employee-offline-attendance/.test(file))))).map(([name])=>name);
  const services=new Set(),typecheck=new Set(),i18n=new Set();
- for(const file of affected){const client=file.match(/^client-(admin|pos|staff)\//);if(client){typecheck.add(client[1]);if(files.includes(file))services.add(client[1])}if(/^server\/(?:src|prisma|package|tsconfig|Dockerfile)/.test(file)){typecheck.add('api');if(files.includes(file))services.add('api')}}
+ for(const file of affected){const client=file.match(/^client-(admin|pos|staff)\//);if(client){typecheck.add(client[1]);if(files.includes(file))services.add(client[1])}if(/^server\/(?:src|public|prisma|package|tsconfig|Dockerfile)/.test(file)){typecheck.add('api');if(files.includes(file))services.add('api')}}
  // Shared code affects the clients that import it; standalone shared assets affect all clients.
  if(files.some(file=>file.startsWith('shared/'))){for(const component of typecheck)services.add(component);if(!services.size)for(const service of ['admin','pos','staff']){services.add(service);typecheck.add(service)}}
  if(files.some(file=>/^(?:package(?:-lock)?\.json|tsconfig(?:\.[^/]+)?\.json)$/.test(file))){for(const service of SERVICES){services.add(service);typecheck.add(service)}}
@@ -101,7 +101,7 @@ function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}
  const unitTests=all.filter(file=>/^tests\/stoploss\/.*\.test\.cjs$/.test(file)&& (affected.has(file)||selectedDomains.some(domain=>domains[domain].tests.test(path.basename(file)))));
  const auditTests=all.filter(file=>/^server\/audit-tests\/.*\.test\.ts$/.test(file)&& (affected.has(file)||selectedDomains.some(domain=>domains[domain].tests.test(path.basename(file)))));
  const browser=[];
- for(const domain of selectedDomains){const check=browserChecks[domain];if(check&&check.components.some(component=>typecheck.has(component)))browser.push({domain,...check})}
+ for(const domain of selectedDomains){const check=browserChecks[domain];if(check&&(check.components.some(component=>typecheck.has(component))||(domain==='tv'&&typecheck.has('api'))))browser.push({domain,...check})}
  const http=[...new Set(selectedDomains.flatMap(domain=>httpChecks[domain]||[]))];
  const builds=new Set(typecheck);
  for(const check of browser)for(const component of check.components)builds.add(component);
