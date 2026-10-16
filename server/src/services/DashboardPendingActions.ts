@@ -1,3 +1,5 @@
+import { loadStoreDateSettings } from '../utils/storeDateSettings'
+import { businessCalendarDate } from '../utils/revenueDateRange'
 import { PrismaClient } from '@prisma/client'
 import { CASH_WARNING_PREFIX } from './ShiftCashReconciliation'
 
@@ -31,11 +33,21 @@ export async function loadDashboardPendingActions(db: PrismaClient, storeId: str
     { key: 'hygiene', count: hygiene, to: '/hygiene/today' },
     { key: 'permissions', count: permissions, to: '/approvals' }
   ]
+  const pendingShiftIds: string[] = []
   for (const row of cashWarnings) {
     try {
-      const warning = JSON.parse(row.value)
-      if (warning.status === 'pending') actions.push({ key: 'cash', count: 1, to: `/finance/revenue/shifts/${encodeURIComponent(row.key.slice(CASH_WARNING_PREFIX.length))}` })
+      if (JSON.parse(row.value).status === 'pending') pendingShiftIds.push(row.key.slice(CASH_WARNING_PREFIX.length))
     } catch { throw new Error('DASHBOARD_PENDING_CASH_WARNING_INVALID') }
+  }
+  if (pendingShiftIds.length) {
+    const [sessions, settings] = await Promise.all([
+      db.shiftSession.findMany({ where: { storeId, id: { in: pendingShiftIds } }, select: { id: true, openedAt: true, closedAt: true } }),
+      loadStoreDateSettings(db, storeId)
+    ])
+    for (const session of sessions) {
+      const range = new URLSearchParams({ startDate: businessCalendarDate(session.openedAt, settings.timezone), endDate: businessCalendarDate(session.closedAt || now, settings.timezone) })
+      actions.push({ key: 'cash', count: 1, to: `/finance/revenue/shifts/${encodeURIComponent(session.id)}?${range}` })
+    }
   }
   return { actions, total: actions.reduce((sum, action) => sum + action.count, 0), timestamp: now.toISOString() }
 }

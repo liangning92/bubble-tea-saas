@@ -185,7 +185,7 @@ export function RefundRequestListPage() {
                 <div>
                   <p className="text-gray-500">{t('orders.refundAmount')}</p>
                   <p className="font-bold text-lg text-red-500">
-                    {formatCurrency(selectedRequest.amount ?? selectedRequest.order?.finalAmount ?? 0)}
+                    {formatCurrency(selectedRequest.amount > 0 ? selectedRequest.amount : selectedRequest.order?.finalAmount || 0)}
                   </p>
                 </div>
                 <div>
