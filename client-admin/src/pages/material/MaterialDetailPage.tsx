@@ -1,3 +1,4 @@
+import { formatItemName } from '../../utils/helpers'
 import { formatNumber } from '../../utils/numberDisplay'
 import dateLocaleI18n from '../../i18n'
 import { useParams, useNavigate } from 'react-router-dom'
@@ -16,7 +17,7 @@ const TYPE_KEYS: Record<string, string> = {
 export function MaterialDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   const { data, isLoading } = useQuery({
     queryKey: ['material', id],
@@ -56,7 +57,7 @@ export function MaterialDetailPage() {
             <Package size={48} className="text-gray-400" />
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold">{mat.name}</h1>
+            <h1 className="text-2xl font-bold">{formatItemName(mat.name, i18n.language)}</h1>
             <div className="flex gap-4 mt-2 text-sm text-gray-500">
               <span>{mat.category}</span>
               <span>•</span>

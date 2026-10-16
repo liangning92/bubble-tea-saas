@@ -1,3 +1,4 @@
+import { formatItemName } from '../../utils/helpers'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -23,7 +24,7 @@ const CATEGORY_OPTIONS = [
 ]
 
 export function MaterialFormPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { user } = useAuthStore()
 
@@ -120,7 +121,7 @@ export function MaterialFormPage() {
                 <option value="">{t('material.selectRecipe')}</option>
                 {recipes.map((r: any) => (
                   <option key={r.id} value={r.id}>
-                    {r.name} → {r.outputName} ({r.outputUnit})
+                    {formatItemName(r.name, i18n.language)} → {formatItemName(r.outputName, i18n.language)} ({r.outputUnit})
                   </option>
                 ))}
               </select>

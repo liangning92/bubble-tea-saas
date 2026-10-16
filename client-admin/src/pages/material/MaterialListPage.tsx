@@ -1,3 +1,4 @@
+import { formatItemName } from '../../utils/helpers'
 import { formatNumber } from '../../utils/numberDisplay'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -20,7 +21,7 @@ const TYPE_COLORS: Record<string, string> = {
 }
 
 export function MaterialListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [showAlerts, setShowAlerts] = useState(false)
@@ -97,7 +98,7 @@ export function MaterialListPage() {
             {alerts.map((alert: any) => (
               <div key={alert.id} className="flex items-center justify-between bg-white p-3 rounded-lg">
                 <div>
-                  <div className="font-medium">{alert.name}</div>
+                  <div className="font-medium">{formatItemName(alert.name, i18n.language)}</div>
                   <div className="text-sm text-gray-500">
                     {t('material.currentStock') || 'Current Stock'}: {formatNumber(alert.currentStock)} {alert.unit}
                   </div>
@@ -138,7 +139,7 @@ export function MaterialListPage() {
             <tbody>
               {materials.map((mat: any) => (
                 <tr key={mat.id} className="border-b border-border last:border-0 hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/inventory/material/${mat.id}`)}>
-                  <td className="py-3 font-medium">{mat.name}</td>
+                  <td className="py-3 font-medium">{formatItemName(mat.name, i18n.language)}</td>
                   <td className="py-3 text-gray-600">{mat.category}</td>
                   <td className="py-3">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${TYPE_COLORS[mat.type] || 'bg-gray-100 text-gray-700'}`}>

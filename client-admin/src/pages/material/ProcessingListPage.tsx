@@ -95,28 +95,28 @@ export function ProcessingListPage() {
                 <div key={recipe.id} className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h4 className="font-semibold">{recipe.name}</h4>
+                      <h4 className="font-semibold">{formatItemName(recipe.name, i18n.language)}</h4>
                       <p className="text-sm text-gray-500">
-                        → {recipe.outputName} ({recipe.outputUnit})
+                        → {formatItemName(recipe.outputName, i18n.language)} ({recipe.outputUnit})
                       </p>
                     </div>
                     <div className="flex gap-2">
                       <button
-                        aria-label={t('material.editRecipe')+' '+recipe.name}
+                        aria-label={t('material.editRecipe')+' '+formatItemName(recipe.name,i18n.language)}
                         onClick={() => navigate(`/inventory/process/${recipe.id}/edit`)}
                         className="p-2 text-gray-500 hover:text-primary hover:bg-gray-100 rounded"
                       >
                         <Edit2 size={18} />
                       </button>
                       <button
-                        aria-label={t('common.delete')+' '+recipe.name}
+                        aria-label={t('common.delete')+' '+formatItemName(recipe.name,i18n.language)}
                         onClick={() => handleDelete(recipe.id, recipe.name)}
                         className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded"
                       >
                         <Trash2 size={18} />
                       </button>
                       <button
-                        aria-label={t('inventoryProcessing.title')+' '+recipe.name}
+                        aria-label={t('inventoryProcessing.title')+' '+formatItemName(recipe.name,i18n.language)}
                         onClick={() => handleExecute(recipe.id)}
                         disabled={executeMutation.isPending || recipe.status!=='active'}
                         className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50"
@@ -219,7 +219,7 @@ function ProcessingHistory() {
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <Clock size={16} className="text-gray-400" />
-                  <span className="font-medium">{log.recipe?.name || t('material.recipe')}</span>
+                  <span className="font-medium">{formatItemName(log.recipe?.name || t('material.recipe'),i18n.language)}</span>
                   <span className="text-sm text-gray-500">{t('material.multiplier', { value: formatNumber(log.multiplier) })}</span>
                 </div>
                 <span className="text-sm text-gray-500">
