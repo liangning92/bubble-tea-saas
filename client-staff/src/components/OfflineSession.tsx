@@ -1,3 +1,5 @@
+import {OfflineAttendancePanel} from './OfflineAttendancePanel'
+import {OfflineAttendanceSync} from './OfflineAttendanceSync'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { WifiOff, LogIn, LogOut } from 'lucide-react'
@@ -14,7 +16,7 @@ export function OfflineSession() {
   }, [offlineUntil, now, logout, navigate])
   const signIn = () => { logout(); navigate('/login', { replace: true }) }
   return <div className="employee-shell">
-    <main className="mx-auto max-w-2xl space-y-5 p-4 sm:p-6">
+    <OfflineAttendanceSync/><main className="mx-auto max-w-2xl space-y-5 p-4 sm:p-6">
       <section role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-amber-950">
         <h1 className="flex items-center gap-3 text-xl font-semibold"><WifiOff aria-hidden size={24} />{t('auth.offlineTitle')}</h1>
         <p className="mt-3 text-base">{t('auth.offlineDescription')}</p>
@@ -27,6 +29,7 @@ export function OfflineSession() {
           <div className="sm:col-span-2"><dt className="text-sm text-gray-500">{t('auth.offlineUntil')}</dt><dd>{offlineUntil ? new Date(offlineUntil).toLocaleString(i18n.language) : '—'}</dd></div>
         </dl>
       </section>
+      <OfflineAttendancePanel/>
       <p className="text-gray-600">{t('auth.offlineOperations')}</p>
       <div className="flex flex-wrap gap-3">
         <button onClick={signIn} className="flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-white"><LogIn size={20}/>{t('auth.offlineReconnect')}</button>

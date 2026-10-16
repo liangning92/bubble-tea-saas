@@ -1,3 +1,4 @@
+import {prepareOfflineAttendanceQR,cachedAttendanceQR} from '../utils/offlineAttendanceQR'
 import {prepareOfflineWork,offlineTasks,mutateOfflineTask,localTaskPhoto} from '../utils/offlineWork'
 import {createOfflineMember} from '../utils/offlineOperations'
 import {offlineMembers,offlineMemberCoupons,prepareOfflineMembers,pendingOfflineMembers,offlineVerifyCoupon,offlineMemberEvidence} from '../utils/offlineMembers'
@@ -252,7 +253,11 @@ export const posApi = {
   getHygieneAnnouncements:(storeId:string)=>offlineRead('/announcement/hygiene/pending',{storeId},()=>api.get('/announcement/hygiene/pending',{params:{storeId},timeout:5000})),
 
   // Attendance QR
-  generateAttendanceQR: (posId: string) => api.post('/attendance-qr/generate', { posId }),
+  prepareOfflineAttendanceQR: (posId:string)=>prepareOfflineAttendanceQR(posId,()=>api.post('/attendance-qr/offline-prepare',{}, {timeout:15000})),
+  generateAttendanceQR: async(posId: string) => {
+    try { if(!navigator.onLine||!readBackendAuth().token) return await cachedAttendanceQR(posId); return await api.post('/attendance-qr/generate', {posId}, {timeout:4000}) }
+    catch(error){if(!serverUnavailable(error))throw error;return cachedAttendanceQR(posId)}
+  },
   verifyAttendanceQR: (qrData: string, type: 'check_in' | 'check_out' | 'verify', attendanceId?: string) =>
     api.post('/attendance-qr/verify', { qrData, type, attendanceId }),
 

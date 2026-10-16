@@ -1,5 +1,8 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
 export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null}> = {
+  "GET /api/auth/employee-offline-attendance": {permission:"personal.attendance",ownerOnly:false,export:false,personal:true},
+  "POST /api/auth/employee-offline-attendance/sync": {permission:"personal.attendance",ownerOnly:false,export:false,personal:true},
+  "POST /api/attendance-qr/offline-prepare": {permission:"pos.shift",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager","cashier"]},
   "POST /api/auth/register": {
     "legacyRoles": [
       "manager",
@@ -3970,11 +3973,11 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "legacyRoles": [
       "manager",
       "cashier",
-      "staff"
+      "admin"
     ],
-    "legacyPermission": "attendance.write",
+    "legacyPermission": "pos.shift",
     "resource": null,
-    "permission": "attendance.write",
+    "permission": "pos.shift",
     "ownerOnly": false,
     "export": false,
     "personal": false

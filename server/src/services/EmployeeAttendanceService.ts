@@ -290,8 +290,8 @@ export async function snapshotAttendance(
   // Payroll issues must not prevent an employee from clocking in.
   return snapshot;
 }
-export async function createEmployeeAttendance(data: any, storeId: string) {
-  return prisma.$transaction(async (db) => {
+export async function createEmployeeAttendance(data: any, storeId: string, transaction?: WorkDB) {
+  const apply = async (db: WorkDB) => {
     await workLock(storeId, `check-in.${data.staffId}`, db);
     const shift = await resolveShift(
         data.staffId,
@@ -322,7 +322,8 @@ export async function createEmployeeAttendance(data: any, storeId: string) {
         data: { status: "completed" },
       });
     return db.attendance.findUniqueOrThrow({ where: { id: attendance.id } });
-  });
+  };
+  return transaction ? apply(transaction) : prisma.$transaction(apply);
 }
 export async function processLatePayroll() {
   const rows = await prisma.config.findMany({

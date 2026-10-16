@@ -89,13 +89,13 @@ export function AttendancePage() {
           setAttendance(response.data);
           setMessage({
             type: "success",
-            text: `${t("attendance.checkInSuccess", "签到成功！")} ${response.data?.storeName ? `(${response.data.storeName})` : ""}`,
+            text: response.offline?t("offlineAttendance.saved"):`${t("attendance.checkInSuccess", "签到成功！")} ${response.data?.storeName ? `(${response.data.storeName})` : ""}`,
           });
         } else {
           setAttendance(response.data ?? attendance);
           setMessage({
             type: "success",
-            text: `${t("attendance.checkOutSuccess", "签退成功！")} ${response.data?.storeName ? `(${response.data.storeName})` : ""}`,
+            text: response.offline?t("offlineAttendance.saved"):`${t("attendance.checkOutSuccess", "签退成功！")} ${response.data?.storeName ? `(${response.data.storeName})` : ""}`,
           });
         }
         setShowScanner(false);

@@ -229,6 +229,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const { filter, setFilter, products, setProducts, searchQuery, setSearchQuery } = useProductStore()
   const [loading, setLoading] = useState(true)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [showOfflineStatus, setShowOfflineStatus] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'offline'>('connected')
   // 渠道状态 - 动态加载
   const [posChannels, setPosChannels] = useState<Array<{id: string; nameKey: string; icon: string; code: string; color?: string; name?: string}>>([])
@@ -1959,6 +1960,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     setExpenseSaving(true)
     try {
       await posApi.createPosExpense({ requestId: expenseRequestId, category: expenseCategory, amount, quantity, description: expenseDescription.trim() })
+      setShowExpenseModal(false)
       showToast(t('pos.expenseCreated'), 'success')
       setExpenseCategory('')
       setExpenseAmount('')
@@ -2140,7 +2142,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   },[quoteInputKey,activityRevision])
   useEffect(()=>{
     let live=true
-    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void posApi.prepareOfflineMembers().catch(()=>{});void posApi.prepareOfflineWork().catch(()=>{});void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
+    const refresh=async()=>{const results=await Promise.allSettled([activitiesApi.list(),activitiesApi.offlineSnapshot()]);if(!live)return;const list=results[0],offline=results[1];if(list.status==='fulfilled'){setUnifiedActivities(list.value.data.data);const key='pos-activity-terminal.'+user?.storeId;let terminal=localStorage.getItem(key);if(!terminal){terminal=crypto.randomUUID();localStorage.setItem(key,terminal)}void posApi.prepareOfflineMembers().catch(()=>{});void posApi.prepareOfflineWork().catch(()=>{});if(user?.storeId)void posApi.prepareOfflineAttendanceQR(user.storeId).catch(()=>{});void activitiesApi.heartbeat(terminal,list.value.data.data.reduce((sum:number,a:any)=>sum+a.version+a.used,0)).catch(()=>{})}else if(offline.status==='fulfilled')setUnifiedActivities(offline.value.data.data.activities);setActivityRevision(v=>v+1)}
     void refresh();const timer=setInterval(refresh,15000)
     const focus=()=>{if(document.visibilityState==='visible')void refresh()}
     window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus)
@@ -3355,12 +3357,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           </div>}
         </section>}
 
+        {showOfflineStatus && <div data-testid="offline-status-details">
         {!!recovery?.rows.some(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()) && <details role="status" className="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950">
           <summary className="cursor-pointer font-medium">{t('offlineSale.queue')} ({recovery.rows.filter(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()).length})</summary>
           <ul className="max-h-36 overflow-y-auto mt-2 space-y-1">{recovery.rows.filter(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()).map(row=><li key={row.localId} className="flex flex-wrap justify-between gap-x-4"><span className="break-all">{row.orderNumber}</span><span>{formatCurrency(row.finalAmount)} · {t(row.status==='review'?'offlineSale.review':'offlineSale.awaitUpload')}</span></li>)}</ul>
         </details>}
         {!useAuthStore.getState().token && <button type="button" className="p-2 bg-amber-50 underline" onClick={()=>navigate('/login')}>{t('offlineSale.reconnectLogin')}</button>}
         <OfflineOperationsStatus />
+        </div>}
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
         <header className="bg-primary px-4 py-3 min-h-[56px] shrink-0 flex flex-wrap items-center justify-between gap-3 select-none">
           {/* 左侧：Logo (下方紧贴收银员) + Online指示器 */}
@@ -3386,7 +3390,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
             {/* Online 状态 */}
             {displaySettings.showOfflineIndicator !== false && (
-              <span className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 ${
+              <button type="button" aria-label={t('offlineOperations.details')} aria-expanded={showOfflineStatus} onClick={()=>setShowOfflineStatus(value=>!value)} className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 ${
                 connectionStatus === 'connected' ? 'bg-emerald-500/20 text-white border border-emerald-400/40' :
                 connectionStatus === 'connecting' ? 'bg-amber-500/20 text-amber-100 border border-amber-400/40 animate-pulse' :
                 'bg-red-500 text-white animate-pulse'
@@ -3399,7 +3403,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 {connectionStatus === 'connected' ? t('pos.online') :
                  connectionStatus === 'connecting' ? t('pos.connecting') :
                  t('pos.offline')}
-              </span>
+              </button>
             )}
           </div>
 
@@ -5014,7 +5018,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       {/* 费用记录弹窗 */}
       {showExpenseModal && access.can('pos.expense') && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowExpenseModal(false)}>
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
+          <div role="dialog" aria-modal="true" aria-label={t('pos.purchaseReimbursement')} className="bg-white w-full max-w-md rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto z-[60]" onClick={e => e.stopPropagation()}>
             <div className="px-5 py-4 flex justify-between items-center border-b bg-primary text-white rounded-t-2xl">
               <h3 className="font-bold">{t('pos.purchaseReimbursement')}</h3>
               <button onClick={() => setShowExpenseModal(false)} className="w-10 h-10 flex items-center justify-center hover:bg-white/20 rounded-full">
@@ -5073,7 +5077,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   disabled={expenseSaving}
                   className="w-full py-3 bg-primary text-white rounded-xl font-bold touch-feedback"
                 >
-                  {t('pos.submitReimbursement')}
+                  {expenseSaving ? t('common.loading') : t('pos.submitReimbursement')}
                 </button>
               </div>
             </div>

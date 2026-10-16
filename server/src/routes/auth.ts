@@ -1,3 +1,4 @@
+import { prepareEmployeeOfflineAttendance, syncEmployeeOfflineAttendance, EmployeeOfflineAttendanceError } from '../services/EmployeeOfflineAttendanceService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
@@ -32,6 +33,18 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   phone: z.string(),
   password: z.string().min(1).refine(value => Buffer.byteLength(value, 'utf8') <= 72)
+})
+
+// Preparation requires the normal online session. Sync accepts only a signed,
+// purpose-scoped grant plus a valid QR at the original occurrence time.
+router.get('/employee-offline-attendance',authenticate,async(req:AuthRequest,res)=>{
+ try{return res.json({code:200,data:await prepareEmployeeOfflineAttendance(req.user!)})}
+ catch(error){const status=error instanceof EmployeeOfflineAttendanceError?error.status:500;return res.status(status).json({code:status,message:error instanceof EmployeeOfflineAttendanceError?error.message:'Offline attendance preparation failed'})}
+})
+const offlineAttendanceLimiter=rateLimit({windowMs:60000,max:300,standardHeaders:true,legacyHeaders:false})
+router.post('/employee-offline-attendance/sync',offlineAttendanceLimiter,async(req,res)=>{
+ try{return res.json({code:200,data:await syncEmployeeOfflineAttendance(req.body)})}
+ catch(error){const status=error instanceof EmployeeOfflineAttendanceError?error.status:error instanceof z.ZodError?400:409;return res.status(status).json({code:status,message:error instanceof EmployeeOfflineAttendanceError?error.message:status===400?'Invalid attendance record':'Attendance needs review; local record retained'})}
 })
 
 // POST /api/auth/register

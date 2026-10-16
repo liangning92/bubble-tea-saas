@@ -57,6 +57,9 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
   // Initial load
   useEffect(() => {
     loadQR()
+    window.addEventListener('offline',loadQR)
+    window.addEventListener('online',loadQR)
+    return ()=>{window.removeEventListener('offline',loadQR);window.removeEventListener('online',loadQR)}
   }, [loadQR])
 
   // Countdown timer
@@ -77,13 +80,13 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
   useEffect(() => {
     if (refreshInterval <= 0) return
 
-    const refreshTime = refreshInterval - 30000 // 30 seconds before expiry
+    const refreshTime = Math.max(1000, expiresAt - Date.now() + 100) // Rotate into the next signed time slot.
     const timeout = setTimeout(() => {
       loadQR()
     }, refreshTime)
 
     return () => clearTimeout(timeout)
-  }, [refreshInterval, loadQR])
+  }, [refreshInterval, expiresAt, loadQR])
 
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000)
@@ -106,7 +109,7 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
             <QrCode size={24} />
             <span className="font-bold">{t('attendance.qrTitle') }</span>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded">
+          <button aria-label={t('common.close')} onClick={onClose} className="p-1 hover:bg-white/20 rounded">
             <X size={20} />
           </button>
         </div>
@@ -135,7 +138,7 @@ export function AttendanceQR({ posId, onClose }: AttendanceQRProps) {
                 {t('pos.retry')}
               </button>
             </div>
-          ) : qrDataUrl ? (
+          ) : qrDataUrl && timeLeft > 0 ? (
             <div className="relative">
               {/* QR Code Image */}
               <div className="w-48 h-48 mx-auto bg-white p-2 rounded-xl border-2 border-gray-200">

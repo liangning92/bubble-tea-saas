@@ -95,6 +95,8 @@ export function staffPermissionForRequest(method: string, originalUrl: string, u
   if (/^\/expenses\/?$/.test(path) && user?.role === 'cashier') return 'pos.expense'
   if (/^\/staff\/attendance$/.test(path) && method==='POST') return 'personal.attendance'
   if (/^\/staff\/attendance\/(today|history)$/.test(path)) return 'personal.attendance'
+  if (['/attendance-qr/offline-prepare','/attendance-qr/generate'].includes(path)) return 'pos.shift'
+  if (path.startsWith('/auth/employee-offline-attendance')) return 'personal.attendance'
   if (/^\/attendance-qr\/verify$/.test(path)) return 'personal.attendance'
   if (/^\/attendance-rules$/.test(path) && read) return 'personal.attendance'
   if (/^\/overtime\/(apply|cancel)(?:\/|$)/.test(path)) return 'personal.attendance'

@@ -74,14 +74,14 @@ export function HomePage() {
     setBusy(true);
     setMessage("");
     try {
-      await staffApi.checkInWithQR(
+      const response=await staffApi.checkInWithQR(
         data,
         selected,
         selected === "check_out" ? attendance?.id : undefined,
       );
       setScanner(false);
       setMessage(
-        t(
+        response.offline?t("offlineAttendance.saved"):t(
           selected === "check_in"
             ? "attendance.checkInSuccess"
             : "attendance.checkOutSuccess",

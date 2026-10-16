@@ -1,3 +1,4 @@
+import {OfflineAttendanceSync} from './components/OfflineAttendanceSync'
 import { OfflineSession } from './components/OfflineSession'
 import {StaffAccessProvider} from '../../shared/StaffAccess'
 import {StaffApprovalInbox} from '../../shared/StaffApprovalInbox'
@@ -59,7 +60,7 @@ function App() {
   const location=useLocation()
   if (isAuthenticated && user && offlineUntil && location.pathname!=='/login') return <OfflineSession/>
   return (
-    <StaffAccessProvider api={staffPermissionClient} actor={user?[user.id,user.storeId,'staff'].join(':'):''} owner={user?.role==='admin'}><StaffApprovalDialog/>{sessionStorage.getItem('employee-offline-setup-failed') && user && <p role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><OfflineSetupNotice/></p>}<Suspense fallback={<RouteLoading />}><Routes>
+    <StaffAccessProvider api={staffPermissionClient} actor={user?[user.id,user.storeId,'staff'].join(':'):''} owner={user?.role==='admin'}><StaffApprovalDialog/><OfflineAttendanceSync/>{sessionStorage.getItem('employee-offline-setup-failed') && user && <p role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><OfflineSetupNotice/></p>}<Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/inventory/count" element={<ProtectedRoute><LayoutWithNav><InventoryCountPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/attendance/appeals" element={<ProtectedRoute><LayoutWithNav><EmployeeAppealsPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/profile/documents" element={<ProtectedRoute><LayoutWithNav><EmployeeDocumentsPage /></LayoutWithNav></ProtectedRoute>} />

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
-import { forgetOfflineLogin, loginBackend } from '../utils/offlineAuth'
+import {attendanceState,localTodayAttendance,queueAttendance,rememberOnlineAttendance,syncAttendance} from '../utils/offlineAttendance'
+import { forgetOfflineLogin, loginBackend, temporaryLoginFailure } from '../utils/offlineAuth'
 
 function getApiBase(): string {
   const configured = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
@@ -37,6 +38,7 @@ async function loadShiftSettings() {
 }
 
 export const staffApi = {
+  prepareOfflineAttendance:async()=> (await http.get(`${API_BASE}/auth/employee-offline-attendance`,{headers:getAuthHeader(),timeout:15000})).data,
   editRequest:async(path:string,id:string,data:any)=>(await http.put(`${API_BASE}/${path}/${id}`,data,{headers:getAuthHeader()})).data,
   withdrawRequest:async(path:string,id:string)=>(await http.put(`${API_BASE}/${path}/${id}/withdraw`,{},{headers:getAuthHeader()})).data,
  reportTaskIssue: async(id:string,description:string)=>(await http.put(`${API_BASE}/hygiene/tasks/${id}/issue`,{description},{headers:getAuthHeader()})).data,
@@ -63,14 +65,20 @@ export const staffApi = {
 
   // QR Attendance - 扫描前台POS动态防伪码打卡
   checkInWithQR: async (qrData: string, type: 'check_in' | 'check_out' = 'check_in', attendanceId?: string) => {
-    const response = await http.post(`${API_BASE}/attendance-qr/verify`, {
-      qrData,
-      type,
-      attendanceId
-    }, {
-      headers: getAuthHeader()
-    })
-    return response.data
+    const actor=useAuthStore.getState().user,backend=loginBackend(API_BASE)
+    const saveLocal=async()=>{
+      if(!actor||useAuthStore.getState().user?.id!==actor.id)throw Error('offlineAttendance.notPrepared')
+      await queueAttendance(backend,actor.id,qrData,type)
+      void syncAttendance(API_BASE,backend,actor.id).catch(()=>{})
+      return localTodayAttendance(backend,actor.id)
+    }
+    const state=actor?await attendanceState(backend,actor.id).catch(()=>null):null
+    if(state?.pending||useAuthStore.getState().offlineUntil)return saveLocal()
+    try {
+      const response=await http.post(`${API_BASE}/attendance-qr/verify`,{qrData,type,attendanceId},{headers:getAuthHeader(),timeout:5000})
+      if(actor&&useAuthStore.getState().user?.id===actor.id)await rememberOnlineAttendance(backend,actor.id,response.data.data).catch(()=>{})
+      return response.data
+    } catch(error){if(!temporaryLoginFailure(error))throw error;return saveLocal()}
   },
 
   checkOut: async (attendanceId: string, data: { checkOutTime: string; location?: string }) => {
@@ -86,11 +94,14 @@ export const staffApi = {
   },
 
   getTodayAttendance: async (staffId: string) => {
-    const response = await http.get(`${API_BASE}/staff/attendance/today`, {
-      params: { staffId },
-      headers: getAuthHeader()
-    })
-    return response.data
+    const actor=useAuthStore.getState().user,backend=loginBackend(API_BASE)
+    const state=actor?await attendanceState(backend,actor.id).catch(()=>null):null
+    if(actor&&(state?.pending||useAuthStore.getState().offlineUntil))return localTodayAttendance(backend,actor.id)
+    try {
+      const response=await http.get(`${API_BASE}/staff/attendance/today`,{params:{staffId},headers:getAuthHeader(),timeout:5000})
+      if(actor&&useAuthStore.getState().user?.id===actor.id)await rememberOnlineAttendance(backend,actor.id,response.data.data).catch(()=>{})
+      return response.data
+    }catch(error){if(!temporaryLoginFailure(error)||!actor||useAuthStore.getState().user?.id!==actor.id)throw error;return localTodayAttendance(backend,actor.id)}
   },
 
   // Monthly Overview for Home Page
