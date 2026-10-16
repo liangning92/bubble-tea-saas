@@ -41,6 +41,7 @@ export const screenSettings = z
     orientation: z.enum(["landscape", "portrait"]).default("landscape"),
     layoutTemplate: z
       .enum([
+        "product_catalog",
         "menu_full",
         "split_media_menu",
         "media_loop",

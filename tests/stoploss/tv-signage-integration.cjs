@@ -111,6 +111,7 @@ async function main() {
   assert.equal(await db.channel.count({ where: { storeId: "new-store" } }), 4);
   const settings = svc.screenSettings.parse({
       inherit: false,
+      layoutTemplate: "product_catalog",
       channelId: "dine",
     }),
     screen = await db.tvScreen.create({
@@ -279,6 +280,7 @@ async function main() {
     .set("X-TV-Device-Token", paired.token);
   assert.equal(content.status, 200);
   assert.equal(content.body.data.store.name, "store");
+  assert.equal(content.body.data.settings.layoutTemplate, "product_catalog");
   await db.tvDevice.update({
     where: { id: claimed.deviceId },
     data: { revoked: true },

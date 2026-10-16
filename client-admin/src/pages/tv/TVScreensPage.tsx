@@ -534,10 +534,12 @@ export function TVScreensPage() {
                     {tr("layout")}
                     <select
                       className="input"
+                      aria-label={tr("layout")}
                       value={edit.settings.layoutTemplate}
                       onChange={(e) => set("layoutTemplate", e.target.value)}
                     >
                       {[
+                        "product_catalog",
                         "menu_full",
                         "split_media_menu",
                         "media_loop",
@@ -550,6 +552,7 @@ export function TVScreensPage() {
                       ))}
                     </select>
                   </label>
+                  {edit.settings.layoutTemplate==='product_catalog'&&<p className="text-sm text-gray-500 sm:col-span-2">{l('左侧轮播已选产品的大图、名称与价格；右侧固定展示全部已选分类和产品，不显示缩略图。独立素材保留用于其他布局。','The left cycles selected product photos, names and prices. The right keeps all selected categories and products visible without thumbnails. Separate media remains available in other layouts.','Kiri menampilkan foto, nama dan harga produk terpilih bergantian. Kanan tetap menampilkan semua kategori dan produk terpilih tanpa gambar kecil. Media terpisah tetap tersedia pada tata letak lain.')}</p>}
                   <label>
                     {tr("theme")}
                     <select
@@ -663,7 +666,7 @@ export function TVScreensPage() {
                     ["volume", 0, 1],
                   ].map(([key, min, max]) => (
                     <label key={key}>
-                      {tr(String(key))}
+                      {edit.settings.layoutTemplate==='product_catalog'&&key==='mediaIntervalSeconds'?l('产品大图切换间隔（秒）','Product photo interval (seconds)','Interval foto produk (detik)'):edit.settings.layoutTemplate==='product_catalog'&&key==='pageSeconds'?l('活动文案切换间隔（秒）','Promotion banner interval (seconds)','Interval teks promo (detik)'):tr(String(key))}
                       <input
                         className="input"
                         type="number"

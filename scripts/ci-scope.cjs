@@ -63,7 +63,7 @@ const browserChecks={
  staffOffline:{scripts:['tests/stoploss/staff-offline-login-page-check.cjs','tests/stoploss/employee-offline-attendance-page-check.cjs'],components:['staff']},
  attendanceReport:{scripts:['tests/stoploss/inventory-attendance-layout-page-check.cjs'],components:['admin']},
  adminUi:{scripts:['tests/stoploss/admin-ui-optimization-page-check.cjs','tests/stoploss/admin-session-reuse-page-check.cjs','tests/stoploss/store-date-settings-page-check.cjs'],components:['admin']},
- tv:{scripts:['tests/stoploss/tv-signage-page-check.cjs','tests/stoploss/tv-signage-admin-page-check.cjs','tests/stoploss/tv-signage-lottery-page-check.cjs'],components:['admin']},
+ tv:{scripts:['tests/stoploss/tv-signage-page-check.cjs','tests/stoploss/tv-signage-admin-page-check.cjs','tests/stoploss/tv-signage-lottery-page-check.cjs','tests/stoploss/tv-signage-catalog-page-check.cjs'],components:['admin']},
  inventory:{scripts:['tests/stoploss/inventory-count-workspace-page-check.cjs','tests/stoploss/inventory-count-batch-page-check.cjs'],components:['admin']},
  staff:{scripts:['tests/stoploss/staff-basic-access-page-check.cjs'],components:['staff'],preview:{component:'staff',port:5179}},
  orders:{scripts:['tests/stoploss/order-export-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
