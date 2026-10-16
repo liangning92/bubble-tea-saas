@@ -316,8 +316,8 @@ export function OrderListPage() {
               <p className="text-gray-500">{t('orders.noRefunds') || 'No refund requests'}</p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl overflow-hidden">
-              <table className="w-full">
+            <div className="bg-white rounded-xl overflow-x-auto">
+              <table className="w-full min-w-[960px]">
                 <thead>
                   <tr className="text-left text-sm text-gray-500 border-b bg-gray-50">
                     <th className="p-4 font-medium">{t('shiftHandover.products')}</th>
