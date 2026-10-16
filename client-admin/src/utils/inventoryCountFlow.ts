@@ -16,8 +16,9 @@ export function inventoryLogDisplay(log: any) {
   const isCount = log.reason === 'count_adjustment'
   const countId = isCount && typeof data?.countId === 'string' && data.countId ? data.countId : undefined
   const countItemId = countId && typeof data?.countItemId === 'string' ? data.countItemId : undefined
-  const note = isCount && typeof data?.reason === 'string' ? data.reason
-    : typeof data?.note === 'string' ? data.note : typeof data?.orderNumber === 'string' ? data.orderNumber : log.note
+  const note = isCount && data && typeof data === 'object' ? (typeof data.reason === 'string' ? data.reason : typeof data.note === 'string' ? data.note : '')
+    : typeof data?.note === 'string' ? data.note : typeof data?.orderNumber === 'string' ? data.orderNumber
+    : data && typeof data === 'object' && (typeof data.kind === 'string' || (data.version === 1 && typeof data.ledgerUnit === 'string')) ? '' : log.note
   const quantity = typeof log.quantity === 'number' ? log.quantity
     : typeof log.quantity === 'string' && log.quantity.trim() ? Number(log.quantity) : NaN
   return { ...log, note, operationKind:typeof data?.kind==='string'?data.kind:undefined, countId, countItemId,
