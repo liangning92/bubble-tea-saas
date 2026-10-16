@@ -5,3 +5,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+declare module '*.html?raw' {
+  const document: string
+  export default document
+}

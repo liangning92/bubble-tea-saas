@@ -10,6 +10,7 @@ COPY client-admin client-admin
 COPY client-pos client-pos
 COPY client-staff client-staff
 COPY shared shared
+COPY server/public/tv/index.html server/public/tv/index.html
 RUN npm run build:admin
 
 FROM nginx:alpine

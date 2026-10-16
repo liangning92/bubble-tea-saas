@@ -81,7 +81,7 @@ public class MainActivity extends Activity {
                         String mime = prefs.getString("mime." + digest, "application/octet-stream");
                         return new WebResourceResponse(mime, null, new FileInputStream(file));
                     }
-                    if (!Arrays.asList("/tv/index.html", "/tv/player.js", "/tv/player.css", "/tv/build.js").contains(name)) return empty();
+                    if (!Arrays.asList("/tv/index.html", "/tv/player.js", "/tv/lottery.js", "/tv/player.css", "/tv/build.js").contains(name)) return empty();
                     String mime = name.endsWith(".js") ? "application/javascript" : name.endsWith(".css") ? "text/css" : "text/html";
                     return new WebResourceResponse(mime, "UTF-8", getAssets().open(name.substring(1)));
                 } catch (Exception e) { return empty(); }

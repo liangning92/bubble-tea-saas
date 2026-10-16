@@ -1,6 +1,7 @@
+import tvPlayerDocument from "../../../../server/public/tv/index.html?raw";
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { useEmployeePermission } from "../../contexts/EmployeeAccess";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { AdminDialog } from "../../components/AdminDialog";
@@ -52,6 +53,22 @@ export function TVScreensPage() {
     [target, setTarget] = useState(""),
     [preview, setPreview] = useState<any>(null),
     [legacy, setLegacy] = useState<any[]>([]);
+  const previewFrame = useRef<HTMLIFrameElement>(null);
+  const [previewPrize,setPreviewPrize] = useState(0), [previewDrawing,setPreviewDrawing] = useState(false), [previewReady,setPreviewReady] = useState(false), [previewFailed,setPreviewFailed] = useState(false);
+  useEffect(()=>{
+    const receive=(event:MessageEvent)=>{
+      if(event.origin!==window.location.origin||event.source!==previewFrame.current?.contentWindow)return;
+      if(event.data?.type==='tv-lottery-preview-finished')setPreviewDrawing(false);
+      if(event.data?.type==='tv-preview-ready')previewFrame.current?.contentWindow?.postMessage({type:'tv-preview',snapshot:preview},window.location.origin);
+      if(event.data?.type==='tv-preview-applied'){setPreviewReady(true);setPreviewFailed(false);}
+    };
+    window.addEventListener('message',receive);return()=>window.removeEventListener('message',receive);
+  },[preview]);
+  useEffect(()=>{
+    if(!preview||previewReady)return;
+    const timeout=window.setTimeout(()=>setPreviewFailed(true),12000);
+    return()=>window.clearTimeout(timeout);
+  },[preview,previewReady]);
   async function load() {
     try {
       const [a, b, c, d] = await Promise.all([
@@ -342,7 +359,7 @@ export function TVScreensPage() {
                 onClick={() =>
                   action(async () => {
                     const res = await tvApi.preview(screen.id);
-                    setPreview(res.data.data);
+                    setPreviewPrize(0);setPreviewDrawing(false);setPreviewReady(false);setPreviewFailed(false);setPreview(res.data.data);
                   })
                 }
               >
@@ -448,7 +465,7 @@ export function TVScreensPage() {
                     <input
                       className="input"
                       required
-                      pattern="[A-Za-z0-9_-]+"
+                      pattern="(?:[A-Za-z0-9_]|-)+"
                       maxLength={40}
                       value={edit.code}
                       onChange={(e) =>
@@ -707,20 +724,36 @@ export function TVScreensPage() {
         </AdminDialog>
       )}
       {preview && (
-        <AdminDialog title={tr("preview")} onClose={() => setPreview(null)} className="max-w-4xl" busy={false} trackChanges chrome>
+        <AdminDialog title={tr("preview")} onClose={() => setPreview(null)} className="max-w-4xl" busy={false} chrome>
             <button className="btn" onClick={() => setPreview(null)} data-dialog-close="true">
               {tr("close")}
             </button>
 
+            <div className="flex flex-wrap items-end gap-3 mb-3">
+              <label className="min-w-0 flex-1 text-sm">
+                {l('预览奖项','Preview result','Hasil pratinjau')}
+                <select className="input" aria-label={l('预览奖项','Preview result','Hasil pratinjau')} value={previewPrize} disabled={previewDrawing||!preview.drawPreview?.prizes?.length} onChange={e=>setPreviewPrize(Number(e.target.value))}>
+                  {(preview.drawPreview?.prizes||[]).map((prize:any,index:number)=><option key={prize.id} value={index}>{prize.name}</option>)}
+                </select>
+              </label>
+              <button className="btn-primary" disabled={!previewReady||previewDrawing||!preview.drawPreview?.prizes?.length} onClick={()=>{
+                const prizes=preview.drawPreview.prizes,prize=prizes[previewPrize];if(!prize)return;
+                setPreviewDrawing(true);
+                previewFrame.current?.contentWindow?.postMessage({type:'tv-lottery-preview',event:{eventId:'preview:'+Date.now(),testMode:true,orderNumber:'DEMO',prizeName:prize.name,prizeId:prize.id,prizeIndex:previewPrize,prizes,coupon:preview.drawPreview.coupons?.[prize.id]}},window.location.origin);
+              }}>{previewDrawing?l('正在演示…','Playing preview…','Demo berlangsung…'):l('预览抽奖动画（不发奖）','Preview draw (no reward)','Demo undian (tanpa hadiah)')}</button>
+            </div>
+            <p className="text-sm text-gray-500 mb-3">{preview.drawPreview?l('使用当前活动奖品演示，不创建订单、不扣库存、不发放权益。','Uses current activity prizes. No orders, stock changes or rewards.','Memakai hadiah promo saat ini. Tanpa pesanan, perubahan stok atau pemberian hadiah.'):l('当前渠道没有生效中的抽奖活动，暂不可预览动画。','No active draw for this channel. Preview is unavailable.','Tidak ada undian aktif untuk kanal ini. Demo belum tersedia.')}</p>
+            {!previewReady&&<p role={previewFailed?'alert':'status'} className={previewFailed?'text-red-600 mb-3':'text-gray-500 mb-3'}>{previewFailed?l('预览加载失败，请关闭后重试。','Preview failed to load. Close and try again.','Pratinjau gagal dimuat. Tutup lalu coba lagi.'):l('正在加载电视预览…','Loading TV preview…','Memuat pratinjau TV…')}</p>}
             <iframe
+              ref={previewFrame}
               title={tr("preview")}
               className="w-full h-[65vh]"
-              src="/tv/?preview=1"
-              onLoad={(e) =>
+              srcDoc={tvPlayerDocument.replace('<head>',`<head><base href="${window.location.origin}/tv/">`).replace('<body>','<body data-preview="1">')}
+              onLoad={(e) => {
                 e.currentTarget.contentWindow?.postMessage(
                   { type: "tv-preview", snapshot: preview },
                   window.location.origin,
-                )
+                );}
               }
             />
             <p className="text-red-600">{preview.errors.join(" · ")}</p>

@@ -30,6 +30,7 @@ import {
   ACTIVITY_TYPES,
 } from "../../../../shared/utils/activities";
 import { activityLabel } from "../../../../shared/utils/activityLabels";
+const LOTTERY_MACARON_COLORS = ["#F8BFD0", "#F6D99B", "#BFE2CE", "#BFDDF1", "#D9C7EC", "#F5C7AF", "#C6DFDF"];
 const empty = {
   name: "",
   description: "",
@@ -1437,6 +1438,10 @@ export function ActivitiesPage() {
                     "Diundi otomatis setelah pembayaran. Hadiah habis tidak dipilih.",
                   )}
                 </p>
+                <button type="button" className="btn-secondary" onClick={()=>rule('prizes',(form.rule.prizes||[]).map((prize:any,index:number)=>({...prize,color:LOTTERY_MACARON_COLORS[index%LOTTERY_MACARON_COLORS.length]})))}>
+                  {l('应用马卡龙配色','Apply macaron colors','Terapkan warna pastel')}
+                </button>
+                <p className="text-xs text-gray-500">{l('配色只修改扇区颜色，保存活动后预览和电视同步；奖品、权重和库存保持原值。','Only sector colors change. Save to sync preview and TV; prizes, weights and stock stay as configured.','Hanya warna sektor berubah. Simpan untuk sinkron ke pratinjau dan TV; hadiah, bobot dan stok tetap.')}</p>
                 {(form.rule.prizes || []).map((p: any, n: number) => {
                   const change = (key: string, value: any) =>
                     rule(
@@ -1561,7 +1566,7 @@ export function ActivitiesPage() {
                         id: crypto.randomUUID(),
                         name: "",
                         code: "",
-                        color: "#ef4444",
+                        color: LOTTERY_MACARON_COLORS[(form.rule.prizes||[]).length%LOTTERY_MACARON_COLORS.length],
                         weight: 1,
                       },
                     ])
@@ -2065,6 +2070,7 @@ export function ActivitiesPage() {
                           g.coupon?.code ||
                           g.pointsAwarded ||
                           "—"}
+                        {g.prize&&g.coupon?.code&&<p className="font-mono text-sm mt-1 select-all">{g.coupon.code}</p>}
                       </td>
                       <td>
                         <span

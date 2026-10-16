@@ -19,6 +19,7 @@ import {
   tvEvents,
   acknowledgeTvEvents,
 } from "../services/TvSignageService";
+import { listActivities, displayPrizes } from "../services/ActivityService";
 const router = Router();
 const run = (fn: (req: any) => Promise<any>) => async (req: any, res: any) => {
   try {
@@ -366,7 +367,16 @@ router.get(
       where: { id: req.params.id, storeId: req.user.storeId },
     });
     if (!found) throw Error("TV_SCREEN_NOT_FOUND");
-    return signageSnapshot(found);
+    const snapshot = await signageSnapshot(found);
+    // Management-only preview uses this store's current public lottery configuration;
+    // it creates no order, entitlement, stock mutation or device acknowledgement.
+    const activities = await listActivities(req.user.storeId);
+    const lottery = activities.find(a => a.type === 'lottery' && snapshot.promotions.some(p => p.id === a.id));
+    const templates = lottery ? await prisma.coupon.findMany({where:{storeId:req.user.storeId,id:{in:(lottery.rule.prizes||[]).map(p=>p.couponId).filter((id):id is string=>!!id)},status:'active'}}) : [];
+    const coupons = Object.fromEntries((lottery?.rule.prizes||[]).flatMap(p=>{
+      const template=templates.find(c=>c.id===p.couponId);return template?[[p.id,{code:'DEMO-NOT-REDEEMABLE',type:template.type,value:template.value,minOrder:template.minOrder,validUntil:template.validUntil.toISOString()}]]:[];
+    }));
+    return { ...snapshot, drawPreview: lottery ? { name: lottery.name, prizes: displayPrizes(lottery.rule.prizes), coupons } : null };
   }),
 );
 router.post(

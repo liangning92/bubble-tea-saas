@@ -45,11 +45,33 @@
         <p id="test-result" role="status"></p>
       </form>
     </dialog>
-    <div id="lottery" hidden>
-      <h2 id="lottery-order"></h2>
-      <strong id="lottery-prize"></strong>
-    </div>
+    <section id="lottery" hidden aria-label="Lucky draw">
+      <div class="draw-topline"><span class="draw-brand">YOUME</span><span id="draw-kicker"></span><span id="draw-preview" hidden></span></div>
+      <div class="draw-layout">
+        <div class="draw-wheel-wrap">
+          <div class="draw-pointer" aria-hidden="true"></div>
+          <svg id="draw-wheel" viewBox="0 0 600 600" aria-hidden="true"></svg>
+          <div class="draw-hub"><span id="draw-countdown"></span><span id="draw-hub-label"></span></div>
+        </div>
+        <div class="draw-copy" aria-live="polite">
+          <p id="lottery-order"></p>
+          <h2 id="draw-heading"></h2>
+          <p id="draw-description"></p>
+          <strong id="lottery-prize" hidden></strong>
+          <section id="draw-coupon" hidden>
+            <p id="draw-coupon-label"></p>
+            <strong id="draw-coupon-code"></strong>
+            <p id="draw-coupon-terms"></p>
+            <p id="draw-coupon-photo"></p>
+          </section>
+          <p id="draw-footer"></p>
+          <div class="draw-progress" aria-hidden="true"><i></i></div>
+        </div>
+      </div>
+      <div id="draw-confetti" aria-hidden="true"></div>
+    </section>
     <script src="./build.js" defer></script>
+    <script src="./lottery.js" defer></script>
     <script src="./player.js" defer></script>
   </body>
 </html>

@@ -1,3 +1,4 @@
+import {generateCouponCode} from '../utils/couponCode'
 import {hasDesignatedTv} from './TvDeviceRegistry'
 import { deductInventory } from './OrderService'
 import { config as environment } from '../config/env'
@@ -233,9 +234,9 @@ export async function publicActivities(storeId:string,channel=''){
 async function issueCoupon(tx:any,storeId:string,templateId:string,memberId:string|undefined,orderId:string){
  const c=await tx.coupon.findFirst({where:{id:templateId,storeId,status:'active'}})
  if(!c||c.validUntil<=new Date())throw Error('ACTIVITY_COUPON_UNAVAILABLE')
- const coupon=await tx.coupon.create({data:{storeId,code:'ACT-'+randomUUID(),type:c.type,value:c.value,minOrder:c.minOrder,maxDiscount:c.maxDiscount,validFrom:c.validFrom>new Date()?c.validFrom:new Date(),validUntil:c.validUntil,usageLimit:1,status:'active'}})
+ const coupon=await tx.coupon.create({data:{storeId,code:generateCouponCode(),type:c.type,value:c.value,minOrder:c.minOrder,maxDiscount:c.maxDiscount,validFrom:c.validFrom>new Date()?c.validFrom:new Date(),validUntil:c.validUntil,usageLimit:1,status:'active'}})
  if(memberId)await tx.memberCoupon.create({data:{memberId,couponId:coupon.id,status:'unused'}})
- return {id:coupon.id,code:coupon.code}
+ return {id:coupon.id,code:coupon.code,type:coupon.type,value:coupon.value,minOrder:coupon.minOrder,validUntil:coupon.validUntil.toISOString()}
 }
 export async function processActivityGrant(storeId:string,id:string){
  const result=await prisma.$transaction(async tx=>{

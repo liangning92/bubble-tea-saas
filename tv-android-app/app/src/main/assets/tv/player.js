@@ -83,8 +83,9 @@
     pairing = false,
     fetching = false,
     eventBusy = false,
+    eventFetching = false,
     pendingAck = JSON.parse(localStorage.getItem("tv.acks") || "[]");
-  let origin = location.origin,
+  let origin = new URL(document.baseURI).origin,
     identity = JSON.parse(localStorage.getItem("tv.identity") || "null");
   if (native) {
     const state = JSON.parse(native.state());
@@ -168,6 +169,8 @@
     clearTimeout(slideTimer);
     $("media").replaceChildren();
     $("promotions").replaceChildren();
+    window.TVLottery.cancel();
+    eventBusy = false;
     $("lottery").hidden = true;
     pairing = false;
     $("display").hidden = true;
@@ -559,6 +562,7 @@
       audio = null;
     }
     if (
+      eventBusy ||
       !snapshot.settings.musicEnabled ||
       !snapshot.music.length ||
       !snapshot.screen.isActive
@@ -656,6 +660,7 @@
           renderProducts();
         }, data.settings.pageSeconds * 1000);
       } else {
+        window.TVLottery.cancel();
         $("products").replaceChildren();
         $("media").replaceChildren(element("h2", t("standby")));
         clearTimeout(slideTimer);
@@ -818,35 +823,36 @@
       localStorage.setItem("tv.acks", "[]");
     } catch {}
   }
-  async function events() {
-    if (
-      !identity ||
-      !online ||
-      eventBusy ||
-      !snapshot ||
-      !snapshot.screen.isActive
-    )
-      return;
+  async function presentDraw(event, preview = false) {
+    if(eventBusy) return false;
+    const epoch = pairGeneration;
+    eventBusy = true;
+    if(audio) audio.pause();
     try {
-      const json = await request("GET", "/api/tv/device/events"),
-        event = json.data.find(
-          (e) =>
-            !pendingAck.includes(e.eventId) &&
-            Date.parse(e.expiresAt) > estimatedTime(),
-        );
-      if (!event) return;
-      eventBusy = true;
-      $("lottery-order").textContent = event.orderNumber;
-      $("lottery-prize").textContent = event.prizeName;
-      $("lottery").hidden = false;
-      setTimeout(() => {
-        $("lottery").hidden = true;
+      const completed = await window.TVLottery.play(event,{language,timezone:snapshot?.store.timezone});
+      if(completed && !preview && epoch===pairGeneration && identity) {
         pendingAck.push(event.eventId);
-        localStorage.setItem("tv.acks", JSON.stringify(pendingAck));
-        eventBusy = false;
-        heartbeat();
-      }, 8000);
-    } catch {}
+        localStorage.setItem("tv.acks",JSON.stringify(pendingAck));
+        await heartbeat();
+      }
+      return completed;
+    } finally {
+      eventBusy = false;
+      if(snapshot) {
+        if(audio && snapshot.screen.isActive && snapshot.settings.musicEnabled) audio.play().catch(()=>{ $("enable-sound").textContent=t("sound");$("enable-sound").hidden=false; });
+        else music();
+      }
+    }
+  }
+  async function events() {
+    if (!identity || !online || eventBusy || eventFetching || !snapshot || !snapshot.screen.isActive) return;
+    eventFetching = true;
+    const epoch=pairGeneration;
+    try {
+      const json=await request("GET","/api/tv/device/events");
+      const event=json.data.find(e => !pendingAck.includes(e.eventId) && Date.parse(e.expiresAt)>estimatedTime());
+      if(event && epoch===pairGeneration && !eventBusy) await presentDraw(event);
+    } catch {} finally { eventFetching=false; }
   }
   function openSetup() {
     $("server").value = origin;
@@ -936,13 +942,19 @@
     }
   };
   async function boot() {
-    if (new URLSearchParams(location.search).get("preview") === "1") {
+    if (new URLSearchParams(location.search).get("preview") === "1" || document.body.dataset.preview === "1") {
+      const previewOrigin = new URL(document.baseURI).origin;
       window.addEventListener("message", (e) => {
-        if (e.origin === location.origin && e.data.type === "tv-preview") {
+        if(e.source!==window.parent || !e.data) return;
+        if (e.origin === previewOrigin && e.data.type === "tv-preview") {
           online = true;
           apply({ ...e.data.snapshot, checkedAt: Date.now() });
+          window.parent.postMessage({type:"tv-preview-applied"},previewOrigin);
+        } else if(e.source===window.parent && e.origin===previewOrigin && e.data.type==="tv-lottery-preview" && e.data.event?.testMode===true) {
+          presentDraw(e.data.event,true).finally(()=>window.parent.postMessage({type:"tv-lottery-preview-finished"},previewOrigin));
         }
       });
+      window.parent.postMessage({type:"tv-preview-ready"},previewOrigin);
       return;
     }
     if (!native && "serviceWorker" in navigator)

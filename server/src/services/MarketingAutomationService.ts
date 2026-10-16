@@ -1,3 +1,4 @@
+import {generateCouponCode} from '../utils/couponCode'
 import prisma from '../config/database'
 import { subDays, addDays, startOfDay, endOfDay } from '../utils/dateUtils'
 import { sendMessageToMember } from './MessageService'
@@ -92,7 +93,7 @@ export async function deleteCampaign(id: string) {
 export async function createCoupon(data: {
   storeId: string
   campaignId?: string
-  code: string
+  code?: string
   type: 'discount_percent' | 'discount_fixed' | 'free_product' | 'free_delivery'
   value: number
   minOrder?: number
@@ -105,14 +106,14 @@ export async function createCoupon(data: {
     data: {
       storeId: data.storeId,
       campaignId: data.campaignId,
-      code: data.code,
+      code: data.code?.trim().toUpperCase() || generateCouponCode(),
       type: data.type,
       value: data.value,
       minOrder: data.minOrder || 0,
       maxDiscount: data.maxDiscount || 0,
       validFrom: data.validFrom,
       validUntil: data.validUntil,
-      usageLimit: data.usageLimit || 0
+      usageLimit: data.usageLimit ?? 1
     }
   })
 }

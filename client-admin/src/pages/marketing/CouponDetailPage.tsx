@@ -1,4 +1,5 @@
 import { formatNumber } from '../../utils/numberDisplay'
+import { useMarketingCopy } from '../../components/marketing/MarketingLayout'
 import { MarketingError } from '../../components/marketing/MarketingLayout'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -8,6 +9,7 @@ import { ArrowLeft, Edit, Loader2, Ticket, Percent, Banknote, Gift, Truck, User 
 
 export function CouponDetailPage() {
   const { t } = useTranslation()
+  const l = useMarketingCopy()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
@@ -75,6 +77,11 @@ export function CouponDetailPage() {
         <span className={`badge ${coupon.status === 'active' ? 'badge-success' : 'badge-gray'}`}>{coupon.status}</span>
       </div>
 
+      <section className="card border border-primary/20 bg-primary-light/30 mb-5 text-center">
+        <p className="text-sm text-gray-600">{l('请拍照保存券码','Photograph and save this code','Foto dan simpan kode ini')}</p>
+        <p className="font-mono font-bold text-xl sm:text-3xl break-all my-3 select-all">{coupon.code}</p>
+        <p className="text-sm text-gray-600">{l('下次消费向收银员出示，按券面条件核销；付款成功后才计为使用。','Show the cashier next time. Terms apply; the coupon is consumed after successful payment.','Tunjukkan kepada kasir pada kunjungan berikutnya. Syarat berlaku; kupon terpakai setelah pembayaran berhasil.')}</p>
+      </section>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="card">
           <h3 className="font-semibold mb-4">{t('marketing.couponDetails')}</h3>
