@@ -1,3 +1,4 @@
+import { todayStockOuts } from '../services/TodayStockOutService'
 import {refreshInventoryAlerts,handleInventoryAlert} from '../services/InventoryAlertCenterService'
 import {setBatchExpiry} from '../services/InventoryBatchService'
 import {employeeConsumption,getConsumptionAlerts} from '../services/EmployeeConsumptionService'
@@ -248,6 +249,13 @@ router.get('/logs/stock-in', authenticate, async (req: AuthRequest, res) => {
     console.error('Get stock in logs error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get stock in logs' })
   }
+})
+
+// Employee requests remain bound to their authenticated store via getStoreId.
+router.get('/logs/today-stock-out', authenticate, async (req: AuthRequest, res) => {
+  res.set('Cache-Control', 'no-store')
+  try { res.json({ code: 200, data: await todayStockOuts(getStoreId(req)), timestamp: new Date().toISOString() }) }
+  catch (error) { console.error('Get today stock outs error:', error); res.status(500).json({ code: 500, message: 'Failed to load today stock outs' }) }
 })
 
 // GET /api/inventory/logs/stock-out

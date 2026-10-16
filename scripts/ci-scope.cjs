@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ todayStockOut:{paths:/(?:TodayStockOutService|TodayStockOuts|inventory-today-stock-out)/i,tests:/inventory-today-stock-out/i},
  staffOffline:{paths:/(?:^client-staff\/.*(?:offlineAuth|OfflineSession|employee-sw)|staff-offline-login|QRCameraScannerModal|OfflineAttendance|AttendanceQRService|attendanceQR\.ts|employee-offline-attendance)/i,tests:/staff-offline-login/i},
  attendanceReport:{paths:/(?:AttendanceReportService|attendanceReport|AttendanceDashboardPage|inventory-attendance-layout)/i,tests:/attendance-report/i},
  adminUi:{paths:/(?:AdminDialog|MainLayout|client-admin\/src\/stores\/auth\.|client-admin\/src\/pages\/LoginPage|client-admin\/src\/index\.css|ChannelProductPricingPage|client-admin\/src\/pages\/SettingsPage|InventoryIndexPage|admin-session-reuse|admin-ui-optimization)/i,tests:/admin-ui-optimization|admin-session-reuse/i},
@@ -60,6 +61,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ todayStockOut:{scripts:['tests/stoploss/inventory-today-stock-out-page-check.cjs'],components:['staff']},
  staffOffline:{scripts:['tests/stoploss/staff-offline-login-page-check.cjs','tests/stoploss/employee-offline-attendance-page-check.cjs'],components:['staff']},
  attendanceReport:{scripts:['tests/stoploss/inventory-attendance-layout-page-check.cjs'],components:['admin']},
  adminUi:{scripts:['tests/stoploss/admin-ui-optimization-page-check.cjs','tests/stoploss/admin-session-reuse-page-check.cjs','tests/stoploss/store-date-settings-page-check.cjs'],components:['admin']},

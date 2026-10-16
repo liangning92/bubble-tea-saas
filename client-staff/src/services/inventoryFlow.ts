@@ -18,6 +18,7 @@ async function intent(path: string, data: Record<string, unknown>, keyField: str
     return result;
 }
 export const inventoryFlowApi = {
+    todayStockOuts: () => get('/inventory/logs/today-stock-out'),
     updatePurchase:(id:string,data:any)=>http.put(base+`/purchase-orders/${id}`,data,{headers:headers()}),
     cancelPurchase:(id:string,reason:string)=>http.delete(base+`/purchase-orders/${id}`,{data:{reason},headers:headers()}),
     logs: async()=>{const [incoming,outgoing]=await Promise.all([get('/inventory/logs/stock-in?limit=100'),get('/inventory/logs/stock-out?limit=100')]);return {data:{list:[...incoming.data.list.map((r:any)=>({...r,type:'stock_in'})),...outgoing.data.list.map((r:any)=>({...r,type:'stock_out'}))]}}},
