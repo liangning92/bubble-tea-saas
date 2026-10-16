@@ -32,3 +32,10 @@ export function itemDisplayName(item: NamedItem, language = 'id'): string {
   return candidate.trim()
 }
 
+/** Only parse the structured purchase ledger description; preserve other free text. */
+export function purchaseDescriptionDisplay(description: string, language: string): string {
+  return description.split('; ').map(segment => {
+    const match = segment.match(/^(.*) · (\d+(?:\.\d+)?\s+\S*)$/)
+    return match ? `${itemDisplayName(match[1], language)} · ${match[2]}` : segment
+  }).join('; ')
+}
