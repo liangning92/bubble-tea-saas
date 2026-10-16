@@ -19,3 +19,14 @@ test('batch count recording is an employee work route, while approval and cancel
  assert.equal(isEmployeeAppRoute('PUT /api/inventory-counts/:id/items',ACCESS_ROUTE_MANIFEST['PUT /api/inventory-counts/:id/items']),true)
  for(const key of ['POST /api/inventory-counts/:id/complete','POST /api/inventory-counts/:id/cancel'])assert.equal(isEmployeeAppRoute(key,ACCESS_ROUTE_MANIFEST[key]),false)
 })
+
+test('today stock-outs pass the real employee guard with own-store scope and no cost grant',async()=>{
+ const key='GET /api/inventory/logs/today-stock-out',spec=ACCESS_ROUTE_MANIFEST[key];assert.equal(spec.permission,'inventory.read');assert.equal(isEmployeeAppRoute(key,spec),true);
+ const database=path.resolve(root,'server/src/config/database.ts');require.cache[database]={id:database,filename:database,loaded:true,exports:{__esModule:true,default:{}}};
+ const {enforceAccessV2}=require(root+'/server/src/middlewares/staffAccessV2.ts'),{getStoreId}=require(root+'/server/src/utils/storeHelper.ts');
+ const user={id:'actor',staffId:'employee',storeId:'own',role:'staff',employeeApp:true,accessRole:employeeAppAccess('staff')};
+ const req={method:'GET',baseUrl:'/api/inventory',params:{},query:{storeId:'foreign'},body:{},user,accessDeclaration:{...spec,routeKey:key}};let status=200,output;
+ const res={status(value){status=value;return this;},json(value){output=value;return this;}};
+ assert.equal(await enforceAccessV2(req,res,user),null);assert.equal(status,200);assert.equal(getStoreId(req),'own');assert.equal(user.accessRole.modes['inventory.read'],'allow');assert.equal(user.accessRole.modes['cost.read'],'deny');
+ res.json({code:200,data:{date:'2026-10-16',timezone:'Asia/Jakarta',groups:[{name:'Teh',quantity:3,unit:'g',entries:[{operator:{name:'Fixture'},quantity:3}]}]}});assert.equal(output.data.groups[0].quantity,3);assert.equal(output.data.groups[0].entries[0].operator.name,'Fixture');
+});
