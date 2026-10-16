@@ -1,4 +1,5 @@
 const zh = {
+ batchProgress:'本次盘点进度', total:'本次应盘', counted:'已盘点', unsaved:'待保存', savedOnly:'仅成功保存的数量计入已盘点；空白为未盘，0 为实盘零库存。', nextPending:'下一项未盘', reviewSubmit:'确认本次提交', confirmPartial:'确认提交已盘项目', continueCount:'继续盘点', partialHint:'以下未盘项目不会按 0 处理，也不参与本次库存调整；提交后本单进入审核。', counter:'盘点人', unknownCounter:'未记录',
  submitFailed:'提交失败，已填内容保留，请重试。', submit:'提交', staffHint:'填好本次实盘数量后直接提交，未填写项会列在后台，无需全部盘完。0 表示实物为零。', submitSummary:'本次提交 {count} 项 · 未盘 {pending} 项', noEntries:'请至少填写一项实盘数量后提交。', uncountedHint:'以下物料未盘点，不参与本次库存调整。',
  hint:'一次带出清单，连续填写后统一保存。空白表示未盘，0 表示实物为零；差异说明选填，审核后才调整库存。',
  search:'搜索物料', all:'全部', pending:'未盘', difference:'有差异', actual:'实盘数量', theory:'账面库存', delta:'差异', unit:'单位', note:'差异说明（选填）', noteToggle:'补充说明',
@@ -7,6 +8,7 @@ const zh = {
  progress:'已保存 {saved} / {total} 项 · 待保存 {dirty} 项', select:'批量选择物料', selectHint:'默认盘点全部物料；也可搜索后勾选本次要盘的物料。', selectVisible:'选中搜索结果', clear:'清空选择', selected:'已选择 {count} 项'
 }
 const en: typeof zh = {
+ batchProgress:'Current count progress', total:'To count', counted:'Counted', unsaved:'Unsaved', savedOnly:'Only saved quantities count as completed. Blank means uncounted; 0 means no stock.', nextPending:'Next uncounted item', reviewSubmit:'Review this submission', confirmPartial:'Submit counted items', continueCount:'Continue counting', partialHint:'Uncounted items remain blank and do not adjust stock. This count will move to review.', counter:'Counted by', unknownCounter:'Not recorded',
  submitFailed:'Submission failed. Your entries are retained. Please retry.', submit:'Submit', staffHint:'Enter the quantities counted and submit directly. Uncounted materials are listed in the admin app; you do not need to count everything. Enter 0 for no stock.', submitSummary:'Submitting {count} items · {pending} uncounted', noEntries:'Enter at least one counted quantity before submitting.', uncountedHint:'These materials were not counted and will not affect this stock adjustment.',
  hint:'Enter quantities continuously, then save together. Blank means uncounted; 0 means none on hand. Notes are optional. Stock changes only after approval.',
  search:'Search materials',all:'All',pending:'Uncounted',difference:'With variance',actual:'Counted quantity',theory:'Book stock',delta:'Variance',unit:'Unit',note:'Variance note (optional)',noteToggle:'Add note',
@@ -15,6 +17,7 @@ const en: typeof zh = {
  progress:'Saved {saved} / {total} · Unsaved {dirty}',select:'Select materials in bulk',selectHint:'Count all materials by default, or search and select materials for this count.',selectVisible:'Select search results',clear:'Clear selection',selected:'{count} selected'
 }
 const id: typeof zh = {
+ batchProgress:'Progres penghitungan ini', total:'Perlu dihitung', counted:'Sudah dihitung', unsaved:'Belum disimpan', savedOnly:'Hanya jumlah tersimpan masuk progres. Kosong berarti belum dihitung; 0 berarti stok habis.', nextPending:'Bahan belum dihitung berikutnya', reviewSubmit:'Periksa pengiriman ini', confirmPartial:'Kirim bahan yang dihitung', continueCount:'Lanjut menghitung', partialHint:'Bahan yang belum dihitung tetap kosong dan tidak menyesuaikan stok. Penghitungan akan masuk tinjauan.', counter:'Dihitung oleh', unknownCounter:'Tidak tercatat',
  submitFailed:'Gagal mengirim. Isian tetap dipertahankan. Coba lagi.', submit:'Kirim', staffHint:'Isi jumlah yang dihitung, lalu langsung kirim. Bahan yang belum dihitung ditampilkan di admin; tidak perlu menghitung semuanya. Isi 0 jika stok habis.', submitSummary:'Kirim {count} bahan · {pending} belum dihitung', noEntries:'Isi minimal satu jumlah fisik sebelum mengirim.', uncountedHint:'Bahan berikut belum dihitung dan tidak memengaruhi penyesuaian stok ini.',
  hint:'Isi jumlah berurutan, lalu simpan sekaligus. Kosong berarti belum dihitung; 0 berarti stok fisik habis. Catatan opsional. Stok berubah setelah disetujui.',
  search:'Cari bahan',all:'Semua',pending:'Belum dihitung',difference:'Ada selisih',actual:'Jumlah fisik',theory:'Stok buku',delta:'Selisih',unit:'Satuan',note:'Catatan selisih (opsional)',noteToggle:'Tambah catatan',

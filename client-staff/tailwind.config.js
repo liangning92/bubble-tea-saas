@@ -5,6 +5,8 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
     "../shared/components/PayrollBasisDetails.tsx",
     "../shared/components/InventoryCountEditor.tsx",
+    "../shared/components/InventoryCountProgress.tsx",
+    "../shared/components/InventoryCountResults.tsx",
   ],
   theme: {
     extend: {
