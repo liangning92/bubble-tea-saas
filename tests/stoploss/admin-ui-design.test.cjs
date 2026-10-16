@@ -51,3 +51,11 @@ test('currency values round for display while retaining complete large totals',(
   assert.ok(!/K|M|B/.test(text));
  }
 });
+
+// Both legacy language orders occur in production; ambiguous product names stay intact.
+test('Indonesian display chooses recognized names and retains identifying sizes',()=>{
+ const cases=[['Cup 700ml / Gelas 700ml (700ml塑料杯)','Gelas 700ml'],['Irisan Lemon / Fresh Lemon Slice (新鲜柠檬片)','Irisan Lemon'],['Bubuk Es Krim / Ice Cream Powder (冰淇淋粉)','Bubuk Es Krim'],['Standard Straw / Pipet Kecil (小吸管)','Pipet Kecil'],['Milk / Tea','Milk / Tea'],['Cup 500ml (塑料杯)','Cup 500ml']];
+ for(const [raw,expected] of cases)assert.equal(names.itemDisplayName(raw,'id-ID'),expected);
+ assert.equal(names.itemDisplayName({name:'Cup 700ml',nameId:'Gelas'},'id'),'Gelas 700ml');
+ assert.equal(names.itemDisplayName('Blue / Red (蓝红)','id'),'Blue / Red');
+});

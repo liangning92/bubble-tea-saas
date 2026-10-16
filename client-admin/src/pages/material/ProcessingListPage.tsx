@@ -231,7 +231,7 @@ function ProcessingHistory() {
                   <div className="text-gray-500 mb-1">{t('material.inputs') || 'Inputs'}</div>
                   {inputs.length > 0 ? inputs.map((item: any, idx: number) => (
                     <div key={idx} className="text-gray-600">
-                      {item.name}: {formatNumber(item.quantity)} {item.unit}
+                      {formatItemName(item.name, i18n.language)}: {formatNumber(item.quantity)} {item.unit}
                     </div>
                   )) : <div className="text-gray-400">-</div>}
                 </div>
@@ -239,7 +239,7 @@ function ProcessingHistory() {
                   <div className="text-gray-500 mb-1">{t('material.outputs') || 'Outputs'}</div>
                   {outputs.length > 0 ? outputs.map((item: any, idx: number) => (
                     <div key={idx} className="text-green-600">
-                      {item.name}: {formatNumber(item.quantity)} {item.unit}
+                      {formatItemName(item.name, i18n.language)}: {formatNumber(item.quantity)} {item.unit}
                     </div>
                   )) : <div className="text-gray-400">-</div>}
                 </div>

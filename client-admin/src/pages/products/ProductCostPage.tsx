@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { bomApi } from '../../services/api'
-import { formatCurrency } from '../../utils/helpers'
+import { formatCurrency, formatItemName } from '../../utils/helpers'
 import { Calculator, Package, Loader2, TrendingUp, TrendingDown } from 'lucide-react'
 
 interface ProductCost {
@@ -47,7 +47,7 @@ interface ProductDetail {
 }
 
 export function ProductCostPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const [products, setProducts] = useState<ProductCost[]>([])
   const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(null)
@@ -204,7 +204,7 @@ export function ProductCostPage() {
                     {selectedProduct.bomDetails.map((item, index) => (
                       <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div>
-                          <p className="font-medium">{item.name}</p>
+                          <p className="font-medium">{formatItemName(item.name, i18n.language)}</p>
                           <p className="text-xs text-gray-500">
                             {formatNumber(item.quantity)} {item.unit} × {formatCurrency(item.costPerUnit)}/{item.unit}
                           </p>

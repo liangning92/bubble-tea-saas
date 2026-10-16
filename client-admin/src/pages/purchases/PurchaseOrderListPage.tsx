@@ -246,7 +246,7 @@ export function PurchaseOrderListPage() {
 
   const editOrder=(order:PurchaseOrder)=>{setEditing(order);setReason('');setActionError('');setFormData({supplierId:order.supplierId||'',expectedDate:order.expectedDate?.slice(0,10)||'',note:order.note||'',items:order.items.map(i=>({inventoryId:i.inventoryId,quantity:String(i.inputQuantity??i.quantity),inputUnit:i.inputUnit||i.inventory?.unit||'',paidAmount:String(i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)))}))});setShowModal(true)}
   const summary = summarizePurchases(orders, today, dateSettings.timezone)
-  const searchedOrders = orders.filter(o => !search || [o.supplier?.name, o.orderNumber, o.onlineOrderNumber, ...o.items.map(i => formatItemName(i.inventory?.name || '', i18n.language))].join(' ').toLowerCase().includes(search.toLowerCase()))
+  const searchedOrders = orders.filter(o => !search || [o.supplier?.name, o.orderNumber, o.onlineOrderNumber, ...o.items.flatMap(i => [i.inventory?.name,formatItemName(i.inventory?.name || '', i18n.language)])].join(' ').toLowerCase().includes(search.toLowerCase()))
   const matchesStatus = (order: PurchaseOrder, status: string) => !status || (status === 'awaiting_receipt' ? ['pending', 'approved', 'awaiting_receipt'].includes(order.status) : order.status === status)
   const visibleOrders = searchedOrders.filter(order => matchesStatus(order, filterStatus))
   const statusFilters = [
