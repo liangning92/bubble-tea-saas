@@ -328,10 +328,11 @@
   function fitCatalog() {
     if(!catalogMode())return;
     const board=$('products').querySelector('.catalog-categories');if(!board)return;
+    board.classList.remove('catalog-overflow');
     const groups=categoryGroups(),count=snapshot.menu.length,columns=count>38?3:count>10?2:1;
     board.style.setProperty('--catalog-columns',columns);
     let size=Math.min(30,Math.floor(board.clientHeight*columns/Math.max(1,count*1.85+groups.length*2.5)));
-    const minimum=innerWidth<500?12:16;size=Math.max(minimum,size);board.style.fontSize=size+'px';
+    const minimum=innerWidth<innerHeight?12:Math.max(6,Math.min(16,Math.floor(innerWidth/120)));size=Math.max(minimum,size);board.style.fontSize=size+'px';
     while(size>minimum&&(board.scrollWidth>board.clientWidth+1||board.scrollHeight>board.clientHeight+1))board.style.fontSize=--size+'px';
     // Small preview windows can scroll manually; the TV menu itself never advances or omits rows.
     board.classList.toggle('catalog-overflow',board.scrollWidth>board.clientWidth+1||board.scrollHeight>board.clientHeight+1);

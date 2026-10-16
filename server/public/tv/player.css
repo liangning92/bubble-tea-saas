@@ -388,6 +388,5 @@ article h3 {
 .catalog-categories {flex:1;min-height:0;height:100%;column-count:var(--catalog-columns,2);column-gap:2vmin;column-fill:balance;overflow:hidden;}
 .catalog-category {break-inside:avoid-column;margin:0 0 1em;}
 .catalog-category h2 {font-size:1.12em;font-weight:850;line-height:1.2;margin:0 0 .4em;padding-bottom:.3em;border-bottom:2px solid #f8bfd0;}
-.catalog-categories.catalog-overflow {column-count:1;overflow-y:auto;}
+.catalog-categories.catalog-overflow {columns:auto;overflow-y:auto;}
 .catalog-categories.catalog-overflow .catalog-category {break-inside:auto;}
-@media(max-aspect-ratio:1/1){.catalog-categories.catalog-overflow{column-count:2;}}
