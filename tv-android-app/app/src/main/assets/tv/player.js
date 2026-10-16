@@ -296,8 +296,74 @@
       return cards;
     });
   }
+  function appendPrices(info,p,compact=false) {
+    if (freshPrices()) {
+        if (!p.specs.length) info.append(element("p", t("price")));
+        for (const spec of p.specs) {
+          const line = element("p");
+          if(!compact||p.specs.length>1)line.append(element("small", spec.name + " "));
+          const promotion =
+            spec.activityId &&
+            snapshot.promotions.find((a) => a.id === spec.activityId);
+          const applicable =
+            !spec.activityId || (promotion && eligible(promotion));
+          if (applicable && spec.displayPrice < spec.basePrice)
+            line.append(element("del", money(spec.basePrice)));
+          line.append(
+            document.createTextNode(
+              money(applicable ? spec.displayPrice : spec.basePrice),
+            ),
+          );
+          info.append(line);
+        }
+      }
+  }
+  let heroProduct = null;
+  function catalogMode() { return snapshot?.settings.layoutTemplate === 'product_catalog'; }
+  function categoryGroups() {
+    const groups=new Map();
+    for(const p of snapshot.menu){const name=p.category||(language==='zh'?'全部产品':language==='en'?'All products':'Semua produk');if(!groups.has(name))groups.set(name,[]);groups.get(name).push(p);}
+    return Array.from(groups,([name,products])=>({name,products}));
+  }
+  function fitCatalog() {
+    if(!catalogMode())return;
+    const board=$('products').querySelector('.catalog-categories');if(!board)return;
+    const groups=categoryGroups(),count=snapshot.menu.length,columns=count>38?3:count>10?2:1;
+    board.style.setProperty('--catalog-columns',columns);
+    let size=Math.min(30,Math.floor(board.clientHeight*columns/Math.max(1,count*1.85+groups.length*2.5)));
+    const minimum=innerWidth<500?12:16;size=Math.max(minimum,size);board.style.fontSize=size+'px';
+    while(size>minimum&&(board.scrollWidth>board.clientWidth+1||board.scrollHeight>board.clientHeight+1))board.style.fontSize=--size+'px';
+    // Small preview windows can scroll manually; the TV menu itself never advances or omits rows.
+    board.classList.toggle('catalog-overflow',board.scrollWidth>board.clientWidth+1||board.scrollHeight>board.clientHeight+1);
+  }
+  function refreshHeroCaption() {
+    const caption=$('media').querySelector('.hero-caption');if(!caption||!heroProduct)return;
+    caption.replaceChildren(element('h2',heroProduct.name));appendPrices(caption,heroProduct,true);
+  }
+  function renderCatalog() {
+    const section=$('products'),groups=categoryGroups();section.replaceChildren();
+    if(!groups.length){section.append(element('h2',language==='zh'?'暂无可展示产品':language==='en'?'No products to display':'Belum ada produk'));return;}
+    const board=element('div',undefined,'catalog-categories');
+    for(const group of groups){
+      const category=element('section',undefined,'catalog-category');category.append(element('h2',group.name));
+      for(const p of group.products){const row=element('article',undefined,'catalog-product'),prices=element('div',undefined,'catalog-prices');row.append(element('h3',p.name));appendPrices(prices,p,true);row.append(prices);category.append(row);}
+      board.append(category);
+    }
+    section.append(board);refreshHeroCaption();requestAnimationFrame(fitCatalog);
+  }
+  function renderHero() {
+    const section=$('media');section.style.removeProperty('--backdrop');heroProduct=null;
+    const pictured=snapshot.menu.filter(p=>p.image),items=pictured.length?pictured:snapshot.menu;
+    if(!items.length){section.append(element('h2',snapshot.store.name));return;}
+    slide%=items.length;const p=items[slide];heroProduct=p;
+    const hero=element('div',undefined,'product-hero'),placeholder=()=>{const empty=element('div',undefined,'hero-placeholder');empty.append(element('strong',p.name.slice(0,1)),element('span',language==='zh'?'暂无产品图片':language==='en'?'Product photo unavailable':'Foto produk belum tersedia'));return empty;};
+    if(p.image){const img=element('img',undefined,'hero-image');img.alt=p.name;img.src=assetUrl(p.image);img.onerror=()=>{img.replaceWith(placeholder());recordError('IMAGE:'+p.id);};hero.append(img);}else hero.append(placeholder());
+    hero.append(element('div',undefined,'hero-caption'));section.append(hero);refreshHeroCaption();
+    slideTimer=setTimeout(()=>{slide=(slide+1)%items.length;playSlide();},snapshot.settings.mediaIntervalSeconds*1000);
+  }
   function renderProducts() {
     if (!snapshot) return;
+    if (catalogMode()) {renderCatalog();return;}
     const grid = $("products");
     grid.replaceChildren();
     const count = snapshot.settings.orientation === "portrait" ? 6 : 8,
@@ -320,26 +386,7 @@
         card.append(img);
       }
       info.append(element("small", p.category), element("h3", p.name));
-      if (freshPrices()) {
-        if (!p.specs.length) info.append(element("p", t("price")));
-        for (const spec of p.specs) {
-          const line = element("p");
-          line.append(element("small", spec.name + " "));
-          const promotion =
-            spec.activityId &&
-            snapshot.promotions.find((a) => a.id === spec.activityId);
-          const applicable =
-            !spec.activityId || (promotion && eligible(promotion));
-          if (applicable && spec.displayPrice < spec.basePrice)
-            line.append(element("del", money(spec.basePrice)));
-          line.append(
-            document.createTextNode(
-              money(applicable ? spec.displayPrice : spec.basePrice),
-            ),
-          );
-          info.append(line);
-        }
-      }
+      appendPrices(info,p);
       card.append(info);
       grid.append(card);
     }
@@ -478,6 +525,7 @@
     }
     section.replaceChildren();
     if (!snapshot) return;
+    if(catalogMode()){renderHero();return;}
     const items = snapshot.media.length
       ? snapshot.media
       : snapshot.menu
@@ -642,12 +690,13 @@
       errors = errors.filter((e) => e !== "MEDIA_ALL_FAILED");
       page = 0;
       slide = 0;
+      heroProduct=null;
       clearInterval(pageTimer);
       if (data.screen.isActive) {
         renderProducts();
         if(data.settings.layoutTemplate!=="menu_full")playSlide();else{clearTimeout(slideTimer);$("media").replaceChildren();}
         music();
-        pageTimer = setInterval(() => {
+        if(!catalogMode())pageTimer = setInterval(() => {
           page =
             (page + 1) %
             Math.max(
@@ -980,5 +1029,6 @@
     clockTimer = setInterval(updateClock, 1000);
   }
   boot();
+  window.addEventListener('resize',()=>{if(catalogMode())requestAnimationFrame(fitCatalog);});
   window.TVTest = { eligible, freshPrices, apply, displaySpec: renderProducts };
 })();

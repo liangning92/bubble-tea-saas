@@ -1,4 +1,4 @@
-/* Authoritative result presentation. Equal display sectors are not a new draw. */
+/* Authoritative result presentation. Equal display cards are not a new draw. */
 (function (root) {
   "use strict";
   const colors = ["#F8BFD0", "#F6D99B", "#BFE2CE", "#BFDDF1", "#D9C7EC", "#F5C7AF", "#C6DFDF"];
@@ -38,8 +38,14 @@
       if(ring){card.style.gridColumn=String(slots[i]%3+1);card.style.gridRow=String(Math.floor(slots[i]/3)+1);}
       const label=doc.createElement('span');label.textContent=p.name;card.append(label);board.append(card);return card;
     });
-    let active=-1;
-    function highlight(index){if(active===index)return;if(cards[active])cards[active].classList.remove('is-lit');active=index;if(cards[index])cards[index].classList.add('is-lit');board.dataset.active=String(index);}
+    let active=-1, trail=false;
+    function highlight(index, withTrail=false){
+      if(active===index&&trail===withTrail)return;
+      for(let back=0;back<3;back++)if(active>=0)cards[(active-back+cards.length)%cards.length]?.classList.remove('is-lit','is-trail-1','is-trail-2');
+      active=index;trail=withTrail;
+      if(index>=0){cards[index].classList.add('is-lit');if(withTrail&&cards.length>2){cards[(index-1+cards.length)%cards.length].classList.add('is-trail-1');cards[(index-2+cards.length)%cards.length].classList.add('is-trail-2');}}
+      board.dataset.active=String(index);
+    }
     overlay.dataset.phase = "countdown";
     $("draw-coupon").hidden=true;
     overlay.classList.toggle('draw-has-coupon',!!event.coupon?.code);
@@ -84,7 +90,7 @@
         }
         $("draw-countdown").textContent=phase==="countdown"?String(Math.max(1,Math.ceil((countdownMs-elapsed)/1000))):"★";
         const progress=Math.max(0,Math.min(1,(elapsed-countdownMs)/spinMs));
-        highlight(phase==="countdown"?-1:phase==="result"?m.index:Math.floor((m.prizes.length*6+m.index)*(1-Math.pow(1-progress,3)))%m.prizes.length);
+        highlight(phase==="countdown"?-1:phase==="result"?m.index:Math.floor((m.prizes.length*7+m.index)*(1-Math.pow(1-progress,3)))%m.prizes.length,phase==='spinning'&&!reduced);
         overlay.style.setProperty("--draw-progress",Math.min(1,elapsed/(countdownMs+spinMs+revealMs)));
         if(elapsed>=countdownMs+spinMs+revealMs)finish(true);else frame=root.requestAnimationFrame(tick);
       }
