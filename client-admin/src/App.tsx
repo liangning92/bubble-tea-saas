@@ -1,3 +1,4 @@
+import { CostSync } from './components/CostSync'
 import { AdminFeedback } from './components/AdminFeedback'
 import {StaffApprovalPage} from './pages/StaffApprovalPage'
 import { EmployeeWorkspacePage } from './pages/staff/EmployeeWorkspacePage'
@@ -153,7 +154,7 @@ function App() {
   const sessionReady = useAuthStore(state => state.sessionReady)
   if (!sessionReady) return <RouteLoading />
   return (
-    <><AdminFeedback/><Suspense fallback={<RouteLoading />}><Routes>
+    <><CostSync/><AdminFeedback/><Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route
