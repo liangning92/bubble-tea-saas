@@ -206,7 +206,6 @@ export function TrainingListPage() {
       if (response.ok) {
         setCategories(categoryForm)
         setShowCategoryModal(false)
-        notifyAdmin(t('common.success'))
       }
     } catch (error) {
       console.error('Failed to save categories:', error)

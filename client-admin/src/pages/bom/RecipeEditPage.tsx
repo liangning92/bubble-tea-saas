@@ -112,7 +112,9 @@ export function RecipeEditPage() {
       queryClient.invalidateQueries({ queryKey: ['bom-product', id] })
       queryClient.invalidateQueries({ queryKey: ['bom-products'] })
       setIsDirty(false)
-      notifyAdmin(t('bom.saveSuccess'))
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['product', id] })
+      navigate(`/products/recipes?productId=${encodeURIComponent(id!)}`, { replace: true })
     },
     onError: (error: any) => {
       notifyAdmin(error?.response?.data?.message || error.message || 'Save failed')
