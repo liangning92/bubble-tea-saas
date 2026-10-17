@@ -1,21 +1,40 @@
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ProductImageEditor, ProductPicture } from '../../components/ProductImageEditor'
 import { mediaApi } from '../../services/media'
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { productApi, categoryApi } from '../../services/api'
+import api, { productApi, categoryApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency } from '../../utils/helpers'
+import { loadProductSales } from '../../utils/productSales'
+import { formatNumber } from '../../utils/numberDisplay'
+import { productSortKeys, ProductSortKey, sortProducts } from '../../utils/productSorting'
 import { Plus, Edit2, Trash2, Search, Loader2, CheckCircle, } from 'lucide-react'
 
 export function ProductListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sortKey = productSortKeys.includes(searchParams.get('sort') as ProductSortKey) ? searchParams.get('sort') as ProductSortKey : 'default'
+  const salesDays = [7, 30, 90].includes(Number(searchParams.get('days'))) ? Number(searchParams.get('days')) : 30
+  const salesSort = sortKey === 'sales' || sortKey === 'revenue'
+  const salesQuery = useQuery({
+    queryKey: ['product-list-sales', user?.storeId, salesDays],
+    enabled: salesSort && !!user?.storeId,
+    queryFn: () => loadProductSales(async page => {
+      const response = await api.get('/product-analysis/insights/details', { params: { days: salesDays, page } })
+      return response.data.data
+    })
+  })
+  const sortDirection = searchParams.get('order') === 'asc' ? 'asc' : 'desc'
+  const changeSort = (key: string, value: string) => {
+    setSearchParams(previous => { const next = new URLSearchParams(previous); next.set(key, value); return next }, { replace: true })
+  }
   const [imagesUploading,setImagesUploading]=useState(false)
   const initialEditState=useRef('')
   const [search, setSearch] = useState('')
@@ -49,7 +68,7 @@ export function ProductListPage() {
     }
   })
 
-  const { data: productsData, isLoading } = useQuery({
+  const { data: productsData, isLoading, isError: productsError, refetch: refetchProducts } = useQuery({
     queryKey: ['products'],
     queryFn: async () => {await mediaApi.list('product',{pageSize:1});return productApi.list({ pageSize: 500 })}
   })
@@ -140,12 +159,13 @@ export function ProductListPage() {
   const products = productsData?.data?.data?.list || []
   const categories = categoriesData?.data?.data || []
 
-  const filteredProducts = products.filter((p: any) => {
+  const rankedProducts = salesSort && salesQuery.data ? products.map((p: any) => ({ ...p, salesQuantity: salesQuery.data.get(p.id)?.quantity ?? 0, revenueShare: salesQuery.data.get(p.id)?.revenueShare ?? 0, salesRevenue: salesQuery.data.get(p.id)?.revenue ?? 0 })) : products
+  const filteredProducts = sortProducts(rankedProducts.filter((p: any) => {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.code?.toLowerCase().includes(search.toLowerCase())
     const matchStatus = !statusFilter || p.status === statusFilter
     const matchCategory = !selectedCategory || p.categoryId === selectedCategory
     return matchSearch && matchStatus && matchCategory
-  })
+  }), sortKey, sortDirection)
 
   const getCategoryName = (categoryId: string) => {
     const cat = categories.find((c: any) => c.id === categoryId)
@@ -353,7 +373,7 @@ export function ProductListPage() {
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-3 mb-4 items-center sm:flex sm:gap-4">
+      <div className="grid grid-cols-[minmax(0,1fr)_8rem] gap-3 mb-4 items-center sm:flex sm:flex-wrap sm:gap-4">
         <button onClick={openAddModal} className="btn-primary flex items-center gap-2 col-span-2 justify-self-start">
           <Plus size={20} /> {t('products.addProduct')}
         </button>
@@ -376,11 +396,29 @@ export function ProductListPage() {
           <option value="active">{t('products.active')}</option>
           <option value="inactive">{t('products.inactive')}</option>
         </select>
+        <div className="col-span-2 flex min-w-0 items-center gap-2 sm:ml-auto">
+          <label htmlFor="product-sort" className="shrink-0 text-sm text-gray-600">{t('productSorting.label')}</label>
+          <select id="product-sort" value={sortKey} onChange={e => changeSort('sort', e.target.value)} className="input min-w-0 flex-1 sm:w-36">
+            {productSortKeys.map(key => <option key={key} value={key}>{t(`productSorting.${key}`)}</option>)}
+          </select>
+          <select aria-label={t('productSorting.direction')} value={sortDirection} onChange={e => changeSort('order', e.target.value)} disabled={sortKey === 'default'} className="input min-w-0 flex-1 sm:w-40 disabled:opacity-50">
+            <option value="desc">{t('productSorting.desc')}</option>
+            <option value="asc">{t('productSorting.asc')}</option>
+          </select>
+        </div>
+        {salesSort && <label className="col-span-2 flex items-center gap-2 text-sm text-gray-600">{t('productSorting.period')}
+          <select aria-label={t('productSorting.period')} value={salesDays} onChange={e => changeSort('days', e.target.value)} className="input w-36">
+            {[7, 30, 90].map(days => <option key={days} value={days}>{t('productSorting.days', { count: days })}</option>)}
+          </select>
+        </label>}
       </div>
+      {salesSort && <p className="text-sm text-gray-500 mb-3">{t('productSorting.basis')}</p>}
 
       {/* Product Table */}
       <div className="card">
-        {isLoading ? (
+        {productsError || (salesSort && salesQuery.isError) ? (
+          <div role="alert" className="p-4 text-red-700 flex flex-wrap gap-3 items-center">{t('productSorting.failed')}<button className="btn-secondary" onClick={() => { if (productsError) void refetchProducts(); if (salesSort) void salesQuery.refetch() }}>{t('productSorting.retry')}</button></div>
+        ) : isLoading || (salesSort && salesQuery.isPending) ? (
           <div className="flex justify-center py-8">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
@@ -398,6 +436,7 @@ export function ProductListPage() {
                   <th className="text-right tabular-nums pb-3 text-left w-24">{t('products.price')}</th>
                   <th className="text-right tabular-nums pb-3 text-left w-20">{t('products.margin')}</th>
                   <th className="text-right tabular-nums pb-3 text-left w-24">{t('products.profit')}</th>
+                  {salesSort && <th className="pb-3 text-right tabular-nums w-36">{t(`productSorting.${sortKey}`)}</th>}
                   <th className="pb-3 text-center w-20">{t('products.status')}</th>
                   <th className="pb-3 pr-3 text-center w-24">{t('common.edit')}</th>
                 </tr>
@@ -423,6 +462,9 @@ export function ProductListPage() {
                       <td className="text-right tabular-nums py-3 text-left font-mono text-gray-600" data-label={t('products.profit')}>
                         {profit !== null ? formatCurrency(profit) : '-'}
                       </td>
+                      {salesSort && <td className="py-3 text-right tabular-nums" data-label={t(`productSorting.${sortKey}`)}>
+                        {sortKey === 'sales' ? formatNumber(product.salesQuantity) : <><span>{new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 1 }).format(product.revenueShare)}%</span><span className="block text-xs text-gray-500">{formatCurrency(product.salesRevenue)}</span></>}
+                      </td>}
                       <td className="py-3 text-center" data-label={t('products.status')}>
                         <button
                           onClick={() => updateStatus.mutate({ id: product.id, status: product.status === 'active' ? 'inactive' : 'active' })}
