@@ -28,3 +28,33 @@ test('manual QRIS preserves occurrence-based payouts and noncash receipts throug
  const manual=service.applyHandoverQris(recorded,15000);assert.equal(manual.expectedCash,97000);assert.equal(manual.cashFromRevenue,4000);
  const corrected=service.applyHandoverQris({...manual,openFloat:80000},12000);assert.equal(corrected.expectedCash,80000);assert.equal(corrected.recordedQris,10000);assert.equal(service.applyHandoverQris(corrected).expectedCash,82000);
 });
+
+const pendingWarning={version:1,status:'pending',sessionId:'s',expectedCash:941000,actualCash:857000,difference:-84000,createdAt:'2026-10-16T16:14:02.639Z'};
+test('pre-handover approved refunds reconcile original shortage without editing evidence',()=>{
+ const original=JSON.stringify(pendingWarning),refunds=[{id:'r1',amount:44000},{id:'r2',amount:40000}];
+ const result=service.reconcileCashWarningRefunds(pendingWarning,refunds);
+ assert.equal(result.status,'resolved');assert.equal(result.difference,0);assert.equal(result.expectedCash,857000);assert.equal(result.originalDifference,-84000);assert.equal(result.approvedRefundAmount,84000);assert.equal(result.refundRequestIds.length,2);assert.equal(JSON.stringify(pendingWarning),original);
+});
+test('partial approval retains outstanding amount; excess refunds, surplus and prior reviews never auto-clear',()=>{
+ const result=service.reconcileCashWarningRefunds(pendingWarning,[{id:'r',amount:44000}]);assert.equal(result.status,'pending');assert.equal(result.difference,-40000);
+ for(const warning of [pendingWarning,{...pendingWarning,status:'reviewed'},{...pendingWarning,difference:84000}]){
+  assert.equal(service.reconcileCashWarningRefunds(warning,[{id:'r',amount:90000}]),warning);
+ }
+ assert.equal(service.reconcileCashWarningRefunds(pendingWarning,[]),pendingWarning);
+});
+test('cash review loader admits only approved cash refunds requested within the original shift and after its snapshot',async()=>{
+ const start=new Date('2026-10-16T11:28:59.461Z'),end=new Date('2026-10-16T16:11:03.372Z');
+ const row=(id,createdAt,approvedAt,amount=40000)=>({id,createdAt:new Date(createdAt),approvedAt:new Date(approvedAt),amount,order:{createdAt:new Date('2026-10-16T12:00Z')}});
+ const db={config:{findMany:async()=>[{key:'pos.shift.cash-warning:s',value:JSON.stringify(pendingWarning)}]},shiftSession:{findMany:async q=>{assert.equal(q.where.storeId,'owned');return [{id:'s',openedAt:start,closedAt:end}]}},refundRequest:{findMany:async q=>{
+  assert.equal(q.where.order.storeId,'owned');assert.equal(q.where.order.paymentMethod,'cash');assert.deepEqual(Array.from(q.where.status.in),['approved','paid']);assert.equal(q.where.OR[0].createdAt.lt,end);assert.equal(q.where.OR[0].approvedAt.gt.toISOString(),pendingWarning.createdAt);
+  return [row('r1','2026-10-16T12:30Z','2026-10-16T20:25Z',44000),row('r2','2026-10-16T12:28Z','2026-10-16T20:26Z'),row('late','2026-10-16T17:00Z','2026-10-16T20:25Z'),row('old','2026-10-16T12:00Z','2026-10-16T15:00Z')];
+ }}};
+ const result=await service.loadShiftCashReviews(db,'owned',['s']);assert.equal(result.get('s').cashWarning.status,'resolved');assert.equal(result.get('s').cashWarning.approvedRefundAmount,84000);
+});
+test('overlapping sessions and refunds from other order windows never clear a warning',async()=>{
+ const session={id:'s',openedAt:new Date('2026-10-16T11:28Z'),closedAt:new Date('2026-10-16T16:11Z')};
+ const db={config:{findMany:async()=>[{key:'pos.shift.cash-warning:s',value:JSON.stringify(pendingWarning)}]},shiftSession:{findMany:async q=>q.where.id ? [session] : [session,{...session,id:'overlap'}]},refundRequest:{findMany:async()=>[{id:'r',amount:84000,createdAt:new Date('2026-10-16T12:00Z'),approvedAt:new Date('2026-10-16T20:25Z'),order:{createdAt:new Date('2026-10-16T12:00Z')}}]}};
+ assert.equal((await service.loadShiftCashReviews(db,'owned',['s'])).get('s').cashWarning.status,'pending');
+ db.shiftSession.findMany=async()=>[session];db.refundRequest.findMany=async()=>[{id:'r',amount:84000,createdAt:new Date('2026-10-16T12:00Z'),approvedAt:new Date('2026-10-16T20:25Z'),order:{createdAt:new Date('2026-10-15T12:00Z')}}];
+ assert.equal((await service.loadShiftCashReviews(db,'owned',['s'])).get('s').cashWarning.status,'pending');
+});

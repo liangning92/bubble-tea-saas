@@ -46,12 +46,23 @@ export async function calculateShiftCash(db:Pick<PrismaClient,'order'|'expense'>
   const cashFromRevenue=money(revenue-expenseAmount-qris-otherNonCash)
   return {version:1,source:'recorded_shift_formula',windowStart:shift.openedAt.toISOString(),windowEnd:asOf.toISOString(),revenue,expenses:expenseAmount,qris,cashFromRevenue,openFloat:shift.openFloat,cashIns,cashOuts,otherNonCash,expectedCash:money(cashFromRevenue+shift.openFloat+cashIns-cashOuts)}
 }
-export type CashWarning={version:1;status:'pending'|'reviewed';sessionId:string;expectedCash:number;actualCash:number;difference:number;createdAt:string;reviewedAt?:string;reviewedBy?:string;reviewedByName?:string;reviewNote?:string}
+export type CashWarning={version:1;status:'pending'|'reviewed'|'resolved';originalDifference?:number;approvedRefundAmount?:number;refundRequestIds?:string[];sessionId:string;expectedCash:number;actualCash:number;difference:number;createdAt:string;reviewedAt?:string;reviewedBy?:string;reviewedByName?:string;reviewNote?:string}
 export function cashWarningFor(sessionId:string,actualCash:number,reconciliation:CashReconciliation,at:Date):CashWarning|null {
   const difference=money(actualCash-reconciliation.expectedCash)
   return difference===0 ? null : {version:1,status:'pending',sessionId,expectedCash:reconciliation.expectedCash,actualCash,difference,createdAt:at.toISOString()}
 }
-export async function loadShiftCashReviews(db:Pick<PrismaClient,'config'>,storeId:string,ids:string[]) {
+// A refund requested before handover can explain its pending shortage once approved.
+// This is a view of review evidence, never a backdated cash payout or snapshot edit.
+export function reconcileCashWarningRefunds(warning:CashWarning,refunds:{id:string;amount:number}[]):CashWarning {
+  if(warning.status!=='pending' || warning.difference>=0 || !refunds.length)return warning
+  const approvedRefundAmount=money(refunds.reduce((sum,r)=>sum+r.amount,0))
+  // Excess refunds do not prove that the historical shortage has been explained.
+  if(approvedRefundAmount<=0 || approvedRefundAmount> -warning.difference)return warning
+  const difference=money(warning.difference+approvedRefundAmount)
+  return {...warning,status:difference===0?'resolved':'pending',originalDifference:warning.difference,
+    approvedRefundAmount,refundRequestIds:refunds.map(r=>r.id),expectedCash:money(warning.expectedCash-approvedRefundAmount),difference}
+}
+export async function loadShiftCashReviews(db:Pick<PrismaClient,'config'|'shiftSession'|'refundRequest'>,storeId:string,ids:string[]) {
   const results=new Map<string,{cashReconciliation:CashReconciliation|null;cashWarning:CashWarning|null}>()
   if(!ids.length)return results
   const rows=await db.config.findMany({where:{storeId,key:{in:ids.flatMap(id=>['pos.shift.report:'+id,CASH_WARNING_PREFIX+id])}},select:{key:true,value:true}})
@@ -61,6 +72,25 @@ export async function loadShiftCashReviews(db:Pick<PrismaClient,'config'>,storeI
     if(isWarning) entry.cashWarning=data;else entry.cashReconciliation=data.cashReconciliation||null
     results.set(id,entry)
   }catch{}}
+  const pendingIds=[...results].filter(([,entry])=>entry.cashWarning?.status==='pending' && entry.cashWarning.difference<0).map(([id])=>id)
+  if(pendingIds.length){
+    const sessions=await db.shiftSession.findMany({where:{storeId,id:{in:pendingIds},status:'closed'},select:{id:true,openedAt:true,closedAt:true}})
+    const closed=sessions.filter(s=>s.closedAt!==null)
+    if(closed.length){
+      const overlapping=await db.shiftSession.findMany({where:{storeId,openedAt:{lt:new Date(Math.max(...closed.map(s=>s.closedAt!.getTime())))},OR:[{closedAt:null},{closedAt:{gt:new Date(Math.min(...closed.map(s=>s.openedAt.getTime())))}}]},select:{id:true,openedAt:true,closedAt:true}})
+      const refunds=await db.refundRequest.findMany({where:{status:{in:['approved','paid']},amount:{gt:0},order:{storeId,paymentMethod:'cash'},OR:closed.map(s=>({
+        createdAt:{gte:s.openedAt,lt:s.closedAt!},approvedAt:{gt:new Date(results.get(s.id)!.cashWarning!.createdAt)},
+        order:{storeId,paymentMethod:'cash',createdAt:{gte:s.openedAt,lt:s.closedAt!}}
+      }))},select:{id:true,amount:true,createdAt:true,approvedAt:true,order:{select:{createdAt:true}}}})
+      for(const session of closed){
+        // Overlapping windows cannot establish a unique handover attribution.
+        if(overlapping.some(other=>other.id!==session.id && other.openedAt<session.closedAt! && (!other.closedAt || other.closedAt>session.openedAt)))continue
+        const entry=results.get(session.id)!,warning=entry.cashWarning!
+        const evidence=refunds.filter(r=>r.createdAt>=session.openedAt && r.createdAt<session.closedAt! && r.order.createdAt>=session.openedAt && r.order.createdAt<session.closedAt! && r.approvedAt && r.approvedAt>new Date(warning.createdAt))
+        entry.cashWarning=reconcileCashWarningRefunds(warning,evidence)
+      }
+    }
+  }
   return results
 }
 export const cashReviewSchema=z.object({note:z.string().trim().min(1).max(2000)}).strict()

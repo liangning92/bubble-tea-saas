@@ -1,7 +1,7 @@
 import { loadStoreDateSettings } from '../utils/storeDateSettings'
 import { businessCalendarDate } from '../utils/revenueDateRange'
 import { PrismaClient } from '@prisma/client'
-import { CASH_WARNING_PREFIX } from './ShiftCashReconciliation'
+import { CASH_WARNING_PREFIX, loadShiftCashReviews } from './ShiftCashReconciliation'
 
 // Pending work is store-wide and independent of dashboard sales date filters.
 export async function loadDashboardPendingActions(db: PrismaClient, storeId: string, now = new Date()) {
@@ -40,11 +40,13 @@ export async function loadDashboardPendingActions(db: PrismaClient, storeId: str
     } catch { throw new Error('DASHBOARD_PENDING_CASH_WARNING_INVALID') }
   }
   if (pendingShiftIds.length) {
-    const [sessions, settings] = await Promise.all([
+    const [sessions, settings, reviews] = await Promise.all([
       db.shiftSession.findMany({ where: { storeId, id: { in: pendingShiftIds } }, select: { id: true, openedAt: true, closedAt: true } }),
-      loadStoreDateSettings(db, storeId)
+      loadStoreDateSettings(db, storeId),
+      loadShiftCashReviews(db, storeId, pendingShiftIds)
     ])
     for (const session of sessions) {
+      if(reviews.get(session.id)?.cashWarning?.status!=='pending')continue
       const range = new URLSearchParams({ startDate: businessCalendarDate(session.openedAt, settings.timezone), endDate: businessCalendarDate(session.closedAt || now, settings.timezone) })
       actions.push({ key: 'cash', count: 1, to: `/finance/revenue/shifts/${encodeURIComponent(session.id)}?${range}` })
     }
