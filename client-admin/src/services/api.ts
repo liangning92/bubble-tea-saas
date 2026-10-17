@@ -1,3 +1,4 @@
+import { COST_SYNC_EVENT, isCostMutation } from '../utils/costSync'
 import {requestStaffApproval} from '../../../shared/StaffApprovalDialog'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
@@ -23,7 +24,12 @@ api.interceptors.request.use((config) => {
 })
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.data?.code === 200 && isCostMutation(response.config.method, response.config.url)) {
+      window.dispatchEvent(new Event(COST_SYNC_EVENT))
+    }
+    return response
+  },
   async (error) => {
     if(error.response?.data?.message==='STAFF_ACCESS_APPROVAL_REQUIRED' && error.config?.url?.includes('/balance/')){const match=error.config.url.match(/members\/([^/]+)\/balance\/(topup|deduct)/);if(match){const body=typeof error.config.data==='string'?JSON.parse(error.config.data):error.config.data;const result=await requestStaffApproval(api,{action:'members.balance',targetId:match[1],requestId:body.requestId||crypto.randomUUID(),payload:{amount:body.amount,type:match[2],note:body.note||'Member balance adjustment'}});return{...error.response,status:200,data:{code:200,data:JSON.parse(result.result)}}}}
     if(error.response?.status===403 && error.response?.data?.message?.startsWith('STAFF_ACCESS_')) window.dispatchEvent(new Event('staff-access-changed'))
