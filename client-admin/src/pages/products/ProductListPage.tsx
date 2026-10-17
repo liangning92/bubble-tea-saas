@@ -15,7 +15,7 @@ import { productSortKeys, ProductSortKey, sortProducts } from '../../utils/produ
 import { Plus, Edit2, Trash2, Search, Loader2, CheckCircle, } from 'lucide-react'
 
 export function ProductListPage() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const { user } = useAuthStore()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -463,7 +463,7 @@ export function ProductListPage() {
                         {profit !== null ? formatCurrency(profit) : '-'}
                       </td>
                       {salesSort && <td className="py-3 text-right tabular-nums" data-label={t(`productSorting.${sortKey}`)}>
-                        {sortKey === 'sales' ? formatNumber(product.salesQuantity) : <><span>{new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 1 }).format(product.revenueShare)}%</span><span className="block text-xs text-gray-500">{formatCurrency(product.salesRevenue)}</span></>}
+                        {sortKey === 'sales' ? formatNumber(product.salesQuantity) : <><span>{formatNumber(product.revenueShare)}%</span><span className="block text-xs text-gray-500">{formatCurrency(product.salesRevenue)}</span></>}
                       </td>}
                       <td className="py-3 text-center" data-label={t('products.status')}>
                         <button
