@@ -62,7 +62,6 @@ export function LeaveBalancePage() {
         year,annualLeave:balance.annualLeave,sickLeave:balance.sickLeave,broughtForward:balance.broughtForward
       })
       await loadBalances()
-      notifyAdmin(t('common.saveSuccess'))
     } catch (error) {
       console.error('Failed to save:', error)
       notifyAdmin(t('common.saveFailed'))

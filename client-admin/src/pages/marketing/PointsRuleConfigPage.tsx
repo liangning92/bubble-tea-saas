@@ -62,7 +62,6 @@ export function PointsRuleConfigPage() {
     mutationFn: (payload: typeof form) => pointsRuleApi.update(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['points-rule'] })
-      notifyAdmin(t('common.success'))
     },
     onError: () => {
       notifyAdmin(t('common.error'))

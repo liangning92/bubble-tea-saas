@@ -1065,7 +1065,6 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
 
       onSave?.()
       await loadTemplates()
-      notifyAdmin('✓ 模板保存成功并已同步设为生效模板！')
     } catch (err: any) {
       console.error('Failed to save template:', err)
       const msg = err?.response?.data?.message || err?.message || ''
@@ -1085,7 +1084,6 @@ export const ReceiptTemplateEditor: React.FC<ReceiptTemplateEditorProps> = ({ st
       await ReceiptTemplateApi.setDefault(currentTemplateId)
       await loadTemplates()
       onSave?.()
-      notifyAdmin('✓ 已成功设为默认生效模板！')
     } catch (err) {
       console.error('Failed to set default:', err)
     }

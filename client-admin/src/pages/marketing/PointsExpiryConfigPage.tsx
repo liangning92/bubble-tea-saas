@@ -43,7 +43,6 @@ export function PointsExpiryConfigPage() {
     mutationFn: (data: any) => marketingApi.createPointsExpiryRule(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['points-expiry-rules'] })
-      notifyAdmin(t('common.saveSuccess'))
     },
     onError: () => {
       notifyAdmin(t('common.error'))
