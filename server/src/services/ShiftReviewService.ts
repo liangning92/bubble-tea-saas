@@ -21,7 +21,7 @@ export function shiftReviewRange(start: unknown, end: unknown, now = new Date(),
   } catch { throw new ShiftReviewInputError('INVALID_SHIFT_DATE_RANGE') }
 }
 
-type ReviewDB = Pick<PrismaClient, 'shiftSession' | 'shift' | 'order' | 'expense' | 'pOSActionLog' | 'staff' | 'user' | 'financeAuditLog' | 'config'>
+type ReviewDB = Pick<PrismaClient, 'shiftSession' | 'shift' | 'order' | 'expense' | 'pOSActionLog' | 'staff' | 'user' | 'financeAuditLog' | 'config' | 'refundRequest'>
 export async function loadShiftReview(db: ReviewDB, storeId: string, start: unknown, end: unknown, now = new Date()) {
   const settings=await loadStoreDateSettings(db,storeId)
   const range = shiftReviewRange(start, end, now,settings.timezone)

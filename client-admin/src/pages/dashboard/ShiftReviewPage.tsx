@@ -6,7 +6,7 @@ import {formatStoreDate,storeCalendarDate} from '../../utils/storeDateTime'
 import { ShiftCorrection } from '../../components/ShiftCorrection'
 import { OrderItemRows } from '../../components/OrderItemsTable'
 import { ShiftHandoverFinancials } from '../../components/ShiftHandoverFinancials'
-import { ShiftCashReconciliation, ShiftCashWarning, formatShiftCash } from '../../../../shared/utils/shiftCashReconciliation'
+import { ShiftCashReconciliation, ShiftCashWarning as StoredShiftCashWarning, formatShiftCash } from '../../../../shared/utils/shiftCashReconciliation'
 import { ManualReceiptAmounts } from '../../components/ManualReceipts'
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -15,6 +15,8 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { RefreshCw, CalendarDays, AlertTriangle, ArrowLeft } from 'lucide-react'
 import api, { financeApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
+
+type ShiftCashWarning = Omit<StoredShiftCashWarning,'status'> & {status:'pending'|'reviewed'|'resolved';originalDifference?:number;approvedRefundAmount?:number}
 
 type Summary = { revenue: number; orders: number; completedOrders: number; refundedOrders: number; refundedAmount: number; expenses: number; expenseAmount: number; warnings: number; employees: number }
 type Employee = { id: string; name: string; employeeNumber: string | null; position: string | null; orders: number; expenses: number; warnings: number; roles: string[] }
@@ -105,9 +107,11 @@ export function ShiftReviewPage() {
         {selected.cashWarning?.status === 'pending' && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4" data-testid="shift-cash-warning">
           <h3 className="font-bold text-amber-900">{t('cashReconciliation.pending')}</h3>
           <p role="alert" className="mt-2 text-sm text-amber-900">{t('cashReconciliation.warning',{difference:money(selected.cashWarning.difference)})}</p>
+          {!!selected.cashWarning.approvedRefundAmount && <p className="mt-2 text-sm">{t('cashReconciliation.refundExplained',{original:money(selected.cashWarning.originalDifference || 0),refund:money(selected.cashWarning.approvedRefundAmount),difference:money(selected.cashWarning.difference)})}</p>}
           {user?.role === 'admin' && <div className="mt-3 flex flex-wrap items-end gap-3"><label className="flex-1 text-sm">{t('cashReconciliation.note')}<textarea aria-label={t('cashReconciliation.note')} value={reviewNote} maxLength={2000} onChange={e=>setReviewNote(e.target.value)} className="input mt-1 block w-full" /></label><button type="button" disabled={reviewSaving} className="btn-primary" onClick={async()=>{if(!reviewNote.trim()){setReviewError(t('cashReconciliation.required'));return}setReviewSaving(true);setReviewError('');try{await api.post('/finance/shift-sessions/'+selected.id+'/cash-warning/review',{note:reviewNote.trim()});await query.refetch();setReviewNote('')}catch{setReviewError(t('cashReconciliation.reviewFailed'))}finally{setReviewSaving(false)}}}>{t('cashReconciliation.review')}</button></div>}
           {reviewError && <p role="alert" className="mt-2 text-sm text-red-600">{reviewError}</p>}
         </section>}
+        {selected.cashWarning?.status === 'resolved' && <section className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm" data-testid="shift-cash-resolved"><h3 className="font-semibold">{t('cashReconciliation.refundResolved')}</h3><p className="mt-2">{t('cashReconciliation.refundExplained',{original:money(selected.cashWarning.originalDifference || 0),refund:money(selected.cashWarning.approvedRefundAmount || 0),difference:money(selected.cashWarning.difference)})}</p><p className="mt-2 text-gray-500">{t('cashReconciliation.snapshotRetained')}</p></section>}
         {selected.cashWarning?.status === 'reviewed' && <section className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm" data-testid="shift-cash-reviewed"><h3 className="font-semibold">{t('cashReconciliation.reviewed')}</h3><p>{selected.cashWarning.reviewedByName || selected.cashWarning.reviewedBy} · {selected.cashWarning.reviewedAt && instant(selected.cashWarning.reviewedAt)}</p><p className="mt-1 whitespace-pre-wrap">{selected.cashWarning.reviewNote}</p><p className="mt-2 text-gray-500">{t('cashReconciliation.reported')}</p></section>}
 
         <p className="text-sm text-gray-500">{t('shiftReview.attribution')}</p>
