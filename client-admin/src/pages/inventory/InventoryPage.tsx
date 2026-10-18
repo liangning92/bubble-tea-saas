@@ -377,7 +377,7 @@ export function InventoryPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">{[["materials",inventory.length],["lowStock",inventory.filter(isLowItem).length],["outOfStock",inventory.filter((item:any)=>isStockItem(item)&&item.currentStock<=0).length]].map(([key,value])=><div className="rounded-xl border bg-white p-4" key={key}><p className="text-sm text-gray-500">{t("operations."+key)}</p><p className="text-2xl font-semibold tabular-nums mt-1">{formatNumber(isLoading||isError?'—':value)}</p></div>)}</div>
+      <p className="text-sm text-gray-600">{t("inventoryUnified.hint")}</p><div className="grid grid-cols-3 gap-3">{[["materials",inventory.length],["lowStock",inventory.filter(isLowItem).length],["outOfStock",inventory.filter((item:any)=>isStockItem(item)&&item.currentStock<=0).length]].map(([key,value])=><div className="rounded-xl border bg-white p-4" key={key}><p className="text-sm text-gray-500">{t("operations."+key)}</p><p className="text-2xl font-semibold tabular-nums mt-1">{formatNumber(isLoading||isError?'—':value)}</p></div>)}</div>
       {isError&&<p role="alert" className="text-red-700"><button type="button" onClick={()=>refetch()}>{t("common.error")} · {t("operations.refresh")}</button></p>}
       <ConsumptionAlertsWidget compact />
       {/* 分类看板 */}
@@ -477,7 +477,7 @@ export function InventoryPage() {
             {alerts.slice(0, 10).map((item: any) => (
               <span key={item.id} className="badge badge-error">
                 {formatItemName(item, i18n.language)}:{" "}
-                {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}
+                {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}{item.calibrationRequired&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
               </span>
             ))}
             {alerts.length > 10 && (
@@ -537,7 +537,7 @@ export function InventoryPage() {
                     {t("inventory.category") || "Category"}
                   </th>
                   <th className="py-3 px-2 font-medium text-right w-24">
-                    {t("inventory.currentStock") || "Stock"}
+                    {t("inventoryUnified.estimate") || "Stock"}
                   </th>
                   <th className="py-3 px-2 font-medium text-right w-20">
                     {t("inventory.unit") || "Unit"}
@@ -582,13 +582,13 @@ export function InventoryPage() {
                         {getCategoryName(item.category)}
                       </td>
                       <td
-                        data-label={t("inventory.currentStock")}
+                        data-label={t("inventoryUnified.estimate")}
                         className="py-3 px-2 text-right"
                       >
                         <span
                           className={`font-bold ${isLow ? "text-red-600" : "text-gray-900"}`}
                         >
-                          {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}
+                          {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}{item.calibrationRequired&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
                         </span>
                       </td>
                       <td
@@ -939,7 +939,7 @@ export function InventoryPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    {t("inventory.currentStock") || "Current Stock"}
+                    {t("inventoryUnified.estimate") || "Current Stock"}
                   </label>
                   <input
                     type="number"
@@ -1118,7 +1118,7 @@ export function InventoryPage() {
 
             <div className="space-y-4">
               <label className="block">
-                {t("inventoryFlow.purpose")}
+                {t("inventoryUnified.hint")}<br/>{t("inventoryFlow.purpose")}
                 <select
                   className="input w-full"
                   value={stockOutPurpose}
@@ -1138,12 +1138,12 @@ export function InventoryPage() {
                 </select>
               </label>
               <p>
-                {t("inventoryFlow.currentStock")}: {formatDisplayQuantity(Number(selectedItem.currentStock))}{" "}
+                {t("inventoryUnified.estimate")}: {formatDisplayQuantity(Number(selectedItem.currentStock))}{" "}
                 {selectedItem.unit}
               </p>
               <p>
                 {t("inventoryFlow.afterStock")}:{" "}
-                {formatDisplayQuantity(selectedItem.currentStock - inventoryLedgerQuantity(Number(stockForm.quantity) || 0, selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)))}{" "}
+                {formatDisplayQuantity(selectedItem.currentStock - (stockOutPurpose==='withdrawal'&&selectedItem.unifiedStock?0:inventoryLedgerQuantity(Number(stockForm.quantity) || 0, selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem))))}{" "}
                 {selectedItem.unit}
               </p>
               <div>

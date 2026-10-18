@@ -32,7 +32,7 @@ test('old completed checkpoint is repaired once after upgrade; calculation failu
  const g=fixture();g.db.orderConsumptionSnapshot.findMany=async()=>{throw Error('offline DB')};await assert.rejects(g.service.refreshStoreConsumptionDays('owned',new Date('2026-10-18T12:00Z')),/offline DB/);assert.equal(g.config.get('employee_consumption_dirty:2026-10-17'),'old-token');
 });
 test('new historical-order snapshot durably invalidates its business day in the sale operation',async()=>{
- const writes=[],at=new Date('2026-10-17T12:00Z');const db={order:{findUniqueOrThrow:async()=>({storeId:'owned',createdAt:at})},bOMItem:{findMany:async()=>[]},config:{upsert:async q=>{writes.push(q);return {value:at.toISOString()}}},orderConsumptionSnapshot:{create:async({data})=>data}};
+ const writes=[],at=new Date('2026-10-17T12:00Z');const db={order:{findUniqueOrThrow:async()=>({storeId:'owned',createdAt:at})},bOMItem:{findMany:async()=>[]},config:{findUnique:async()=>null,upsert:async q=>{writes.push(q);return {value:at.toISOString()}}},orderConsumptionSnapshot:{create:async({data})=>data}};
  const service=load('server/src/services/OrderConsumptionService.ts',{'../config/database':{default:db,__esModule:true},'../utils/inventoryBusinessCalendar':{inventoryBusinessCalendar:async(storeId)=>{assert.equal(storeId,'owned');return {formatDate:date=>{assert.equal(date,at);return '2026-10-17'}}}}});
  await service.recordOrderConsumption(db,'owned','late',[{productId:'tea',quantity:1}]);const dirty=writes.find(w=>w.where.storeId_key.key==='employee_consumption_dirty:2026-10-17');assert.ok(dirty);assert.equal(dirty.where.storeId_key.storeId,'owned');assert.ok(dirty.update.value);
 });

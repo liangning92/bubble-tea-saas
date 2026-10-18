@@ -1,3 +1,4 @@
+import {applySaleEstimate,reverseSaleEstimate} from './UnifiedInventoryService';
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
 import { convertQuantity } from '../utils/inventoryUnits';
@@ -78,6 +79,7 @@ export async function recordOrderConsumption(tx: any, storeId: string, orderId: 
     const snapshot = await tx.orderConsumptionSnapshot.create({ data: {
             storeId, orderId:options?.consumptionKey||orderId, createdAt: consumedAt, materials: JSON.stringify([...materials.values()]), issues: JSON.stringify(issues)
         } });
+    await applySaleEstimate(tx,storeId,snapshot);
     await markConsumptionDayDirty(tx, storeId, consumedAt);
     return snapshot;
 }
@@ -89,7 +91,9 @@ export async function markConsumptionDayDirty(tx: any, storeId: string, at: Date
 export async function reverseOrderConsumption(tx: any, orderId: string) {
     const snapshot = await tx.orderConsumptionSnapshot.findUnique({ where: { orderId } });
     const changed = await tx.orderConsumptionSnapshot.updateMany({ where: { orderId, reversedAt: null }, data: { reversedAt: new Date() } });
-    if (changed.count && snapshot)
+    if (changed.count && snapshot) {
+        await reverseSaleEstimate(tx,snapshot);
         await markConsumptionDayDirty(tx, snapshot.storeId, snapshot.createdAt);
+    }
     return changed;
 }

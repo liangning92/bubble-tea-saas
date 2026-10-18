@@ -1,31 +1,34 @@
+import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar'
+import {unifiedInventorySince} from './UnifiedInventoryService'
 import {COUNT_OBSERVATION_PREFIX} from '../utils/countObservation'
 import {assertLedgerInstalled} from '../utils/inventoryLedger'
 import prisma from '../config/database'
 import {getInventoryAlertConfig} from './InventoryAlertConfigService'
 import {varianceClassification} from '../utils/inventoryVariance'
 export async function physicalInventoryVariance(filter:{storeId:string;startDate:string;endDate:string;category?:string}){
- const start=new Date(filter.startDate),end=new Date(filter.endDate)
- if(/^\d{4}-\d{2}-\d{2}$/.test(filter.endDate))end.setUTCHours(23,59,59,999)
+ const {boundary:dateBoundary}=await inventoryBusinessCalendar(filter.storeId)
+ const start=dateBoundary(filter.startDate),end=dateBoundary(filter.endDate,true)
  if(!Number.isFinite(start.getTime())||!Number.isFinite(end.getTime())||end<start)throw new Error('INVALID_ANALYSIS_PERIOD')
  const settings=await getInventoryAlertConfig(filter.storeId)
  // Read a consistent epoch + ledger snapshot, including concurrent UPDATE/DELETE invalidations.
  return prisma.$transaction(async tx=>{
   await assertLedgerInstalled(tx,(process.env.DATABASE_URL||'').startsWith('file:'))
-  const inventory=await tx.inventory.findMany({where:{storeId:filter.storeId,...(filter.category?{category:filter.category}:{})}})
+  const unifiedSince=await unifiedInventorySince(tx,filter.storeId)
+  const inventory=await tx.inventory.findMany({where:{storeId:filter.storeId,...(unifiedSince?{OR:[{type:{not:'semi_finished'}},{processRecipeId:null}]}:{}),...(filter.category?{category:filter.category}:{})}})
   const results=[]
   for(const material of inventory){
-   const where={inventoryId:material.id,countedAt:{gte:start,lte:end},countedQty:{not:null},inventoryCount:{storeId:filter.storeId,status:'completed'}}
+   const where={inventoryId:material.id,countedAt:{gte:start,lte:end},countedQty:{not:null},inventoryCount:{storeId:filter.storeId,status:'completed'},...(unifiedSince?{countedAt:{gte:new Date(Math.max(start.getTime(),unifiedSince.getTime())),lte:end}}:{})}
    const opening=await tx.inventoryCountItem.findFirst({where,orderBy:{countedAt:'asc'}})
    const closing=await tx.inventoryCountItem.findFirst({where,orderBy:{countedAt:'desc'}})
    const supported=!!opening&&!!closing&&opening.countedAt!.getTime()<closing.countedAt!.getTime()
    async function boundary(item:any){
     if(!item)return null
     const record=await tx.config.findUnique({where:{storeId_key:{storeId:filter.storeId,key:COUNT_OBSERVATION_PREFIX+item.id}}})
-    try{const v=JSON.parse(record?.value||'null'),b=v?.boundary;return v?.version===3&&v.countId===item.inventoryCountId&&v.countedQty===item.countedQty&&v.observedAt===item.countedAt.toISOString()&&v.ledgerUnit===material.unit&&b?.inventoryId===material.id&&/^\d+$/.test(b.sequence)&&/^\d+$/.test(b.epoch)?b:null}catch{return null}
+    try{const v=JSON.parse(record?.value||'null'),b=v?.boundary;return [3,4].includes(v?.version)&&(!unifiedSince||v.version===4)&&v.countId===item.inventoryCountId&&v.countedQty===item.countedQty&&v.observedAt===item.countedAt.toISOString()&&v.ledgerUnit===material.unit&&b?.inventoryId===material.id&&/^\d+$/.test(b.sequence)&&/^\d+$/.test(b.epoch)?b:null}catch{return null}
    }
    const first=await boundary(opening),last=await boundary(closing)
    const certified=supported&&first&&last&&first.epoch===last.epoch&&last.epoch===material.ledgerEpoch.toString()&&BigInt(first.sequence)<=BigInt(last.sequence)&&BigInt(last.sequence)<=material.ledgerSequence
-   let theoretical=0,receipts=0,known=0,ambiguous=false,seen=0n,lastOrderDate:string|null=null
+   let theoretical=0,receipts=0,known=0,ambiguous=false,recipeIncomplete=false,seen=0n,lastOrderDate:string|null=null
    const orderIds=new Set<string>()
    if(certified){
     // Composite (inventoryId,ledgerSequence) index, bounded pages; no lifetime enumeration.
@@ -41,7 +44,12 @@ export async function physicalInventoryVariance(filter:{storeId:string;startDate
         if(genuine)receipts+=log.quantity
         else if(!log.note?.startsWith('Inventory count:'))ambiguous=true
        }else{
-        if(['sold','refund_unprepared'].includes(log.reason))theoretical+=log.quantity
+        if(unifiedSince){
+         let detail:any;try{detail=JSON.parse(log.note||'null')}catch{}
+         if(['loss','expired','transfer','other'].includes(log.reason))known+=log.quantity
+         else if(log.reason==='withdrawal'&&detail?.stockEffect==='internal_transfer'||log.reason==='process'&&detail?.stockEffect==='internal_conversion'||['sale_estimate','sale_estimate_reversal','count_adjustment'].includes(log.reason)){}
+         else ambiguous=true
+        }else if(['sold','refund_unprepared'].includes(log.reason))theoretical+=log.quantity
         else if(['loss','expired','transfer','process'].includes(log.reason))known+=log.quantity
         else if(log.reason!=='count_adjustment')ambiguous=true
         if(log.reason==='sold'){if(log.orderId)orderIds.add(log.orderId);const date=log.createdAt.toISOString();if(!lastOrderDate||date>lastOrderDate)lastOrderDate=date}
@@ -51,14 +59,25 @@ export async function physicalInventoryVariance(filter:{storeId:string;startDate
      }
     }
    }
+   if(unifiedSince&&supported){
+    const snapshots=await tx.orderConsumptionSnapshot.findMany({where:{storeId:filter.storeId,createdAt:{gt:opening!.countedAt!,lte:closing!.countedAt!}}})
+    for(const snapshot of snapshots){
+     if(snapshot.reversedAt)continue
+     if(JSON.parse(snapshot.issues).length)recipeIncomplete=true
+     for(const entry of JSON.parse(snapshot.materials))if(entry.inventoryId===material.id){if(entry.unit!==material.unit)recipeIncomplete=true;else theoretical+=entry.quantity}
+     orderIds.add(snapshot.orderId);lastOrderDate=snapshot.createdAt.toISOString()
+    }
+    const uncovered=await tx.order.count({where:{storeId:filter.storeId,status:{in:['paid','completed']},createdAt:{gt:opening!.countedAt!,lte:closing!.countedAt!},id:{notIn:snapshots.map(s=>s.orderId)}}})
+    recipeIncomplete=recipeIncomplete||uncovered>0
+   }
    const complete=certified&&seen===BigInt(last.sequence)-BigInt(first.sequence)
-   const actual=complete&&!ambiguous?opening!.countedQty!+receipts-closing!.countedQty!-known:null
+   const actual=complete&&!ambiguous&&!recipeIncomplete?opening!.countedQty!+receipts-closing!.countedQty!-known:null
    const classification=varianceClassification(theoretical,actual!==null&&actual<0?null:actual,settings.varianceWarningPercent,settings.varianceCriticalPercent,settings.enableConsumptionAlert)
    results.push({inventoryId:material.id,inventoryName:material.name,unit:material.unit,theoreticalConsumption:theoretical,actualConsumption:actual,...classification,
     varianceAmountEstimate:classification.variance===null?null:Math.round(classification.variance*Number(material.avgCost)),valuationBasis:'current_carrying_average_estimate',orderCount:orderIds.size,lastOrderDate,
     observationCount:supported?2:opening?1:0,openingPhysical:supported?opening!.countedQty:null,closingPhysical:supported?closing!.countedQty:null,receipts,knownNonSaleOut:known,
     windowStart:(supported?opening!.countedAt!:start).toISOString(),windowEnd:(supported?closing!.countedAt!:end).toISOString(),basis:'physical_observation_balance_minus_known_movements',
-    unavailableReason:!supported?'TWO_PHYSICAL_OBSERVATIONS_REQUIRED':!complete?'UNCERTIFIED_OBSERVATION_BOUNDARY':ambiguous?'UNCLASSIFIED_MOVEMENTS':actual!==null&&actual<0?'NEGATIVE_INFERRED_DEPLETION':classification.varianceStatus==='unavailable'?'ZERO_THEORETICAL_BASELINE':null,
+    unavailableReason:!supported?'TWO_PHYSICAL_OBSERVATIONS_REQUIRED':!complete?'UNCERTIFIED_OBSERVATION_BOUNDARY':ambiguous?'UNCLASSIFIED_MOVEMENTS':recipeIncomplete?'INCOMPLETE_RECIPE':actual!==null&&actual<0?'NEGATIVE_INFERRED_DEPLETION':classification.varianceStatus==='unavailable'?'ZERO_THEORETICAL_BASELINE':null,
     alertsEnabled:settings.enableConsumptionAlert,warningPercent:settings.varianceWarningPercent,criticalPercent:settings.varianceCriticalPercent,refreshHours:settings.autoCheckIntervalHours})
   }
   return results

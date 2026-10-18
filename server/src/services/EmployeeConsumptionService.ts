@@ -56,7 +56,9 @@ export async function employeeConsumption(filter: {
         } = { withdrawal: 0, loss: 0, expired: 0, other: 0, process: 0 };
         for (const log of logs.filter((l: any) => l.inventoryId === item.id))
             totals[log.reason] += log.quantity;
-        const actual = Object.values(totals).reduce((a, b) => a + b, 0), theory = materials.get(item.id);
+        // A unified processing entry describes an internal conversion, not a second issue.
+        const internalProcess=logs.filter((l:any)=>l.inventoryId===item.id&&l.reason==='process').reduce((sum:number,l:any)=>{try{return sum+(JSON.parse(l.note||'null')?.stockEffect==='internal_conversion'?l.quantity:0)}catch{return sum}},0);
+        const actual = Object.values(totals).reduce((a, b) => a + b, 0)-internalProcess, theory = materials.get(item.id);
         const classification = classifyEmployeeConsumption(theory?.quantity || 0, actual, setting.varianceWarningPercent, setting.varianceCriticalPercent, setting.enableConsumptionAlert, incomplete || !!theory && theory.unit !== item.unit);
         const usageMode=inventoryUsageMode(item);
         const comparison=usageMode==='tracked'&&classification.varianceStatus==='unavailable'?classification:{variance:usageMode==='self_produced'?null:Math.round((actual-(theory?.quantity||0))*1e9)/1e9,variancePercent:null,varianceStatus:'not_compared',unavailableReason:usageMode==='bulk'?'BULK_ISSUE':usageMode==='self_produced'?'SELF_PRODUCED':'BATCH_WITHDRAWAL'};

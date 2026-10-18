@@ -1,3 +1,4 @@
+import {unifiedInventorySince,CALIBRATED_PREFIX} from './UnifiedInventoryService'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {validateInventoryProcessLink} from '../utils/inventoryProcessLink'
 import {recalculateInventoryConsumers,inventoryQuantityCost} from './InventoryQuantityService'
@@ -78,7 +79,7 @@ export async function getInventory(filter: InventoryFilter) {
     const forecast=forecasts.find((row:any)=>row.inventoryId===item.id)
     let unitCost=Number(item.avgCost),processCostAvailable=true
     if(item.type==='semi_finished'&&item.processRecipeId){try{unitCost=await inventoryQuantityCost(prisma,item.id,1,item.unit,0,item.storeId)}catch{unitCost=0;processCostAvailable=false}}
-    return {...item,avgCost:unitCost,processCostAvailable,packaging,effectiveSafetyStock:forecast?.effectiveSafetyStock??item.safetyStock,dynamicSafetyStock:forecast?.dynamicSafetyStock??0,forecastHistoryDays:forecast?.historyDays??0,daysUntilStockOut:forecast?.daysUntilStockOut??null}
+    return {...item,unifiedStock:!!(forecast&&'calibrationRequired' in forecast),calibrationRequired:forecast&&'calibrationRequired' in forecast?forecast.calibrationRequired:false,avgCost:unitCost,processCostAvailable,packaging,effectiveSafetyStock:forecast?.effectiveSafetyStock??item.safetyStock,dynamicSafetyStock:forecast?.dynamicSafetyStock??0,forecastHistoryDays:forecast?.historyDays??0,daysUntilStockOut:forecast?.daysUntilStockOut??null}
   }))
   // Filter low stock using safetyStock threshold
   if (filter.lowStock) {
@@ -208,15 +209,17 @@ export async function stockOut(data: StockOperation) {
     const saved=data.inputUnit?await tx.config.findUnique({where:{storeId_key:{storeId,key:`inventoryPackage:${inventoryId}`}}}):null
     const quantity=convertQuantity(data.quantity,data.inputUnit||inventory.unit,inventory.unit,saved?validatePackage(JSON.parse(saved.value),inventory.unit):null)
     if(reason==='other'&&!note?.trim())throw Error('OUT_REASON_REQUIRED')
-    if (inventory.currentStock < quantity) {
+    const internalIssue=reason==='withdrawal'&&!!(await unifiedInventorySince(tx,storeId))
+    if(await unifiedInventorySince(tx,storeId)){if(['sold','adjust'].includes(reason||''))throw Error('USE_SALE_OR_COUNT_WORKFLOW')}
+    if (!internalIssue && inventory.currentStock < quantity) {
       throw new Error('Insufficient stock')
     }
 
-    const changed=await tx.inventory.updateMany({where:{id:inventoryId,storeId,currentStock:inventory.currentStock},data:{currentStock:{decrement:quantity}}})
+    const changed=await tx.inventory.updateMany({where:{id:inventoryId,storeId,currentStock:inventory.currentStock},data:{currentStock:{decrement:internalIssue?0:quantity}}})
     if(changed.count!==1)throw new Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
     const updated=await tx.inventory.findUniqueOrThrow({where:{id:inventoryId}})
 
-    await consumeInventoryBatches(tx,inventory,quantity)
+    if(!internalIssue)await consumeInventoryBatches(tx,inventory,quantity)
     // Create stock out log
     await tx.stockOutLog.create({
       data: {
@@ -225,7 +228,7 @@ export async function stockOut(data: StockOperation) {
         staffId,
         quantity,
         reason,
-        note:JSON.stringify({version:1,kind:'manual-out',unitCost:Number(inventory.avgCost),totalAmount:Math.round(quantity*Number(inventory.avgCost)),note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
+        note:JSON.stringify({version:1,kind:'manual-out',stockEffect:internalIssue?'internal_transfer':'physical_out',unitCost:Number(inventory.avgCost),totalAmount:Math.round(quantity*Number(inventory.avgCost)),note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
         orderId
       }
     })

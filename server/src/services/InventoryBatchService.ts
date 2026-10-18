@@ -30,15 +30,18 @@ export async function consumeInventoryBatches(tx: any, inventory: any, quantity:
     const batches = await alignInventoryBatches(tx, inventory);
     batches.sort((a, b) => (a.expiryDate?.getTime() ?? Infinity) - (b.expiryDate?.getTime() ?? Infinity) || a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
     let remaining = quantity;
+    const allocations:Array<{id:string;quantity:number}>=[];
     for (const batch of batches) {
         if (remaining <= 1e-9)
             break;
         const used = Math.min(batch.quantity, remaining), balance = Math.max(0, Math.round((batch.quantity - used) * 1e9) / 1e9);
         await tx.batch.update({ where: { id: batch.id }, data: { quantity: balance, status: balance > 0 ? 'active' : 'used' } });
+        allocations.push({id:batch.id,quantity:used});
         remaining -= used;
     }
     if (remaining > 1e-7)
         throw Error('BATCH_BALANCE_CHANGED');
+    return allocations;
 }
 export async function setBatchExpiry(storeId: string, inventoryId: string, batchId: string | undefined, expiryDate: string, manufacturingDate?: string) {
     if (!expiryDate.trim())
