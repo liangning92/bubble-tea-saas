@@ -42,6 +42,7 @@ for(const text of ['', '0','-100','1.5','1,5','abc','999999999999'])assert.equal
 assert.equal(expenseCalendarDate('2026-10-06T17:01:00Z'),'2026-10-07');assert.equal(expenseCalendarDate('2026-10-06T16:59:00Z'),'2026-10-06');assert.equal(expenseCalendarDate('2026-10-05T17:00:00Z'),'2026-10-06');
 console.log('PASS expense form amount separators and Jakarta calendar boundary/edit roundtrip');
 const evidence={paymentSource:'owner_transfer',paidLocal:'2026-10-06T12:34',expectedVersion:(await prisma.expense.findUnique({where:{id:row.id}})).updatedAt.toISOString(),reason:'Synthetic bank receipt verification'};
+for(const paidLocal of ['2026-02-30T12:34','2026-10-06T24:00','2026-10-06T12:60'])assert.equal((await send('POST','/'+row.id+'/payment-source',{...evidence,paidLocal})).status,400,'Invalid calendar/time cannot change payment evidence');
 const verified=await send('POST','/'+row.id+'/payment-source',evidence);assert.equal(verified.status,200,await verified.clone().text());const verifiedExpense=(await verified.json()).data;assert.equal(verifiedExpense.paymentSource,'owner_transfer');assert.equal(verifiedExpense.cashSessionId,null);assert.equal(verifiedExpense.date,'2026-10-06T05:34:00.000Z');
 assert.equal((await send('POST','/'+row.id+'/payment-source',evidence)).status,400,'stale evidence rejected');
 const denied=await fetch(base+'/api/expenses/'+row.id+'/payment-source',{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(evidence)});assert.equal(denied.status,403);
