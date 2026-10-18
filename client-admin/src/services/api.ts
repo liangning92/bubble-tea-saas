@@ -358,7 +358,7 @@ export const supplierApi = {
 
 // Purchase Orders
 export const purchaseOrderApi = {
-  confirmPayment:(id:string,data:{expectedVersion:string;paidDate:string;reason:string})=>api.post('/purchase-orders/'+id+'/confirm-payment',data),
+  confirmPayment:(id:string,data:{expectedVersion:string;paidDate:string;reason:string;paymentSource?:string})=>api.post('/purchase-orders/'+id+'/confirm-payment',data),
   update:(id:string,data:any)=>api.put('/purchase-orders/'+id,data),
   reverseReceipt:(id:string,reason:string)=>api.post('/purchase-orders/'+id+'/reverse-receipt',{reason}),
   refund:(id:string,reason:string)=>api.post('/purchase-orders/'+id+'/refund',{reason}),

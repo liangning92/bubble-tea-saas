@@ -1,3 +1,5 @@
+import { confirmExpensePayment, paymentSourceSchema, ExpensePaymentError } from '../services/ExpensePaymentService'
+import { calendarStart,loadStoreDateSettings } from '../utils/storeDateSettings'
 import { createPosExpense, getPosExpenses, legacyPosExpenseBody } from '../services/PosExpenseService'
 import { parseDateBoundary } from '../utils/businessDate'
 import {validExpenseDate} from '../services/RecurringExpenseService'
@@ -113,10 +115,12 @@ router.post('/', authenticate, authorize('admin', 'manager', 'cashier'), async (
     res.status(201).json({ code: 201, data: expense })
   } catch (error: any) {
     console.error('Create expense error:', error)
-    const status = error instanceof ExpenseService.ExpenseInputError ? 400 : 500
+    const status = error instanceof ExpenseService.ExpenseInputError || error instanceof ExpensePaymentError || error instanceof z.ZodError ? 400 : 500
     res.status(status).json({ code: status, message: error.message || 'Failed to create expense' })
   }
 })
+
+router.post('/:id/payment-source',authenticate,authorize('admin'),async(req:AuthRequest,res,next)=>{try{const input=z.object({paymentSource:paymentSourceSchema,paidLocal:z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),expectedVersion:z.string().datetime(),reason:z.string().trim().min(1).max(2000)}).strict().parse(req.body);const settings=await loadStoreDateSettings(prisma,req.user!.storeId),[day,time]=input.paidLocal.split('T'),[hour,minute]=time.split(':').map(Number);if(hour>23||minute>59)throw new ExpensePaymentError('INVALID_PAYMENT_DATE');const paidAt=new Date(calendarStart(day,settings.timezone).getTime()+(hour*60+minute)*60000);res.json({code:200,data:await confirmExpensePayment(prisma,req.user!,req.params.id,{paymentSource:input.paymentSource!,expectedVersion:input.expectedVersion!,reason:input.reason!,paidAt})})}catch(e){if(e instanceof ExpensePaymentError||e instanceof z.ZodError)return res.status(400).json({code:400,message:(e as Error).message});next(e)}})
 
 // PUT /api/expenses/:id
 router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
@@ -138,7 +142,7 @@ router.put('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
     res.json({ code: 200, data: expense })
   } catch (error: any) {
     console.error('Update expense error:', error)
-    const status = error instanceof ExpenseService.ExpenseInputError ? 400 : 500
+    const status = error instanceof ExpenseService.ExpenseInputError || error instanceof ExpensePaymentError || error instanceof z.ZodError ? 400 : 500
     res.status(status).json({ code: status, message: error.message || 'Failed to update expense' })
   }
 })
@@ -173,7 +177,7 @@ router.post('/bulk', authenticate, authorize('admin'), async (req: AuthRequest, 
     res.status(201).json({ code: 201, data: { count: result.count } })
   } catch (error: any) {
     console.error('Bulk import error:', error)
-    const status = error instanceof ExpenseService.ExpenseInputError ? 400 : 500
+    const status = error instanceof ExpenseService.ExpenseInputError || error instanceof ExpensePaymentError || error instanceof z.ZodError ? 400 : 500
     res.status(status).json({ code: status, message: error.message || 'Failed to import expenses' })
   }
 })
@@ -235,7 +239,8 @@ router.delete('/:id', authenticate, authorize('admin'), async (req: AuthRequest,
     res.json({ code: 200, message: 'Expense deleted' })
   } catch (error: any) {
     console.error('Delete expense error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to delete expense' })
+    const status=error instanceof ExpensePaymentError?400:500
+    res.status(status).json({ code: status, message: error.message || 'Failed to delete expense' })
   }
 })
 

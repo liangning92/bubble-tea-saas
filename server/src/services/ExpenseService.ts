@@ -1,3 +1,4 @@
+import {paymentFields, PaymentSource, ExpensePaymentError} from './ExpensePaymentService'
 import prisma from '../config/database'
 import { BusinessInputError as ExpenseInputError, parseBusinessDate } from '../utils/businessDate'
 import { formatDate } from '../utils/dateUtils'
@@ -69,10 +70,12 @@ export async function createExpense(data: {
   date: Date | string
   referenceId?: string
   referenceType?: string
+  paymentSource?:PaymentSource
 }) {
   validateAmount(data.amount)
-  return prisma.expense.create({
+  return prisma.$transaction(async tx=>tx.expense.create({
     data: {
+      ...await paymentFields(tx,data.storeId,data.paymentSource,normalizeExpenseDate(data.date)),
       storeId: data.storeId,
       type: data.type,
       category: data.category,
@@ -82,11 +85,13 @@ export async function createExpense(data: {
       referenceId: data.referenceId,
       referenceType: data.referenceType
     }
-  })
+  }))
 }
 
 // Delete expense
 export async function deleteExpense(expenseId: string) {
+  const existing=await prisma.expense.findUnique({where:{id:expenseId}})
+  if(existing?.paymentSource==='drawer_cash')throw new ExpensePaymentError('DRAWER_PAYMENT_DELETE_REQUIRES_CORRECTION')
   return prisma.expense.delete({ where: { id: expenseId } })
 }
 
@@ -98,6 +103,8 @@ export async function updateExpense(expenseId: string, data: {
   description?: string
   date?: Date | string
 }) {
+  const existing=await prisma.expense.findUnique({where:{id:expenseId}})
+  if(existing?.paymentSource==='drawer_cash')throw new ExpensePaymentError('DRAWER_PAYMENT_EDIT_REQUIRES_CORRECTION')
   if (data.amount !== undefined) validateAmount(data.amount)
   return prisma.expense.update({
     where: { id: expenseId },

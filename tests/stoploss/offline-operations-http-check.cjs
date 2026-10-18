@@ -38,7 +38,7 @@ const wrongStore=op('cash',sessionId,new Date(start.getTime()+1000),{type:'cash_
 const invalid=op('cash',sessionId,new Date(issued+30*86400000+1),{type:'cash_in',amount:5000});assert.equal((await deliver(invalid)).status,403);
 const cashIn=op('cash',sessionId,new Date(start.getTime()+1000),{type:'cash_in',amount:5000});const cashOut=op('cash',sessionId,new Date(start.getTime()+2000),{type:'cash_out',amount:2000});
 for(const command of [cashIn,cashOut]){await assert.rejects(()=>deliver(command,true));assert.equal((await deliver(command)).status,200);}
-const purchase=op('expense',sessionId,new Date(start.getTime()+3000),{requestId:crypto.randomUUID(),category:'supplies',amount:3000,quantity:2,description:'Owned synthetic purchase'});
+const purchase=op('expense',sessionId,new Date(start.getTime()+3000),{paymentSource:'drawer_cash',requestId:crypto.randomUUID(),category:'supplies',amount:3000,quantity:2,description:'Owned synthetic purchase'});
 await assert.rejects(()=>deliver(purchase,true));assert.equal((await deliver(purchase)).status,200);assert.equal(await prisma.expense.count(),1);
 const request={storeId:'store',staffId:'staff',shiftSessionId:sessionId,paymentMethod:'cash',taxEnabled:false,pointsRedeemed:0,discountAmount:0,orderNumber:'OFFLINE-'+crypto.randomUUID(),items:[{productId:'product',productName:'Tea',specId:'spec',specName:'Regular',quantity:1,unitPrice:10000,addons:[]}]};
 const receipt={orderNumber:request.orderNumber,occurredAt:new Date(start.getTime()+4000).toISOString(),grandTotal:10000,cashTender:{receivedCash:20000,changeGiven:10000},request};

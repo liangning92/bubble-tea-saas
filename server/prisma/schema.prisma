@@ -1013,6 +1013,9 @@ model CashSummary {
 // ============================================
 
 model Expense {
+  paymentSource String @default("unknown") // drawer_cash | owner_transfer | personal | other | unknown
+  cashSessionId String?
+  cashOccurredAt DateTime? // actual drawer payment; independent of entry/receipt date
   id            String   @id @default(cuid())
   storeId       String
   store         Store    @relation(fields: [storeId], references: [id])
