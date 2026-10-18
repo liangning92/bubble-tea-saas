@@ -1,0 +1,18 @@
+{
+  "base": "8989b6290413af056f51b1e9b00fae2fc4f2267c",
+  "branch": "codex/team-communication-20261019",
+  "integrationGroupsPassed": 14,
+  "builds": [
+    "server",
+    "admin",
+    "staff"
+  ],
+  "additionalChecks": [
+    "POS TypeScript (shared permission helper consumer)",
+    "git diff --check"
+  ],
+  "deployment": false,
+  "productionDDL": false,
+  "modelCalls": false,
+  "employeeNotifications": false
+}

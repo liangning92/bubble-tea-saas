@@ -1,0 +1,24 @@
+{
+  "environment": "owned temporary PostgreSQL 15.17; synthetic accounts only",
+  "productionTouched": false,
+  "browserChecks": [
+    "Staff sign-in and team entry",
+    "Create text meeting and send message",
+    "Start/end meeting without native dialog",
+    "Manual minutes edit/confirm persisted as version 2; original messages retained",
+    "Admin employee-module secondary entry",
+    "Nonmember private chat hides content until explicit audit reason",
+    "Admin/member cross-origin reply appears in staff UI without reload",
+    "Service 503 retains IndexedDB pending message",
+    "Reload preserves pending message",
+    "Service recovery sends exactly one message",
+    "390px viewport document width 386px, no horizontal overflow",
+    "Primary button contrast checked: rgb(220,38,38) background, rgb(255,255,255) text"
+  ],
+  "notTested": [
+    "Production rollout and real employee data",
+    "Native phone OS offline/sleep/background behavior",
+    "PostgreSQL 16 runtime (Docker fixture Prisma connection failed; owned fixtures cleaned)"
+  ],
+  "screenshots": "Native browser screenshot evidence emitted in task tool records; no screenshot file export API available."
+}
