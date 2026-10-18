@@ -147,7 +147,7 @@ export function ShiftSwapPage() {
             {req.reason && <p>{req.reason}</p>}
             <p className="text-sm text-gray-600">{req.staff?.name}</p>
             <div className="flex flex-wrap gap-3">{[true, false].map(agree => <button key={String(agree)} disabled={!!confirming} className="bg-primary text-white p-3 rounded-lg disabled:opacity-50" onClick={async () => {
-              if (confirming || !await dialogs.confirm(t('audit.swapHint'))) return
+              if (confirming || !await dialogs.confirm(t('swapFlow.confirmReply'))) return
               setConfirming(req.id)
               try { await staffApi.confirmShiftSwap(req.id, agree, req.updatedAt); await loadData() }
               catch { await dialogs.alert(t('common.error')) }

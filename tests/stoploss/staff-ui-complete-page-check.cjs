@@ -14,15 +14,17 @@ module.exports = async function staffUI(browser) {
   const materials = [{ id: 'm', name: 'Test Water', unit: 'ml', category: 'raw_material', currentStock: 88799.99999999994, safetyStock: 100, updatedAt: '2026-10-15T00:00:00Z' }];
   const purchase = { id: 'p', orderNumber: 'UI-PURCHASE', status: 'awaiting_receipt', totalAmount:10000, updatedAt:'2026-10-15T00:00:00Z', createdAt: '2026-10-15T00:00:00Z', items: [{ id: 'pi', inventoryId:'m', inventory: materials[0], quantity: 10, unitCost:1000, inputQuantity:10, inputUnit:'ml', inputUnitCost:1000, lineAmount:10000 }] };
   const course = { key: 'onboarding', reviewed: true, title: { en: 'UI Course', id: 'UI Course', zh: '测试课程' }, subtitle: { en: 'UI subtitle', id: 'UI subtitle', zh: '测试说明' }, minutes: 5, sections: [{ title: { en: 'Section', id: 'Section' }, points: [{ en: 'Step', id: 'Step' }] }], quiz: [], practical: [], sources: [] };
-  let failInventory = false, failOvertime = false, confirmedSwap = false, failLeaveRules = false;
+  let failInventory = false, failOvertime = false, confirmedSwap = false, swapTestEnabled = false, declinedSwap = false, failLeaveRules = false;
   await context.route('**/api/**', async route => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname, method = req.method();
     let data = [], extra = {};
     if (method !== 'GET') writes.push({ p, method, data:req.postDataJSON() });
     if (failInventory && p === '/api/inventory') return route.fulfill({ status: 503, json: { code: 503, message: 'Synthetic inventory failure' } });
     if (failOvertime && p === '/api/overtime') return route.fulfill({ status: 503, json: { code: 503, message: 'Synthetic overtime failure' } });
-    if (p === '/api/shift-swap/pending-confirm') data = confirmedSwap ? [] : [{id:'swap-invite',originalDate:'2026-10-15',targetDate:'2026-10-16',originalShift:'morning',targetShift:'evening',status:'pending',reason:'UI swap invitation'}];
-    else if (p === '/api/shift-swap/swap-invite/confirm') { confirmedSwap = true; data = {id:'swap-invite',targetConfirmed:true}; }
+    const invitation={id:'swap-invite',staffId:'sender',targetStaffId:'e',staff:{name:'UI Applicant'},targetStaff:{name:'UI Employee'},updatedAt:'2026-10-18T10:00:00.000Z',originalDate:'2026-10-15',targetDate:'2026-10-16',originalShift:'morning',targetShift:'evening',originalShiftName:'Morning',targetShiftName:'Evening',status:declinedSwap?'peer_rejected':'pending',targetConfirmed:confirmedSwap,reason:'UI swap invitation'};
+    if (p === '/api/shift-swap/pending-confirm') data = !swapTestEnabled || confirmedSwap || declinedSwap ? [] : [invitation];
+    else if (p === '/api/shift-swap/my') data = swapTestEnabled ? [invitation] : [];
+    else if (p === '/api/shift-swap/swap-invite/confirm') { const reply=req.postDataJSON(); confirmedSwap = reply.agree; declinedSwap = !reply.agree; data = {...invitation,targetConfirmed:confirmedSwap,status:declinedSwap?'peer_rejected':'pending'}; }
     else if (p === '/api/staff-permissions/me') data = { role: { version: 2, modes: {} } };
     else if (p === '/api/auth/me') data = { staff: { name: 'UI Employee', position: 'cashier' }, store: { name: 'UI Store' } };
     else if (p === '/api/staff/overview/monthly') data = { schedule: {}, attendance: {}, announcements: [] };
@@ -151,13 +153,30 @@ module.exports = async function staffUI(browser) {
     await expect(page.getByRole('dialog')).toBeVisible(); await page.keyboard.press('Tab');
     assert.equal(await page.getByRole('dialog').evaluate(el => el.contains(document.activeElement)), true);
     await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
+    swapTestEnabled = true;
     await page.goto(origin + '/shift-swap');
-    await expect(page.getByText('UI swap invitation', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Confirm', exact: true }).click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await page.getByRole('dialog').getByRole('button', {name:'Confirm',exact:true}).click();
-    await expect(page.getByText('UI swap invitation', { exact: true })).toHaveCount(0);
-    assert.ok(writes.some(w => w.p === '/api/shift-swap/swap-invite/confirm' && w.method === 'PUT'));
+    const invitationDialog = page.getByRole('dialog', {name:'Shift swap invitation',exact:true});
+    await expect(invitationDialog).toBeVisible();
+    await expect(invitationDialog).toContainText('UI Applicant');
+    await expect(invitationDialog.getByRole('button',{name:'Agree',exact:true})).toBeVisible();
+    await expect(invitationDialog.getByRole('button',{name:'Disagree',exact:true})).toBeVisible();
+    await page.screenshot({path:path.join(output,'swap-invitation-phone.jpg')});
+    // Deferral keeps the same invitation actionable on its dedicated page.
+    await invitationDialog.getByRole('button',{name:'Review later',exact:true}).click();
+    await expect(invitationDialog).toHaveCount(0);
+    await page.getByRole('button',{name:'Disagree',exact:true}).click();
+    await expect(page.getByRole('dialog')).toContainText('Submit this response?');
+    await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();
+    await expect(page.getByRole('status').filter({hasText:'Colleague declined; request closed'})).toBeVisible();
+    assert.ok(writes.some(w=>w.p==='/api/shift-swap/swap-invite/confirm'&&w.data.agree===false&&w.data.expectedVersion==='2026-10-18T10:00:00.000Z'));
+    declinedSwap = false;
+    await page.reload();
+    await expect(invitationDialog).toBeVisible();
+    await invitationDialog.getByRole('button',{name:'Agree',exact:true}).click();
+    await expect(invitationDialog).toHaveCount(0);
+    await expect(page.getByRole('status').filter({hasText:'Colleague agreed; awaiting admin review'})).toBeVisible();
+    assert.ok(writes.some(w=>w.p==='/api/shift-swap/swap-invite/confirm'&&w.method==='PUT'&&w.data.agree===true&&w.data.expectedVersion==='2026-10-18T10:00:00.000Z'));
+    await page.screenshot({path:path.join(output,'swap-waiting-admin-phone.jpg')});
     await page.goto(origin + '/profile/documents');
     await page.getByRole('button', {name:'View file',exact:true}).click();
     await expect(page.getByRole('dialog').getByRole('img')).toBeVisible();
