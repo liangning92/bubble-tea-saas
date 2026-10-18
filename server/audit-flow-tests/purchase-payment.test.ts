@@ -89,11 +89,11 @@ async function staffToken(storeId:string,role='staff'){
  return {staff,user,token:'Bearer '+jwt.sign({id:user.id,phone:user.phone,role,storeId,staffId:staff.id,issuedAtMs:Date.now()+1000},config.jwt.secret)}
 }
 test('employee can revise and withdraw own pending requests, but cannot change another employee or an approved request',async()=>{
- const f=await fixture(),a=await staffToken(f.store.id),b=await staffToken(f.store.id),api=request(app);
+ const f=await fixture(),a=await staffToken(f.store.id),b=await staffToken(f.store.id),colleague=await staffToken(f.store.id),api=request(app);
  for(const [path,model,data,edit] of [
   ['staff-correction','attendanceCorrection',{date:'2026-10-15',correctCheckIn:'09:00',reason:'missed clock'},{date:'2026-10-15',correctCheckIn:'08:30',reason:'correct time'}],
   ['overtime','overtimeRequest',{date:'2026-10-15',startTime:'18:00',endTime:'20:00',reason:'delivery'},{date:'2026-10-15',startTime:'18:00',endTime:'21:00',reason:'correct hours'}],
-  ['shift-swap','shiftSwap',{originalDate:'2026-10-16',originalShift:'morning',targetDate:'2026-10-17',targetShift:'evening',reason:'swap'},{originalDate:'2026-10-16',originalShift:'morning',targetDate:'2026-10-18',targetShift:'evening',reason:'correct day'}]
+  ['shift-swap','shiftSwap',{originalDate:'2026-10-16',originalShift:'morning',targetDate:'2026-10-17',targetShift:'evening',targetStaffId:colleague.staff.id,reason:'swap'},{originalDate:'2026-10-16',originalShift:'morning',targetDate:'2026-10-18',targetShift:'evening',targetStaffId:colleague.staff.id,reason:'correct day'}]
  ] as const){
   const created=await api.post('/api/'+path).set('Authorization',a.token).set('X-Client-App','employee').send(data);expect(created.status).toBe(201);const id=created.body.data.id;
   expect((await api.put(`/api/${path}/${id}`).set('Authorization',b.token).set('X-Client-App','employee').send({...edit,expectedVersion:created.body.data.updatedAt})).status).toBe(409);
