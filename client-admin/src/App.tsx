@@ -35,6 +35,7 @@ const StockLogPage = lazy(() => import('./pages/inventory/StockLogPage').then(mo
 const StockAlertsPage = lazy(() => import('./pages/inventory/StockAlertsPage').then(module => ({ default: module.StockAlertsPage })))
 const StockAlertConfigPage = lazy(() => import('./pages/inventory/StockAlertConfigPage').then(module => ({ default: module.StockAlertConfigPage })))
 const InventoryCountPage = lazy(() => import('./pages/inventory/InventoryCountPage').then(module => ({ default: module.InventoryCountPage })))
+const TeamCommunicationPage = lazy(() => import('./pages/staff/TeamCommunicationPage').then(module => ({ default: module.TeamCommunicationPage })))
 const StaffIndexPage = lazy(() => import('./pages/staff/StaffIndexPage').then(module => ({ default: module.StaffIndexPage })))
 const StaffListPage = lazy(() => import('./pages/staff/StaffListPage').then(module => ({ default: module.StaffListPage })))
 const StaffFormPage = lazy(() => import('./pages/staff/StaffFormPage').then(module => ({ default: module.StaffFormPage })))
@@ -219,6 +220,7 @@ function App() {
 
         {/* 员工管理 */}
         <Route path="staff" element={<StaffIndexPage />}>
+          <Route path="communication" element={<TeamCommunicationPage />} />
           <Route path="features" element={<StaffFeatureSettingsPage />} />
           <Route index element={<StaffListPage />} />
           <Route path="new" element={<StaffFormPage />} />

@@ -1,0 +1,28 @@
+{
+  "base": "8989b6290413af056f51b1e9b00fae2fc4f2267c",
+  "branch": "codex/team-communication-20261019",
+  "integrationGroupsPassed": 16,
+  "builds": [
+    "server",
+    "admin",
+    "staff"
+  ],
+  "additionalChecks": [
+    "POS TypeScript (shared permission helper consumer)",
+    "git diff --check"
+  ],
+  "deployment": false,
+  "productionDDL": false,
+  "modelCalls": false,
+  "employeeNotifications": false,
+  "reviewFixes": [
+    "Legacy attachment download shares channel authorization and audit logging; ordinary employee file permissions retained",
+    "Grant query checks the current join sequence without a first-100 limit"
+  ],
+  "postgresVersionsVerified": [
+    "15.17",
+    "16.15"
+  ],
+  "pg16IntegrationGroupsPassed": 16,
+  "independentReview": "4f171236: two P2 findings closed; no new blocking findings"
+}

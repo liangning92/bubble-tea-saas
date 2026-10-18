@@ -4,6 +4,8 @@ const pos: StaffBaseRole[] = ['manager', 'cashier']
 const management: StaffBaseRole[] = ['manager']
 const purchasers: StaffBaseRole[] = ['manager','staff']
 export const STAFF_PERMISSION_CATALOG = [
+  {key:'team.manage',group:'staff',roles:management},
+  {key:'team.audit',group:'staff',roles:management},
   {key:'dashboard.read',group:'dashboard',roles:management},
   {key:'products.read',group:'products',roles:all},
   {key:'products.write',group:'products',roles:management},
@@ -69,6 +71,8 @@ export function defaultStaffPermissions(baseRole: StaffBaseRole): string[] {
 export function staffPermissionForRequest(method: string, originalUrl: string, user?: {role:string;staffId:string;accessRole?:{permissions:string[]}|null}): string | null {
   const path = originalUrl.split('?')[0].replace(/^\/api(?=\/|$)/,'')
   const read = ['GET','HEAD','OPTIONS'].includes(method)
+  if (/^\/team\/admin/.test(path)) return null
+  if (/^\/team(?:\/|$)/.test(path)) return 'personal.messages'
   if (/^\/staff-work\/admin(?:\/|$)/.test(path)) return '__administrator_only__'
   if (/^\/staff-work\/my\/compensation/.test(path)) return 'personal.rewards'
   if (/^\/staff-work\/my\/(attendance|appeals|late-rule)/.test(path)) return 'personal.attendance'

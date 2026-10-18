@@ -1,0 +1,23 @@
+{
+  "base": "8989b6290413af056f51b1e9b00fae2fc4f2267c",
+  "checks": [
+    "identity, store-scoped directory, separate management and audit capabilities",
+    "direct creation deduplication, request retry and payload-conflict rejection",
+    "concurrent messages receive unique contiguous sequence numbers; reconnect cursor recovers every message",
+    "lost HTTP response retries return the committed message without duplication",
+    "persisted cursor pagination recovers a gap larger than a response page",
+    "per-person monotonic read receipts and unread counters",
+    "private chat access is denied to nonmembers and other stores; authorized audit requires a reason and creates an audit record",
+    "private employee attachment can be read only through an authorized channel grant",
+    "legacy file downloads enforce chat membership and audit reasons while ordinary employee files retain their permissions",
+    "attachment grants after the first hundred remain downloadable only from the current join sequence",
+    "membership join floor, removal, scoped public channels and historical minutes privacy",
+    "meeting close atomically creates a manual scaffold; versioned human decisions never rewrite source messages",
+    "retained minutes and revision history are not silently truncated by metadata limits",
+    "rate and length limits apply transactionally, and invalid requests do not allocate sequence numbers",
+    "reserved storage cannot be read or overwritten using ordinary configuration routes",
+    "archive retains history, and inactive employees or revoked old tokens cannot read it"
+  ],
+  "count": 16,
+  "productionTouched": false
+}

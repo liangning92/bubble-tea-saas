@@ -1,3 +1,4 @@
+import { teamCopy } from '../../../shared/teamCopy'
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -156,6 +157,7 @@ export function HomePage() {
           <span>{t("ui.coreValueEnthusiasm")}</span>
         </p>
       </header>
+      <button className="m-4 flex w-[calc(100%-2rem)] items-center justify-between rounded-2xl border border-red-200 bg-white p-4 text-left font-semibold text-gray-900" onClick={() => navigate('/team')}>{teamCopy(i18n.language).title}<ChevronRight size={20}/></button>
       <section className="home-greeting">
         <div>
           <p className="home-date">{today} · WIB</p>

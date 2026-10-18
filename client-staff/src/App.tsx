@@ -16,6 +16,7 @@ import { EmployeeAppealsPage, EmployeeDocumentsPage } from './pages/EmployeePriv
 import { BottomNav } from './components/BottomNav'
 
 // Layout with BottomNav
+const TeamCommunicationPage = lazy(() => import('./pages/TeamCommunicationPage').then(module => ({ default: module.TeamCommunicationPage })))
 const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
 const InventoryCountPage = lazy(() => import('./pages/InventoryCountPage').then(module => ({ default: module.InventoryCountPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })))
@@ -62,6 +63,7 @@ function App() {
   if (isAuthenticated && user && offlineUntil && location.pathname!=='/login') return <OfflineSession/>
   return (
     <StaffAccessProvider api={staffPermissionClient} actor={user?[user.id,user.storeId,'staff'].join(':'):''} owner={user?.role==='admin'}><StaffApprovalDialog/><OfflineAttendanceSync/>{isAuthenticated && user && <ShiftSwapInbox/>}{sessionStorage.getItem('employee-offline-setup-failed') && user && <p role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><OfflineSetupNotice/></p>}<Suspense fallback={<RouteLoading />}><Routes>
+      <Route path="/team" element={<ProtectedRoute><LayoutWithNav><TeamCommunicationPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/inventory/count" element={<ProtectedRoute><LayoutWithNav><InventoryCountPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/attendance/appeals" element={<ProtectedRoute><LayoutWithNav><EmployeeAppealsPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/profile/documents" element={<ProtectedRoute><LayoutWithNav><EmployeeDocumentsPage /></LayoutWithNav></ProtectedRoute>} />

@@ -1,14 +1,16 @@
+import { teamCopy } from '../../../../shared/teamCopy'
 import {useEmployeeNavigation} from '../../contexts/EmployeeAccess'
 import {permissionForPage} from '../../../../shared/StaffAccess'
 import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 
 export function StaffIndexPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const allowed=useEmployeeNavigation()
   const location = useLocation()
 
   const tabs = [
+    { key: 'communication', label: teamCopy(i18n.language).title, path: '/staff/communication' },
     { key: 'staff', label: t('staff.staffFile'), path: '/staff' },
     { key: 'attendance', label: t('staff.attendance'), path: '/staff/attendance' },
     { key: 'schedule', label: t('staff.schedule'), path: '/staff/schedule' },

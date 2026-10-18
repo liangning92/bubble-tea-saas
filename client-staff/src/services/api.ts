@@ -561,7 +561,7 @@ export const employeeApi = {
  post: async (path:string,data:any) => (await http.post(`${API_BASE}/staff-work${path}`,data,{headers:getAuthHeader()})).data.data,
  put: async (path:string,data:any) => (await http.put(`${API_BASE}/staff-work${path}`,data,{headers:getAuthHeader()})).data.data,
  delete: async(path:string,data?:any) => http.delete(`${API_BASE}/staff-work${path}`,{headers:getAuthHeader(),data}),
- upload: async(file:File) => {const data=new FormData();data.append('file',file);return (await http.post(`${API_BASE}/staff-work/my/files`,data,{headers:getAuthHeader()})).data.data.id},
+ upload: async(file:File,purpose?:'team') => {const data=new FormData();data.append('file',file);if(purpose)data.append('purpose',purpose);return (await http.post(`${API_BASE}/staff-work/my/files`,data,{headers:getAuthHeader()})).data.data.id},
  file: async(id:string) => {const res=await http.get(`${API_BASE}/staff-work/files/${id}`,{headers:getAuthHeader(),responseType:'blob'});return res.data as Blob},
  permissions: async() => (await http.get(`${API_BASE}/staff-permissions/me`,{headers:getAuthHeader()})).data.data
 }

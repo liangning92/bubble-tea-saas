@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
+    "../shared/TeamCommunication.tsx",
     "./index.html",
     "../shared/ShiftSwapProgress.tsx",
     "./src/**/*.{js,ts,jsx,tsx}",

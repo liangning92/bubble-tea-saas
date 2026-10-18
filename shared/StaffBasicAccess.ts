@@ -11,6 +11,7 @@ export function isStaffBasicPermission(key: string): boolean {
 }
 
 export function canUseStaffPermission(key: string, ready: boolean, role: any, request = false): boolean {
+  if (key === 'team.access') return ready && !!role && (role.version === 2 ? role.modes?.['team.manage'] === 'allow' || role.modes?.['team.audit'] === 'allow' : role.permissions?.includes('team.manage') || role.permissions?.includes('team.audit'))
   if (isStaffBasicPermission(key)) return true
   if (!ready) return false
   if (!role) return true
