@@ -34,7 +34,9 @@ COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
     ('PurchaseOrder','createdBy','TEXT'), ('PurchaseOrder','receivedBy','TEXT'),
     ('PurchaseOrderItem','inputQuantity','REAL'), ('PurchaseOrderItem','inputUnit','TEXT'),
     ('PurchaseOrderItem','inputUnitCost','REAL'), ('PurchaseOrderItem','packageSnapshot','TEXT'),
-    ('PurchaseOrder','paidAt','DATETIME'), ('PurchaseOrderItem','lineAmount','INTEGER')]
+    ('PurchaseOrder','paidAt','DATETIME'), ('PurchaseOrderItem','lineAmount','INTEGER'),
+    ('Expense','paymentSource',"TEXT NOT NULL DEFAULT 'unknown'"),
+    ('Expense','cashSessionId','TEXT'), ('Expense','cashOccurredAt','DATETIME')]
 NEW_TABLES = ('PaymentEvidence','LocalSchemaMigration','StaffActionApproval','StaffApprovalCredential','MediaAsset','ProductImage','MediaReference','OrderConsumptionSnapshot','ConsumptionAlert','TvScreen','TvDevice','TvPairSession')
 INVENTORY_INDEXES = ('StockInLog_operationId_key','StockOutLog_operationId_key','PurchaseOrder_requestId_key')
 CHANGES = [table+'.'+name+' '+declaration for table,name,declaration in COLUMN_ADDITIONS] + ['PaymentEvidence, LocalSchemaMigration and reusable media tables and indexes', 'Order_pickupNumber_idx nonunique index']

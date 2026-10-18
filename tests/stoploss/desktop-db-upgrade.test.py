@@ -108,7 +108,7 @@ class UpgradeTests(unittest.TestCase):
         with closing(sqlite3.connect(template)) as c, c:
             c.execute('CREATE TABLE Leave (id TEXT PRIMARY KEY, totalDays REAL NOT NULL)')
             c.execute('CREATE TABLE LeaveBalance (id TEXT PRIMARY KEY, usedLeave REAL NOT NULL, usedSick REAL NOT NULL)')
-            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest','PurchaseOrder','PurchaseOrderItem']:
+            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest','PurchaseOrder','PurchaseOrderItem','Expense']:
                 fields=', '.join(U.quote(name)+' '+declaration for t,name,declaration in U.COLUMN_ADDITIONS if t==table)
                 c.execute('CREATE TABLE '+U.quote(table)+' (id TEXT PRIMARY KEY, '+fields+')')
             c.execute('CREATE TABLE PaymentEvidence (id TEXT PRIMARY KEY, orderId TEXT, image BLOB)')
@@ -120,7 +120,7 @@ class UpgradeTests(unittest.TestCase):
             c.execute('INSERT INTO LeaveBalance VALUES (?, ?, ?)', ('old-balance', 3, 4))
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB)')
             c.execute('INSERT INTO "Order" VALUES (?, ?, ?)', ('historical', 123.45, b'\x00\xff'))
-            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest','PurchaseOrder','PurchaseOrderItem']:
+            for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest','PurchaseOrder','PurchaseOrderItem','Expense']:
                 c.execute('CREATE TABLE '+U.quote(table)+' (id TEXT PRIMARY KEY)')
         self.before = U.digest(self.db)
         self.app_before = U.tree_manifest(self.app)
@@ -176,6 +176,21 @@ class UpgradeTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as c:
             self.assertEqual(c.execute('SELECT status FROM StaffActionApproval WHERE id="approval"').fetchone()[0],'pending')
             self.assertEqual(c.execute('SELECT pinHash FROM StaffApprovalCredential WHERE userId="fixture"').fetchone()[0],'synthetic-only')
+
+    def test_legacy_expenses_gain_payment_metadata_without_asserting_cash_or_changing_history(self):
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('ALTER TABLE Expense ADD COLUMN amount INTEGER')
+            c.execute('ALTER TABLE Expense ADD COLUMN date DATETIME')
+            c.execute('INSERT INTO Expense VALUES (?, ?, ?)', ('old-purchase', 33520000, '2026-10-18T03:00:00Z'))
+        receipt = self.prepare()
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        with closing(sqlite3.connect(self.db)) as c:
+            self.assertEqual(c.execute('SELECT id,amount,date,paymentSource,cashSessionId,cashOccurredAt FROM Expense').fetchall(),
+                             [('old-purchase', 33520000, '2026-10-18T03:00:00Z', 'unknown', None, None)])
+        unchanged = U.digest(self.db)
+        repeated = self.prepare()
+        self.assertEqual(repeated['columnsAdded'], [])
+        self.assertEqual(U.digest(self.db), unchanged)
 
     def test_success_preserves_every_old_value_and_verified_backups(self):
         receipt = self.prepare()
