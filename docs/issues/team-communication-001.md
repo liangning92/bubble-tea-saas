@@ -29,7 +29,8 @@ Build server/admin/staff only. Browser QA uses an isolated test API and syntheti
 API integration uses a freshly initialized PostgreSQL 15.17 on a random loopback port,
 a unique owned temporary directory, synthetic users, and automatic stop/removal.
 Docker PostgreSQL 16 attempts were cleaned after a local Prisma connection failure;
-no production volume or credentials were used. PostgreSQL 16 rollout remains untested.
+no production volume or credentials were used. A later owned native PostgreSQL
+16.15 run passed all 16 HTTP groups. Actual production rollout remains untested.
 
 Staff/admin/server builds and shared-consumer POS type check passed. Browser QA
 used both built applications against the isolated API: meeting start/end, manual

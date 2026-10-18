@@ -1,7 +1,7 @@
 # Team communication local verification
 
-Verified only with synthetic accounts and an owned temporary PostgreSQL 15.17.
-Production PostgreSQL 16, real phones, push notifications, and rollout were not tested.
+Verified with synthetic accounts on owned temporary PostgreSQL 15.17 and 16.15.
+Real phones, push notifications, and rollout were not tested.
 No production changes or model calls were made.
 
 ## Reproduce
@@ -41,3 +41,7 @@ join sequence, audit permission/reason and audit logging. Existing employee file
 retain their previous owner/admin access. Historical unmarked chat grants are also
 recognized. Grant lookup does not truncate after 100 uses. All 16 HTTP groups passed
 on an owned PostgreSQL 15.17 instance after these fixes.
+
+The 16 integration groups also passed on PostgreSQL 16.15 (the production major/minor).
+Use a PostgreSQL 16.15 bin directory at the front of PATH to reproduce with the same
+wrapper; the fixture prints the selected version and creates/deletes its own data.

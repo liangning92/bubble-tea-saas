@@ -17,8 +17,8 @@
   ],
   "notTested": [
     "Production rollout and real employee data",
-    "Native phone OS offline/sleep/background behavior",
-    "PostgreSQL 16 runtime (Docker fixture Prisma connection failed; owned fixtures cleaned)"
+    "Native phone OS offline/sleep/background behavior"
   ],
-  "screenshots": "Native browser screenshot evidence emitted in task tool records; no screenshot file export API available."
+  "screenshots": "Native browser screenshot evidence emitted in task tool records; no screenshot file export API available.",
+  "postgres16Followup": "16 HTTP groups passed on owned native PostgreSQL 16.15; Docker startup/port issues are separate host-environment limitations."
 }

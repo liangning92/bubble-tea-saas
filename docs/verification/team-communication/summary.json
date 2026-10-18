@@ -20,6 +20,9 @@
     "Grant query checks the current join sequence without a first-100 limit"
   ],
   "postgresVersionsVerified": [
-    "15.17"
-  ]
+    "15.17",
+    "16.15"
+  ],
+  "pg16IntegrationGroupsPassed": 16,
+  "independentReview": "4f171236: two P2 findings closed; no new blocking findings"
 }
