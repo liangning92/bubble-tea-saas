@@ -1,3 +1,4 @@
+import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {convertQuantity} from '../utils/inventoryUnits'
 /** Cost matches the same quantities consumed by checkout; no implicit density/dilution. */
 export async function inventoryQuantityCost(db:any,inventoryId:string,quantity:number,unit?:string,depth=0,storeId?:string):Promise<number>{
@@ -5,6 +6,7 @@ export async function inventoryQuantityCost(db:any,inventoryId:string,quantity:n
  const inv=await db.inventory.findUnique({where:{id:inventoryId}})
  if(!inv)throw new Error('Inventory not found')
  if(storeId&&inv.storeId!==storeId)throw new Error('INVENTORY_STORE_MISMATCH')
+ if(inventoryUsageMode(inv)==='self_produced')return 0
  const qty=convertQuantity(quantity,unit||inv.unit,inv.unit)
  if(inv.type==='raw_material'||inv.type==='finished_goods'||(inv.type==='semi_finished'&&!inv.processRecipeId))return qty*Number(inv.avgCost)
  if(inv.type==='semi_finished'&&inv.processRecipeId){

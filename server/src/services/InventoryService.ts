@@ -1,3 +1,4 @@
+import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {validateInventoryProcessLink} from '../utils/inventoryProcessLink'
 import {recalculateInventoryConsumers,inventoryQuantityCost} from './InventoryQuantityService'
 import {loadInventoryActors, inventoryLogActorId} from '../utils/inventoryActors'
@@ -237,7 +238,7 @@ export async function stockOut(data: StockOperation) {
 export async function getLowStockAlerts(storeId:string){
  const settings=await getInventoryAlertConfig(storeId)
  if(!settings.enableLowStockAlert)return []
- return (await inventoryForecast(storeId)).filter(row=>row.currentStock<=row.effectiveSafetyStock).map(row=>({...row,safetyStock:row.effectiveSafetyStock,shortage:row.suggestedReorderQty,estimatedRestockCost:Math.round(row.suggestedReorderQty*row.avgCost)}))
+ return (await inventoryForecast(storeId)).filter(row=>inventoryUsageMode({name:row.name})!=='self_produced'&&row.currentStock<=row.effectiveSafetyStock).map(row=>({...row,safetyStock:row.effectiveSafetyStock,shortage:row.suggestedReorderQty,estimatedRestockCost:Math.round(row.suggestedReorderQty*row.avgCost)}))
 }
 
 // Adjust inventory (for inventory count correction)
