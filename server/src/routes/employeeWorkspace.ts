@@ -94,6 +94,38 @@ router.post(
         .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
       pdf = data.subarray(0, 5).toString() === "%PDF-";
     if (!jpeg && !png && !pdf) throw new Error("ONLY_JPEG_PNG_PDF");
+    const uploadRequestId = z.string().max(80).optional().parse(req.body?.uploadRequestId);
+    if (uploadRequestId !== undefined) {
+      if (purpose !== 'team') throw new TeamError(400, 'TEAM_UPLOAD_PURPOSE_REQUIRED');
+      const parts = uploadRequestId.split(':');
+      z.tuple([z.string().uuid(), z.enum(['0', '1', '2', '3', '4'])]).parse(parts);
+      // Stable per message/file slot, scoped to the current owner and store.
+      const hex = createHash('sha256').update(JSON.stringify([user.storeId, user.staffId, uploadRequestId])).digest('hex');
+      const id = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+      const sha256 = createHash('sha256').update(data).digest('hex');
+      const type = jpeg ? 'image/jpeg' : png ? 'image/png' : 'application/pdf';
+      await prisma.$transaction(async db => {
+        await workLock(user.storeId, `file-upload.${id}`, db);
+        const existing = await readWork(user.storeId, `file.${id}`, db);
+        if (existing) {
+          if (existing.staffId !== user.staffId || existing.purpose !== purpose || existing.sha256 !== sha256 || existing.type !== type)
+            throw new TeamError(409, 'TEAM_UPLOAD_REQUEST_CONFLICT');
+          return;
+        }
+        await fs.mkdir(privateRoot, { recursive: true, mode: 0o700 });
+        try {
+          await fs.writeFile(path.join(privateRoot, id), data, { mode: 0o600, flag: 'wx' });
+        } catch (error: any) {
+          if (error.code !== 'EEXIST') throw error;
+          // A transaction/connection loss can leave its private file behind.
+          const storedHash = createHash('sha256').update(await fs.readFile(path.join(privateRoot, id))).digest('hex');
+          if (storedHash !== sha256) throw new TeamError(409, 'TEAM_UPLOAD_REQUEST_CONFLICT');
+        }
+        await writeWork(user.storeId, `file.${id}`, { id, staffId: user.staffId, purpose, type, sha256, createdAt: new Date().toISOString() }, db);
+      });
+      res.status(201).json({ code: 201, data: { id } });
+      return;
+    }
     const id = randomUUID();
     await fs.mkdir(privateRoot, { recursive: true, mode: 0o700 });
     await fs.writeFile(path.join(privateRoot, id), data, { mode: 0o600 });

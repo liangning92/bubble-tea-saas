@@ -47,7 +47,14 @@ const token = async id => {
 async function main() {
   await seed();
   const app = express(); app.use(express.json({ limit: '256kb' }));
-  let pauseMessages = false, dropNextResponse = false;
+  let pauseMessages = false, dropNextResponse = false, dropNextUploadResponse = false;
+  app.use('/api/staff-work/my/files', (req, res, next) => {
+    if (req.method === 'POST' && dropNextUploadResponse) {
+      dropNextUploadResponse = false;
+      res.json = () => { req.socket.destroy(); return res; };
+    }
+    next();
+  });
   app.post('/fixture/outage', (req, res) => { pauseMessages = req.body.pause === true; res.json({ paused: pauseMessages }); });
   app.use('/api/team', (req, res, next) => {
     if (req.method === 'POST' && /^\/channels\/[^/]+\/messages$/.test(req.path)) {
@@ -147,6 +154,35 @@ async function main() {
       assert.equal(file.status, 200); assert.match(file.headers.get('cache-control'), /private/);
       assert.equal((await request('carol', 'GET', `/team/channels/${direct.id}/files/${fileId}`)).status, 403);
       assert.equal((await request('bob', 'POST', `/team/channels/${direct.id}/messages`, { requestId: randomUUID(), text: '', files: [fileId] })).status, 403);
+    });
+    await test('image upload retries and concurrent tabs reuse one private file; lost responses and payload conflicts are safe', async () => {
+      const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+      const upload = async (who, uploadRequestId, bytes = png, purpose = 'team') => {
+        const form = new FormData(); form.append('purpose', purpose); form.append('uploadRequestId', uploadRequestId);
+        form.append('file', new Blob([bytes], { type: 'image/png' }), 'synthetic.png');
+        const r = await fetch(base + '/api/staff-work/my/files', { method: 'POST', headers: { Authorization: 'Bearer ' + tokens[who], 'X-Client-App': 'employee' }, body: form });
+        return { status: r.status, body: await r.json() };
+      };
+      const privatePath = path.join(process.env.UPLOADS_PATH, '.employee-private');
+      const before = fs.readdirSync(privatePath).length, key = randomUUID() + ':0';
+      const concurrent = await Promise.all([upload('alice', key), upload('alice', key), upload('alice', key)]);
+      assert(concurrent.every(r => r.status === 201));
+      assert.equal(new Set(concurrent.map(r => r.body.data.id)).size, 1);
+      assert.equal(fs.readdirSync(privatePath).length, before + 1);
+      assert.equal((await upload('alice', key, Buffer.concat([png, Buffer.from('different')]))).status, 409);
+      assert.equal((await upload('alice', 'invalid-key')).status, 400);
+      assert.equal((await upload('alice', randomUUID() + ':0', png, 'employee')).status, 400);
+      const lost = randomUUID() + ':0'; dropNextUploadResponse = true;
+      await assert.rejects(upload('alice', lost));
+      const retry = await upload('alice', lost); assert.equal(retry.status, 201);
+      assert.equal(fs.readdirSync(privatePath).length, before + 2);
+      assert.deepEqual(fs.readFileSync(path.join(privatePath, retry.body.data.id)), png);
+      const bob = await upload('bob', key), otherStore = await upload('outsider', key);
+      assert.equal(bob.status, 201); assert.equal(otherStore.status, 201);
+      assert.notEqual(bob.body.data.id, concurrent[0].body.data.id);
+      assert.notEqual(otherStore.body.data.id, concurrent[0].body.data.id);
+      const big = await upload('alice', randomUUID() + ':0', Buffer.concat([png, Buffer.alloc(1200000)]));
+      assert.equal(big.status, 201); assert.equal(fs.statSync(path.join(privatePath, big.body.data.id)).size, png.length + 1200000);
     });
     await test('legacy file downloads enforce chat membership and audit reasons while ordinary employee files retain their permissions', async () => {
       const download = (who, url) => fetch(base + '/api' + url, { headers: { Authorization: 'Bearer ' + tokens[who] } });
