@@ -14,7 +14,7 @@ module.exports = async function staffUI(browser) {
   const materials = [{ id: 'm', name: 'Test Water', unit: 'ml', category: 'raw_material', currentStock: 88799.99999999994, safetyStock: 100, updatedAt: '2026-10-15T00:00:00Z' }];
   const purchase = { id: 'p', orderNumber: 'UI-PURCHASE', status: 'awaiting_receipt', totalAmount:10000, updatedAt:'2026-10-15T00:00:00Z', createdAt: '2026-10-15T00:00:00Z', items: [{ id: 'pi', inventoryId:'m', inventory: materials[0], quantity: 10, unitCost:1000, inputQuantity:10, inputUnit:'ml', inputUnitCost:1000, lineAmount:10000 }] };
   const course = { key: 'onboarding', reviewed: true, title: { en: 'UI Course', id: 'UI Course', zh: '测试课程' }, subtitle: { en: 'UI subtitle', id: 'UI subtitle', zh: '测试说明' }, minutes: 5, sections: [{ title: { en: 'Section', id: 'Section' }, points: [{ en: 'Step', id: 'Step' }] }], quiz: [], practical: [], sources: [] };
-  let failInventory = false, failOvertime = false, confirmedSwap = false, swapTestEnabled = false, declinedSwap = false, failLeaveRules = false;
+  let failInventory = false, failOvertime = false, confirmedSwap = false, swapTestEnabled = false, declinedSwap = false, editSwapTestEnabled = false, failLeaveRules = false;
   await context.route('**/api/**', async route => {
     const req = route.request(), url = new URL(req.url()), p = url.pathname, method = req.method();
     let data = [], extra = {};
@@ -23,14 +23,15 @@ module.exports = async function staffUI(browser) {
     if (failOvertime && p === '/api/overtime') return route.fulfill({ status: 503, json: { code: 503, message: 'Synthetic overtime failure' } });
     const invitation={id:'swap-invite',staffId:'sender',targetStaffId:'e',staff:{name:'UI Applicant'},targetStaff:{name:'UI Employee'},updatedAt:'2026-10-18T10:00:00.000Z',originalDate:'2026-10-15',targetDate:'2026-10-16',originalShift:'morning',targetShift:'evening',originalShiftName:'Morning',targetShiftName:'Evening',status:declinedSwap?'peer_rejected':'pending',targetConfirmed:confirmedSwap,reason:'UI swap invitation'};
     if (p === '/api/shift-swap/pending-confirm') data = !swapTestEnabled || confirmedSwap || declinedSwap ? [] : [invitation];
-    else if (p === '/api/shift-swap/my') data = swapTestEnabled ? [invitation] : [];
+    else if (p === '/api/shift-swap/colleagues') data = [{id:'colleague',name:'UI Colleague',employeeNumber:'UI-2'}];
+    else if (p === '/api/shift-swap/my') data = editSwapTestEnabled ? [{...invitation,id:'edit-swap',staffId:'e',targetStaffId:'colleague',targetStaff:{name:'UI Colleague'},originalDate:'2026-10-14T17:00:00.000Z',targetDate:'2026-10-15T17:00:00.000Z',targetConfirmed:false}] : swapTestEnabled ? [invitation] : [];
     else if (p === '/api/shift-swap/swap-invite/confirm') { const reply=req.postDataJSON(); confirmedSwap = reply.agree; declinedSwap = !reply.agree; data = {...invitation,targetConfirmed:confirmedSwap,status:declinedSwap?'peer_rejected':'pending'}; }
     else if (p === '/api/staff-permissions/me') data = { role: { version: 2, modes: {} } };
     else if (p === '/api/auth/me') data = { staff: { name: 'UI Employee', position: 'cashier' }, store: { name: 'UI Store' } };
     else if (p === '/api/staff/overview/monthly') data = { schedule: {}, attendance: {}, announcements: [] };
     else if (p === '/api/staff/attendance/today') data = null;
     else if (p === '/api/staff/salary/my') { data = null; extra = { unavailableReason: 'STAFF_BASE_SALARY_REQUIRED' }; }
-    else if (p === '/api/shifts') data = [{ key: 'morning', name: 'Morning', startTime: '09:00', endTime: '18:00' }];
+    else if (p === '/api/shifts') data = [{ key: 'morning', name: 'Morning', startTime: '09:00', endTime: '18:00' }, {key:'evening',name:'Evening',startTime:'15:00',endTime:'23:00'}];
     else if (p === '/api/staff/schedule/my') data = { monday: 'morning' };
     else if (p === '/api/staff-work/my/dashboard') data = { tasks: [], reminders: [], pendingRequests: [], reviews: [] };
     else if (p === '/api/staff-work/my/attendance') data = { records: [], appeals: [], payrollIssues: [] };
@@ -177,6 +178,17 @@ module.exports = async function staffUI(browser) {
     await expect(page.getByRole('status').filter({hasText:'Colleague agreed; awaiting admin review'})).toBeVisible();
     assert.ok(writes.some(w=>w.p==='/api/shift-swap/swap-invite/confirm'&&w.method==='PUT'&&w.data.agree===true&&w.data.expectedVersion==='2026-10-18T10:00:00.000Z'));
     await page.screenshot({path:path.join(output,'swap-waiting-admin-phone.jpg')});
+    editSwapTestEnabled = true;
+    await page.reload();
+    await page.getByRole('button',{name:'Edit',exact:true}).click();
+    await expect(page.locator('input[data-picker=date]').nth(0)).toHaveValue('15/10/2026');
+    await expect(page.locator('input[data-picker=date]').nth(1)).toHaveValue('16/10/2026');
+    await expect(page.getByRole('combobox',{name:'Swap with colleague',exact:true})).toHaveValue('colleague');
+    await page.getByRole('button',{name:'Submit',exact:true}).click();
+    await expect.poll(()=>writes.find(w=>w.p==='/api/shift-swap/edit-swap'&&w.method==='PUT')?.data?.originalDate).toBe('2026-10-15');
+    assert.equal(writes.find(w=>w.p==='/api/shift-swap/edit-swap'&&w.method==='PUT').data.targetDate,'2026-10-16');
+    editSwapTestEnabled = false;
+
     await page.goto(origin + '/profile/documents');
     await page.getByRole('button', {name:'View file',exact:true}).click();
     await expect(page.getByRole('dialog').getByRole('img')).toBeVisible();
