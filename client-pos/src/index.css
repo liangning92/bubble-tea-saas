@@ -249,3 +249,16 @@ html, body {
 /* Low resolution display scaling (1024x768 and similar) */
 /* Removed zoom-based scaling - causes blurry rendering on high DPI screens */
 /* Electron handles DPI scaling correctly, no manual scaling needed */
+/* Finger input: visible focus, no double-tap zoom on payment controls. */
+.pos-payment-dialog button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.pos-payment-dialog button:focus-visible {
+  outline: 3px solid #9d174d;
+  outline-offset: 2px;
+}
+.pos-payment-dialog button:active:not(:disabled) {
+  filter: brightness(0.94);
+}
+.pos-toolbar button { flex-shrink: 0; }
