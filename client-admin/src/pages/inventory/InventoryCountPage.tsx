@@ -456,7 +456,7 @@ export function InventoryCountPage() {
 
     return (
       <div className="space-y-6">
-        <PageHelp>{inventoryCountLabels(i18n.language).hint}</PageHelp>
+        <PageHelp>{inventoryCountLabels(i18n.language).hint}</PageHelp><p className="text-sm text-amber-800">{t("inventoryUnified.count")}</p>
         <button disabled={draftDirty || busy} onClick={refreshCounts}>{t("countFlow.refresh")}</button>
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

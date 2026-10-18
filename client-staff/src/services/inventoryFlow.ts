@@ -28,7 +28,7 @@ export const inventoryFlowApi = {
     saveCount: (id: string, items: unknown[]) => http.put(base + `/inventory-counts/${id}/items`, {items}, {headers: headers()}),
     startCount: (data: unknown) => post('/inventory-counts', data), submitCount: (id: string, items: unknown[] = []) => post(`/inventory-counts/${id}/submit`, {items})
 };
-export interface Material {
+export interface Material { unifiedStock?:boolean;calibrationRequired?:boolean;
     effectiveSafetyStock?: number; dynamicSafetyStock?: number; forecastHistoryDays?: number; daysUntilStockOut?: number | null;
     type?: string;
     processRecipeId?:string|null;

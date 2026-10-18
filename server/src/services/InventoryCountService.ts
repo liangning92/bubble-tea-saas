@@ -1,3 +1,6 @@
+import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
+import {expandProcessInputs} from './ProcessRecipeService'
+import {unifiedInventorySince,CALIBRATED_PREFIX} from './UnifiedInventoryService'
 import {loadInventoryActors} from '../utils/inventoryActors'
 import {COUNT_OBSERVATION_PREFIX,captureCountBoundary} from '../utils/countObservation'
 import prisma from '../config/database'
@@ -13,8 +16,20 @@ async function people(counts:any[],storeId:string){
   loadInventoryActors(prisma,storeId,counts.flatMap(c=>c.items.map((i:any)=>i.countedBy))),
   prisma.config.findMany({where:{storeId,key:{startsWith:'inventoryPackage:'}}})
  ])
+ const equivalents=new Map<string,any[]>()
+ if(await unifiedInventorySince(prisma,storeId)){
+  const outputs=await prisma.inventory.findMany({where:{storeId,type:'semi_finished',processRecipeId:{not:null}}})
+  for(const output of outputs){
+   try{
+    const leaves=await expandProcessInputs(prisma,storeId,output.id,1)
+    const totals=new Map<string,number>()
+    for(const raw of leaves)totals.set(raw.inventoryId,(totals.get(raw.inventoryId)||0)+raw.quantity)
+    for(const [id,rawQuantity] of totals){const rows=equivalents.get(id)||[];rows.push({id:output.id,name:output.name,unit:output.unit,rawQuantity});equivalents.set(id,rows)}
+   }catch{/* Invalid conversions are omitted; quantities must be verified directly. */}
+  }
+ }
  const packageMap=new Map(packages.map(p=>[p.key,p.value]))
- return counts.map(c=>({...c,items:c.items.map((i:any)=>{let packaging=null;try{const raw=packageMap.get('inventoryPackage:'+i.inventoryId);if(raw)packaging=validatePackage(JSON.parse(raw),i.inventory.unit)}catch{};return {...i,inventory:{...i.inventory,packaging},countedByActor:actors.get(i.countedBy)||null}})}))
+ return counts.map(c=>({...c,items:c.items.map((i:any)=>{let packaging=null;try{const raw=packageMap.get('inventoryPackage:'+i.inventoryId);if(raw)packaging=validatePackage(JSON.parse(raw),i.inventory.unit)}catch{};return {...i,inventory:{...i.inventory,packaging,countEquivalents:equivalents.get(i.inventoryId)||[]},countedByActor:actors.get(i.countedBy)||null}})}))
 }
 export async function getInventoryCounts(storeId:string){return people((await prisma.inventoryCount.findMany({where:{storeId},include,orderBy:{createdAt:'desc'}})).map(view),storeId)}
 export async function getInventoryCountById(countId:string,storeId?:string){const count=view(await prisma.inventoryCount.findFirst({where:{id:countId,...(storeId?{storeId}:{})},include}));return count?(await people([count],count.storeId))[0]:null}
@@ -28,7 +43,8 @@ export async function createInventoryCount(data:CreateInventoryCountData){
   // Lock store row to prevent two simultaneous active sessions without a schema migration.
   await tx.store.update({where:{id:data.storeId},data:{updatedAt:new Date()}})
   if(await tx.inventoryCount.findFirst({where:{storeId:data.storeId,status:{in:['in_progress','pending_review']}}}))throw new Error('COUNT_ALREADY_ACTIVE')
-  const inventory=await tx.inventory.findMany({where:{storeId:data.storeId,OR:[{type:{not:'semi_finished'}},{processRecipeId:null}],...(data.inventoryIds?{id:{in:data.inventoryIds}}:{})},select:{id:true,currentStock:true}})
+  const stockRows=await tx.inventory.findMany({where:{storeId:data.storeId,OR:[{type:{not:'semi_finished'}},{processRecipeId:null}],...(data.inventoryIds?{id:{in:data.inventoryIds}}:{})},select:{id:true,currentStock:true,name:true,category:true}})
+  const inventory=await unifiedInventorySince(tx,data.storeId)?stockRows.filter(i=>inventoryUsageMode(i)!=='self_produced'):stockRows
   if(!inventory.length||data.inventoryIds&&(new Set(data.inventoryIds).size!==data.inventoryIds.length||inventory.length!==data.inventoryIds.length))throw Error('INVALID_COUNT_SELECTION')
   const {inventoryIds,...fields}=data
   return view(await tx.inventoryCount.create({data:{...fields,status:'in_progress',items:{create:inventory.map(i=>({inventoryId:i.id,systemQty:i.currentStock}))}},include}))
@@ -41,12 +57,13 @@ async function recordObservation(tx:any,countItemId:string,countedQty:number,cou
   if(!item||item.inventory.storeId!==context.storeId)throw new Error('COUNT_ITEM_STORE_MISMATCH')
   const version=new Date(context.observedVersion)
   if(!Number.isFinite(version.getTime()))throw new Error('COUNT_REFRESH_REQUIRED')
-  const locked=await tx.inventory.updateMany({where:{id:item.inventoryId,storeId:context.storeId,currentStock:context.expectedStock,updatedAt:version},data:{currentStock:{increment:0}}})
+  const locked=await tx.inventory.updateMany({where:{id:item.inventoryId,storeId:context.storeId,currentStock:{gte:context.expectedStock-1e-9,lte:context.expectedStock+1e-9},updatedAt:version},data:{currentStock:{increment:0}}})
   if(locked.count!==1)throw new Error('COUNT_REFRESH_REQUIRED')
   const variance=Math.round((countedQty-context.expectedStock)*1e9)/1e9
   const observedAt=new Date(),key=COUNT_OBSERVATION_PREFIX+countItemId
   const boundary=await captureCountBoundary(tx,item.inventoryId)
-  const value=JSON.stringify({version:3,boundary,countId:context.countId,systemQty:context.expectedStock,countedQty,actor:countedBy,observedAt:observedAt.toISOString(),ledgerUnit:item.inventory.unit})
+  const unifiedSince=await unifiedInventorySince(tx,context.storeId)
+  const value=JSON.stringify({version:unifiedSince?4:3,scope:unifiedSince?'whole_store_raw_equivalent':'legacy',boundary,countId:context.countId,systemQty:context.expectedStock,countedQty,actor:countedBy,observedAt:observedAt.toISOString(),ledgerUnit:item.inventory.unit})
   await tx.config.upsert({where:{storeId_key:{storeId:context.storeId,key}},create:{storeId:context.storeId,key,value,category:'inventory'},update:{value}})
   return tx.inventoryCountItem.update({where:{id:countItemId},data:{systemQty:context.expectedStock,countedQty,variance,countedAt:observedAt,countedBy,note:note?.trim()||null}})
 }
@@ -76,10 +93,23 @@ export async function completeInventoryCount(countId:string,staffId:string,store
    if(item.inventory.storeId!==storeId)throw new Error('COUNT_ITEM_STORE_MISMATCH')
    const recorded=await tx.config.findUnique({where:{storeId_key:{storeId,key:COUNT_OBSERVATION_PREFIX+item.id}}})
    const observation=recorded?JSON.parse(recorded.value):null
-   if(!observation||![1,2,3].includes(observation.version)||observation.countId!==countId||observation.systemQty!==item.systemQty||observation.countedQty!==item.countedQty||observation.actor!==item.countedBy||observation.observedAt!==item.countedAt!.toISOString()||observation.ledgerUnit!==item.inventory.unit)throw new Error('COUNT_REOBSERVATION_REQUIRED')
+   if(!observation||![1,2,3,4].includes(observation.version)||observation.countId!==countId||observation.systemQty!==item.systemQty||observation.countedQty!==item.countedQty||observation.actor!==item.countedBy||observation.observedAt!==item.countedAt!.toISOString()||observation.ledgerUnit!==item.inventory.unit)throw new Error('COUNT_REOBSERVATION_REQUIRED')
    if(await tx.inventoryCountItem.findFirst({where:{inventoryId:item.inventoryId,countedAt:{not:null},inventoryCount:{storeId,status:'completed',updatedAt:{gte:item.countedAt!}}}}))throw new Error('COUNT_REOBSERVATION_REQUIRED')
    const variance=item.countedQty!-item.systemQty
    if(item.variance===null||!Number.isFinite(item.variance)||Math.abs(variance-item.variance)>1e-7||!Number.isFinite(variance))throw new Error('INVALID_COUNT_OBSERVATION')
+   if(observation.version===4){
+    // Serialize against sales, including delayed offline orders while review was pending.
+    await tx.inventory.update({where:{id:item.inventoryId},data:{currentStock:{increment:0}}})
+    const late=await tx.stockOutLog.findMany({where:{inventoryId:item.inventoryId,ledgerSequence:{gt:BigInt(observation.boundary.sequence)},reason:{in:['sale_estimate','sale_estimate_reversal']}}})
+    let correction=0
+    for(const log of late){const detail=JSON.parse(log.note||'{}');if(detail.consumedAt&&new Date(detail.consumedAt)<=item.countedAt!)correction+=log.quantity}
+    if(correction){
+     await tx.inventory.update({where:{id:item.inventoryId},data:{currentStock:{increment:correction}}})
+     await tx.stockOutLog.create({data:{inventoryId:item.inventoryId,quantity:-correction,reason:'count_adjustment',note:JSON.stringify({version:1,countId,countItemId:item.id,kind:'late-estimate-in-count',actor:staffId})}})
+    }
+    const key=CALIBRATED_PREFIX+item.inventoryId,value=item.countedAt!.toISOString()
+    await tx.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,value,category:'inventory'},update:{value}})
+   }
    if(!variance)continue
    await tx.inventory.update({where:{id:item.inventoryId},data:{currentStock:{increment:variance}}})
    // Signed count adjustment is never classified as a sale, staff withdrawal or disciplinary action.

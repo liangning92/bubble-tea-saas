@@ -1,3 +1,4 @@
+import {unifiedInventorySince} from './UnifiedInventoryService'
 import {createHash, randomUUID} from 'crypto'
 import {consumeInventoryBatches} from './InventoryBatchService'
 import {convertQuantity} from '../utils/inventoryUnits'
@@ -78,15 +79,16 @@ export async function executeRecipe(recipeId:string,multiplier=1,staffId?:string
   const expanded=(await Promise.all(inputs.map(i=>expandProcessInputs(tx,storeId,i.inventoryId!,i.quantity*multiplier,[recipe.id])))).flat()
   const materials=new Map<string,any>()
   for(const item of expanded){const old=materials.get(item.inventoryId);materials.set(item.inventoryId,{...item,quantity:item.quantity+(old?.quantity||0)})}
+  const internalProcessing=!!(await unifiedInventorySince(tx,storeId))
   let totalInputCost=0
   for(const item of materials.values()){
    const inv=await tx.inventory.findFirstOrThrow({where:{id:item.inventoryId,storeId}})
-   if(inv.currentStock+1e-9<item.quantity)throw Error('Insufficient stock')
-   const changed=await tx.inventory.updateMany({where:{id:inv.id,storeId,currentStock:inv.currentStock},data:{currentStock:{decrement:item.quantity}}})
+   if(!internalProcessing&&inv.currentStock+1e-9<item.quantity)throw Error('Insufficient stock')
+   const changed=await tx.inventory.updateMany({where:{id:inv.id,storeId,currentStock:inv.currentStock},data:{currentStock:{decrement:internalProcessing?0:item.quantity}}})
    if(changed.count!==1)throw Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
-   await consumeInventoryBatches(tx,inv,item.quantity)
-   item.unitCost=Number(inv.avgCost);item.totalAmount=Math.round(item.quantity*item.unitCost);totalInputCost+=item.quantity*item.unitCost
-   await tx.stockOutLog.create({data:{inventoryId:inv.id,quantity:item.quantity,reason:'process',staffId,note:JSON.stringify({version:1,kind:'process',processId:id,recipeName:recipe.name,unitCost:item.unitCost,totalAmount:item.totalAmount,note:note||''})}})
+   if(!internalProcessing)await consumeInventoryBatches(tx,inv,item.quantity)
+   item.unitCost=internalProcessing?await inventoryQuantityCost(tx,inv.id,1,inv.unit,0,storeId):Number(inv.avgCost);item.totalAmount=Math.round(item.quantity*item.unitCost);totalInputCost+=item.quantity*item.unitCost
+   await tx.stockOutLog.create({data:{inventoryId:inv.id,quantity:item.quantity,reason:'process',staffId,note:JSON.stringify({version:1,kind:'process',stockEffect:internalProcessing?'internal_conversion':'physical_out',processId:id,recipeName:recipe.name,unitCost:item.unitCost,totalAmount:item.totalAmount,note:note||''})}})
   }
   const outputItems=outputs.map(i=>({name:i.name,quantity:i.quantity*multiplier,unit:recipe.outputUnit,accounting:'conversion_only'}))
   const cost=Math.round(totalInputCost)

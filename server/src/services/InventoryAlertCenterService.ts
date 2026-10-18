@@ -39,14 +39,16 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
         const material = inventory.find(m => m.id === row.inventoryId)!;
         if(inventoryUsageMode(material)==='self_produced')continue;
         const detail = { ...row, inventoryName: row.name };
-        if (settings.enableLowStockAlert) {
+        const calibrated=!('calibrationRequired' in row&&row.calibrationRequired);
+        if(!calibrated&&settings.enableDataAlert)add('data_incomplete',row.inventoryId+':calibration','info',{...detail,reason:'calibration_needed'});
+        if (settings.enableLowStockAlert && calibrated) {
             if (row.currentStock <= 0)
                 add('out_of_stock', row.inventoryId, 'critical', detail);
             else if (row.currentStock <= row.effectiveSafetyStock)
                 add('low_stock', row.inventoryId, row.daysUntilStockOut !== null && row.daysUntilStockOut <= settings.lowStockCriticalDays ? 'critical' : 'warning', detail);
         }
-        if (settings.enablePurchaseAlert && row.dailyUsage > 0 && row.currentStock > 0) {
-            const arrivals = orders.flatMap(order => order.items.filter(item => item.inventoryId === row.inventoryId && order.expectedDate).map(item => ({ purchaseOrderId: order.id, orderNumber: order.onlineOrderNumber || order.orderNumber, quantity: item.quantity, date: endOfDay(order.expectedDate!) }))).filter(a => a.date > now).sort((a, b) => a.date.getTime() - b.date.getTime());
+        if (calibrated && settings.enablePurchaseAlert && row.daysUntilStockOut !== null && row.dailyUsage > 0 && row.currentStock > 0) {
+            const arrivals = orders.flatMap(order => order.items.filter(item => item.inventoryId === row.inventoryId && order.expectedDate).map(item => ({ purchaseOrderId: order.id, orderNumber: order.onlineOrderNumber || order.orderNumber, quantity: Math.max(0,item.quantity-item.receivedQty), date: endOfDay(order.expectedDate!) }))).filter(a => a.date > now).sort((a, b) => a.date.getTime() - b.date.getTime());
             let balance = row.currentStock, at = now, shortage: any = null;
             for (const arrival of arrivals) {
                 const usage = row.dailyUsage * (arrival.date.getTime() - at.getTime()) / 86400000;
@@ -60,8 +62,8 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
         }
         if (settings.enableLossAlert && row.lossPercent !== null && row.lossUsage > 0 && row.lossPercent >= settings.lossWarningPercent)
             add('excessive_loss', row.inventoryId, row.lossPercent >= settings.lossCriticalPercent ? 'critical' : 'warning', detail);
-        if (settings.enableOverstockAlert) {
-            if (row.dailyUsage > 0 && row.currentStock > row.dailyUsage * settings.overstockDays)
+        if (settings.enableOverstockAlert && calibrated) {
+            if (row.daysUntilStockOut !== null && row.dailyUsage > 0 && row.currentStock > row.dailyUsage * settings.overstockDays)
                 add('overstock', row.inventoryId, 'warning', { ...detail, maxStock: row.dailyUsage * settings.overstockDays });
             const tracking = await prisma.config.findUnique({ where: { storeId_key: { storeId, key: 'employee_inventory_flow_started_at' } } });
             const since = row.lastUsageAt ? new Date(row.lastUsageAt) : tracking ? new Date(tracking.value) : material.createdAt;

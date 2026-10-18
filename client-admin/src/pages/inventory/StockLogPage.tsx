@@ -178,7 +178,8 @@ export function StockLogPage() {
         totalInboundCost += amt
       } else if (log.type === 'stock_out') {
         const itemCost = log.totalAmount ?? Math.round(Number(log.quantity || 0) * avgCost)
-        if (log.reason === 'sold') {
+        if (log.reason==='sale_estimate'||log.reason==='sale_estimate_reversal') return <span className="badge badge-info">{t(log.reason==='sale_estimate'?'inventoryUnified.sales':'inventoryUnified.reversal')}</span>
+    if (log.reason === 'sold') {
           totalSalesCost += itemCost
         } else if (log.reason === 'loss' || log.reason === 'expired') {
           totalWasteCost += itemCost
@@ -419,6 +420,7 @@ export function StockLogPage() {
     }
 
     if (['withdrawal','other'].includes(log.reason)) return <span className="badge badge-info">{t('inventoryFlow.'+log.reason)}</span>
+    if (log.reason==='sale_estimate'||log.reason==='sale_estimate_reversal') return <span className="badge badge-info">{t(log.reason==='sale_estimate'?'inventoryUnified.sales':'inventoryUnified.reversal')}</span>
     if (log.reason === 'sold') {
       return <span className="badge badge-info">{t('inventory.reasonSold')}</span>
     }

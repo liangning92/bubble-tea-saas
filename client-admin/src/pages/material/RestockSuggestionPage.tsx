@@ -14,7 +14,7 @@ import {
 export function RestockSuggestionPage() {
   const { t, i18n } = useTranslation();
   const [days, setDays] = useState(15);
-  const qty = (value: unknown) => value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 0 });
+  const qty = (value: unknown) => value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 6 });
   const category = (value: string) => ({ raw_material: t('material.typeRawMaterial'), semi_finished: t('material.typeSemiFinished'), finished_goods: t('material.typeFinishedGoods'), packaging: t('inventory.packaging') } as Record<string,string>)[value] || value;
 
   const { data: suggestionsData, isLoading } = useQuery({
@@ -56,7 +56,7 @@ export function RestockSuggestionPage() {
           <option value={30}>30 {t("material.days") || "days"}</option>
         </select></label>
       </div>
-      <p className="text-sm text-gray-500">{t("operations.restockHint")}</p>
+      <p className="text-sm text-gray-500">{t("inventoryUnified.forecast")}</p>
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
