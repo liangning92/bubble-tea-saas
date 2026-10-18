@@ -4,7 +4,7 @@ const ts=require('typescript'),fs=require('node:fs'),vm=require('node:vm');
 function moduleAt(path, deps){
  const module={exports:{}};
  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,
- {module,exports:module.exports,require:name=>{if(name in deps)return deps[name];if(name.endsWith('/storeDateSettings'))return moduleAt('server/src/utils/storeDateSettings.ts',{});if(name.endsWith('/refundApprovalAccess'))return moduleAt('server/src/utils/refundApprovalAccess.ts',{});throw Error('Unexpected dependency '+name);},console:{error:()=>{},warn:()=>{}},Date,Set});
+ {module,exports:module.exports,require:name=>{if(name in deps)return deps[name];if(name.endsWith('/ExpensePaymentService'))return moduleAt('server/src/services/ExpensePaymentService.ts',{'zod':require('../../server/node_modules/zod'),'../utils/revenueDateRange':moduleAt('server/src/utils/revenueDateRange.ts',{})});if(name.endsWith('/storeDateSettings'))return moduleAt('server/src/utils/storeDateSettings.ts',{});if(name.endsWith('/refundApprovalAccess'))return moduleAt('server/src/utils/refundApprovalAccess.ts',{});throw Error('Unexpected dependency '+name);},console:{error:()=>{},warn:()=>{}},Date,Set});
  return module.exports;
 }
 const auth={authenticate:(req,res,next)=>next(),authorize:(...roles)=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({message:'Forbidden'})};
