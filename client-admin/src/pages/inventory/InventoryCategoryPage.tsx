@@ -36,9 +36,9 @@ export function InventoryCategoryPage() {
 
   // Load categories from config
   const { data: configData, isLoading } = useQuery({
-    queryKey: ['config'],
+    queryKey: ['config', 'inventory-categories', user?.storeId || ''],
     queryFn: async () => {
-      const resp = await configApi.get()
+      const resp = await configApi.get(user?.storeId || undefined)
       return resp.data
     }
   })

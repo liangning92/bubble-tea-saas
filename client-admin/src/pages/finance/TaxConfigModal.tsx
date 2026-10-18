@@ -43,19 +43,14 @@ export function TaxConfigModal({ isOpen, onClose, onSaved }: TaxConfigModalProps
     setIsLoading(true)
     try {
       const res = await configApi.get(user.storeId)
-      const configs = res.data?.data || []
-
-      const ppnEnabledConfig = configs.find((c: any) => c.key === 'finance.ppnEnabled')
-      const ppnRateConfig = configs.find((c: any) => c.key === 'finance.ppnRate')
-      const exemptConfig = configs.find((c: any) => c.key === 'finance.taxExemptCategories')
-      const taxableRatioConfig = configs.find((c: any) => c.key === 'finance.taxableRatio')
-
+      const configs = res.data?.data || {}
       setConfig({
-        ppnEnabled: ppnEnabledConfig ? JSON.parse(ppnEnabledConfig.value) : true,
-        ppnRate: ppnRateConfig ? parseFloat(ppnRateConfig.value) : 11,
-        taxExemptCategories: exemptConfig ? JSON.parse(exemptConfig.value) : [],
-        taxableRatio: taxableRatioConfig ? parseFloat(taxableRatioConfig.value) : 100
+        ppnEnabled: configs['finance.ppnEnabled'] === undefined ? true : configs['finance.ppnEnabled'] === true || configs['finance.ppnEnabled'] === 'true',
+        ppnRate: Number(configs['finance.ppnRate'] ?? 11),
+        taxExemptCategories: configs['finance.taxExemptCategories'] ?? [],
+        taxableRatio: Number(configs['finance.taxableRatio'] ?? 100)
       })
+
     } catch (error) {
       console.error('Failed to load tax config:', error)
     } finally {

@@ -54,7 +54,7 @@ export function FinanceSettingsPage() {
 
   useEffect(() => {
     loadSettings()
-  }, [])
+  }, [user?.storeId])
 
   const loadSettings = async () => {
     try {
@@ -63,23 +63,12 @@ export function FinanceSettingsPage() {
       if (!storeId) return
 
       const configs = await configApi.get(storeId)
-      const configData = configs.data?.data || []
-
-      // 解析已保存的配置
-      const savedSettings: Partial<FinanceSettings> = {}
-      configData.forEach((c: any) => {
-        if (c.key === 'finance.settings') {
-          try {
-            Object.assign(savedSettings, JSON.parse(c.value))
-          } catch {}
-        }
-        if (c.key === 'finance.ppnRate') {
-          savedSettings.ppnRate = parseFloat(c.value) || 11
-        }
-        if (c.key === 'finance.ppnEnabled') {
-          savedSettings.ppnEnabled = c.value === 'true'
-        }
-      })
+      const configData = configs.data?.data || {}
+      const savedSettings: Partial<FinanceSettings> = {
+        ...configData['finance.settings'],
+        ...(configData['finance.ppnRate'] !== undefined ? { ppnRate: Number(configData['finance.ppnRate']) } : {}),
+        ...(configData['finance.ppnEnabled'] !== undefined ? { ppnEnabled: configData['finance.ppnEnabled'] === true || configData['finance.ppnEnabled'] === 'true' } : {})
+      }
 
       setSettings({ ...DEFAULT_SETTINGS, ...savedSettings })
     } catch (err) {
@@ -96,24 +85,12 @@ export function FinanceSettingsPage() {
       const storeId = user?.storeId
       if (!storeId) return
 
-      // 保存财务设置
-      await configApi.set(
-        storeId,
-        'finance.settings',
-        JSON.stringify({
-          enableAccounts: settings.enableAccounts,
-          enableBudget: settings.enableBudget,
-          enableTransfer: settings.enableTransfer,
-          enableFixedAssets: settings.enableFixedAssets,
-          accountingMode: settings.accountingMode,
-          cashOnlyMode: settings.cashOnlyMode
-        }),
-        'finance'
-      )
-
-      // 保存PPN配置
-      await configApi.set(storeId, 'finance.ppnRate', settings.ppnRate.toString(), 'finance')
-      await configApi.set(storeId, 'finance.ppnEnabled', settings.ppnEnabled.toString(), 'finance')
+      await configApi.setBatch(storeId, [
+        { key: 'finance.settings', value: settings, category: 'finance' },
+        { key: 'finance.ppnRate', value: settings.ppnRate, category: 'finance' },
+        { key: 'finance.ppnEnabled', value: settings.ppnEnabled, category: 'finance' }
+      ])
+      window.dispatchEvent(new Event('finance-settings-changed'))
 
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)

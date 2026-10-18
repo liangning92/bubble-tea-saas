@@ -26,7 +26,10 @@ export function FinanceIndexPage() {
 
   useEffect(() => {
     loadSettings()
-  }, [])
+    const refresh = () => { void loadSettings() }
+    window.addEventListener('finance-settings-changed', refresh)
+    return () => window.removeEventListener('finance-settings-changed', refresh)
+  }, [user?.storeId])
 
   const loadSettings = async () => {
     try {
@@ -34,17 +37,7 @@ export function FinanceIndexPage() {
       if (!storeId) return
 
       const configs = await configApi.get(storeId)
-      // API returns { code, data: [...] }, axios wraps as { data: { code, data: [...] } }
-      const configData = configs.data?.data?.data || []
-
-      let foundSettings: FinanceSettings | null = null
-      configData.forEach((c: any) => {
-        if (c.key === 'finance.settings') {
-          try {
-            foundSettings = JSON.parse(c.value)
-          } catch {}
-        }
-      })
+      const foundSettings = configs.data?.data?.['finance.settings'] as FinanceSettings | undefined
 
       if (foundSettings) {
         setSettings(foundSettings)

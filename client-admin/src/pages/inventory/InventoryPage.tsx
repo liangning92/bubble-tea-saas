@@ -86,9 +86,9 @@ export function InventoryPage() {
 
   // Fetch dynamic categories
   const { data: configData } = useQuery({
-    queryKey: ["config"],
+    queryKey: ["config", "inventory-categories", user?.storeId || ""],
     queryFn: async () => {
-      const resp = await configApi.get();
+      const resp = await configApi.get(user?.storeId || undefined);
       return resp.data;
     },
   });
@@ -106,7 +106,7 @@ export function InventoryPage() {
       const cats =
         configData.data.inventory_categories ||
         configData.data["inventory_categories"];
-      if (cats?.length > 0) {
+      if (Array.isArray(cats)) {
         setCategories(cats);
       }
     }
