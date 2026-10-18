@@ -1,3 +1,4 @@
+import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { formatNumber } from '../../utils/numberDisplay'
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -14,7 +15,7 @@ import {
 export function RestockSuggestionPage() {
   const { t, i18n } = useTranslation();
   const [days, setDays] = useState(15);
-  const qty = (value: unknown) => value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString(i18n.language, { maximumFractionDigits: 6 });
+  const qty = (value: unknown) => value == null || !Number.isFinite(Number(value)) ? '—' : consumptionQuantity(Number(value),i18n.language);
   const category = (value: string) => ({ raw_material: t('material.typeRawMaterial'), semi_finished: t('material.typeSemiFinished'), finished_goods: t('material.typeFinishedGoods'), packaging: t('inventory.packaging') } as Record<string,string>)[value] || value;
 
   const { data: suggestionsData, isLoading } = useQuery({
