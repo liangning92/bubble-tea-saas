@@ -4089,7 +4089,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
                   <section className="rounded-xl border border-gray-200 p-3 space-y-2">
                     <label htmlFor="payment-voucher-code" className="block text-sm font-semibold">{t('voucher.code')}</label>
-                    {selectedCoupon?<div className="flex items-center justify-between gap-2"><span>{selectedCoupon.coupon?.code} · {t('voucher.applied')}</span><button type="button" disabled={isCheckingOut} onClick={()=>setSelectedCoupon(null)} className="text-primary">{t('voucher.remove')}</button></div>:<div className="flex gap-2"><input id="payment-voucher-code" value={couponCodeInput} disabled={isVerifyingCoupon||isCheckingOut} onChange={e=>setCouponCodeInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(!isVerifyingCoupon&&couponCodeInput.trim())void verifyCouponByCode()}}} placeholder={t('voucher.placeholder')} className="min-h-12 min-w-0 flex-1 border rounded-lg px-3 py-2 text-base uppercase"/><button type="button" disabled={isVerifyingCoupon||isCheckingOut||!couponCodeInput.trim()} onClick={()=>void verifyCouponByCode()} className="min-h-12 bg-primary text-white rounded-lg px-4 font-bold disabled:opacity-50">{isVerifyingCoupon?t('common.loading'):t('voucher.apply')}</button></div>}
+                    {selectedCoupon?<div className="flex items-center justify-between gap-2"><span>{selectedCoupon.coupon?.code} · {t('voucher.applied')}</span><button type="button" disabled={isCheckingOut} onClick={()=>setSelectedCoupon(null)} className="min-h-12 px-3 text-primary font-bold">{t('voucher.remove')}</button></div>:<div className="flex gap-2"><input id="payment-voucher-code" value={couponCodeInput} disabled={isVerifyingCoupon||isCheckingOut} onChange={e=>setCouponCodeInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(!isVerifyingCoupon&&couponCodeInput.trim())void verifyCouponByCode()}}} placeholder={t('voucher.placeholder')} className="min-h-12 min-w-0 flex-1 border rounded-lg px-3 py-2 text-base uppercase"/><button type="button" disabled={isVerifyingCoupon||isCheckingOut||!couponCodeInput.trim()} onClick={()=>void verifyCouponByCode()} className="min-h-12 bg-primary text-white rounded-lg px-4 font-bold disabled:opacity-50">{isVerifyingCoupon?t('common.loading'):t('voucher.apply')}</button></div>}
                     <p className="text-xs text-gray-500">{t('voucher.rules')}</p>
                   </section>
 
@@ -4205,12 +4205,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-2xl mb-2">
                         {paymentMethods.find(m => m.id === paymentMethod)?.icon || '💳'}
                       </div>
-                      <h4 className="font-bold text-gray-800 text-sm">
+                      <h4 className="font-bold text-gray-800 text-xl">
                         {paymentMethods.find(m => m.id === paymentMethod)?.labelKey ? t(paymentMethods.find(m => m.id === paymentMethod)!.labelKey) : paymentMethod.toUpperCase()}
                       </h4>
-                      {paymentMethod !== 'qris' && <p className="text-xs text-gray-500 mt-1 max-w-xs">{t('pos.externalPayHelp')}</p>}
-                      {paymentMethod !== 'qris' && <label className="mt-3 text-sm text-left"><input type="checkbox" checked={externalPaymentConfirmed} onChange={e=>setExternalPaymentConfirmed(e.target.checked)} /> {t('paymentValidation.externalConfirm')}</label>}
-                      <div className="mt-3 px-3 py-1 bg-white rounded-lg border text-xs font-mono font-bold text-gray-700">
+                      {paymentMethod !== 'qris' && <p className="text-base text-gray-600 mt-2 max-w-sm">{t('pos.externalPayHelp')}</p>}
+                      {paymentMethod !== 'qris' && <label className="mt-3 min-h-14 flex items-center gap-3 text-base font-semibold text-left"><input className="w-6 h-6 shrink-0 accent-primary" type="checkbox" checked={externalPaymentConfirmed} onChange={e=>setExternalPaymentConfirmed(e.target.checked)} /> {t('paymentValidation.externalConfirm')}</label>}
+                      <div className="mt-3 px-4 py-3 bg-white rounded-xl border text-xl tabular-nums font-bold text-gray-800">
                         {t('pos.amountDue', '支付金额')}: {formatCurrency(total)}
                       </div>
                     </div>
@@ -4220,7 +4220,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               </div>
             </div>
 
-            {paymentIssue && <p role="alert" className="text-red-600 px-4 py-2 text-sm">{t(`paymentValidation.${paymentIssue}`)}</p>}
+            {paymentIssue && <p role="alert" className="text-red-700 px-4 py-2 text-base font-semibold">{t(`paymentValidation.${paymentIssue}`)}</p>}
             {offlineSaveFailed && (
               <div role="alert" className="bg-red-50 text-red-700 text-sm px-4 py-3 border-t border-red-200">
                 {t('pos.offlineSaveFailed')}

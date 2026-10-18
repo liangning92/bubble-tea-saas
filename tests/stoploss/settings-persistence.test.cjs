@@ -41,3 +41,10 @@ test('tax modal reopens all saved values from the real API contract',async()=>{
 test('category readers request the same store as the writer and isolate response cache shape',()=>{
  for(const file of ['InventoryPage','InventoryCategoryPage']){const text=fs.readFileSync('client-admin/src/pages/inventory/'+file+'.tsx','utf8');assert.match(text,/configApi\.get\(user\?\.storeId \|\| undefined\)/);assert.match(text,/['"]inventory-categories['"]/)}
 });
+
+test('all save entry points count toward one final refresh, including async logo saves',()=>{
+ const context={pendingSaves:{current:0},queryStoreId:'store-a',queryClient:{invalidateQueries:()=>{context.refreshes++}},refreshes:0};
+ const start=admin.match(/onMutate: \(\) => \{([^}]+)\}/)[1];
+ const finish=admin.slice(admin.indexOf('    onSettled: () => {')+'    onSettled: () => {'.length,admin.indexOf('    onError:',admin.indexOf('    onSettled: () => {'))).replace(/},\s*$/,'');
+ vm.runInNewContext(start,context);vm.runInNewContext(start,context);vm.runInNewContext(finish,context);assert.equal(context.refreshes,0);vm.runInNewContext(finish,context);assert.equal(context.refreshes,1);assert.equal(context.pendingSaves.current,0);
+});
