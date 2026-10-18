@@ -95,14 +95,14 @@ test('employee count selection, submit freeze, manager approval and subsequent s
  await completeInventoryCount(count.id,'manager',f.store.id);expect(await balance(f.inventory.id)).toBe(97)
  await expect(completeInventoryCount(count.id,'manager',f.store.id)).rejects.toThrow('COUNT_NOT_ACTIVE')
 })
-test('daily consumption uses WIB boundaries, includes all actual purposes, persists one alert and respects thresholds',async()=>{
+test('daily consumption uses WIB boundaries, includes all actual purposes, persists reference quantities without treating batch issues as loss',async()=>{
  const f=await fixture();await cutoff(f.store.id)
  const day='2026-10-05',createdAt=new Date('2026-10-05T12:00:00+07:00')
  await prisma.orderConsumptionSnapshot.create({data:{storeId:f.store.id,orderId:randomUUID(),createdAt,materials:JSON.stringify([{inventoryId:f.inventory.id,name:'Tea',unit:'kg',quantity:10}]),issues:'[]'}})
  for(const [reason,quantity] of [['withdrawal',8],['loss',2],['expired',1],['other',1],['process',1]] as const)await prisma.stockOutLog.create({data:{inventoryId:f.inventory.id,reason,quantity,createdAt}})
  await prisma.stockOutLog.create({data:{inventoryId:f.inventory.id,reason:'withdrawal',quantity:50,createdAt:new Date('2026-10-06T00:00:00+07:00')}})
- const result=await employeeConsumption({storeId:f.store.id,startDate:day,endDate:day});expect(result.list[0].actualConsumption).toBe(13);expect(result.list[0].theoreticalConsumption).toBe(10);expect(result.list[0].varianceStatus).toBe('critical');expect(result.list[0].breakdown.loss).toBe(2)
- await checkConsumptionDay(f.store.id,day,new Date('2026-10-07'));await checkConsumptionDay(f.store.id,day,new Date('2026-10-07'));expect((await getConsumptionAlerts(f.store.id))).toHaveLength(1)
+ const result=await employeeConsumption({storeId:f.store.id,startDate:day,endDate:day});expect(result.list[0].actualConsumption).toBe(13);expect(result.list[0].theoreticalConsumption).toBe(10);expect(result.list[0].varianceStatus).toBe('not_compared');expect(result.list[0].variancePercent).toBeNull();expect(result.list[0].breakdown.loss).toBe(2)
+ await checkConsumptionDay(f.store.id,day,new Date('2026-10-07'));await checkConsumptionDay(f.store.id,day,new Date('2026-10-07'));expect((await getConsumptionAlerts(f.store.id))).toHaveLength(0);expect(await prisma.consumptionAlert.count({where:{storeId:f.store.id,businessDate:day}})).toBe(1)
  await expect(checkConsumptionDay(f.store.id,'2026-10-07',new Date('2026-10-07T13:00:00+07:00'))).rejects.toThrow('NOT_CLOSED')
  await saveInventoryAlertConfig(f.store.id,{enableConsumptionAlert:false});expect(await getConsumptionAlerts(f.store.id)).toEqual([])
  expect(classifyEmployeeConsumption(3,3.3,10,20).varianceStatus).toBe('warning');expect(classifyEmployeeConsumption(3,3.6,10,20).varianceStatus).toBe('critical')
@@ -120,7 +120,7 @@ test('scheduler catches up closed days and handles repeated runs without duplica
  const f=await fixture();await cutoff(f.store.id,'2026-10-04T00:00:00+07:00')
  await prisma.stockOutLog.create({data:{inventoryId:f.inventory.id,reason:'withdrawal',quantity:1,createdAt:new Date('2026-10-05T10:00:00+07:00')}})
  await checkClosedConsumptionDays(new Date('2026-10-06T01:00:00+07:00'));await checkClosedConsumptionDays(new Date('2026-10-06T02:00:00+07:00'))
- expect(await prisma.consumptionAlert.count({where:{storeId:f.store.id,businessDate:'2026-10-05',status:'warning'}})).toBe(1)
+ expect(await prisma.consumptionAlert.count({where:{storeId:f.store.id,businessDate:'2026-10-05',status:'not_compared'}})).toBe(1)
 })
 test('receipt synchronization carries original consumption without recalculating or changing physical inventory',async()=>{
  const f=await fixture(),sale=await createOrder(f.sale)
@@ -184,7 +184,7 @@ test('late theoretical reversals survive downtime through durable dirty-day mark
  await prisma.$transaction(tx=>reverseOrderConsumption(tx,orderId))
  await prisma.orderConsumptionSnapshot.update({where:{orderId},data:{reversedAt:new Date('2026-10-06')}})
  await checkClosedConsumptionDays(new Date('2026-10-10T12:00:00+07:00'))
- expect((await getConsumptionAlerts(f.store.id)).find(a=>a.businessDate==='2026-10-05')?.status).toBe('warning')
+ expect((await prisma.consumptionAlert.findFirstOrThrow({where:{storeId:f.store.id,businessDate:'2026-10-05'}})).status).toBe('not_compared');expect((await getConsumptionAlerts(f.store.id))).toHaveLength(0)
  expect(await prisma.config.count({where:{storeId:f.store.id,key:'employee_consumption_dirty:2026-10-05'}})).toBe(0)
 })
 test('old sales without new snapshots still reverse their certified original physical deductions',async()=>{

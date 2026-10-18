@@ -65,9 +65,9 @@ test('loss threshold equality alerts, overstock boundary does not; current-day a
  await prisma.inventory.update({where:{id:f.inventory.id},data:{currentStock:61}});expect((await calculateInventoryAlerts(f.store.id,now)).some(a=>a.type==='overstock')).toBe(true)
  const inactive=await fixture(10);await out(inactive,1,'2026-08-10T08:00:00+07:00');expect((await calculateInventoryAlerts(inactive.store.id,now)).some(a=>a.type==='stagnant_stock')).toBe(true);await out(inactive,1,'2026-10-13T09:00:00+07:00');expect((await calculateInventoryAlerts(inactive.store.id,now)).some(a=>a.type==='stagnant_stock')).toBe(false)
 })
-test('threshold changes reclassify stored comparisons immediately without rewriting frozen consumption',async()=>{
+test('old daily issue comparisons cannot recreate loss alerts after a threshold change',async()=>{
  const f=await fixture();await prisma.consumptionAlert.create({data:{storeId:f.store.id,inventoryId:f.inventory.id,businessDate:'2026-10-12',status:'normal',detail:JSON.stringify({inventoryId:f.inventory.id,inventoryName:'Tea',unit:'kg',theoreticalConsumption:10,actualConsumption:11,varianceStatus:'normal'})}})
- expect((await calculateInventoryAlerts(f.store.id,now)).find(a=>a.type==='consumption_variance')?.severity).toBe('warning');await saveInventoryAlertConfig(f.store.id,{varianceWarningPercent:15,varianceCriticalPercent:30});expect((await calculateInventoryAlerts(f.store.id,now)).some(a=>a.type==='consumption_variance')).toBe(false)
+ expect((await calculateInventoryAlerts(f.store.id,now)).some(a=>a.type==='consumption_variance')).toBe(false);await saveInventoryAlertConfig(f.store.id,{varianceWarningPercent:15,varianceCriticalPercent:30});expect((await calculateInventoryAlerts(f.store.id,now)).some(a=>a.type==='consumption_variance')).toBe(false)
 })
 
 test('secondary restock and low stock pages use the same short-history safety floor',async()=>{
