@@ -759,6 +759,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
   // ========== SAVE MUTATION ==========
   const saveConfigMutation = useMutation({
     scope: { id: `pos-settings-${effectiveStoreId}` },
+    onMutate: () => { pendingSaves.current += 1 },
     mutationFn: async (data: { key: string; value: any }) => {
       await configApi.set(effectiveStoreId, data.key, data.value, 'pos')
     },
@@ -780,7 +781,6 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
   const handleSave = useCallback((key: string, value: any) => {
     console.log('[Admin] handleSave called:', key, JSON.stringify(value).substring(0, 100))
-    pendingSaves.current += 1
     saveConfigMutation.mutate({ key, value })
   }, [user?.storeId, posConfig])
 

@@ -289,6 +289,25 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'quiet-expense-qr,offline-
  }
  if(scenario==='payment-validation'){
   await addCart();await page.getByRole('button',{name:/Checkout/}).click();const confirm=page.getByRole('button',{name:/Confirm Payment/});
+  for(const [name,width,height] of [['desktop',1024,768],['tablet',768,1024],['phone',390,844]]){
+   await page.setViewportSize({width,height});
+   const dialog=page.getByTestId('payment-dialog');await expect(dialog).toBeVisible();
+   const overflow=await dialog.evaluate(el=>({fits:el.scrollWidth<=el.clientWidth+1,width:el.clientWidth,scroll:el.scrollWidth,wide:[...el.querySelectorAll('*')].filter(n=>n.getBoundingClientRect().right>el.getBoundingClientRect().right+1).map(n=>({tag:n.tagName,classes:n.className,width:n.getBoundingClientRect().width})).slice(0,8)}));
+   assert.ok(overflow.fits,'payment fits '+name+' '+JSON.stringify(overflow));
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'page fits '+name);
+   for(const button of await dialog.getByTestId('payment-keypad').getByRole('button').all()){
+    const box=await button.boundingBox();assert.ok(box.height>=56,'finger key height '+name);assert.ok(box.width>=48,'finger key width '+name);
+   }
+   for(const button of await dialog.getByTestId('payment-quick-amounts').getByRole('button').all())assert.ok((await button.boundingBox()).height>=56);
+   assert.ok((await confirm.boundingBox()).height>=56);assert.ok(await confirm.evaluate(el=>el.getBoundingClientRect().bottom<=innerHeight),'confirm remains reachable '+name);
+   await page.screenshot({path:'/tmp/pos-continuous-offline-evidence/payment-touch-'+name+'.png',fullPage:true});
+  }
+  await page.setViewportSize({width:1440,height:1100});
+  for(const label of await page.locator('.pos-toolbar button span').all()){
+   const type=await label.evaluate(el=>({size:parseFloat(getComputedStyle(el).fontSize),weight:Number(getComputedStyle(el).fontWeight)}));
+   // Badge typography is separate from the action label.
+   if(type.size>=16)assert.ok(type.weight>=700);
+  }
   await expect(confirm).toBeDisabled();await expect(page.getByText('Enter the cash received.',{exact:true})).toBeVisible();
   await confirm.evaluate(button=>button[Object.keys(button).find(k=>k.startsWith('__reactProps$'))].onClick());assert.equal((await read()).length,0);assert.equal(posts.length,0);assert.equal(await page.evaluate(()=>window.calls.length),0);
   await page.getByRole('button',{name:'1',exact:true}).click();await expect(confirm).toBeDisabled();await expect(page.getByText('Cash received is below the total.',{exact:true})).toBeVisible();

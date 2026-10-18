@@ -3445,7 +3445,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showShift !== false && access.can('pos.shift')) {
                 toolbarButtons.push({
                   id: 'shift',
-                  icon: <Users size={18} />,
+                  icon: <Users size={22} />,
                   labelKey: posLayout.toolbarLabels?.shift || 'toolbar.shift',
                   onClick: () => openShiftModal()
                 })
@@ -3453,7 +3453,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showAttendance !== false && access.can('personal.attendance')) {
                 toolbarButtons.push({
                   id: 'attendance',
-                  icon: <QrCode size={18} />,
+                  icon: <QrCode size={22} />,
                   labelKey: posLayout.toolbarLabels?.attendance || 'toolbar.attendance',
                   onClick: () => setShowAttendanceQR(true)
                 })
@@ -3461,7 +3461,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showSuspend !== false) {
                 toolbarButtons.push({
                   id: 'suspend',
-                  icon: <Clock size={18} />,
+                  icon: <Clock size={22} />,
                   labelKey: posLayout.toolbarLabels?.suspend || 'toolbar.suspend',
                   onClick: () => setShowSuspendModal(true),
                   badge: suspendedOrders.length
@@ -3470,7 +3470,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showScan !== false) {
                 toolbarButtons.push({
                   id: 'scan',
-                  icon: <ScanLine size={18} />,
+                  icon: <ScanLine size={22} />,
                   labelKey: posLayout.toolbarLabels?.scan || 'toolbar.scan',
                   onClick: openScan
                 })
@@ -3478,7 +3478,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showHistory !== false && access.can('orders.read')) {
                 toolbarButtons.push({
                   id: 'history',
-                  icon: <FileText size={18} />,
+                  icon: <FileText size={22} />,
                   labelKey: posLayout.toolbarLabels?.history || 'toolbar.history',
                   onClick: () => setShowHistoryModal(true)
                 })
@@ -3486,7 +3486,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showCash === true) {
                 toolbarButtons.push({
                   id: 'cash',
-                  icon: <Wallet size={18} />,
+                  icon: <Wallet size={22} />,
                   labelKey: posLayout.toolbarLabels?.cash || 'toolbar.cash',
                   onClick: () => navigate('/cash')
                 })
@@ -3495,7 +3495,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showExpense !== false && access.can('pos.expense')) {
                 toolbarButtons.push({
                   id: 'expense',
-                  icon: <Receipt size={18} />,
+                  icon: <Receipt size={22} />,
                   labelKey: posLayout.toolbarLabels?.expense || 'toolbar.expense',
                   onClick: () => setShowExpenseModal(true)
                 })
@@ -3504,7 +3504,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showTasks === true && access.can('personal.tasks')) {
                 toolbarButtons.push({
                   id: 'tasks',
-                  icon: <ClipboardList size={18} />,
+                  icon: <ClipboardList size={22} />,
                   labelKey: posLayout.toolbarLabels?.tasks || 'toolbar.tasks',
                   onClick: () => navigate('/tasks')
                 })
@@ -3513,7 +3513,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showHardware === true) {
                 toolbarButtons.push({
                   id: 'hardware',
-                  icon: <Printer size={18} />,
+                  icon: <Printer size={22} />,
                   labelKey: posLayout.toolbarLabels?.hardware || 'toolbar.hardware',
                   onClick: () => {
                     setShowPrinterDetectModal(true)
@@ -3523,19 +3523,19 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               if (posLayout.showLogout !== false) {
                 toolbarButtons.push({
                   id: 'logout',
-                  icon: <X size={18} />,
+                  icon: <X size={22} />,
                   labelKey: posLayout.toolbarLabels?.logout || 'toolbar.logout',
                   onClick: () => setShowLogoutModal(true)
                 })
               }
 
               return (
-                <div className="flex flex-wrap items-center gap-1">
+                <div className="pos-toolbar flex flex-wrap items-center gap-2">
                   {toolbarButtons.map(btn => (
                     <button
                       key={btn.id}
                       onClick={btn.onClick}
-                      className="flex flex-col items-center justify-center py-1 px-2.5 text-white/90 hover:bg-white/20 rounded-lg touch-feedback relative transition-colors"
+                      className="min-h-16 min-w-[68px] max-w-[160px] flex flex-col items-center justify-center py-2 px-3 text-white hover:bg-white/20 rounded-xl touch-feedback relative transition-colors touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
                     >
                       <div className="relative">
                         {btn.icon}
@@ -3545,7 +3545,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           </span>
                         )}
                       </div>
-                      <span className="text-xs mt-1 font-medium leading-none whitespace-nowrap">
+                      <span className="text-base mt-1 font-bold leading-tight text-center break-words">
                         {(() => {
                           const legacyChineseDefaults: Record<string, string> = {
                             '交班': 'shift',
@@ -4029,11 +4029,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
 {showPaymentModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4" onClick={() => setShowPaymentModal(false)}>
-          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl max-h-[94vh] flex flex-col z-[60] overflow-hidden" onClick={e => e.stopPropagation()}>
-            {/* Header (紧凑单行) */}
-            <div className="bg-primary text-white px-4 py-2.5 flex justify-between items-center flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <h2 className="font-bold text-base flex items-center gap-1.5">
+          <div role="dialog" aria-modal="true" aria-labelledby="payment-dialog-title" data-testid="payment-dialog" className="pos-payment-dialog bg-white w-full max-w-5xl rounded-2xl shadow-2xl max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col z-[60] overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* Payment summary and actions remain visible while the body scrolls. */}
+            <div className="bg-primary text-white px-4 py-3 flex justify-between items-center flex-shrink-0">
+              <div className="min-w-0 flex flex-wrap items-center gap-2">
+                <h2 id="payment-dialog-title" className="font-bold text-xl flex items-center gap-2">
                   <span>💰</span>
                   <span>{t('pos.confirmPayment', '结账与收款')}</span>
                 </h2>
@@ -4060,7 +4060,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   }
                   setShowPaymentModal(false)
                 }}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
+                aria-label={t('common.close')} className="w-12 h-12 shrink-0 flex items-center justify-center rounded-xl hover:bg-white/20 transition-colors touch-manipulation"
               >
                 <X size={18} />
               </button>
@@ -4068,15 +4068,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
             {/* 主内容区域：宽屏双列自适应布局，高度绝不超屏 */}
             <div className="flex-1 overflow-y-auto p-3 sm:p-4 min-h-0">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-4 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-5 items-start">
 
                 {/* 左列 (应收金额 + 支付方式 + QRIS动态码展示) */}
-                <div className="md:col-span-5 space-y-3">
+                <div className="min-w-0 md:col-span-5 space-y-4">
                   {/* 应收金额大卡片 */}
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] text-emerald-800 font-medium uppercase tracking-wider">{t('pos.receivable', '应收总计')}</p>
-                      <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 leading-tight">
+                      <p className="text-base text-emerald-800 font-bold uppercase tracking-wider">{t('pos.receivable', '应收总计')}</p>
+                      <p className="text-3xl sm:text-4xl font-extrabold text-emerald-800 leading-tight tabular-nums break-words">
                         {formatCurrency(total)}
                       </p>
                     </div>
@@ -4089,30 +4089,30 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
                   <section className="rounded-xl border border-gray-200 p-3 space-y-2">
                     <label htmlFor="payment-voucher-code" className="block text-sm font-semibold">{t('voucher.code')}</label>
-                    {selectedCoupon?<div className="flex items-center justify-between gap-2"><span>{selectedCoupon.coupon?.code} · {t('voucher.applied')}</span><button type="button" disabled={isCheckingOut} onClick={()=>setSelectedCoupon(null)} className="text-primary">{t('voucher.remove')}</button></div>:<div className="flex gap-2"><input id="payment-voucher-code" value={couponCodeInput} disabled={isVerifyingCoupon||isCheckingOut} onChange={e=>setCouponCodeInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(!isVerifyingCoupon&&couponCodeInput.trim())void verifyCouponByCode()}}} placeholder={t('voucher.placeholder')} className="min-w-0 flex-1 border rounded-lg px-3 py-2 uppercase"/><button type="button" disabled={isVerifyingCoupon||isCheckingOut||!couponCodeInput.trim()} onClick={()=>void verifyCouponByCode()} className="bg-primary text-white rounded-lg px-3 disabled:opacity-50">{isVerifyingCoupon?t('common.loading'):t('voucher.apply')}</button></div>}
+                    {selectedCoupon?<div className="flex items-center justify-between gap-2"><span>{selectedCoupon.coupon?.code} · {t('voucher.applied')}</span><button type="button" disabled={isCheckingOut} onClick={()=>setSelectedCoupon(null)} className="min-h-12 px-3 text-primary font-bold">{t('voucher.remove')}</button></div>:<div className="flex gap-2"><input id="payment-voucher-code" value={couponCodeInput} disabled={isVerifyingCoupon||isCheckingOut} onChange={e=>setCouponCodeInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();e.stopPropagation();if(!isVerifyingCoupon&&couponCodeInput.trim())void verifyCouponByCode()}}} placeholder={t('voucher.placeholder')} className="min-h-12 min-w-0 flex-1 border rounded-lg px-3 py-2 text-base uppercase"/><button type="button" disabled={isVerifyingCoupon||isCheckingOut||!couponCodeInput.trim()} onClick={()=>void verifyCouponByCode()} className="min-h-12 bg-primary text-white rounded-lg px-4 font-bold disabled:opacity-50">{isVerifyingCoupon?t('common.loading'):t('voucher.apply')}</button></div>}
                     <p className="text-xs text-gray-500">{t('voucher.rules')}</p>
                   </section>
 
                   {/* 支付方式网格 */}
                   <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                    <label className="block text-base font-bold text-gray-700 mb-2">
                       {t('pos.paymentMethod', '选择收款渠道')}
                     </label>
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-2 gap-2">
                       {paymentMethods.map(m => {
                         const isSelected = paymentMethod === m.id
                         return (
                           <button
                             key={m.id}
                             onClick={() => setPaymentMethod(m.id)}
-                            className={`p-2 rounded-xl border-2 flex items-center gap-2 transition-all touch-feedback text-left ${
+                            className={`min-h-14 p-3 rounded-xl border-2 flex items-center gap-2 transition-all touch-feedback touch-manipulation text-left ${
                               isSelected
                                 ? 'border-primary bg-primary/10 text-primary font-bold shadow-sm ring-1 ring-primary'
                                 : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-700'
                             }`}
                           >
                             <span className="text-xl flex-shrink-0">{m.icon}</span>
-                            <span className="text-xs truncate">{t(m.labelKey)}</span>
+                            <span className="text-base font-bold break-words min-w-0">{t(m.labelKey)}</span>
                           </button>
                         )
                       })}
@@ -4123,27 +4123,27 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 </div>
 
                 {/* 右列 (现金输入键盘 / 非现金引导) */}
-                <div className="md:col-span-7 space-y-2.5">
+                <div className="min-w-0 md:col-span-7 space-y-3">
                   {paymentMethod === 'cash' ? (
                     <div>
                       {/* 实收与找零金额并列显示 */}
-                      <div className="grid grid-cols-2 gap-2 mb-2">
-                        <div className="bg-gray-100 rounded-xl p-2 border border-gray-200">
-                          <div className="text-[11px] text-gray-500 font-medium">{t('pos.paidAmount', '实收现金')}</div>
-                          <div className="text-lg sm:text-xl font-bold text-gray-800 truncate font-mono">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                        <div className="bg-gray-100 rounded-xl p-3 border border-gray-200">
+                          <div className="text-base text-gray-700 font-bold">{t('pos.paidAmount', '实收现金')}</div>
+                          <div className="text-3xl font-extrabold text-gray-900 tabular-nums break-words">
                             {formatCurrency(parseInt(paidAmount) || 0)}
                           </div>
                         </div>
-                        <div className={`rounded-xl p-2 border ${change > 0 ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'}`}>
-                          <div className="text-[11px] text-gray-500 font-medium">{t('pos.change', '应找零钱')}</div>
-                          <div className={`text-lg sm:text-xl font-bold truncate font-mono ${change > 0 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                        <div className={`rounded-xl p-3 border ${change > 0 ? 'bg-emerald-50 border-emerald-300' : 'bg-gray-50 border-gray-200'}`}>
+                          <div className="text-base text-gray-700 font-bold">{t('pos.change', '应找零钱')}</div>
+                          <div className={`text-3xl font-extrabold tabular-nums break-words ${change > 0 ? 'text-emerald-600' : 'text-gray-600'}`}>
                             {change > 0 ? formatCurrency(change) : 'Rp 0'}
                           </div>
                         </div>
                       </div>
 
-                      {/* 紧凑数字小键盘 (高度经过精密缩减) */}
-                      <div className="grid grid-cols-3 gap-1.5 mb-2">
+                      {/* Large separated keys for finger input. */}
+                      <div data-testid="payment-keypad" className="grid grid-cols-3 gap-3 mb-3">
                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
                           <button
                             key={n}
@@ -4152,14 +4152,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                               if (prev === '0') return String(n)
                               return prev + String(n)
                             })}
-                            className="h-10 bg-white border border-gray-300 rounded-xl text-base font-bold text-gray-800 hover:bg-gray-100 active:scale-95 transition-all touch-feedback shadow-sm"
+                            className="min-h-14 bg-white border border-gray-300 rounded-xl text-3xl font-bold text-gray-900 hover:bg-gray-100 active:scale-95 transition-all touch-feedback shadow-sm"
                           >
                             {n}
                           </button>
                         ))}
                         <button
                           onClick={() => setPaidAmount('')}
-                          className="h-10 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-100 active:scale-95 transition-all touch-feedback"
+                          className="min-h-14 bg-rose-50 border border-rose-200 rounded-xl text-base font-bold text-rose-600 hover:bg-rose-100 active:scale-95 transition-all touch-feedback"
                         >
                           C {t('common.clear', '清空')}
                         </button>
@@ -4169,23 +4169,23 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                             if (prev === '0') return '0'
                             return prev + '0'
                           })}
-                          className="h-10 bg-white border border-gray-300 rounded-xl text-base font-bold text-gray-800 hover:bg-gray-100 active:scale-95 transition-all touch-feedback shadow-sm"
+                          className="min-h-14 bg-white border border-gray-300 rounded-xl text-3xl font-bold text-gray-900 hover:bg-gray-100 active:scale-95 transition-all touch-feedback shadow-sm"
                         >
                           0
                         </button>
                         <button
                           onClick={() => setPaidAmount(prev => prev.slice(0, -1))}
-                          className="h-10 bg-gray-100 border border-gray-300 rounded-xl text-xs font-bold text-gray-700 hover:bg-gray-200 active:scale-95 transition-all touch-feedback"
+                          className="min-h-14 bg-gray-100 border border-gray-300 rounded-xl text-base font-bold text-gray-700 hover:bg-gray-200 active:scale-95 transition-all touch-feedback"
                         >
                           ← {t('common.backspace', '退格')}
                         </button>
                       </div>
 
                       {/* 快捷现金面额按钮 + 正好 */}
-                      <div className="grid grid-cols-4 gap-1.5">
+                      <div data-testid="payment-quick-amounts" className="grid grid-cols-2 gap-3">
                         <button
                           onClick={() => setPaidAmount(String(total))}
-                          className="py-1.5 px-1 bg-amber-50 border border-amber-300 text-amber-800 rounded-lg text-xs font-bold hover:bg-amber-100 transition-colors touch-feedback"
+                          className="min-h-14 py-3 px-3 bg-amber-50 border border-amber-300 text-amber-800 rounded-xl text-lg font-bold hover:bg-amber-100 transition-colors touch-feedback"
                         >
                           ⚡ {t('pos.exactAmount', '正好')}
                         </button>
@@ -4193,7 +4193,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                           <button
                             key={amount}
                             onClick={() => setPaidAmount(String(amount))}
-                            className="py-1.5 px-1 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-100 transition-colors touch-feedback truncate"
+                            className="min-h-14 py-3 px-3 bg-white border border-gray-200 text-gray-700 rounded-xl text-lg font-bold hover:bg-gray-100 transition-colors touch-feedback tabular-nums break-words"
                           >
                             {formatCurrency(amount)}
                           </button>
@@ -4205,12 +4205,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                       <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center text-2xl mb-2">
                         {paymentMethods.find(m => m.id === paymentMethod)?.icon || '💳'}
                       </div>
-                      <h4 className="font-bold text-gray-800 text-sm">
+                      <h4 className="font-bold text-gray-800 text-xl">
                         {paymentMethods.find(m => m.id === paymentMethod)?.labelKey ? t(paymentMethods.find(m => m.id === paymentMethod)!.labelKey) : paymentMethod.toUpperCase()}
                       </h4>
-                      {paymentMethod !== 'qris' && <p className="text-xs text-gray-500 mt-1 max-w-xs">{t('pos.externalPayHelp')}</p>}
-                      {paymentMethod !== 'qris' && <label className="mt-3 text-sm text-left"><input type="checkbox" checked={externalPaymentConfirmed} onChange={e=>setExternalPaymentConfirmed(e.target.checked)} /> {t('paymentValidation.externalConfirm')}</label>}
-                      <div className="mt-3 px-3 py-1 bg-white rounded-lg border text-xs font-mono font-bold text-gray-700">
+                      {paymentMethod !== 'qris' && <p className="text-base text-gray-600 mt-2 max-w-sm">{t('pos.externalPayHelp')}</p>}
+                      {paymentMethod !== 'qris' && <label className="mt-3 min-h-14 flex items-center gap-3 text-base font-semibold text-left"><input className="w-6 h-6 shrink-0 accent-primary" type="checkbox" checked={externalPaymentConfirmed} onChange={e=>setExternalPaymentConfirmed(e.target.checked)} /> {t('paymentValidation.externalConfirm')}</label>}
+                      <div className="mt-3 px-4 py-3 bg-white rounded-xl border text-xl tabular-nums font-bold text-gray-800">
                         {t('pos.amountDue', '支付金额')}: {formatCurrency(total)}
                       </div>
                     </div>
@@ -4220,14 +4220,18 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               </div>
             </div>
 
-            {paymentIssue && <p role="alert" className="text-red-600 px-4 py-2 text-sm">{t(`paymentValidation.${paymentIssue}`)}</p>}
+            {paymentIssue && <p role="alert" className="text-red-700 px-4 py-2 text-base font-semibold">{t(`paymentValidation.${paymentIssue}`)}</p>}
             {offlineSaveFailed && (
               <div role="alert" className="bg-red-50 text-red-700 text-sm px-4 py-3 border-t border-red-200">
                 {t('pos.offlineSaveFailed')}
               </div>
             )}
             {/* 确认支付操作栏 - 紧凑固定底栏 */}
-            <div className="flex-shrink-0 px-4 py-2.5 bg-gray-50 border-t flex items-center justify-between gap-3">
+            <div className="flex-shrink-0 px-4 py-3 bg-gray-50 border-t flex flex-wrap items-center justify-between gap-3">
+              <div className="sm:hidden w-full flex items-baseline justify-between gap-2 text-gray-800">
+                <span className="text-base font-bold">{t('pos.receivable')}</span>
+                <span className="text-2xl font-extrabold tabular-nums">{formatCurrency(total)}</span>
+              </div>
               <div className="text-xs text-gray-500 truncate hidden sm:block">
                 {paymentMethod === 'cash' ? (
                   Boolean(paidAmount) && parseInt(paidAmount) >= total ? (
@@ -4239,11 +4243,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   <span>{t('pos.digitalPayHint', '📱 电子支付或刷卡成功后，点击右侧按钮出单')}</span>
                 )}
               </div>
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3 w-full sm:w-auto sm:flex sm:items-center sm:ml-auto">
                 <button
                   type="button"
                   onClick={() => setShowPaymentModal(false)}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-xl text-xs font-semibold hover:bg-gray-50 touch-feedback"
+                  className="min-h-14 min-w-0 px-3 sm:px-5 py-3 break-words border border-gray-300 text-gray-800 bg-white rounded-xl text-lg font-bold hover:bg-gray-50 touch-feedback"
                 >
                   {t('common.cancel', '取消')}
                 </button>
@@ -4254,7 +4258,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     Boolean(paymentIssue) ||
                     isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || !!currentQuote.pendingSelections?.length
                   }
-                  className="px-6 py-2 bg-primary text-white rounded-xl font-bold text-sm disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 min-w-[140px] justify-center"
+                  className="min-h-14 min-w-0 px-3 sm:px-6 py-3 break-words bg-primary text-white rounded-xl font-bold text-lg disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 sm:min-w-[140px] justify-center"
                 >
                   {isCheckingOut ? (
                     <>
