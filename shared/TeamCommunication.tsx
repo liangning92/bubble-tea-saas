@@ -4,7 +4,7 @@ import { TeamPending, pendingMessages, removePending, savePending } from './team
 
 export interface TeamClient {
   request: (method: 'get' | 'post' | 'put', url: string, data?: unknown) => Promise<any>
-  upload: (file: File) => Promise<string>
+  upload: (file: File, requestId: string) => Promise<string>
   download: (url: string) => Promise<Blob>
   current: () => boolean
 }
@@ -78,7 +78,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
         if (message.retryable === false || (message.nextRetryAt || 0) > Date.now()) continue
         try {
           while (message.uploaded.length < message.files.length) {
-            const id = await client.upload(message.files[message.uploaded.length])
+            const id = await client.upload(message.files[message.uploaded.length], `${message.id}:${message.uploaded.length}`)
             message.uploaded.push(id); await savePending(message)
             if (!client.current()) return
           }
