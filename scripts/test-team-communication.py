@@ -16,6 +16,7 @@ def tool(name):
     return value
 started = False
 try:
+    command([tool('postgres'), '--version'])
     command([tool('initdb'), '-D', str(base / 'pg'), '--username=team_test', '--auth=trust', '--no-locale', '-E', 'UTF8'], stdout=subprocess.DEVNULL)
     command([tool('pg_ctl'), '-D', str(base / 'pg'), '-l', str(base / 'pg.log'), '-o', '-h 127.0.0.1 -p ' + str(port) + ' -k ' + str(base), '-w', 'start'], stdout=subprocess.DEVNULL)
     started = True

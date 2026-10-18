@@ -34,3 +34,10 @@ Delivery uses 3-second cursor polling while visible, persistent client request U
 and a per-account IndexedDB outbox. Background/closed-app notifications are out of
 scope. Human minutes retain source ranges and versions; action items do not execute
 other business workflows. No model configuration, AI summary, voice, or video was added.
+
+Independent review fixes: chat uploads use an explicit team purpose and cannot be
+reused as ordinary employee evidence. Both download routes apply channel membership,
+join sequence, audit permission/reason and audit logging. Existing employee files
+retain their previous owner/admin access. Historical unmarked chat grants are also
+recognized. Grant lookup does not truncate after 100 uses. All 16 HTTP groups passed
+on an owned PostgreSQL 15.17 instance after these fixes.

@@ -9,6 +9,8 @@
     "per-person monotonic read receipts and unread counters",
     "private chat access is denied to nonmembers and other stores; authorized audit requires a reason and creates an audit record",
     "private employee attachment can be read only through an authorized channel grant",
+    "legacy file downloads enforce chat membership and audit reasons while ordinary employee files retain their permissions",
+    "attachment grants after the first hundred remain downloadable only from the current join sequence",
     "membership join floor, removal, scoped public channels and historical minutes privacy",
     "meeting close atomically creates a manual scaffold; versioned human decisions never rewrite source messages",
     "retained minutes and revision history are not silently truncated by metadata limits",
@@ -16,6 +18,6 @@
     "reserved storage cannot be read or overwritten using ordinary configuration routes",
     "archive retains history, and inactive employees or revoked old tokens cannot read it"
   ],
-  "count": 14,
+  "count": 16,
   "productionTouched": false
 }

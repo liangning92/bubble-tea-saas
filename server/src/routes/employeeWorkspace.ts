@@ -10,6 +10,7 @@ import path from "path";
 import fs from "fs/promises";
 import { randomUUID, createHash } from "crypto";
 import prisma from "../config/database";
+import { isTeamAttachment, teamCommunication, TeamActor, TeamError } from "../services/TeamCommunicationService";
 import { authenticate, AuthRequest } from "../middlewares/auth";
 import {
   readWork,
@@ -47,7 +48,7 @@ const handle =
       await fn(req, res);
     } catch (e: any) {
       const code =
-        e instanceof z.ZodError
+        e instanceof TeamError ? e.status : e instanceof z.ZodError
           ? 400
           : e.message?.includes("NOT_FOUND")
             ? 404
@@ -74,7 +75,7 @@ function admin(req: AuthRequest) {
 async function ownedFiles(user: any, files: string[], db: any = prisma) {
   for (const id of files) {
     const file = await readWork(user.storeId, `file.${id}`, db);
-    if (!file || file.staffId !== user.staffId)
+    if (!file || file.staffId !== user.staffId || await isTeamAttachment(db, user.storeId, id, file))
       throw new Error("FILE_FORBIDDEN");
   }
 }
@@ -84,6 +85,7 @@ router.post(
   handle(async (req, res) => {
     const user = identity(req),
       file = req.file;
+    const purpose = z.enum(['employee', 'team']).default('employee').parse(req.body?.purpose);
     if (!file) throw new Error("FILE_REQUIRED");
     const data = file.buffer as Buffer;
     const jpeg = data[0] === 255 && data[1] === 216 && data[2] === 255,
@@ -99,6 +101,7 @@ router.post(
       await writeWork(user.storeId, `file.${id}`, {
         id,
         staffId: user.staffId,
+        purpose,
         type: jpeg ? "image/jpeg" : png ? "image/png" : "application/pdf",
         createdAt: new Date().toISOString(),
       });
@@ -114,9 +117,16 @@ router.get(
   handle(async (req, res) => {
     const id = z.string().uuid().parse(req.params.id),
       user = req.user!,
-      file = await readWork(user.storeId, `file.${id}`);
-    if (!file || (user.role !== "admin" && file.staffId !== user.staffId))
+      stored = await readWork(user.storeId, `file.${id}`);
+    let file = stored;
+    if (stored && await isTeamAttachment(prisma, user.storeId, id, stored)) {
+      if (req.query.channelId === undefined) throw new TeamError(403, 'TEAM_CHANNEL_REQUIRED');
+      const channelId = z.string().uuid().parse(req.query.channelId);
+      const auditReason = req.query.auditReason === undefined ? undefined : z.string().min(5).max(500).parse(req.query.auditReason);
+      file = await teamCommunication().attachment(user as TeamActor, channelId, id, auditReason);
+    } else if (!stored || (user.role !== "admin" && stored.staffId !== user.staffId)) {
       throw new Error("FILE_FORBIDDEN");
+    }
     res.set({
       "Cache-Control": "private, no-store",
       "Content-Type": file.type,

@@ -11,7 +11,7 @@ export function TeamCommunicationPage() {
     const current = () => { const state = useAuthStore.getState(); return state.isAuthenticated && state.user?.id === expected && state.user?.storeId === store }
     return { current,
       request: async (method, url, data) => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return (await api.request({ method, url, data })).data.data },
-      upload: async file => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); const data = new FormData(); data.append('file', file); return (await api.post('/staff-work/my/files', data, { headers: { 'Content-Type': 'multipart/form-data' } })).data.data.id },
+      upload: async file => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); const data = new FormData(); data.append('file', file); data.append('purpose', 'team'); return (await api.post('/staff-work/my/files', data, { headers: { 'Content-Type': 'multipart/form-data' } })).data.data.id },
       download: async url => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return (await api.get(url, { responseType: 'blob' })).data }
     }
   }, [user?.id, user?.storeId])

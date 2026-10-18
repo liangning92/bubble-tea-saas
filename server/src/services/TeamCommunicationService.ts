@@ -4,6 +4,11 @@ import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
 
 export const TEAM_PREFIX = 'team.communication.'
+export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
+  if (file?.purpose === 'team') return true
+  // Also protect pre-purpose records if an older build already granted them to a chat.
+  return !!await db.config.findFirst({ where: { storeId, key: { startsWith: TEAM_PREFIX + 'fileGrant.', contains: `.${id}.` } }, select: { id: true } })
+}
 export interface TeamActor {
   id: string; storeId: string; staffId: string; role: string; employeeApp?: boolean
   accessRole?: { permissions: string[]; version?: number; modes?: Record<string, string> } | null
@@ -186,7 +191,7 @@ export function teamCommunication(db: DB = prisma) {
         if (recent.length >= 30) fail(429, 'TEAM_RATE_LIMIT')
         for (const fileId of v.files) {
           const file = await readWork(a.storeId, `file.${fileId}`, tx)
-          if (!file || file.staffId !== a.staffId) fail(403, 'TEAM_FILE_FORBIDDEN')
+          if (!file || file.staffId !== a.staffId || file.purpose !== 'team') fail(403, 'TEAM_FILE_FORBIDDEN')
         }
         if (c.lastSeq >= 999999999999) fail(409, 'TEAM_MESSAGE_LIMIT')
         if (!c.round) c.round = { id: randomUUID(), title: c.title, fromSeq: c.lastSeq + 1, startedAt: new Date(now).toISOString(), participants: c.members.map(m => m.staffId) }
@@ -291,8 +296,9 @@ export function teamCommunication(db: DB = prisma) {
     },
     async attachment(a: TeamActor, id: string, fileId: string, auditReason?: string) {
       uuid.parse(fileId); const { fromSeq } = await channel(db, a, id, auditReason)
-      const grants = await list(db, a.storeId, `fileGrant.${id}.${fileId}.`, 100)
-      if (!grants.some(g => g.seq >= fromSeq)) fail(403, 'TEAM_FILE_FORBIDDEN')
+      const prefix = TEAM_PREFIX + `fileGrant.${id}.${fileId}.`
+      const grant = await db.config.findFirst({ where: { storeId: a.storeId, key: { startsWith: prefix, gte: prefix + pad(fromSeq) } }, select: { id: true } })
+      if (!grant) fail(403, 'TEAM_FILE_FORBIDDEN')
       const file = await readWork(a.storeId, `file.${fileId}`, db)
       if (!file) fail(404, 'TEAM_FILE_NOT_FOUND')
       return file

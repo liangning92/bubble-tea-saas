@@ -139,7 +139,7 @@ async function main() {
       assert((await good('owner', 'GET', '/team/admin/audits')).some(log => log.action === 'view' && JSON.parse(log.newValue).reason === 'business-review'));
     });
     await test('private employee attachment can be read only through an authorized channel grant', async () => {
-      const form = new FormData(); form.append('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' }), 'test.png');
+      const form = new FormData(); form.append('purpose', 'team'); form.append('file', new Blob([Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64')], { type: 'image/png' }), 'test.png');
       const upload = await fetch(base + '/api/staff-work/my/files', { method: 'POST', headers: { Authorization: 'Bearer ' + tokens.alice, 'X-Client-App': 'employee' }, body: form });
       assert.equal(upload.status, 201); fileId = (await upload.json()).data.id;
       await send('alice', direct.id, 'Private evidence', { files: [fileId] });
@@ -147,6 +147,45 @@ async function main() {
       assert.equal(file.status, 200); assert.match(file.headers.get('cache-control'), /private/);
       assert.equal((await request('carol', 'GET', `/team/channels/${direct.id}/files/${fileId}`)).status, 403);
       assert.equal((await request('bob', 'POST', `/team/channels/${direct.id}/messages`, { requestId: randomUUID(), text: '', files: [fileId] })).status, 403);
+    });
+    await test('legacy file downloads enforce chat membership and audit reasons while ordinary employee files retain their permissions', async () => {
+      const download = (who, url) => fetch(base + '/api' + url, { headers: { Authorization: 'Bearer ' + tokens[who] } });
+      for (const who of ['owner', 'alice', 'bob', 'carol']) assert.equal((await download(who, `/staff-work/files/${fileId}`)).status, 403);
+      assert.equal((await download('bob', `/staff-work/files/${fileId}?channelId=${direct.id}`)).status, 200);
+      assert.equal((await download('owner', `/staff-work/files/${fileId}?channelId=${direct.id}`)).status, 403);
+      assert.equal((await download('carol', `/staff-work/files/${fileId}?channelId=${direct.id}&auditReason=business-review`)).status, 403);
+      const before = await prisma.financeAuditLog.count({ where: { entityType: 'team_communication', action: 'view' } });
+      assert.equal((await download('owner', `/staff-work/files/${fileId}?channelId=${direct.id}&auditReason=attachment-review`)).status, 200);
+      assert.equal(await prisma.financeAuditLog.count({ where: { entityType: 'team_communication', action: 'view' } }), before + 1);
+      assert.equal((await download('outsider', `/staff-work/files/${fileId}?channelId=${direct.id}&auditReason=attachment-review`)).status, 403);
+      // Old chat records with no purpose marker must also be protected.
+      const fileKey = { storeId_key: { storeId: 'team-store-a', key: 'employee.workspace.file.' + fileId } };
+      const record = await prisma.config.findUniqueOrThrow({ where: fileKey }); const metadata = JSON.parse(record.value);
+      const { purpose, ...legacy } = metadata;
+      await prisma.config.update({ where: fileKey, data: { value: JSON.stringify(legacy) } });
+      assert.equal((await download('owner', `/staff-work/files/${fileId}`)).status, 403);
+      await prisma.config.update({ where: fileKey, data: { value: JSON.stringify(metadata) } });
+      const form = new FormData(); form.append('file', new Blob(['%PDF-1.4\nsynthetic employee file'], { type: 'application/pdf' }), 'work.pdf');
+      const uploaded = await fetch(base + '/api/staff-work/my/files', { method: 'POST', headers: { Authorization: 'Bearer ' + tokens.alice }, body: form });
+      assert.equal(uploaded.status, 201); const ordinary = (await uploaded.json()).data.id;
+      assert.equal((await download('owner', `/staff-work/files/${ordinary}`)).status, 200);
+      assert.equal((await download('alice', `/staff-work/files/${ordinary}`)).status, 200);
+      assert.equal((await download('bob', `/staff-work/files/${ordinary}`)).status, 403);
+      assert.equal((await request('alice', 'POST', `/team/channels/${direct.id}/messages`, { requestId: randomUUID(), text: 'Keep separate purposes', files: [ordinary] })).status, 403);
+    });
+    await test('attachment grants after the first hundred remain downloadable only from the current join sequence', async () => {
+      const c = await create('alice', 'group', ['s-bob']);
+      await prisma.config.createMany({ data: Array.from({ length: 100 }, (_, i) => ({ storeId: 'team-store-a', category: 'staff', key: `team.communication.fileGrant.${c.id}.${fileId}.${String(i + 1).padStart(12, '0')}`, value: JSON.stringify({ seq: i + 1 }) })) });
+      await prisma.config.update({ where: { storeId_key: { storeId: 'team-store-a', key: 'team.communication.channel.' + c.id } }, data: { value: JSON.stringify({ ...c, lastSeq: 100 }) } });
+      const joined = await good('alice', 'PUT', `/team/channels/${c.id}/members`, { expectedVersion: c.version, ownerId: 's-alice', members: ['s-alice', 's-bob', 's-carol'], archived: false });
+      assert.equal((await request('carol', 'GET', `/team/channels/${c.id}/files/${fileId}`)).status, 403);
+      assert.equal((await send('alice', c.id, 'Visible grant 101', { files: [fileId] })).seq, 101);
+      assert.deepEqual((await good('carol', 'GET', `/team/channels/${c.id}/messages`)).messages.map(m => m.seq), [101]);
+      for (const url of [`/team/channels/${c.id}/files/${fileId}`, `/staff-work/files/${fileId}?channelId=${c.id}`]) {
+        assert.equal((await fetch(base + '/api' + url, { headers: { Authorization: 'Bearer ' + tokens.carol } })).status, 200);
+      }
+      await good('alice', 'PUT', `/team/channels/${c.id}/members`, { expectedVersion: joined.version, ownerId: 's-alice', members: ['s-alice', 's-bob'], archived: false });
+      assert.equal((await request('carol', 'GET', `/staff-work/files/${fileId}?channelId=${c.id}`)).status, 403);
     });
     await test('membership join floor, removal, scoped public channels and historical minutes privacy', async () => {
       assert.equal((await request('alice', 'POST', '/team/channels', { requestId: randomUUID(), title: 'No permission', kind: 'public', members: ['s-bob'] })).status, 403);

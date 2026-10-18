@@ -49,3 +49,12 @@ all channel access. Archive retains all content. No irreversible-delete endpoint
 Evidence: output/team-communication/http-results.json, ui-checks.json and component
 build logs. Browser screenshots were emitted into the task tool record. No claim of
 production page verification or deployment is made.
+
+## Independent review follow-up
+
+Two P2 attachment issues were reproduced and fixed before publication: legacy file
+URLs now require the same channel access/audit checks, and grant lookup searches from
+the membership join sequence instead of truncating at 100 records. Team-purpose
+uploads are separate from existing employee-workflow evidence; existing employee file
+access is preserved. Two new regression groups cover both download paths, audit log
+creation, legacy metadata, ordinary file permissions, the 101st grant and revocation.
