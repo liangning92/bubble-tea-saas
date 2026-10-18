@@ -152,7 +152,7 @@ export async function calculateRestockSuggestions(storeId: string, daysAhead: nu
    const inv=inventory.find(material=>material.id===row.inventoryId)!,target=Math.max(row.effectiveSafetyStock,('predictionAvailable' in row&&!row.predictionAvailable?0:row.dailyUsage*daysAhead),inv.minStock||0)
    const pack='orderPackQuantity' in row?Number(row.orderPackQuantity)||1:1
    const needed=Math.max(0,Math.ceil((target-row.currentStock-('onOrderQty' in row?Number(row.onOrderQty):0))/pack)*pack),suggestQty=inv.maxStock>0?Math.min(needed,Math.max(0,Math.floor((inv.maxStock-row.currentStock-('onOrderQty' in row?Number(row.onOrderQty):0))/pack)*pack)):needed
-   return suggestQty>0?[{...row,currentStock:Math.round(row.currentStock*100)/100,dailyUsage:Math.round(row.dailyUsage*100)/100,targetStock:target,suggestQty,suggestCost:suggestQty*Number(inv.avgCost||0)}]:[]
+   return suggestQty>0?[{...row,targetStock:target,suggestQty,suggestCost:suggestQty*Number(inv.avgCost||0)}]:[]
   }).sort((a,b)=>b.suggestCost-a.suggestCost)
 }
 

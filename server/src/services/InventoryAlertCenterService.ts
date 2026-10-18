@@ -48,7 +48,7 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
                 add('low_stock', row.inventoryId, row.daysUntilStockOut !== null && row.daysUntilStockOut <= settings.lowStockCriticalDays ? 'critical' : 'warning', detail);
         }
         if (calibrated && settings.enablePurchaseAlert && row.daysUntilStockOut !== null && row.dailyUsage > 0 && row.currentStock > 0) {
-            const arrivals = orders.flatMap(order => order.items.filter(item => item.inventoryId === row.inventoryId && order.expectedDate).map(item => ({ purchaseOrderId: order.id, orderNumber: order.onlineOrderNumber || order.orderNumber, quantity: Math.max(0,item.quantity-item.receivedQty), date: endOfDay(order.expectedDate!) }))).filter(a => a.date > now).sort((a, b) => a.date.getTime() - b.date.getTime());
+            const arrivals = orders.filter(order=>!('calibrationRequired' in row)||order.status==='approved'||order.status==='awaiting_receipt'||!!order.paidAt).flatMap(order => order.items.filter(item => item.inventoryId === row.inventoryId && order.expectedDate).map(item => ({ purchaseOrderId: order.id, orderNumber: order.onlineOrderNumber || order.orderNumber, quantity: Math.max(0,item.quantity-item.receivedQty), date: endOfDay(order.expectedDate!) }))).filter(a => a.date > now).sort((a, b) => a.date.getTime() - b.date.getTime());
             let balance = row.currentStock, at = now, shortage: any = null;
             for (const arrival of arrivals) {
                 const usage = row.dailyUsage * (arrival.date.getTime() - at.getTime()) / 86400000;

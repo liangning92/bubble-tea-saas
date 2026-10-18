@@ -11,27 +11,30 @@ export async function salesInventoryForecast(db:any,storeId:string,days:number,n
  // A partially observed first day cannot be a complete sample day.
  const firstDay=startOfDay(begun),completeStart=begun>firstDay?addDays(firstDay,1):firstDay
  const start=new Date(Math.max(windowStart.getTime(),completeStart.getTime()))
- const historyDays=Math.max(0,dayCount(start,end))
+ const evidenceStart=new Date(Math.max(begun.getTime(),Math.min(start.getTime(),addDays(end,-settings.stagnantDays).getTime())))
  const [materials,snapshots,losses,orders,metadata]=await Promise.all([
   db.inventory.findMany({where:{storeId,OR:[{type:{not:'semi_finished'}},{processRecipeId:null}]},orderBy:{name:'asc'}}),
-  db.orderConsumptionSnapshot.findMany({where:{storeId,createdAt:{gte:start,lt:end}}}),
+  db.orderConsumptionSnapshot.findMany({where:{storeId,createdAt:{gte:evidenceStart,lt:end}}}),
   db.stockOutLog.findMany({where:{inventory:{storeId},reason:{in:['loss','expired']},createdAt:{gte:start,lt:end}}}),
   db.purchaseOrder.findMany({where:{storeId,status:{in:['pending','approved','awaiting_receipt']}},include:{items:true}}),
   db.config.findMany({where:{storeId,OR:[{key:{startsWith:CALIBRATED_PREFIX}},{key:{startsWith:'inventoryPackage:'}}]}})
  ])
  const uncovered=await db.order.count({where:{storeId,status:{in:['paid','completed']},createdAt:{gte:start,lt:end},id:{notIn:snapshots.map((s:any)=>s.orderId)}}})
+ const samples=new Map<string,Date>(materials.map((mat:any)=>{const created=mat.createdAt||start,day=startOfDay(created),full=created>day?addDays(day,1):day;return [mat.id,new Date(Math.max(start.getTime(),full.getTime()))]}))
  const totals=new Map<string,{quantity:number;unit:string;last:Date}>();let incomplete=uncovered>0
  for(const snapshot of snapshots){
   if(snapshot.reversedAt)continue
-  if(JSON.parse(snapshot.issues).length)incomplete=true
+  if(snapshot.createdAt>=start&&JSON.parse(snapshot.issues).length)incomplete=true
   for(const entry of JSON.parse(snapshot.materials)){
-   if(!materials.some((m:any)=>m.id===entry.inventoryId))incomplete=true
+   if(snapshot.createdAt>=start&&!samples.has(entry.inventoryId))incomplete=true
+   if(!Number.isFinite(entry.quantity)||entry.quantity<=0)continue
    const old=totals.get(entry.inventoryId)
    if(old&&old.unit!==entry.unit)incomplete=true
-   totals.set(entry.inventoryId,{quantity:(old?.quantity||0)+entry.quantity,unit:entry.unit,last:!old||snapshot.createdAt>old.last?snapshot.createdAt:old.last})
+   totals.set(entry.inventoryId,{quantity:(old?.quantity||0)+(snapshot.createdAt>=(samples.get(entry.inventoryId)||start)?entry.quantity:0),unit:entry.unit,last:!old||snapshot.createdAt>old.last?snapshot.createdAt:old.last})
   }
  }
  return materials.map((mat:any)=>{
+  const sampleStart=samples.get(mat.id)!,historyDays=Math.max(0,dayCount(sampleStart,end))
   const use=totals.get(mat.id),mode=inventoryUsageMode(mat)
   const recipeComplete=!incomplete&&(!use||use.unit===mat.unit)
   const totalUsage=recipeComplete?Math.max(0,use?.quantity||0):0
@@ -46,6 +49,6 @@ export async function salesInventoryForecast(db:any,storeId:string,days:number,n
   const raw=metadata.find((m:any)=>m.key==='inventoryPackage:'+mat.id)
   if(raw&&suggestedReorderQty){const pack=validatePackage(JSON.parse(raw.value),mat.unit);if(pack)suggestedReorderQty=Math.ceil(suggestedReorderQty/pack.quantity)*pack.quantity}
   const lossUsage=losses.filter((l:any)=>l.inventoryId===mat.id).reduce((sum:number,l:any)=>sum+l.quantity,0)
-  return {inventoryId:mat.id,id:mat.id,name:mat.name,unit:mat.unit,avgCost:Number(mat.avgCost),category:mat.category,currentStock:mat.currentStock,safetyStock:mat.safetyStock,totalUsage,dailyUsage,historyDays,requestedHistoryDays:days,insufficientHistory:historyDays<7,noUsageHistory:historyDays===0||!recipeComplete,historyStart:historyDays?start.toISOString():null,historyEnd:end.toISOString(),lastUsageAt:use?.last.toISOString()||null,dynamicSafetyStock,effectiveSafetyStock,daysUntilStockOut:predictionAvailable&&dailyUsage>0?Math.max(0,mat.currentStock/dailyUsage):null,suggestedReorderQty,onOrderQty,orderPackQuantity:raw?validatePackage(JSON.parse(raw.value),mat.unit)?.quantity||null:null,calibratedAt,calibrationRequired:mode!=='self_produced'&&!calibratedAt,predictionAvailable,recipeComplete,lossUsage,lossPercent:totalUsage+lossUsage>0?lossUsage/(totalUsage+lossUsage)*100:null,basis:'closed_day_sales_recipe'}
+  return {inventoryId:mat.id,id:mat.id,name:mat.name,unit:mat.unit,avgCost:Number(mat.avgCost),category:mat.category,currentStock:mat.currentStock,safetyStock:mat.safetyStock,totalUsage,dailyUsage,historyDays,requestedHistoryDays:days,insufficientHistory:historyDays<7,noUsageHistory:historyDays===0||!recipeComplete,historyStart:historyDays?sampleStart.toISOString():null,historyEnd:end.toISOString(),lastUsageAt:use?.last.toISOString()||null,dynamicSafetyStock,effectiveSafetyStock,daysUntilStockOut:predictionAvailable&&dailyUsage>0?Math.max(0,mat.currentStock/dailyUsage):null,suggestedReorderQty,onOrderQty,orderPackQuantity:raw?validatePackage(JSON.parse(raw.value),mat.unit)?.quantity||null:null,calibratedAt,calibrationRequired:mode!=='self_produced'&&!calibratedAt,predictionAvailable,recipeComplete,lossUsage,lossPercent:totalUsage+lossUsage>0?lossUsage/(totalUsage+lossUsage)*100:null,basis:'closed_day_sales_recipe'}
  }).sort((a:any,b:any)=>(a.daysUntilStockOut??Infinity)-(b.daysUntilStockOut??Infinity))
 }

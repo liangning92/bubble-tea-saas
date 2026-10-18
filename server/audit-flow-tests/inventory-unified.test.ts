@@ -11,13 +11,14 @@ import {createRecipe,executeRecipe} from '../src/services/ProcessRecipeService'
 import {createInventoryCount,updateCountItem,submitInventoryCount,completeInventoryCount,getInventoryCountById} from '../src/services/InventoryCountService'
 import {physicalInventoryVariance} from '../src/services/InventoryVarianceService'
 import {getLowStockAlerts} from '../src/services/BomService'
+import {calculateRestockSuggestions} from '../src/services/MaterialService'
 import {inventoryForecast} from '../src/services/InventoryForecastService'
 beforeAll(async()=>{if(process.env.DATABASE_URL!.startsWith('file:'))await upgradeLocalSqlite(prisma,process.env.DATABASE_URL!);else try{await assertLedgerInstalled(prisma,false)}catch{for(const sql of pgLedgerDDL)await prisma.$executeRawUnsafe(sql)}await upgradeInventoryFlow(prisma,process.env.DATABASE_URL!)})
 afterAll(async()=>{await prisma.$disconnect()})
 async function fixture(){
  const tenant=await prisma.tenant.create({data:{name:'Synthetic unified stock'}}),store=await prisma.store.create({data:{tenantId:tenant.id,name:'Synthetic unified stock'}})
  for(const [key,value] of [[UNIFIED_INVENTORY_KEY,'2026-01-01T00:00:00Z'],['employee_inventory_flow_started_at','2026-01-01T00:00:00Z']])await prisma.config.create({data:{storeId:store.id,key,value,category:'inventory'}})
- const raw=await prisma.inventory.create({data:{storeId:store.id,name:'Vanilla powder',category:'ingredient',unit:'kg',currentStock:10,avgCost:1000,minStock:5}})
+ const raw=await prisma.inventory.create({data:{storeId:store.id,name:'Vanilla powder',createdAt:new Date('2026-01-01T00:00Z'),category:'ingredient',unit:'kg',currentStock:10,avgCost:1000,minStock:5}})
  const recipe=await createRecipe({storeId:store.id,name:'Base',outputUnit:'kg',inputs:[{inventoryId:raw.id,quantity:3}],outputs:[{name:'Prepared base',quantity:10}]})
  const semi=await prisma.inventory.findFirstOrThrow({where:{storeId:store.id,processRecipeId:recipe!.id}})
  const category=await prisma.category.create({data:{storeId:store.id,name:'Ice cream'}}),product=await prisma.product.create({data:{storeId:store.id,categoryId:category.id,name:'Sundae',code:randomUUID()}})
@@ -83,6 +84,8 @@ test('unverified opening balance and incomplete recipes suppress numerical cover
  await prisma.config.create({data:{storeId:f.store.id,key:'inventoryPackage:'+f.raw.id,value:JSON.stringify({unit:'bag',quantity:3,baseUnit:'kg'}),category:'inventory'}})
  row=(await inventoryForecast(f.store.id,7,new Date('2026-10-20T12:00:00Z'))).find(r=>r.inventoryId===f.raw.id)!
  expect(row.suggestedReorderQty).toBe(6)
+ const suggestion=(await calculateRestockSuggestions(f.store.id)).find(r=>r.inventoryId===f.raw.id)!
+ expect(suggestion.dailyUsage).toBeGreaterThan(0);expect(suggestion.dailyUsage).toBeLessThan(0.01);expect(suggestion.suggestQty%3).toBe(0)
  const o=await f.order(new Date('2026-10-19T12:00:00Z'))
  await prisma.orderConsumptionSnapshot.create({data:{storeId:f.store.id,orderId:o.id,createdAt:o.createdAt,materials:'[]',issues:'[{"code":"BOM_MISSING"}]'}})
  row=(await inventoryForecast(f.store.id,7,new Date('2026-10-20T12:00:00Z'))).find(r=>r.inventoryId===f.raw.id)!
@@ -95,3 +98,5 @@ test('whole-store analysis requires two post-cutover counts and provides prepare
  const options=opening.items[0].inventory.countEquivalents
  expect(options).toHaveLength(1);expect(options[0].unit).toBe('kg');expect(options[0].rawQuantity).toBeCloseTo(0.3)
 })
+
+test('newly introduced materials never claim a full historical sample',async()=>{const f=await fixture();await f.observe(10);await prisma.inventory.update({where:{id:f.raw.id},data:{createdAt:new Date(Date.now()-2*86400000)}});const row=(await inventoryForecast(f.store.id)).find(r=>r.inventoryId===f.raw.id)!;expect(row.historyDays).toBeLessThanOrEqual(2);expect(row.daysUntilStockOut).toBeNull()})
