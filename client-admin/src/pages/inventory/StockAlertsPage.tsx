@@ -1,3 +1,4 @@
+import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings';
@@ -23,7 +24,7 @@ export function StockAlertsPage() {
         return <DashboardReadFailure scope/>;
     if (query.isError)
         return <DashboardReadFailure retry={() => query.refetch()}/>;
-    return <div className="space-y-5"><DashboardContextNotice current/><header className="flex justify-between"><h1 className="text-2xl font-bold">{label('title')}</h1><Link className="text-primary" to="/inventory/alert-config">{label('settings')}</Link></header><p className="text-sm text-gray-600">{label('formula')}</p><p className="text-sm text-gray-600">{label('handleHint')}</p>
+    return <div className="space-y-5"><DashboardContextNotice current/><header className="flex justify-between"><h1 className="text-2xl font-bold">{label('title')}</h1><Link className="text-primary" to="/inventory/alert-config">{label('settings')}</Link></header><p className="text-sm text-gray-600">{label('formula')}</p><p className="text-sm text-gray-600">{label('handleHint')}</p><p className="text-sm text-gray-600">{t('inventoryFlow.usagePolicyHint')}</p>
  <div className="grid grid-cols-3 gap-3">{['open', 'handled', 'resolved'].map(s => <button key={s} className={`card text-left ${s === 'open' ? 'bg-orange-50' : ''}`} onClick={() => setStatus(s)}><p>{label(s)}</p><strong className="text-2xl">{list.filter(a => a.status === s).length}</strong></button>)}</div>
  <div className="flex gap-3"><select aria-label={label('open')} className="input min-w-0 flex-1" value={status} onChange={e => setStatus(e.target.value)}>{['open', 'handled', 'resolved', 'all'].map(s => <option key={s} value={s}>{label(s)}</option>)}</select><select aria-label={label('all')} className="input min-w-0 flex-1" value={type} onChange={e => setType(e.target.value)}><option value="">{label('all')}</option>{[...new Set(list.map(a => a.type))].map(s => <option key={s} value={s}>{label(s)}</option>)}</select><button className="btn btn-outline shrink-0 whitespace-nowrap" onClick={() => query.refetch()}>{t('inventoryFlow.refresh')}</button></div>
  {query.isPending ? <p>{t('common.loading')}</p> : !visible.length ? <p className="card text-gray-500">{t('inventoryFlow.noAlerts')}</p> : visible.map(a => {
@@ -31,7 +32,7 @@ export function StockAlertsPage() {
             return <article key={a.id} className={`card border-l-4 space-y-2 ${a.status === 'resolved' ? 'border-gray-300' : a.severity === 'critical' ? 'border-red-500 bg-red-50' : a.severity === 'warning' ? 'border-orange-400 bg-orange-50' : 'border-blue-300 bg-blue-50'}`}><div className="flex justify-between gap-3"><strong>{label(a.type)} · {formatItemName(d.inventoryName || d.name || d.orderNumber || '', i18n.language)}</strong><span>{label(a.status)} · {label(a.severity)}</span></div>
  {d.currentStock !== undefined && <p className="text-sm">{t('inventoryFlow.currentStock')}: {n(d.currentStock)} {d.unit} · {label('safe')}: {n(d.effectiveSafetyStock)} {d.unit} · {label('daily')}: {n(d.dailyUsage)} {d.unit} · {t('inventoryAlerts.sample', { days: d.historyDays ?? 0 })} · {label('daysLeft')}: {n(d.daysUntilStockOut)} {t('common.days')}</p>}
  {d.basis === 'recorded_sales_ledger_estimate' && <p className="text-sm">{label('legacy')}</p>}
- {d.businessDate && <p>{d.businessDate} · {t('inventoryFlow.theory')}: {n(d.theoreticalConsumption)} {d.unit} · {t('inventoryFlow.actualOut')}: {n(d.actualConsumption)} {d.unit} · {label('variance')}: {n(d.variancePercent)} {d.variancePercent === null ? '' : '%'}</p>}
+ {d.businessDate && <p>{d.businessDate} · {t('inventoryFlow.theory')}: {consumptionQuantity(d.theoreticalConsumption,i18n.language)} {d.unit} · {t('inventoryFlow.actualOut')}: {consumptionQuantity(d.actualConsumption,i18n.language)} {d.unit} · {label('variance')}: {n(d.variancePercent)} {d.variancePercent === null ? '' : '%'}</p>}
  {a.type === 'count_variance' && <p>{t('inventoryFlow.currentStock')}: {n(d.systemQty)} {d.unit} · {t('inventory.actualQty')}: {n(d.countedQty)} {d.unit} · {label('variance')}: {n(d.variance)} {d.unit} ({n(d.variancePercent)}%)</p>}
  {a.type === 'excessive_loss' && <p>{label('loss')}: {n(d.lossUsage)} {d.unit} ({n(d.lossPercent)}%)</p>}
  {d.expectedDate && <p>{label('expectedDate')}: {formatStoreDate(d.expectedDate,dateSettings)} · {d.orderNumber}</p>}

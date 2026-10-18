@@ -1,10 +1,11 @@
+import {inventoryUsageMode} from '../utils/inventoryUsagePolicy';
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
 import { inventoryForecast } from './InventoryForecastService';
 import { getInventoryAlertConfig } from './InventoryAlertConfigService';
 import { availableBatches } from './InventoryBatchService';
 import { startOfDay, addDays, endOfDay, formatDate } from '../utils/dateUtils';
-import { employeeConsumption, checkClosedConsumptionDays, classifyEmployeeConsumption } from './EmployeeConsumptionService';
+import { employeeConsumption, checkClosedConsumptionDays, classifyEmployeeConsumption, refreshStoreConsumptionDays } from './EmployeeConsumptionService';
 import { createHash } from 'crypto';
 const CATEGORY = 'inventory_alert_events';
 export type InventoryAlertType = 'low_stock' | 'out_of_stock' | 'arrival_shortage' | 'purchase_overdue' | 'excessive_loss' | 'count_variance' | 'expiry_batch' | 'expiry_missing' | 'overstock' | 'stagnant_stock' | 'consumption_variance' | 'data_incomplete';
@@ -28,6 +29,7 @@ const keyFor = (type: string, resource: string) => 'inventoryAlert:' + createHas
 const rank = { info: 0, warning: 1, critical: 2 };
 export async function calculateInventoryAlerts(storeId: string, now = new Date()): Promise<Candidate[]> {
     const {startOfDay,addDays,endOfDay,formatDate}=await inventoryBusinessCalendar(storeId);
+    await refreshStoreConsumptionDays(storeId,now);
     const settings = await getInventoryAlertConfig(storeId), forecasts = await inventoryForecast(storeId, 30, now);
     const inventory = await prisma.inventory.findMany({ where: { storeId }, include: { batches: { where: { status: 'active', quantity: { gt: 0 } } } } });
     const orders = await prisma.purchaseOrder.findMany({ where: { storeId, status: { in: ['pending', 'approved', 'awaiting_receipt'] } }, include: { items: true } });
@@ -35,6 +37,7 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
     const add = (type: InventoryAlertType, resourceId: string, severity: Candidate['severity'], detail: any) => candidates.push({ type, resourceId, severity, detail });
     for (const row of forecasts) {
         const material = inventory.find(m => m.id === row.inventoryId)!;
+        if(inventoryUsageMode(material)==='self_produced')continue;
         const detail = { ...row, inventoryName: row.name };
         if (settings.enableLowStockAlert) {
             if (row.currentStock <= 0)
@@ -65,7 +68,7 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
             if (row.currentStock > 0 && since < addDays(startOfDay(now), -settings.stagnantDays))
                 add('stagnant_stock', row.inventoryId, 'warning', { ...detail, lastUsageAt: row.lastUsageAt, stagnantDays: settings.stagnantDays });
         }
-        if (settings.enableDataAlert && row.noUsageHistory && row.currentStock > 0)
+        if (settings.enableDataAlert && inventoryUsageMode(material)==='tracked' && row.noUsageHistory && row.currentStock > 0)
             add('data_incomplete', row.inventoryId + ':history', 'info', { ...detail, reason: 'no_history' });
         if (settings.enableExpiryAlert) {
             const batches = availableBatches(material.batches, material.currentStock).filter(b => b.quantity > 0);
@@ -89,21 +92,15 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
         const counts = await prisma.inventoryCount.findMany({ where: { storeId, status: 'pending_review' }, include: { items: { include: { inventory: { select: { name: true, unit: true } } } } } });
         for (const count of counts)
             for (const item of count.items) {
-                if (item.variance === null || !item.variance)
+                if (inventoryUsageMode(item.inventory)==='self_produced' || item.variance === null || !item.variance)
                     continue;
                 const percent = item.systemQty === 0 ? null : Math.abs(item.variance) / Math.abs(item.systemQty) * 100;
                 if (percent === null || percent >= settings.countVarianceWarningPercent)
                     add('count_variance', item.id, percent !== null && percent >= settings.countVarianceCriticalPercent ? 'critical' : 'warning', { inventoryId: item.inventoryId, inventoryName: item.inventory.name, unit: item.inventory.unit, countId: count.id, systemQty: item.systemQty, countedQty: item.countedQty, variance: item.variance, variancePercent: percent, note: item.note });
             }
     }
-    if (settings.enableConsumptionAlert) {
-        const stored = await prisma.consumptionAlert.findMany({ where: { storeId, status: { in: ['normal', 'warning', 'critical'] } }, orderBy: { businessDate: 'desc' } });
-        for (const alert of stored) {
-            const detail = JSON.parse(alert.detail), classification = classifyEmployeeConsumption(detail.theoreticalConsumption, detail.actualConsumption, settings.varianceWarningPercent, settings.varianceCriticalPercent, true, detail.varianceStatus === 'unavailable');
-            if (['warning', 'critical'].includes(classification.varianceStatus))
-                add('consumption_variance', alert.id, classification.varianceStatus as 'warning' | 'critical', { ...detail, ...classification, businessDate: alert.businessDate, missingOut: detail.theoreticalConsumption > 0 && detail.actualConsumption === 0 });
-        }
-    }
+    // Stock issues and processed recipe use measure different stages. Their daily
+    // difference is not evidence of waste; physical count alerts remain independent.
     if (settings.enableDataAlert) {
         const yesterday = formatDate(addDays(startOfDay(now), -1)), report = await employeeConsumption({ storeId, startDate: yesterday, endDate: yesterday });
         for (const row of report.list)

@@ -1,3 +1,4 @@
+import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { formatNumber } from '../../utils/numberDisplay'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import { useState } from 'react'
@@ -12,8 +13,8 @@ export function EmployeeConsumptionPage(){
  const query=useQuery({queryKey:['employee-consumption',range],queryFn:()=>inventoryApi.employeeConsumption(range),enabled:!!range.startDate&&!!range.endDate,refetchInterval:60000})
  const settings=useQuery({queryKey:['inventory-alert-config'],queryFn:()=>inventoryApi.getAlertConfig()})
  const data=query.isError?undefined:query.data?.data?.data,config=settings.data?.data?.data
- const qty=(value:unknown)=>value==null||!Number.isFinite(Number(value))?'—':Number(value).toLocaleString(i18n.language,{maximumFractionDigits: 0})
- return <section className="space-y-4"><header className="flex flex-wrap justify-between gap-3 items-center"><h1>{t('operations.consumption')}</h1><Link className="text-primary text-sm" to="/inventory/alerts">{t('operations.alerts')} →</Link></header><p className="text-sm text-gray-500">{t('operations.consumptionHint')}</p>
+ const qty=(value:unknown)=>consumptionQuantity(value,i18n.language)
+ return <section className="space-y-4"><header className="flex flex-wrap justify-between gap-3 items-center"><h1>{t('operations.consumption')}</h1><Link className="text-primary text-sm" to="/inventory/alerts">{t('operations.alerts')} →</Link></header><p className="text-sm text-gray-500">{t('operations.consumptionHint')}</p><p className="text-sm text-gray-500">{t('inventoryFlow.usagePolicyHint')}</p>
  <div className="flex flex-wrap gap-3 items-center"><LocalizedDateTimeInput aria-label={t('shiftReview.start')} type="date" className="input w-auto" value={range.startDate} onChange={e=>setRange({...range,startDate:e.target.value})}/><span>—</span><LocalizedDateTimeInput aria-label={t('shiftReview.end')} type="date" className="input w-auto" value={range.endDate} onChange={e=>setRange({...range,endDate:e.target.value})}/><button type="button" className="btn-secondary" onClick={()=>query.refetch()}>{t('operations.refresh')}</button><Link className="text-sm text-primary" to="/inventory/physical-analysis">{t('inventoryFlow.physicalAnalysis')}</Link></div>
  {data?.list?.some((row:any)=>row.provisional)&&<p className="text-sm text-blue-700">{t('inventoryFlow.provisional')}</p>}
  {query.isPending&&<p role="status">{t('inventoryFlow.loading')}</p>}{query.isError&&<p role="alert" className="text-red-700">{t('inventoryFlow.failed')}</p>}

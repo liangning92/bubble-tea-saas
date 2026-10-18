@@ -1,3 +1,4 @@
+import {inventoryUsageMode} from '../utils/inventoryUsagePolicy';
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
 import { getInventoryAlertConfig } from './InventoryAlertConfigService';
@@ -57,7 +58,9 @@ export async function employeeConsumption(filter: {
             totals[log.reason] += log.quantity;
         const actual = Object.values(totals).reduce((a, b) => a + b, 0), theory = materials.get(item.id);
         const classification = classifyEmployeeConsumption(theory?.quantity || 0, actual, setting.varianceWarningPercent, setting.varianceCriticalPercent, setting.enableConsumptionAlert, incomplete || !!theory && theory.unit !== item.unit);
-        return { inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: theory?.quantity || 0, actualConsumption: actual, breakdown: totals, ...classification, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
+        const usageMode=inventoryUsageMode(item);
+        const comparison=usageMode==='tracked'&&classification.varianceStatus==='unavailable'?classification:{variance:null,variancePercent:null,varianceStatus:'not_compared',unavailableReason:usageMode==='bulk'?'BULK_ISSUE':usageMode==='self_produced'?'SELF_PRODUCED':'BATCH_WITHDRAWAL'};
+        return { usageMode, inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: theory?.quantity || 0, actualConsumption: actual, breakdown: totals, ...comparison, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
     });
     return { list, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
 }
@@ -77,50 +80,51 @@ export async function getConsumptionAlerts(storeId: string) {
     const setting = await getInventoryAlertConfig(storeId);
     if (!setting.enableConsumptionAlert)
         return [];
+    await refreshStoreConsumptionDays(storeId);
     const rows = await prisma.consumptionAlert.findMany({ where: { storeId, status: { in: ['warning', 'critical'] } }, orderBy: [{ businessDate: 'desc' }, { inventoryId: 'asc' }] });
     return rows.map(row => ({ ...row, detail: JSON.parse(row.detail) }));
 }
-let running = false;
-export async function checkClosedConsumptionDays(now = new Date()) {
-    if (running)
-        return;
-    running = true;
-    try {
-        const stores = await prisma.store.findMany({ select: { id: true } });
-        for (const store of stores) {
-            try {
-                const {startOfDay,addDays,formatDate,boundary}=await inventoryBusinessCalendar(store.id);
-                const cutover = await ensureInventoryFlow(store.id, prisma, now);
-                const settings = await getInventoryAlertConfig(store.id);
-                if (!settings.enableConsumptionAlert)
-                    continue;
-                const checkpoint = await prisma.config.findUnique({ where: { storeId_key: { storeId: store.id, key: 'employee_consumption_checkpoint' } } });
-                let day = checkpoint ? addDays(boundary(checkpoint.value), 1) : startOfDay(cutover);
-                const today = startOfDay(now);
-                while (day < today) {
-                    const date = formatDate(day);
-                    await checkConsumptionDay(store.id, date, now);
-                    await prisma.config.upsert({ where: { storeId_key: { storeId: store.id, key: 'employee_consumption_checkpoint' } }, create: { storeId: store.id, key: 'employee_consumption_checkpoint', value: date, category: 'inventory' }, update: { value: date } });
-                    day = addDays(day, 1);
-                }
-                // Durable dirty-day markers survive downtime and delayed offline receipt sync.
-                const dirty = await prisma.config.findMany({ where: { storeId: store.id, key: { startsWith: 'employee_consumption_dirty:' } } });
-                for (const record of dirty) {
-                    const date = record.key.slice('employee_consumption_dirty:'.length);
-                    if (boundary(date) >= today)
-                        continue;
-                    await checkConsumptionDay(store.id, date, now);
-                    await prisma.config.deleteMany({ where: { storeId: store.id, key: record.key, value: record.value } });
-                }
-            }
-            catch (error) {
-                console.error('[Inventory consumption]', store.id, error);
-            }
-        }
-    }
-    finally {
-        running = false;
-    }
+// Share one per-store refresh between the scheduler and alert-page requests.
+// New evidence writes a new dirty token. Delete only the token actually processed.
+const refreshes=new Map<string,Promise<void>>();
+export function refreshStoreConsumptionDays(storeId:string,now=new Date()):Promise<void>{
+ const running=refreshes.get(storeId);if(running)return running;
+ const operation=(async()=>{
+  const {startOfDay,addDays,formatDate,boundary}=await inventoryBusinessCalendar(storeId);
+  const settings=await getInventoryAlertConfig(storeId);if(!settings.enableConsumptionAlert)return;
+  const cutover=await ensureInventoryFlow(storeId,prisma,now),today=startOfDay(now);
+  const [checkpoint,version]=await Promise.all([
+   prisma.config.findUnique({where:{storeId_key:{storeId,key:'employee_consumption_checkpoint'}}}),
+   prisma.config.findUnique({where:{storeId_key:{storeId,key:'employee_consumption_refresh_version'}}})
+  ]);
+  // One-time repair of old cached results missed by pre-fix offline imports.
+  let day=version?.value==='2'&&checkpoint?addDays(boundary(checkpoint.value),1):startOfDay(cutover);
+  while(day<today){
+   const date=formatDate(day);await checkConsumptionDay(storeId,date,now);
+   await prisma.config.upsert({where:{storeId_key:{storeId,key:'employee_consumption_checkpoint'}},create:{storeId,key:'employee_consumption_checkpoint',value:date,category:'inventory'},update:{value:date}});
+   day=addDays(day,1);
+  }
+  const dirty=await prisma.config.findMany({where:{storeId,key:{startsWith:'employee_consumption_dirty:'}}});
+  const yesterday=formatDate(addDays(today,-1));
+  // Refresh yesterday on demand, including batch withdrawals after the daily run.
+  const dates=new Set<string>([...(boundary(yesterday)>=startOfDay(cutover)?[yesterday]:[]),...dirty.map(r=>r.key.slice('employee_consumption_dirty:'.length))]);
+  for(const date of dates){
+   if(boundary(date)>=today)continue;
+   await checkConsumptionDay(storeId,date,now);
+   const record=dirty.find(r=>r.key==='employee_consumption_dirty:'+date);
+   if(record)await prisma.config.deleteMany({where:{storeId,key:record.key,value:record.value}});
+  }
+  if(version?.value!=='2'||dirty.some(r=>boundary(r.key.slice('employee_consumption_dirty:'.length))<today))await prisma.config.deleteMany({where:{storeId,key:'inventory_alert_center_checked_at'}});
+  await prisma.config.upsert({where:{storeId_key:{storeId,key:'employee_consumption_refresh_version'}},create:{storeId,key:'employee_consumption_refresh_version',value:'2',category:'inventory'},update:{value:'2'}});
+ })().finally(()=>refreshes.delete(storeId));
+ refreshes.set(storeId,operation);return operation;
+}
+let running=false;
+export async function checkClosedConsumptionDays(now=new Date()){
+ if(running)return;running=true;
+ try{for(const store of await prisma.store.findMany({select:{id:true}})){
+  try{await refreshStoreConsumptionDays(store.id,now)}catch(error){console.error('[Inventory consumption]',store.id,error)}
+ }}finally{running=false}
 }
 export function startConsumptionScheduler() {
     void checkClosedConsumptionDays();

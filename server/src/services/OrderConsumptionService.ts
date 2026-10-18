@@ -75,9 +75,11 @@ export async function recordOrderConsumption(tx: any, storeId: string, orderId: 
             }
         }
     }
-    return tx.orderConsumptionSnapshot.create({ data: {
+    const snapshot = await tx.orderConsumptionSnapshot.create({ data: {
             storeId, orderId:options?.consumptionKey||orderId, createdAt: consumedAt, materials: JSON.stringify([...materials.values()]), issues: JSON.stringify(issues)
         } });
+    await markConsumptionDayDirty(tx, storeId, consumedAt);
+    return snapshot;
 }
 export async function markConsumptionDayDirty(tx: any, storeId: string, at: Date) {
     const {formatDate}=await inventoryBusinessCalendar(storeId,tx);

@@ -1,3 +1,4 @@
+import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {inventoryForecast} from './InventoryForecastService'
 import {getInventoryAlertConfig} from './InventoryAlertConfigService'
 import {convertQuantity} from '../utils/inventoryUnits'
@@ -87,7 +88,7 @@ export async function getProductBomDetail(productId: string) {
     }
 
     // 对于 raw_material，直接计算
-    const cpu = convertQuantity(1, item.unit, inv.unit) * Number(inv.avgCost)
+    const cpu = inventoryUsageMode(inv)==='self_produced'?0:convertQuantity(1, item.unit, inv.unit) * Number(inv.avgCost)
     const totalCost = item.quantity * cpu
 
     return {
@@ -148,7 +149,7 @@ export async function getLowStockAlerts(storeId:string,days:number=30){
  const settings=await getInventoryAlertConfig(storeId)
  if(!settings.enableLowStockAlert)return []
  return (await getMaterialUsageForecast(storeId,days))
-  .filter(mat=>mat.currentStock<=mat.effectiveSafetyStock)
+  .filter(mat=>inventoryUsageMode({name:mat.name})!=='self_produced'&&mat.currentStock<=mat.effectiveSafetyStock)
   .map(mat=>({...mat,urgency:mat.currentStock<=0||(mat.daysUntilStockOut!==null&&mat.daysUntilStockOut<=settings.lowStockCriticalDays)?'critical':'warning'}))
 }
 
