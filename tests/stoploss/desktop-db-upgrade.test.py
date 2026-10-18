@@ -1,5 +1,6 @@
 from contextlib import closing
 import importlib.util
+import json
 import pathlib
 import shutil
 import socket
@@ -16,6 +17,10 @@ SPEC.loader.exec_module(U)
 
 
 class UpgradeTests(unittest.TestCase):
+    def test_published_upgrade_allowlist_matches_the_verified_installer_changes(self):
+        approved = pathlib.Path(__file__).parents[2] / 'docs/desktop-upgrade-changes.json'
+        self.assertEqual(json.loads(approved.read_text()), U.CHANGES)
+
     def test_automatic_close_targets_only_the_original_pos_directory(self):
         root = self.root / 'btps-close-owned'
         self.assertTrue(U.owned_pos_executable(root / 'BTPS.exe', root))
