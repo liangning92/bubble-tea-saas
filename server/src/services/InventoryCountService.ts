@@ -44,7 +44,7 @@ export async function createInventoryCount(data:CreateInventoryCountData){
   await tx.store.update({where:{id:data.storeId},data:{updatedAt:new Date()}})
   if(await tx.inventoryCount.findFirst({where:{storeId:data.storeId,status:{in:['in_progress','pending_review']}}}))throw new Error('COUNT_ALREADY_ACTIVE')
   const stockRows=await tx.inventory.findMany({where:{storeId:data.storeId,OR:[{type:{not:'semi_finished'}},{processRecipeId:null}],...(data.inventoryIds?{id:{in:data.inventoryIds}}:{})},select:{id:true,currentStock:true,name:true,category:true}})
-  const inventory=await unifiedInventorySince(tx,data.storeId)?stockRows.filter(i=>inventoryUsageMode(i)!=='self_produced'):stockRows
+  const inventory=await unifiedInventorySince(tx,data.storeId)&&!data.inventoryIds?stockRows.filter(i=>inventoryUsageMode(i)!=='self_produced'):stockRows
   if(!inventory.length||data.inventoryIds&&(new Set(data.inventoryIds).size!==data.inventoryIds.length||inventory.length!==data.inventoryIds.length))throw Error('INVALID_COUNT_SELECTION')
   const {inventoryIds,...fields}=data
   return view(await tx.inventoryCount.create({data:{...fields,status:'in_progress',items:{create:inventory.map(i=>({inventoryId:i.id,systemQty:i.currentStock}))}},include}))
