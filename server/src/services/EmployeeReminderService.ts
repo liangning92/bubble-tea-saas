@@ -213,6 +213,13 @@ export async function collectReminders(storeId: string, now = new Date()) {
           "Hasil pengajuan tersedia / 申请审核结果已更新",
           url,
         );
+      if (model === "shiftSwap" && r.targetStaffId) {
+        if (["approved", "rejected", "peer_rejected", "cancelled"].includes(r.status))
+          for (const staffId of [r.staffId, r.targetStaffId])
+            await enqueueReminder(storeId, staffId, `swap-result:${r.id}:${r.updatedAt.toISOString()}`, "Status tukar shift diperbarui / 调班流程已更新", url);
+        if (r.status === "pending" && r.targetConfirmed)
+          await enqueueReminder(storeId, r.staffId, `swap-agreed:${r.id}:${r.updatedAt.toISOString()}`, "Rekan setuju, menunggu admin / 对方已同意，等待审批", url);
+      }
       if (
         model === "shiftSwap" &&
         r.status === "pending" &&
@@ -222,7 +229,7 @@ export async function collectReminders(storeId: string, now = new Date()) {
         await enqueueReminder(
           storeId,
           r.targetStaffId,
-          `swap-confirm:${r.id}`,
+          `swap-confirm:${r.id}:${r.updatedAt.toISOString()}`,
           "Konfirmasi pertukaran shift / 请确认换班",
           "/shift-swap",
         );

@@ -1,3 +1,4 @@
+import { getStoreId } from '../utils/storeHelper'
 import { snapshotAttendance, reconcileLate } from '../services/EmployeeAttendanceService'
 import { parseBusinessDate, BusinessInputError } from '../utils/businessDate'
 import { formatDate, startOfDay } from '../utils/dateUtils'
@@ -6,7 +7,6 @@ import { validateBody } from '../utils/validation'
 import { z } from 'zod'
 import { Router } from 'express'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
-import { isFeatureEnabled } from '../services/StaffConfigService'
 import { prisma } from '../config/database'
 
 const router = Router()
@@ -17,7 +17,7 @@ const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/)
 const date = z.string().transform(value => parseBusinessDate(value))
 const correctionSchema = z.object({ date, originalCheckIn: z.string().optional(), originalCheckOut: z.string().optional(), correctCheckIn: z.union([time, z.literal('')]).optional(), correctCheckOut: z.union([time, z.literal('')]).optional(), reason: z.string().trim().min(1) }).refine(value => !!value.correctCheckIn || !!value.correctCheckOut, 'Corrected check-in or check-out is required')
 const overtimeSchema = z.object({ date, startTime: time, endTime: time, reason: z.string().trim().min(1) }).refine(value => value.startTime !== value.endTime, 'Start and end times must differ')
-const swapSchema = z.object({ originalDate: date, originalShift: z.string().min(1), targetDate: date, targetShift: z.string().min(1), targetStaffId: z.string().min(1).optional(), reason: z.string().optional() })
+const swapSchema = z.object({ originalDate: date, originalShift: z.string().min(1), targetDate: date, targetShift: z.string().min(1), targetStaffId: z.string().min(1), reason: z.string().optional() })
 const scope = (model: 'attendanceCorrection' | 'shiftSwap' | 'overtimeRequest') => requireResourceStore(req => (prisma[model] as any).findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
 async function decide(model: 'attendanceCorrection' | 'shiftSwap' | 'overtimeRequest', id: string, status: string, processedBy: string, adminNote?: string) {
   return prisma.$transaction(async tx => {
@@ -185,6 +185,20 @@ router.put('/:id/reject', authenticate, authorize('admin', 'manager'), scope('at
 
 // ========== 调班申请 ==========
 
+// Employee picker exposes only active colleagues in the current store.
+shiftSwapRouter.get('/colleagues', authenticate, async (req: AuthRequest, res) => {
+  if (!req.user!.staffId) return res.status(403).json({ code: 403, message: 'STAFF_PROFILE_REQUIRED' })
+  try {
+    const data = await prisma.staff.findMany({ where: { storeId: req.user!.storeId, status: 'active', id: { not: req.user!.staffId } }, select: { id: true, name: true, employeeNumber: true }, orderBy: { name: 'asc' } })
+    res.json({ code: 200, data })
+  } catch { res.status(500).json({ code: 500, message: 'Failed to load colleagues' }) }
+})
+async function withSwapPeople<T extends { targetStaffId: string | null; storeId: string; originalShift: string; targetShift: string }>(records: T[]) {
+  const people = await prisma.staff.findMany({ where: { id: { in: records.map(r => r.targetStaffId).filter((id): id is string => !!id) } }, select: { id: true, name: true, employeeNumber: true } })
+  const shifts = await prisma.shift.findMany({ where: { storeId: { in: [...new Set(records.map(r => r.storeId))] } }, select: { key: true, name: true, storeId: true } })
+  return records.map(r => ({ ...r, originalShiftName: shifts.find(s => s.storeId === r.storeId && s.key === r.originalShift)?.name || r.originalShift, targetShiftName: shifts.find(s => s.storeId === r.storeId && s.key === r.targetShift)?.name || r.targetShift, targetStaff: people.find(p => p.id === r.targetStaffId) || null }))
+}
+
 // POST /api/shift-swap - 员工提交调班申请
 shiftSwapRouter.post('/', authenticate, validateBody(swapSchema), async (req: AuthRequest, res) => {
   try {
@@ -192,9 +206,10 @@ shiftSwapRouter.post('/', authenticate, validateBody(swapSchema), async (req: Au
     const staffId = req.user!.staffId
     const storeId = req.user!.storeId
 
+    if (!staffId) return res.status(403).json({ code: 403, message: 'STAFF_PROFILE_REQUIRED' })
     if (targetStaffId) {
       const target = await prisma.staff.findUnique({ where: { id: targetStaffId } })
-      if (!target || target.storeId !== storeId || target.id === staffId) return res.status(400).json({ code: 400, message: 'Target must be another employee in this store' })
+      if (!target || target.storeId !== storeId || target.id === staffId || target.status !== 'active') return res.status(400).json({ code: 400, message: 'Target must be another employee in this store' })
     }
     const swap = await prisma.shiftSwap.create({
       data: {
@@ -227,15 +242,17 @@ shiftSwapRouter.post('/', authenticate, validateBody(swapSchema), async (req: Au
 shiftSwapRouter.get('/my', authenticate, async (req: AuthRequest, res) => {
   try {
     const staffId = req.user!.staffId
+    if (!staffId) return res.status(403).json({ code: 403, message: 'STAFF_PROFILE_REQUIRED' })
 
     const swaps = await prisma.shiftSwap.findMany({
-      where: { staffId },
+      where: { storeId: req.user!.storeId, OR: [{ staffId }, { targetStaffId: staffId }] },
+      include: { staff: { select: { name: true, employeeNumber: true } } },
       orderBy: { createdAt: 'desc' }
     })
 
     res.json({
       code: 200,
-      data: swaps,
+      data: await withSwapPeople(swaps),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -249,10 +266,10 @@ shiftSwapRouter.get('/my', authenticate, async (req: AuthRequest, res) => {
 // GET /api/shift-swap - 管理端获取所有调班申请
 shiftSwapRouter.get('/', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const storeId = req.user!.storeId
+    const storeId = getStoreId(req)
     const { status } = req.query
 
-    const where: any = { storeId }
+    const where: any = { storeId, OR: [{ status: { not: 'pending' } }, { targetConfirmed: true }] }
     if (status) where.status = status
 
     const swaps = await prisma.shiftSwap.findMany({
@@ -263,7 +280,7 @@ shiftSwapRouter.get('/', authenticate, authorize('admin', 'manager'), async (req
 
     res.json({
       code: 200,
-      data: swaps,
+      data: await withSwapPeople(swaps),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -280,27 +297,18 @@ shiftSwapRouter.put('/:id/approve', authenticate, authorize('admin', 'manager'),
     const { id } = req.params
     const { adminNote } = req.body
     const processedBy = req.user!.id
-    const storeId = req.user!.storeId
 
     const swap = await prisma.shiftSwap.findUnique({ where: { id } })
     if (!swap) {
       return res.status(404).json({ code: 404, message: 'Shift swap not found' })
     }
 
-    // Check if confirmation is required
-    const confirmationRequired = await isFeatureEnabled(storeId, 'shiftSwapConfirmation')
-
-    // If confirmation required and target hasn't confirmed, don't allow approval yet
-    if (confirmationRequired && swap.targetStaffId && !swap.targetConfirmed) {
-      return res.status(400).json({
-        code: 400,
-        message: 'Target staff has not confirmed this shift swap yet',
-        timestamp: new Date().toISOString()
-      })
+    if (!swap.targetStaffId || !swap.targetConfirmed) {
+      return res.status(409).json({ code: 409, message: 'Target staff must agree before admin review' })
     }
 
     const updated = await prisma.$transaction(async tx => {
-      const changed = await tx.shiftSwap.updateMany({ where: { id, status: 'pending', ...(confirmationRequired && swap.targetStaffId ? { targetConfirmed: true } : {}) }, data: { status: 'approved', adminNote, processedBy, processedAt: new Date() } })
+      const changed = await tx.shiftSwap.updateMany({ where: { id, status: 'pending', targetConfirmed: true, updatedAt: swap.updatedAt }, data: { status: 'approved', adminNote, processedBy, processedAt: new Date() } })
       if (changed.count !== 1) throw new WorkflowConflict('Request is no longer pending')
       const originalStart = startOfDay(swap.originalDate)
       const targetStart = startOfDay(swap.targetDate)
@@ -328,7 +336,7 @@ shiftSwapRouter.put('/:id/approve', authenticate, authorize('admin', 'manager'),
 })
 
 // PUT /api/shift-swap/:id/confirm - 目标员工确认调班申请
-shiftSwapRouter.put('/:id/confirm', authenticate, async (req: AuthRequest, res) => {
+shiftSwapRouter.put('/:id/confirm', authenticate, validateBody(z.object({ agree: z.boolean(), expectedVersion: z.string().datetime() })), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const staffId = req.user!.staffId
@@ -339,7 +347,7 @@ shiftSwapRouter.put('/:id/confirm', authenticate, async (req: AuthRequest, res) 
     }
 
     // Verify this staff is the target
-    if (swap.targetStaffId !== staffId) {
+    if (!staffId || swap.storeId !== req.user!.storeId || swap.targetStaffId !== staffId) {
       return res.status(403).json({ code: 403, message: 'Not authorized to confirm this swap' })
     }
 
@@ -347,11 +355,13 @@ shiftSwapRouter.put('/:id/confirm', authenticate, async (req: AuthRequest, res) 
       return res.status(400).json({ code: 400, message: 'Swap is no longer pending' })
     }
 
-    const updated = await prisma.shiftSwap.update({
-      where: { id },
-      data: {
-        targetConfirmed: true
-      }
+    const updated = await prisma.$transaction(async tx => {
+      const changed = await tx.shiftSwap.updateMany({
+        where: { id, storeId: req.user!.storeId, targetStaffId: staffId, status: 'pending', targetConfirmed: false, updatedAt: new Date(req.body.expectedVersion) },
+        data: req.body.agree ? { targetConfirmed: true } : { status: 'peer_rejected' }
+      })
+      if (changed.count !== 1) throw new WorkflowConflict('Request changed; refresh before responding')
+      return tx.shiftSwap.findUniqueOrThrow({ where: { id } })
     })
 
     res.json({
@@ -372,9 +382,11 @@ shiftSwapRouter.put('/:id/confirm', authenticate, async (req: AuthRequest, res) 
 shiftSwapRouter.get('/pending-confirm', authenticate, async (req: AuthRequest, res) => {
   try {
     const staffId = req.user!.staffId
+    if (!staffId) return res.status(403).json({ code: 403, message: 'STAFF_PROFILE_REQUIRED' })
 
     const swaps = await prisma.shiftSwap.findMany({
       where: {
+        storeId: req.user!.storeId,
         targetStaffId: staffId,
         status: 'pending',
         targetConfirmed: false
@@ -387,7 +399,7 @@ shiftSwapRouter.get('/pending-confirm', authenticate, async (req: AuthRequest, r
 
     res.json({
       code: 200,
-      data: swaps,
+      data: await withSwapPeople(swaps),
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -405,7 +417,11 @@ shiftSwapRouter.put('/:id/reject', authenticate, authorize('admin', 'manager'), 
     const { adminNote } = req.body
     const processedBy = req.user!.id
 
-    const updated = await decide('shiftSwap', id, 'rejected', processedBy, adminNote)
+    const updated = await prisma.$transaction(async tx => {
+      const changed = await tx.shiftSwap.updateMany({ where: { id, status: 'pending', targetConfirmed: true }, data: { status: 'rejected', processedBy, processedAt: new Date(), adminNote } })
+      if (changed.count !== 1) throw new WorkflowConflict('Target staff must agree before admin review')
+      return tx.shiftSwap.findUniqueOrThrow({ where: { id } })
+    })
 
     res.json({
       code: 200,
@@ -566,7 +582,7 @@ for(const [target,model,schema] of [[router,'attendanceCorrection',correctionSch
   try{
    const expectedVersion=z.string().datetime().parse(req.body.expectedVersion);const input=schema.parse(req.body),staffId=req.user!.staffId,storeId=req.user!.storeId;
    if(!staffId)return res.status(403).json({code:403,message:'STAFF_PROFILE_REQUIRED'});
-   if(model==='shiftSwap'&&(input as any).targetStaffId){const other=await prisma.staff.findFirst({where:{id:(input as any).targetStaffId,storeId}});if(!other||other.id===staffId)return res.status(400).json({code:400,message:'INVALID_SWAP_TARGET'})}
+   if(model==='shiftSwap'&&(input as any).targetStaffId){const other=await prisma.staff.findFirst({where:{id:(input as any).targetStaffId,storeId}});if(!other||other.id===staffId||other.status!=='active')return res.status(400).json({code:400,message:'INVALID_SWAP_TARGET'})}
    const data:any={...input};if(model==='shiftSwap')data.targetConfirmed=false;if(model==='overtimeRequest'){const minutes=(v:string)=>Number(v.slice(0,2))*60+Number(v.slice(3));data.hours=((minutes(data.endTime)-minutes(data.startTime)+1440)%1440)/60}
    const result=await prisma.$transaction(async tx=>{
     const db=tx[model] as any,old=await db.findFirst({where:{id:req.params.id,storeId,staffId,status:'pending'}});if(!old)throw new WorkflowConflict('REQUEST_CHANGED_OR_NOT_OWNED');

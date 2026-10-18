@@ -51,7 +51,7 @@ export async function getStaffConfig(storeId: string): Promise<StaffFeatureConfi
   }
 
   try {
-    return { ...DEFAULT_STAFF_CONFIG, ...JSON.parse(config.value) }
+    return { ...DEFAULT_STAFF_CONFIG, ...JSON.parse(config.value), shiftSwapConfirmation: true }
   } catch {
     return DEFAULT_STAFF_CONFIG
   }
@@ -69,7 +69,7 @@ export async function saveStaffConfig(storeId: string, config: Partial<StaffFeat
   })
 
   const currentConfig = existing ? JSON.parse(existing.value) : DEFAULT_STAFF_CONFIG
-  const newConfig = { ...currentConfig, ...config }
+  const newConfig = { ...currentConfig, ...config, shiftSwapConfirmation: true }
 
   await prisma.config.upsert({
     where: {

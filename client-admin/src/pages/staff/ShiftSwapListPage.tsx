@@ -1,3 +1,4 @@
+import { ShiftSwapProgress } from '../../../../shared/ShiftSwapProgress'
 import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -6,6 +7,8 @@ import { ArrowRightLeft, Check, X, Clock, User } from 'lucide-react'
 
 interface ShiftSwapRequest {
   id: string
+  targetConfirmed: boolean
+  targetStaff?: { name: string; employeeNumber: string }
   staffId: string
   staff: { name: string; employeeNumber: string }
   originalDate: string
@@ -13,7 +16,7 @@ interface ShiftSwapRequest {
   targetDate: string
   targetShift: string
   reason?: string
-  status: 'pending' | 'approved' | 'rejected'
+  status: 'pending' | 'approved' | 'rejected' | 'peer_rejected' | 'cancelled'
   adminNote?: string
   createdAt: string
   processedAt?: string
@@ -135,8 +138,8 @@ export function ShiftSwapListPage() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex gap-2 mb-4">
-        {['', 'pending', 'approved', 'rejected'].map(status => (
+      <div className="flex flex-wrap gap-2 mb-4">
+        {['', 'pending', 'approved', 'rejected', 'peer_rejected', 'cancelled'].map(status => (
           <button
             key={status}
             onClick={() => setFilter(status)}
@@ -146,7 +149,7 @@ export function ShiftSwapListPage() {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
-            {status ? t(`staff.status${status.charAt(0).toUpperCase() + status.slice(1)}`) : t('common.all')}
+            {status ? (['peer_rejected', 'cancelled'].includes(status) ? t(`swapFlow.${status}`) : t(`staff.status${status.charAt(0).toUpperCase() + status.slice(1)}`)) : t('common.all')}
             {status === 'pending' && requests.filter(r => r.status === 'pending').length > 0 && (
               <span className="ml-2 bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
                 {requests.filter(r => r.status === 'pending').length}
@@ -175,10 +178,12 @@ export function ShiftSwapListPage() {
                   request.status === 'approved' ? 'bg-green-100 text-green-700' :
                   'bg-red-100 text-red-700'
                 }`}>
-                  {t(`staff.status${request.status.charAt(0).toUpperCase() + request.status.slice(1)}`)}
+                  {['peer_rejected', 'cancelled'].includes(request.status) ? t(`swapFlow.${request.status}`) : t(`staff.status${request.status.charAt(0).toUpperCase() + request.status.slice(1)}`)}
                 </span>
               </div>
 
+              <p className="text-sm text-gray-600">{t('swapFlow.parties')}: {request.staff?.name} ↔ {request.targetStaff?.name || '—'}</p>
+              <ShiftSwapProgress request={request} />
               {/* Swap Details */}
               <div className="flex items-center justify-center gap-4 py-3 bg-gray-50 rounded-lg mb-3">
                 <div className="text-center">
@@ -209,7 +214,7 @@ export function ShiftSwapListPage() {
               )}
 
               {/* Actions */}
-              {request.status === 'pending' && (
+              {request.status === 'pending' && request.targetConfirmed && (
                 <div className="flex gap-2 pt-2 border-t">
                   <button
                     onClick={() => handleApprove(request.id)}
@@ -231,7 +236,7 @@ export function ShiftSwapListPage() {
               )}
 
               {/* Timestamps */}
-              <div className="flex items-center gap-4 mt-3 text-xs text-gray-400">
+              <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-gray-400">
                 <span className="flex items-center gap-1">
                   <Clock size={12} />
                   {t('staff.requestedAt')}: {(new Date(request.createdAt).getTime() && !isNaN(new Date(request.createdAt).getTime())) ? new Date(request.createdAt).toLocaleString('id-ID', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}

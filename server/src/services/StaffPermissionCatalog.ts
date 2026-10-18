@@ -100,7 +100,7 @@ export function staffPermissionForRequest(method: string, originalUrl: string, u
   if (/^\/attendance-qr\/verify$/.test(path)) return 'personal.attendance'
   if (/^\/attendance-rules$/.test(path) && read) return 'personal.attendance'
   if (/^\/overtime\/(apply|cancel)(?:\/|$)/.test(path)) return 'personal.attendance'
-  if ((read && path === '/shift-swap/pending-confirm') || (method === 'PUT' && /^\/shift-swap\/[^/]+\/confirm$/.test(path))) return 'personal.schedule'
+  if ((read && ['/shift-swap/pending-confirm', '/shift-swap/colleagues'].includes(path)) || (method === 'PUT' && /^\/shift-swap\/[^/]+\/confirm$/.test(path))) return 'personal.schedule'
   if (/^\/shift-swap\/(request|apply|respond|cancel)(?:\/|$)/.test(path)) return 'personal.schedule'
   if (/^\/leave-types$/.test(path) && read) return 'personal.leave'
   if (/^\/leave\/(apply|balance|cancel)(?:\/|$)/.test(path) && !/^\/leave\/balance\/[^/]+/.test(path)) return 'personal.leave'
