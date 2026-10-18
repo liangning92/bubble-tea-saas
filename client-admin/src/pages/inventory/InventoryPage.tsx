@@ -1,5 +1,5 @@
 import { formatNumber } from '../../utils/numberDisplay'
-import { formatDisplayQuantity } from '../../utils/itemDisplayName'
+import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { ConsumptionAlertsWidget } from '../../components/ConsumptionAlertsWidget'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
@@ -1138,12 +1138,12 @@ export function InventoryPage() {
                 </select>
               </label>
               <p>
-                {t("inventoryUnified.estimate")}: {formatDisplayQuantity(Number(selectedItem.currentStock))}{" "}
+                {t("inventoryUnified.estimate")}: {consumptionQuantity(Number(selectedItem.currentStock),i18n.language)}{" "}
                 {selectedItem.unit}
               </p>
               <p>
                 {t("inventoryFlow.afterStock")}:{" "}
-                {formatDisplayQuantity(selectedItem.currentStock - (stockOutPurpose==='withdrawal'&&selectedItem.unifiedStock?0:inventoryLedgerQuantity(Number(stockForm.quantity) || 0, selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem))))}{" "}
+                {consumptionQuantity(selectedItem.currentStock - (stockOutPurpose==='withdrawal'&&selectedItem.unifiedStock?0:inventoryLedgerQuantity(Number(stockForm.quantity) || 0, selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem))),i18n.language)}{" "}
                 {selectedItem.unit}
               </p>
               <div>

@@ -1,6 +1,6 @@
 import { InventoryCountProgress } from '../../../../shared/components/InventoryCountProgress'
 import { countProgress, isCounted, hasCountVariance, matchesCountFilter, CountItemFilter } from '../../../../shared/inventoryCountProgress'
-import { formatNumber } from '../../utils/numberDisplay'
+import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { InventoryCountEditor } from '../../../../shared/components/InventoryCountEditor'
 import { inventoryCountLabels } from '../../../../shared/inventoryCountLabels'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
@@ -73,6 +73,7 @@ interface InventoryCountItem {
 
 export function InventoryCountPage() {
   const { t, i18n } = useTranslation();
+  const formatNumber=(value:unknown)=>consumptionQuantity(value,i18n.language);
   useStoreDateSettings();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();

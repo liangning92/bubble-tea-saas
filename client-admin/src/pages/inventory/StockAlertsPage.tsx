@@ -19,7 +19,7 @@ export function StockAlertsPage() {
     const refresh = () => { qc.invalidateQueries({ queryKey: ['inventory-alert-center'] }); setSelected(null); setNote(''); setExpiry(''); setError(''); };
     const mutation = useMutation({ mutationFn: () => selected.action === 'expiry' ? inventoryApi.setExpiry({ inventoryId: selected.detail.inventoryId, batchId: selected.detail.batchId || undefined, expiryDate: expiry }) : inventoryApi.handleAlert(selected.id, note), onSuccess: refresh, onError: () => setError(t('inventoryFlow.failed')) });
     const list: any[] = query.data?.data?.data?.list || [], visible = list.filter(a => (status === 'all' || a.status === status) && (!type || a.type === type));
-    const n = (v: any) => v === null || v === undefined ? '—' : Number(Number(v).toFixed(0)), label = (key: string) => t('inventoryAlerts.' + key);
+    const n = (v: any) => consumptionQuantity(v,i18n.language), label = (key: string) => t('inventoryAlerts.' + key);
     if (!context.valid)
         return <DashboardReadFailure scope/>;
     if (query.isError)
