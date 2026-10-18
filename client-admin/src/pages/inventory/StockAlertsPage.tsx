@@ -1,3 +1,4 @@
+import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings';
@@ -31,7 +32,7 @@ export function StockAlertsPage() {
             return <article key={a.id} className={`card border-l-4 space-y-2 ${a.status === 'resolved' ? 'border-gray-300' : a.severity === 'critical' ? 'border-red-500 bg-red-50' : a.severity === 'warning' ? 'border-orange-400 bg-orange-50' : 'border-blue-300 bg-blue-50'}`}><div className="flex justify-between gap-3"><strong>{label(a.type)} · {formatItemName(d.inventoryName || d.name || d.orderNumber || '', i18n.language)}</strong><span>{label(a.status)} · {label(a.severity)}</span></div>
  {d.currentStock !== undefined && <p className="text-sm">{t('inventoryFlow.currentStock')}: {n(d.currentStock)} {d.unit} · {label('safe')}: {n(d.effectiveSafetyStock)} {d.unit} · {label('daily')}: {n(d.dailyUsage)} {d.unit} · {t('inventoryAlerts.sample', { days: d.historyDays ?? 0 })} · {label('daysLeft')}: {n(d.daysUntilStockOut)} {t('common.days')}</p>}
  {d.basis === 'recorded_sales_ledger_estimate' && <p className="text-sm">{label('legacy')}</p>}
- {d.businessDate && <p>{d.businessDate} · {t('inventoryFlow.theory')}: {n(d.theoreticalConsumption)} {d.unit} · {t('inventoryFlow.actualOut')}: {n(d.actualConsumption)} {d.unit} · {label('variance')}: {n(d.variancePercent)} {d.variancePercent === null ? '' : '%'}</p>}
+ {d.businessDate && <p>{d.businessDate} · {t('inventoryFlow.theory')}: {consumptionQuantity(d.theoreticalConsumption,i18n.language)} {d.unit} · {t('inventoryFlow.actualOut')}: {consumptionQuantity(d.actualConsumption,i18n.language)} {d.unit} · {label('variance')}: {n(d.variancePercent)} {d.variancePercent === null ? '' : '%'}</p>}
  {a.type === 'count_variance' && <p>{t('inventoryFlow.currentStock')}: {n(d.systemQty)} {d.unit} · {t('inventory.actualQty')}: {n(d.countedQty)} {d.unit} · {label('variance')}: {n(d.variance)} {d.unit} ({n(d.variancePercent)}%)</p>}
  {a.type === 'excessive_loss' && <p>{label('loss')}: {n(d.lossUsage)} {d.unit} ({n(d.lossPercent)}%)</p>}
  {d.expectedDate && <p>{label('expectedDate')}: {formatStoreDate(d.expectedDate,dateSettings)} · {d.orderNumber}</p>}

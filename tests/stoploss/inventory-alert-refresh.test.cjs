@@ -16,10 +16,10 @@ function fixture(){
  const service=load('server/src/services/EmployeeConsumptionService.ts',{'../config/database':{default:db,__esModule:true},'../utils/inventoryBusinessCalendar':{inventoryBusinessCalendar:async()=>calendar},'./InventoryAlertConfigService':{getInventoryAlertConfig:async()=>({enableConsumptionAlert:true,varianceWarningPercent:10,varianceCriticalPercent:20})},'./OrderConsumptionService':{FLOW_CUTOVER_KEY:'employee_inventory_flow_started_at',ensureInventoryFlow:async()=>new Date('2026-10-17T00:00Z')}});
  return{service,db,config,alerts,deleted,materials};
 }
-test('alert refresh uses latest late-synced quantities, suppresses bulk/self-produced daily losses, retains tracked warnings',async()=>{
+test('alert refresh uses latest late-synced quantities, suppresses bulk/self-produced daily losses, keeps ingredient use as a reference instead of a false loss warning',async()=>{
  const f=fixture();await f.service.refreshStoreConsumptionDays('owned',new Date('2026-10-18T12:00Z'));
  assert.equal(JSON.parse(f.alerts.get('cup').detail).theoreticalConsumption,67);assert.equal(f.alerts.get('cup').status,'not_compared');assert.equal(JSON.parse(f.alerts.get('cup').detail).variance,null);
- assert.equal(f.alerts.get('water').status,'not_compared');assert.equal(f.alerts.get('syrup').status,'critical');assert.equal(JSON.parse(f.alerts.get('syrup').detail).theoreticalConsumption,625);
+ assert.equal(f.alerts.get('water').status,'not_compared');assert.equal(f.alerts.get('syrup').status,'not_compared');assert.equal(JSON.parse(f.alerts.get('syrup').detail).theoreticalConsumption,625);
  assert.ok(f.deleted.some(w=>w.key==='employee_consumption_dirty:2026-10-17'&&w.value==='old-token'));assert.ok(f.deleted.some(w=>w.key==='inventory_alert_center_checked_at'));
 });
 test('dirty token written during recalculation survives compare-and-delete; concurrent readers share store refresh',async()=>{
@@ -36,3 +36,5 @@ test('new historical-order snapshot durably invalidates its business day in the 
  const service=load('server/src/services/OrderConsumptionService.ts',{'../config/database':{default:db,__esModule:true},'../utils/inventoryBusinessCalendar':{inventoryBusinessCalendar:async(storeId)=>{assert.equal(storeId,'owned');return {formatDate:date=>{assert.equal(date,at);return '2026-10-17'}}}}});
  await service.recordOrderConsumption(db,'owned','late',[{productId:'tea',quantity:1}]);const dirty=writes.find(w=>w.where.storeId_key.key==='employee_consumption_dirty:2026-10-17');assert.ok(dirty);assert.equal(dirty.where.storeId_key.storeId,'owned');assert.ok(dirty.update.value);
 });
+
+test('sub-kilogram theoretical amounts stay visible instead of rounding to zero',()=>{const format=load('client-admin/src/utils/consumptionQuantity.ts',{}).consumptionQuantity;assert.equal(format(0.394,'en'),'0.394');assert.equal(format(3,'zh'),'3');assert.equal(format(0.0000001,'en'),'<0.000001');assert.equal(format(null),'—')});

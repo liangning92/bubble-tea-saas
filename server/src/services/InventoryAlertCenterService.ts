@@ -99,16 +99,8 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
                     add('count_variance', item.id, percent !== null && percent >= settings.countVarianceCriticalPercent ? 'critical' : 'warning', { inventoryId: item.inventoryId, inventoryName: item.inventory.name, unit: item.inventory.unit, countId: count.id, systemQty: item.systemQty, countedQty: item.countedQty, variance: item.variance, variancePercent: percent, note: item.note });
             }
     }
-    if (settings.enableConsumptionAlert) {
-        const stored = await prisma.consumptionAlert.findMany({ where: { storeId, status: { in: ['normal', 'warning', 'critical'] } }, orderBy: { businessDate: 'desc' } });
-        for (const alert of stored) {
-            const material=inventory.find(m=>m.id===alert.inventoryId);
-            if(!material || inventoryUsageMode(material)!=='tracked')continue;
-            const detail = JSON.parse(alert.detail), classification = classifyEmployeeConsumption(detail.theoreticalConsumption, detail.actualConsumption, settings.varianceWarningPercent, settings.varianceCriticalPercent, true, detail.varianceStatus === 'unavailable');
-            if (['warning', 'critical'].includes(classification.varianceStatus))
-                add('consumption_variance', alert.id, classification.varianceStatus as 'warning' | 'critical', { ...detail, ...classification, businessDate: alert.businessDate, missingOut: detail.theoreticalConsumption > 0 && detail.actualConsumption === 0 });
-        }
-    }
+    // Stock issues and processed recipe use measure different stages. Their daily
+    // difference is not evidence of waste; physical count alerts remain independent.
     if (settings.enableDataAlert) {
         const yesterday = formatDate(addDays(startOfDay(now), -1)), report = await employeeConsumption({ storeId, startDate: yesterday, endDate: yesterday });
         for (const row of report.list)
