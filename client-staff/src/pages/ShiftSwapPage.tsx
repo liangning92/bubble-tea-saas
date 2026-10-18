@@ -294,7 +294,7 @@ export function ShiftSwapPage() {
                 <div key={req.id} className="p-4">
                   {req.status==='pending'&&req.staffId===user?.staffId&&<div className="flex justify-end gap-4 text-sm mb-2"><button disabled={isSubmitting} onClick={()=>{setEditingId(req.id);setEditingVersion(req.updatedAt);setFormData({targetStaffId:req.targetStaffId||'',originalDate:req.originalDate.slice(0,10),originalShift:req.originalShift,targetDate:req.targetDate.slice(0,10),targetShift:req.targetShift,reason:req.reason||''});setShowForm(true)}}>{t('entryFix.edit')}</button><button disabled={isSubmitting} onClick={async()=>{if(!await dialogs.confirm(t('entryFix.withdrawHint')))return;setIsSubmitting(true);try{await staffApi.withdrawRequest('shift-swap',req.id);await loadData()}catch(e:any){await dialogs.alert(e.response?.data?.message||t('entryFix.error'))}finally{setIsSubmitting(false)}}}>{t('entryFix.withdraw')}</button></div>}
 
-                  <div className="flex items-start justify-between mb-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                     <div>
                       <p className="font-medium">{formatDate(req.originalDate)} → {formatDate(req.targetDate)}</p>
                       <p className="text-sm text-gray-500">

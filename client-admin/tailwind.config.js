@@ -2,6 +2,7 @@
 export default {
   content: [
     "./index.html",
+    "../shared/ShiftSwapProgress.tsx",
     "./src/**/*.{js,ts,jsx,tsx}",
     "../shared/components/PayrollBasisDetails.tsx",
     "../shared/components/InventoryCountEditor.tsx",

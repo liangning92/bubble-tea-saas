@@ -169,7 +169,7 @@ export function ShiftSwapListPage() {
           filteredRequests.map(request => (
             <div key={request.id} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
               {/* Staff Info */}
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
                 <User size={16} className="text-gray-400" />
                 <span className="font-medium">{request.staff?.name || 'Unknown'}</span>
                 <span className="text-sm text-gray-500">#{request.staff?.employeeNumber || '-'}</span>
