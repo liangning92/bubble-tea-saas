@@ -270,7 +270,7 @@ export function InventoryPage() {
   // API returns { code, data: { list } } but axios wraps it: data.data.data.list = array
   const inventory = data?.data?.data?.list || [];
   const isStockItem = (item:any) => !(item.type === "semi_finished" && item.processRecipeId);
-  const isLowItem = (item:any) => isStockItem(item) && (item.isLowStock || item.currentStock <= (item.effectiveSafetyStock ?? item.safetyStock ?? 0));
+  const isLowItem = (item:any) => isStockItem(item) && !item.calibrationRequired && (item.isLowStock || item.currentStock <= (item.effectiveSafetyStock ?? item.safetyStock ?? 0));
   const alerts = alertsData?.data || [];
 
   const filteredInventory = inventory.filter((item: any) => {
@@ -377,7 +377,7 @@ export function InventoryPage() {
         </button>
       </div>
 
-      <p className="text-sm text-gray-600">{t("inventoryUnified.hint")}</p><div className="grid grid-cols-3 gap-3">{[["materials",inventory.length],["lowStock",inventory.filter(isLowItem).length],["outOfStock",inventory.filter((item:any)=>isStockItem(item)&&item.currentStock<=0).length]].map(([key,value])=><div className="rounded-xl border bg-white p-4" key={key}><p className="text-sm text-gray-500">{t("operations."+key)}</p><p className="text-2xl font-semibold tabular-nums mt-1">{formatNumber(isLoading||isError?'—':value)}</p></div>)}</div>
+      <p className="text-sm text-gray-600">{t("inventoryUnified.hint")}</p><div className="grid grid-cols-3 gap-3">{[["materials",inventory.length],["lowStock",inventory.filter(isLowItem).length],["outOfStock",inventory.filter((item:any)=>isStockItem(item)&&!item.calibrationRequired&&item.currentStock<=0).length]].map(([key,value])=><div className="rounded-xl border bg-white p-4" key={key}><p className="text-sm text-gray-500">{t("operations."+key)}</p><p className="text-2xl font-semibold tabular-nums mt-1">{formatNumber(isLoading||isError||key!=='materials'&&inventory.some((item:any)=>item.calibrationRequired)?'—':value)}</p></div>)}</div>
       {isError&&<p role="alert" className="text-red-700"><button type="button" onClick={()=>refetch()}>{t("common.error")} · {t("operations.refresh")}</button></p>}
       <ConsumptionAlertsWidget compact />
       {/* 分类看板 */}
@@ -586,7 +586,7 @@ export function InventoryPage() {
                         className="py-3 px-2 text-right"
                       >
                         <span
-                          className={`font-bold ${isLow ? "text-red-600" : "text-gray-900"}`}
+                          className={`font-bold ${isLow && !item.calibrationRequired ? "text-red-600" : "text-gray-900"}`}
                         >
                           {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}{item.calibrationRequired&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
                         </span>
