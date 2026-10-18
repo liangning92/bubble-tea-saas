@@ -232,7 +232,9 @@ export const posApi = {
   getShifts: (params?: any) => offlineRead('/pos-cash/shifts',params,()=>api.get('/pos-cash/shifts',{params,timeout:5000})),
   getShiftHandover: async (id: string) => {
     const local=await offlineHandover(readBackendAuth().user!.storeId!,id)
-    return local?{data:{code:200,data:local}}:api.get('/pos-cash/shifts/'+id+'/handover')
+    if (local?.report?.offlineStatus === 'pending') return {data:{code:200,data:local}}
+    try { return await api.get('/pos-cash/shifts/'+id+'/handover', {timeout:5000}) }
+    catch (error:any) { if (!local || error.response) throw error; return {data:{code:200,data:local}} }
   },
   getCurrentShift: async () => {
     const actor=readBackendAuth()

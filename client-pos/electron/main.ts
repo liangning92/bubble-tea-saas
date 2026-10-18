@@ -1706,7 +1706,7 @@ function generateShiftReportText(data: any): string {
   const financials = data.handoverFinancials || {}
   if (visible('revenue')) money(label('营收', 'Revenue', 'Pendapatan'), financials.totalRevenue)
   if (visible('cashReceived')) money(label('现金', 'Cash', 'Tunai'), financials.actualCashReceived)
-  if (visible('expenseAmount')) money(label('费用', 'Expenses', 'Biaya'), financials.expenses)
+  if (visible('expenseAmount')) money(label('钱箱费用', 'Drawer expenses', 'Biaya laci'), financials.expenses)
   if (visible('openFloat')) money(label('备用金', 'Opening float', 'Kas awal'), data.openFloat)
   if (visible('closeCash')) money(label('现金总数', 'Drawer total', 'Total laci'), data.actualCash)
   const receipts = data.manualReceipts || {}
@@ -1719,13 +1719,13 @@ function generateShiftReportText(data: any): string {
   if (visible('cupCount')) row(label('商品杯数记录', 'Item quantity', 'Jumlah minuman'), number(evidence.cupCount) ? String(evidence.cupCount) : unknown)
   if (visible('expenses')) {
     separator()
-    wrap(label('本班采购报销', 'SHIFT PURCHASE EXPENSES', 'BELANJA SHIFT'))
+    wrap(label('本班钱箱费用', 'SHIFT DRAWER EXPENSES', 'BIAYA LACI SHIFT'))
     const purchases = data.purchaseExpenses
     if (purchases && number(purchases.total) && Array.isArray(purchases.items)) {
       for (const item of purchases.items) { money(`${item.category} x${item.quantity ?? '-'}`, item.amount); if (item.description) wrap(String(item.description)) }
-      money(label('采购合计', 'Purchase total', 'Total belanja'), purchases.total)
+      money(label('钱箱费用合计', 'Drawer expense total', 'Total biaya laci'), purchases.total)
     } else wrap(unknown)
-    wrap(label('采购记账，不等于钱箱已付款', 'Expense recorded; cash payout separate', 'Biaya dicatat; kas dibayar terpisah'))
+    wrap(label('已从本班钱箱支付，已扣交班现金', 'Paid from this drawer; deducted from handover cash', 'Dibayar dari laci shift; sudah mengurangi kas serah terima'))
   }
   separator()
   if (visible('cashierSignature')) {

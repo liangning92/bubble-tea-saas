@@ -1,4 +1,3 @@
-import { ExpensePaymentFields } from '../../../shared/components/ExpensePaymentFields'
 import {RefundRequestForm} from '../components/RefundRequestForm'
 import { offlineActivityQuote } from '../utils/offlineMembers'
 import { ReprintReceiptButton } from '../components/ReprintReceiptButton'
@@ -286,7 +285,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [expenseCategories, setExpenseCategories] = useState<{ key: string; label: string; labelZh?: string; labelEn?: string; labelId?: string; posVisible?: boolean }[]>([])
   const [expenseCategory, setExpenseCategory] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
-  const [expensePaymentSource,setExpensePaymentSource]=useState('unknown')
   const [expenseQuantity, setExpenseQuantity] = useState('1')
   const [expenseSaving, setExpenseSaving] = useState(false)
   const [expenseRequestId, setExpenseRequestId] = useState(() => crypto.randomUUID())
@@ -1955,7 +1953,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   }
 
   // 创建费用记录
-  const createExpense = async () => {
+  const createExpense = async (duplicateConfirmed = false) => {
     if (expenseSaving) return
     const amount = Number(expenseAmount)
     const quantity = Number(expenseQuantity)
@@ -1965,7 +1963,16 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
     setExpenseSaving(true)
     try {
-      await posApi.createPosExpense({ requestId: expenseRequestId, category: expenseCategory, amount, quantity, description: expenseDescription.trim(),paymentSource:expensePaymentSource })
+      if (!duplicateConfirmed) {
+        const {offlineOperations,currentOfflineShift} = await import('../utils/offlineOperations')
+        const current = await currentOfflineShift(user.storeId)
+        const previous = (await offlineOperations(user.storeId)).find(op => op.kind==='expense' && op.sessionId===current.data?.shift?.id && op.id!==expenseRequestId && op.data.category===expenseCategory && op.data.amount===amount && op.data.quantity===quantity && op.data.description?.trim()===expenseDescription.trim())
+        if (previous) {
+          setConfirmModal({isOpen:true,title:t('pos.expenseDuplicateTitle'),message:t('pos.expenseDuplicate',{amount:formatCurrency(amount)}),type:'warning',onConfirm:()=>{void createExpense(true)}})
+          return
+        }
+      }
+      await posApi.createPosExpense({ requestId: expenseRequestId, category: expenseCategory, amount, quantity, description: expenseDescription.trim(),paymentSource:'drawer_cash' })
       setShowExpenseModal(false)
       showToast(t('pos.expenseCreated'), 'success')
       setExpenseCategory('')
@@ -1974,7 +1981,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       setExpenseDescription('')
       setExpenseRequestId(crypto.randomUUID())
     } catch (e: any) {
-      showToast(e?.response?.data?.message || t('pos.expenseFailed'), 'error')
+      const code=e?.response?.data?.message||e?.message||''
+      showToast(t('pos.expenseErrors.'+code,{defaultValue:t('pos.expenseFailed')}), 'error')
     } finally { setExpenseSaving(false) }
   }
 
@@ -5053,7 +5061,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   </select>
                 </div>
 
-                <ExpensePaymentFields source={expensePaymentSource} onSource={setExpensePaymentSource}/>
+                <p className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm" data-testid="pos-expense-cash-note">{t('pos.expenseDrawerHint')}</p>
                 <div className="mb-3"><label className="block text-sm text-gray-500 mb-1">{t('pos.purchaseQuantity')}</label><input type="number" min="1" step="1" aria-label={t('pos.purchaseQuantity')} value={expenseQuantity} onChange={e => setExpenseQuantity(e.target.value)} className="w-full px-3 py-2 border rounded-xl" /></div>
 
                 {/* 金额 */}
@@ -5084,7 +5092,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
                 {/* 提交按钮 */}
                 <button
-                  onClick={createExpense}
+                  onClick={() => {void createExpense()}}
                   disabled={expenseSaving}
                   className="w-full py-3 bg-primary text-white rounded-xl font-bold touch-feedback"
                 >
