@@ -18,7 +18,7 @@ function fixture(){
 }
 test('alert refresh uses latest late-synced quantities, suppresses bulk/self-produced daily losses, keeps ingredient use as a reference instead of a false loss warning',async()=>{
  const f=fixture();await f.service.refreshStoreConsumptionDays('owned',new Date('2026-10-18T12:00Z'));
- assert.equal(JSON.parse(f.alerts.get('cup').detail).theoreticalConsumption,67);assert.equal(f.alerts.get('cup').status,'not_compared');assert.equal(JSON.parse(f.alerts.get('cup').detail).variance,null);
+ assert.equal(JSON.parse(f.alerts.get('cup').detail).theoreticalConsumption,67);assert.equal(f.alerts.get('cup').status,'not_compared');assert.equal(JSON.parse(f.alerts.get('cup').detail).variance,-67);
  assert.equal(f.alerts.get('water').status,'not_compared');assert.equal(f.alerts.get('syrup').status,'not_compared');assert.equal(JSON.parse(f.alerts.get('syrup').detail).theoreticalConsumption,625);
  assert.ok(f.deleted.some(w=>w.key==='employee_consumption_dirty:2026-10-17'&&w.value==='old-token'));assert.ok(f.deleted.some(w=>w.key==='inventory_alert_center_checked_at'));
 });
@@ -38,3 +38,5 @@ test('new historical-order snapshot durably invalidates its business day in the 
 });
 
 test('sub-kilogram theoretical amounts stay visible instead of rounding to zero',()=>{const format=load('client-admin/src/utils/consumptionQuantity.ts',{}).consumptionQuantity;assert.equal(format(0.394,'en'),'0.394');assert.equal(format(3,'zh'),'3');assert.equal(format(0.0000001,'en'),'<0.000001');assert.equal(format(null),'—')});
+
+test('3kg powder issued versus daily recipe theory remains visible as a reference balance, not waste',async()=>{const f=fixture();const inventory=await f.db.inventory.findMany();inventory[2].unit='kg';inventory[2].name='Vanilla powder';f.materials[2].unit='kg';f.materials[2].quantity=2.931428571;f.db.stockOutLog.findMany=async()=>[{inventoryId:'syrup',reason:'withdrawal',quantity:3}];const result=await f.service.employeeConsumption({storeId:'owned',startDate:'2026-10-17',endDate:'2026-10-17'});const row=result.list.find(r=>r.inventoryId==='syrup');assert.equal(row.actualConsumption,3);assert.equal(row.theoreticalConsumption,2.931428571);assert.equal(row.variance,0.068571429);assert.equal(row.varianceStatus,'not_compared');assert.equal(row.variancePercent,null)});
