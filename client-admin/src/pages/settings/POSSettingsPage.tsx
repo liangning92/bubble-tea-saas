@@ -754,16 +754,23 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
 
 
+  // Serialize full-object saves so a slower old request cannot replace a newer setting.
+  const pendingSaves = useRef(0)
   // ========== SAVE MUTATION ==========
   const saveConfigMutation = useMutation({
+    scope: { id: `pos-settings-${effectiveStoreId}` },
     mutationFn: async (data: { key: string; value: any }) => {
       await configApi.set(effectiveStoreId, data.key, data.value, 'pos')
     },
     onSuccess: () => {
-      // 使用函数式 queryKey，运行时获取最新的 storeId，避免闭包捕获 stale 值
-      queryClient.invalidateQueries({ queryKey: ['config', user?.storeId || ''] })
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 2000)
+    },
+    onSettled: () => {
+      pendingSaves.current -= 1
+      if (pendingSaves.current === 0) {
+        queryClient.invalidateQueries({ queryKey: ['config', queryStoreId] })
+      }
     },
     onError: (error: any) => {
       console.error('Save config error:', error)
@@ -773,6 +780,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
 
   const handleSave = useCallback((key: string, value: any) => {
     console.log('[Admin] handleSave called:', key, JSON.stringify(value).substring(0, 100))
+    pendingSaves.current += 1
     saveConfigMutation.mutate({ key, value })
   }, [user?.storeId, posConfig])
 
@@ -965,6 +973,13 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
     // axios将响应放在response.data中，所以posConfig.data是{code, data, timestamp}，需要posConfig.data.data获取实际配置
     if (posConfig?.data?.data) {
       const configs = posConfig.data.data
+      if (configs.posLayout) {
+        setPosLayout(prev => ({
+          ...prev, ...configs.posLayout,
+          productImage: configs.posLayout.productImage !== false && configs.posLayout.productImage !== 'hidden',
+          hotkeys: { ...prev.hotkeys, ...configs.posLayout.hotkeys }
+        }))
+      }
       // Load toolbar settings
       if (configs.toolbarSettings) {
         setToolbarSettings(prev => ({
@@ -1684,7 +1699,8 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                           }
                           setSoundSettings(newSettings)
                         }}
-                        onMouseUp={() => handleSave('soundSettings', soundSettings)}
+                        onPointerUp={() => handleSave('soundSettings', soundSettings)}
+                        onKeyUp={() => handleSave('soundSettings', soundSettings)}
                         className="flex-1"
                       />
                       <span className="text-sm w-12">{formatNumber(soundSettings[sound.key as keyof typeof soundSettings]?.volume ?? 100)}{t('posSettings.percent')}</span>
@@ -2373,7 +2389,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.maxCashAmount')}</label>
                 <input
                   type="number"
-                  value={paymentMethods.maxCashAmount || 100000}
+                  value={paymentMethods.maxCashAmount ?? 100000}
                   onChange={(e) => setPaymentMethods({ ...paymentMethods, maxCashAmount: parseInt(e.target.value) || 0 })}
                   onBlur={() => handleSave('paymentMethods', paymentMethods)}
                   className="input"
@@ -2860,8 +2876,8 @@ function PrinterConfigCard({
                 <label className="block text-xs font-medium text-gray-600 mb-1">{t('posSettings.labelGap', '间距 (mm)')}</label>
                 <input
                   type="number"
-                  value={printer.stickerGap || 2}
-                  onChange={(e) => onUpdate({ ...printer, stickerGap: parseInt(e.target.value) || 2 })}
+                  value={printer.stickerGap ?? 2}
+                  onChange={(e) => onUpdate({ ...printer, stickerGap: parseInt(e.target.value) || 0 })}
                   className="input text-sm"
                   min="0"
                   max="10"
@@ -2990,7 +3006,8 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
               type="range" min="50" max="500" step="10"
               value={hardwareSettings.cashDrawerPulse || 100}
               onChange={(e) => setHardwareSettings({ ...hardwareSettings, cashDrawerPulse: parseInt(e.target.value) })}
-              onMouseUp={() => handleSave('hardwareSettings', hardwareSettings)}
+              onPointerUp={() => handleSave('hardwareSettings', hardwareSettings)}
+                        onKeyUp={() => handleSave('hardwareSettings', hardwareSettings)}
               className="w-full"
             />
           </div>
@@ -3028,7 +3045,8 @@ function HardwareTabContent({ hardwareSettings, setHardwareSettings, handleSave,
               type="range" min="20" max="100" step="5"
               value={hardwareSettings.displayBrightness || 80}
               onChange={(e) => setHardwareSettings({ ...hardwareSettings, displayBrightness: parseInt(e.target.value) })}
-              onMouseUp={() => handleSave('hardwareSettings', hardwareSettings)}
+              onPointerUp={() => handleSave('hardwareSettings', hardwareSettings)}
+                        onKeyUp={() => handleSave('hardwareSettings', hardwareSettings)}
               className="w-full"
             />
           </div>

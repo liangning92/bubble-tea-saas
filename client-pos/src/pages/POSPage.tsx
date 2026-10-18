@@ -478,6 +478,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     } as Record<string, string>
   })
 
+  useEffect(() => {
+    if (!posLayout.showCategory) setFilter('')
+  }, [posLayout.showCategory, filter, setFilter])
+
   // 店铺信息
   const [storeInfo, setStoreInfo] = useState({
     storeName: 'YOUME',
@@ -1106,7 +1110,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             channelGrab: posLayoutData.channelGrab ?? prev.channelGrab,
             channelShopee: posLayoutData.channelShopee ?? prev.channelShopee,
             // 布局样式
-            productImage: posLayoutData.productImage || prev.productImage,
+            productImage: posLayoutData.productImage ?? prev.productImage,
             compactMode: posLayoutData.compactMode ?? prev.compactMode,
             productSortBy: posLayoutData.productSortBy || prev.productSortBy,
             productSortOrder: posLayoutData.productSortOrder || prev.productSortOrder,
@@ -1764,7 +1768,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
   // 自动登出 - 使用配置的分钟数 (默认30分钟)
   useEffect(() => {
-    const timeoutMinutes = displaySettings.autoLogoutMinutes || 30
+    const timeoutMinutes = displaySettings.autoLogoutMinutes ?? 30
     if (timeoutMinutes <= 0) return // 0 = 禁用
 
     const TIMEOUT = timeoutMinutes * 60 * 1000
@@ -2111,7 +2115,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     '8': 'grid-cols-2 sm:grid-cols-3 md:grid-cols-8'
   }[posLayout.gridCols] || 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4'
 
-  const cardHeightClass = posLayout.cardSize === 'large' ? 'h-24' : posLayout.cardSize === 'small' ? 'h-16' : 'h-20'
+  const cardHeightClass = posLayout.compactMode ? 'h-16' : posLayout.cardSize === 'large' ? 'h-24' : posLayout.cardSize === 'small' ? 'h-16' : 'h-20'
 
   const basketSubtotal = cart.reduce((sum, item) => {
     const addonsTotal = item.addons.reduce((a, addon) => a + addon.price * addon.qty, 0)
@@ -3607,7 +3611,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               }
               setShowChannelModal(false)
               const cats = productStore.categories()
-              if (cats.length > 0 && !filter) {
+              if (posLayout.showCategory && cats.length > 0 && !filter) {
                 setFilter(cats[0])
               }
             }
@@ -3630,7 +3634,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         <div className="h-[45vh] min-h-[320px] shrink-0 md:h-auto md:min-h-0 md:flex-1 min-w-0 flex flex-col overflow-hidden relative">
 
           {/* 分类区域 - 白色背景 */}
-          {selectedChannel && (
+          {selectedChannel && posLayout.showCategory && (
             <div className="bg-white px-4 py-2 border-b flex-shrink-0">
               <div className="flex gap-3 overflow-x-auto pb-2">
                 {categories.map(cat => {
@@ -3669,7 +3673,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     openProductOptions(product)
                   }}
                   className={`${cardHeightClass} bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-primary active:scale-95 transition-all overflow-hidden flex flex-col items-center justify-center ${!product.specs?.length ? 'opacity-50' : ''}`}
-                  style={{ minHeight: '110px' }}
+                  style={{ minHeight: posLayout.compactMode ? '64px' : posLayout.cardSize === 'small' ? '80px' : posLayout.cardSize === 'large' ? '140px' : '110px' }}
                 >
                   {product.image && (posLayout.productImage as any) !== false && posLayout.productImage !== 'hidden' ? (
                     <div className="w-full h-full flex flex-col items-center justify-between p-1.5">
@@ -4185,7 +4189,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         >
                           ⚡ {t('pos.exactAmount', '正好')}
                         </button>
-                        {(quickAmounts.enabled && quickAmounts.amounts.length > 0 ? quickAmounts.amounts.slice(0, 3) : [50000, 100000, 200000]).map(amount => (
+                        {(quickAmounts.enabled ? quickAmounts.amounts : []).map(amount => (
                           <button
                             key={amount}
                             onClick={() => setPaidAmount(String(amount))}
