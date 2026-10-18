@@ -4243,11 +4243,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   <span>{t('pos.digitalPayHint', '📱 电子支付或刷卡成功后，点击右侧按钮出单')}</span>
                 )}
               </div>
-              <div className="flex items-center gap-3 ml-auto shrink-0">
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3 w-full sm:w-auto sm:flex sm:items-center sm:ml-auto">
                 <button
                   type="button"
                   onClick={() => setShowPaymentModal(false)}
-                  className="min-h-14 px-5 py-3 border border-gray-300 text-gray-800 bg-white rounded-xl text-lg font-bold hover:bg-gray-50 touch-feedback"
+                  className="min-h-14 min-w-0 px-3 sm:px-5 py-3 break-words border border-gray-300 text-gray-800 bg-white rounded-xl text-lg font-bold hover:bg-gray-50 touch-feedback"
                 >
                   {t('common.cancel', '取消')}
                 </button>
@@ -4258,7 +4258,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                     Boolean(paymentIssue) ||
                     isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || !!currentQuote.pendingSelections?.length
                   }
-                  className="min-h-14 px-6 py-3 bg-primary text-white rounded-xl font-bold text-lg disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 min-w-[140px] justify-center"
+                  className="min-h-14 min-w-0 px-3 sm:px-6 py-3 break-words bg-primary text-white rounded-xl font-bold text-lg disabled:bg-gray-300 hover:bg-primary/90 active:scale-95 transition-all touch-feedback shadow-md flex items-center gap-2 sm:min-w-[140px] justify-center"
                 >
                   {isCheckingOut ? (
                     <>

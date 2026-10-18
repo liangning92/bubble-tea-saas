@@ -292,7 +292,8 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'quiet-expense-qr,offline-
   for(const [name,width,height] of [['desktop',1024,768],['tablet',768,1024],['phone',390,844]]){
    await page.setViewportSize({width,height});
    const dialog=page.getByTestId('payment-dialog');await expect(dialog).toBeVisible();
-   assert.ok(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth+1),'payment fits '+name);
+   const overflow=await dialog.evaluate(el=>({fits:el.scrollWidth<=el.clientWidth+1,width:el.clientWidth,scroll:el.scrollWidth,wide:[...el.querySelectorAll('*')].filter(n=>n.getBoundingClientRect().right>el.getBoundingClientRect().right+1).map(n=>({tag:n.tagName,classes:n.className,width:n.getBoundingClientRect().width})).slice(0,8)}));
+   assert.ok(overflow.fits,'payment fits '+name+' '+JSON.stringify(overflow));
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'page fits '+name);
    for(const button of await dialog.getByTestId('payment-keypad').getByRole('button').all()){
     const box=await button.boundingBox();assert.ok(box.height>=56,'finger key height '+name);assert.ok(box.width>=48,'finger key width '+name);
