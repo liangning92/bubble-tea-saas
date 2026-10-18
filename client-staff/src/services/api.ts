@@ -482,7 +482,8 @@ export const staffApi = {
 
   // Shift Swap
   getPendingShiftSwaps: async () => (await http.get(`${API_BASE}/shift-swap/pending-confirm`, { headers: getAuthHeader() })).data,
-  confirmShiftSwap: async (id: string) => (await http.put(`${API_BASE}/shift-swap/${id}/confirm`, {}, { headers: getAuthHeader() })).data,
+  getSwapColleagues: async () => (await http.get(`${API_BASE}/shift-swap/colleagues`, { headers: getAuthHeader() })).data,
+  confirmShiftSwap: async (id: string, agree: boolean, expectedVersion: string) => (await http.put(`${API_BASE}/shift-swap/${id}/confirm`, { agree, expectedVersion }, { headers: getAuthHeader() })).data,
   getMyShiftSwaps: async () => {
     const response = await http.get(`${API_BASE}/shift-swap/my`, {
       headers: getAuthHeader()
@@ -491,6 +492,7 @@ export const staffApi = {
   },
 
   createShiftSwap: async (data: {
+    targetStaffId: string
     originalDate: string
     originalShift: string
     targetDate: string

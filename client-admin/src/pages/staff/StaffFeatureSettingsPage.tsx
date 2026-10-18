@@ -81,7 +81,7 @@ export function StaffFeatureSettingsPage() {
     try {
       const response = await configApi.getStaffFeatures()
       if (response.data?.data) {
-        setConfig(response.data.data)
+        setConfig({ ...response.data.data, shiftSwapConfirmation: true })
       }
     } catch (error) {
       console.error('Failed to load staff features:', error)
@@ -91,6 +91,7 @@ export function StaffFeatureSettingsPage() {
   }
 
   const handleToggle = (key: keyof StaffFeatureConfig) => {
+    if (key === 'shiftSwapConfirmation') return
     setConfig(prev => ({ ...prev, [key]: !prev[key] }))
     setSaved(false)
   }
@@ -176,10 +177,13 @@ export function StaffFeatureSettingsPage() {
                         {t(feature.label) || feature.label}
                       </p>
                       <p className="text-sm text-gray-500 mt-0.5">
-                        {t(feature.desc) || feature.desc}
+                        {feature.key === 'shiftSwapConfirmation' ? t('swapFlow.adminHint') : (t(feature.desc) || feature.desc)}
                       </p>
                     </div>
                     <button
+                      disabled={feature.key === 'shiftSwapConfirmation'}
+                      aria-label={t(feature.label)}
+                      aria-pressed={value}
                       onClick={() => handleToggle(feature.key as keyof StaffFeatureConfig)}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                         value ? 'bg-primary' : 'bg-gray-200'

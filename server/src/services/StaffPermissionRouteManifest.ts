@@ -4147,6 +4147,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": true
   },
+  "GET /api/shift-swap/colleagues": {permission:"personal.schedule",ownerOnly:false,export:false,personal:true},
   "GET /api/shift-swap/my": {
     "legacyRoles": [
       "manager",
