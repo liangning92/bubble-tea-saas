@@ -61,7 +61,7 @@ export async function revenueQuery(db:DB,storeId:string,input:unknown,canRefund=
  }
  if(filter.dataset==='expense'||filter.dataset.startsWith('expense:')){
   const expenses=await db.expense.findMany({where:{storeId,date:{gte:range.start,lte:range.end},...(filter.dataset.startsWith('expense:')?{category:filter.dataset.slice(8)}:{})},orderBy:{date:'desc'}})
-  for(const e of expenses)rows.push({...base(e.id,'expense',e.date,e.amount/100,e.description),associationAt:e.createdAt,category:e.category})
+  for(const e of expenses)rows.push({...base(e.id,'expense',e.date,e.amount/100,e.description),associationAt:e.cashOccurredAt||e.date,sessionId:e.paymentSource==='drawer_cash'&&!['purchase','purchase_refund'].includes(e.referenceType||'')?e.cashSessionId:null,source:e.referenceType||'expense',category:e.category,paymentMethod:e.paymentSource||'unknown'})
  }
  if(filter.dataset==='drawer'||filter.dataset.startsWith('manual:')||(filter.dataset==='net'&&!payment&&!channel)){
   const receipts=await getHandoverReceipts(db,storeId,range.start,range.end,settings.timezone)
@@ -75,7 +75,7 @@ export async function revenueQuery(db:DB,storeId:string,input:unknown,canRefund=
  const associationStart=new Date(rows.reduce((minimum,row)=>Math.min(minimum,row.associationAt.getTime()),range.start.getTime()))
  const sessions=await db.shiftSession.findMany({where:{storeId,openedAt:{lte:now},OR:[{closedAt:null},{closedAt:{gte:associationStart}}]},orderBy:{openedAt:'desc'}})
  const definitions=await db.shift.findMany({where:{storeId},select:{key:true,name:true,nameZh:true,nameId:true}})
- for(const row of rows)if(!row.sessionId){const matches=sessions.filter(s=>row.associationAt>=s.openedAt&&row.associationAt<(s.closedAt||now));if(matches.length===1)row.sessionId=matches[0].id}
+ for(const row of rows)if(!row.sessionId&&row.kind!=='expense'){const matches=sessions.filter(s=>row.associationAt>=s.openedAt&&row.associationAt<(s.closedAt||now));if(matches.length===1)row.sessionId=matches[0].id}
  const showEmpty=(filter.dataset==='net'||filter.dataset==='orders')&&!payment&&!channel
  const matched=sessions.filter(s=>rows.some(r=>r.sessionId===s.id)||(showEmpty&&s.openedAt<=range.end&&(!s.closedAt||s.closedAt>=range.start)))
  const ids=matched.map(s=>s.staffId),[staff,users]=await Promise.all([db.staff.findMany({where:{storeId,OR:[{id:{in:ids}},{userId:{in:ids}}]},select:{id:true,userId:true,name:true}}),db.user.findMany({where:{storeId,id:{in:ids}},select:{id:true,role:true}})])
@@ -85,5 +85,5 @@ export async function revenueQuery(db:DB,storeId:string,input:unknown,canRefund=
  const groupMap=new Map<string,{key:string;label:Label|null;amount:number;count:number;missingCount:number}>()
  for(const row of rows){const key=row.kind==='order'||row.kind==='refund'?row.channelId||'none':row.category||row.source;const g=groupMap.get(key)||{key,label:row.channel,amount:0,count:0,missingCount:0};g.amount+=row.amount||0;g.count++;if(row.amount===null)g.missingCount++;groupMap.set(key,g)}
  const missingCount=rows.filter(r=>r.amount===null).length
- return {filter,range:{startDate,endDate,timezone:settings.timezone},selected,asOf:now,summary:{amount:rows.reduce((n,r)=>n+(r.amount||0),0),count:rows.length,missingCount,legacyDateCount:rows.filter(r=>r.legacyDate).length,orderCount:rows.filter(r=>r.kind==='order').length},breakdown:[...groupMap.values()],rows:rows.slice((filter.page-1)*50,filter.page*50),pagination:{page:filter.page,pageSize:50,total:rows.length,pages:Math.max(1,Math.ceil(rows.length/50))},shifts,unassignedCount:rows.filter(r=>!r.sessionId).length}
+ return {filter,range:{startDate,endDate,timezone:settings.timezone},selected,asOf:now,summary:{amount:rows.reduce((n,r)=>n+(r.amount||0),0),count:rows.length,missingCount,legacyDateCount:rows.filter(r=>r.legacyDate).length,orderCount:rows.filter(r=>r.kind==='order').length},breakdown:[...groupMap.values()],rows:rows.slice((filter.page-1)*50,filter.page*50),pagination:{page:filter.page,pageSize:50,total:rows.length,pages:Math.max(1,Math.ceil(rows.length/50))},shifts,unassignedCount:rows.filter(r=>!r.sessionId&&r.kind!=='expense').length,storePaymentCount:rows.filter(r=>r.kind==='expense'&&!r.sessionId).length}
 }

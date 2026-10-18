@@ -59,7 +59,7 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
     return date >= range.startDate && date < range.endDate ? outside : null
   }
   for (const o of orders) assign(o.createdAt)?.orders.push(o)
-  for (const e of quantities) assign(e.createdAt)?.expenses.push(e)
+  for (const e of quantities) if(!['purchase','purchase_refund'].includes(e.referenceType||'')&&e.paymentSource==='drawer_cash'&&e.cashOccurredAt&&e.cashSessionId){const bucket=assign(e.cashOccurredAt);if(bucket?.id===e.cashSessionId)bucket.expenses.push(e)}
   for (const w of warnings) assign(w.createdAt)?.warnings.push(w)
   const nightlyIds=dailyNightHandoverIds(sessions.filter(s=>s.status==='closed'),definitions,settings.timezone)
   const serialize = (b: typeof buckets[number] | typeof outside) => {

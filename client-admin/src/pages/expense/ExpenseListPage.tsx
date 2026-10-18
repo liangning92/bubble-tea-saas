@@ -1,3 +1,5 @@
+import { ExpensePaymentFields } from '../../../../shared/components/ExpensePaymentFields'
+import api from '../../services/api'
 import { purchaseDescriptionDisplay } from '../../../../shared/utils/localizedItemName'
 import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
@@ -25,6 +27,9 @@ interface Expense {
   referenceId?: string
   referenceType?: string
   createdAt: string
+  updatedAt:string
+  paymentSource?:string
+  cashOccurredAt?:string|null
 }
 
 interface ExpenseSummary {
@@ -63,6 +68,9 @@ interface Reimbursement {
     employeeNumber: string
   }
   createdAt: string
+  updatedAt:string
+  paymentSource?:string
+  cashOccurredAt?:string|null
 }
 
 // ExpenseCategory 类型：支持名称/颜色/是否默认均可编辑
@@ -97,6 +105,12 @@ const DEFAULT_CATEGORY_DEFS: ExpenseCategory[] = [
 ]
 
 export function ExpenseListPage() {
+  const [paymentSource,setPaymentSource]=useState('unknown')
+  const [paymentReview,setPaymentReview]=useState<Expense|null>(null)
+  const [paymentAt,setPaymentAt]=useState('')
+  const [paymentReason,setPaymentReason]=useState('')
+  const [paymentError,setPaymentError]=useState('')
+  const [paymentBusy,setPaymentBusy]=useState(false)
   const canWrite=useEmployeePermission('finance.write')
   const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
@@ -364,7 +378,7 @@ export function ExpenseListPage() {
         category: formData.category,
         amount,
         description: formData.description,
-        date: formData.date
+        date: formData.date,paymentSource
       }
 
       if (selectedExpense) {
@@ -557,6 +571,7 @@ export function ExpenseListPage() {
   }
 
   const resetForm = () => {
+    setPaymentSource('unknown')
     setFormData({
       category: 'other',
       amount: '',
@@ -573,6 +588,7 @@ export function ExpenseListPage() {
   }
 
   const openEditModal = (expense: Expense) => {
+    setPaymentSource(expense.paymentSource||'unknown')
     if (['salary','purchase','purchase_refund'].includes(expense.referenceType||'')) return
     setSelectedExpense(expense)
     // Format amount with thousand separators for display
@@ -965,6 +981,8 @@ export function ExpenseListPage() {
                           </span>
                           <span className="text-xs text-gray-400">{formatDate(expense.date)}</span>
                         </div>
+                        <p className="text-xs text-gray-500">{t('expensePayment.source')}: {t('expensePayment.'+(expense.paymentSource||'unknown'))}</p>
+                        {user?.role==='admin'&&<button type="button" className="text-xs text-primary underline mt-1" onClick={e=>{e.stopPropagation();setPaymentReview(expense);setPaymentSource(['purchase','purchase_refund'].includes(expense.referenceType||'')?'online_payment':expense.paymentSource||'unknown');setPaymentAt('');setPaymentReason('');setPaymentError('')}}>{t('expensePayment.verify')}</button>}
                         {expense.quantity !== undefined && <p className="text-sm text-gray-600">{t('expense.purchaseQuantity')}: {formatNumber(expense.quantity)}</p>}
                         {expense.description && (
                           <p className="text-sm text-gray-600 mt-1">{expense.referenceType==='purchase'?purchaseDescriptionDisplay(expense.description,i18n.language):expense.description}</p>
@@ -1173,6 +1191,7 @@ export function ExpenseListPage() {
                 />
               </div>
 
+              <ExpensePaymentFields source={paymentSource} onSource={setPaymentSource} disabled={!!selectedExpense}/>
               <div className="admin-dialog-footer flex gap-3 mt-6">
                 <button
                   onClick={() => { setShowModal(false); resetForm(); }}
@@ -1413,6 +1432,14 @@ export function ExpenseListPage() {
             </div>
           </AdminDialog>
       )}
+      {paymentReview&&<AdminDialog title={t('expensePayment.verify')} onClose={()=>setPaymentReview(null)} busy={paymentBusy} chrome className="max-w-lg">
+       <p className="text-sm mb-3">{paymentReview.description} · {formatCurrency(paymentReview.amount)}</p>
+       <ExpensePaymentFields fixedSource={['purchase','purchase_refund'].includes(paymentReview.referenceType||'')} source={paymentSource} onSource={setPaymentSource}/>
+       <label className="block text-sm mt-3">{t('expensePayment.actualTime')}<LocalizedDateTimeInput aria-label={t('expensePayment.actualTime')} type="datetime-local" value={paymentAt} onChange={e=>setPaymentAt(e.target.value)} className="input w-full"/></label>
+       <label className="block text-sm mt-3">{t('entryFix.reason')}<textarea aria-label={t('entryFix.reason')} className="input w-full" value={paymentReason} onChange={e=>setPaymentReason(e.target.value)}/></label>
+       {paymentError&&<p role="alert" className="text-red-700">{paymentError}</p>}
+       <button className="btn-primary mt-3" disabled={paymentBusy||!paymentAt||!paymentReason.trim()} onClick={async()=>{setPaymentBusy(true);setPaymentError('');try{await api.post('/expenses/'+paymentReview.id+'/payment-source',{paymentSource,paidLocal:paymentAt,expectedVersion:paymentReview.updatedAt,reason:paymentReason});setPaymentReview(null);await loadData()}catch(e:any){setPaymentError(e.response?.data?.message||t('common.error'))}finally{setPaymentBusy(false)}}}>{t('common.confirm')}</button>
+      </AdminDialog>}
     </div>
   )
 }

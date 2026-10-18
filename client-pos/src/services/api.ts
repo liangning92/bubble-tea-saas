@@ -282,7 +282,7 @@ export const posApi = {
     api.post('/hardware/test-drawer', { printerName, storeId }),
 
   getMyPosExpenses: () => offlineRead('/expenses/pos',undefined,()=>api.get('/expenses/pos',{timeout:5000})),
-  createPosExpense: async (data: { requestId: string; category: string; amount: number; quantity: number; description: string }) => ({data:{code:201,data:await createOfflineExpense(data)}}),
+  createPosExpense: async (data: { requestId: string; category: string; amount: number; quantity: number; description: string; paymentSource?:string }) => ({data:{code:201,data:await createOfflineExpense(data)}}),
   getExpenseCategories: () => api.get('/expenses/categories'),
   // Expenses - POS can record daily expenses
   getExpenses: (params?: { startDate?: string; endDate?: string; type?: string }) =>

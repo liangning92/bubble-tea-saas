@@ -130,7 +130,7 @@ export async function applyOfflineOperation(storeId:string,body:unknown) {
    }else if(input.kind==='expense'){
     const categories=await tx.config.findUnique({where:{storeId_key:{storeId,key:'expense.categories'}}})
     if(Array.isArray(authorization.expenseCategoryKeys)?!authorization.expenseCategoryKeys.includes(input.data.category):!categories||!JSON.parse(categories.value).some((c:any)=>c.key===input.data.category&&c.posVisible!==false))throw new OfflineOperationError('POS_EXPENSE_CATEGORY_INVALID')
-    result=await tx.expense.create({data:{id:input.id,storeId,type:'operational',category:input.data.category,amount:input.data.amount*100,description:input.data.description,date:new Date(new Date(at.getTime()+7*3600000).toISOString().slice(0,10)+'T00:00:00+07:00'),referenceType:'pos_reimbursement',referenceId:actor.id+':'+input.data.requestId,createdAt:at}})
+    result=await tx.expense.create({data:{id:input.id,storeId,type:'operational',category:input.data.category,paymentSource:input.data.paymentSource||'unknown',cashSessionId:input.data.paymentSource==='drawer_cash'?shift.id:null,cashOccurredAt:input.data.paymentSource==='drawer_cash'?at:null,amount:input.data.amount*100,description:input.data.description,date:new Date(new Date(at.getTime()+7*3600000).toISOString().slice(0,10)+'T00:00:00+07:00'),referenceType:'pos_reimbursement',referenceId:actor.id+':'+input.data.requestId,createdAt:at}})
     await tx.financeAuditLog.create({data:{storeId,userId:actor.id,action:'create',entityType:'expense',entityId:result.id,description:'Offline POS purchase',newValue:JSON.stringify({...input.data,source:'pos_reimbursement'})}})
     result={...result,amount:input.data.amount,quantity:input.data.quantity}
    }else{

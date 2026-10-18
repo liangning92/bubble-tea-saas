@@ -1,3 +1,4 @@
+import { ExpensePaymentFields } from '../../../shared/components/ExpensePaymentFields'
 import { TodayStockOuts } from '../components/TodayStockOuts'
 import { PurchasePrices } from '../../../shared/components/PurchasePrices'
 import { useDialogs } from '../components/Dialogs'
@@ -124,6 +125,7 @@ function StockForm({ kind, items, onDone, refreshKey }: {
 }
 function PurchaseForm({items,suppliers,onDone,editing,onCancel}:{items:Material[];suppliers:any[];onDone:(text:string)=>Promise<void>;editing?:any;onCancel:()=>void}){
  const {t,i18n}=useTranslation(),{user}=useAuthStore();
+ const [paymentSource,setPaymentSource]=useState('online_payment'),[paidDate,setPaidDate]=useState(editing?.paidAt?new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(editing.paidAt)):new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Jakarta',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()));
  const [supplierId,setSupplier]=useState(editing?.supplierId||''),[onlineOrderNumber,setOnlineOrder]=useState(editing?.onlineOrderNumber||''),[expectedDate,setExpected]=useState(editing?.expectedDate?.slice(0,10)||''),[note,setNote]=useState(editing?.note||''),[reason,setReason]=useState('');
  const [rows,setRows]=useState<Array<{inventoryId:string;quantity:string;paidAmount:string;inputUnit:string}>>(editing?editing.items.map((i:any)=>({inventoryId:i.inventoryId,quantity:String(i.inputQuantity??i.quantity),inputUnit:i.inputUnit||i.inventory?.unit,paidAmount:String(i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)))})):[{inventoryId:'',quantity:'',paidAmount:'',inputUnit:''}]);
  const [busy,setBusy]=useState(false),[error,setError]=useState(''),lock=useRef(false);
@@ -131,7 +133,7 @@ function PurchaseForm({items,suppliers,onDone,editing,onCancel}:{items:Material[
  const submit=async(e:React.FormEvent)=>{e.preventDefault();if(lock.current)return;
   if(rows.some(r=>!r.inventoryId||!items.some(i=>i.id===r.inventoryId)||!Number.isFinite(Number(r.quantity))||Number(r.quantity)<=0||r.paidAmount===''||!Number.isSafeInteger(Number(r.paidAmount))||Number(r.paidAmount)<0)||new Set(rows.map(r=>r.inventoryId)).size!==rows.length||(editing&&!reason.trim())){setError(t('inventoryFlow.invalid'));return}
   lock.current=true;setBusy(true);setError('');try{
-   const data={storeId:user?.storeId,source:'online',supplierId:supplierId||undefined,onlineOrderNumber,expectedDate:expectedDate||undefined,note,items:rows.map(r=>({...r,quantity:Number(r.quantity),paidAmount:Number(r.paidAmount),inputUnit:r.inputUnit||defaultInventoryInputUnit(items.find(i=>i.id===r.inventoryId)!)}))};
+   const data={storeId:user?.storeId,paymentSource,paidDate,source:'online',supplierId:supplierId||undefined,onlineOrderNumber,expectedDate:expectedDate||undefined,note,items:rows.map(r=>({...r,quantity:Number(r.quantity),paidAmount:Number(r.paidAmount),inputUnit:r.inputUnit||defaultInventoryInputUnit(items.find(i=>i.id===r.inventoryId)!)}))};
    if(editing)await inventoryFlowApi.updatePurchase(editing.id,{...data,expectedVersion:editing.updatedAt,reason});else await inventoryFlowApi.purchase(data);
    await onDone(t('inventoryFlow.purchaseSaved'));
   }catch(e:any){setError(e.response?.data?.message||t('inventoryFlow.failed'))}finally{lock.current=false;setBusy(false)}
@@ -149,6 +151,7 @@ function PurchaseForm({items,suppliers,onDone,editing,onCancel}:{items:Material[
  <button type="button" className="text-primary-hover" onClick={()=>setRows([...rows,{inventoryId:'',quantity:'',paidAmount:'',inputUnit:''}])}>+ {t('inventoryFlow.addItem')}</button>
  <label className="block">{t('inventoryFlow.note')}<textarea className="border rounded-lg p-3 w-full" value={note} onChange={e=>setNote(e.target.value)}/></label>
  {editing&&<label className="block">{t('entryFix.reason')}<textarea required className="border rounded-lg p-3 w-full" value={reason} onChange={e=>setReason(e.target.value)}/></label>}
+ <ExpensePaymentFields fixedSource source="online_payment" onSource={setPaymentSource} date={paidDate} onDate={setPaidDate} disabled={!!editing?.paidAt}/>
  <p className="font-bold">{t('inventoryFlow.total')}: Rp {rows.reduce((sum,r)=>sum+Number(r.paidAmount||0),0).toLocaleString(i18n.language)}</p><p className="text-sm text-gray-500">{t('entryFix.stockHint')}</p></fieldset>
  {error&&<p role="alert" className="text-red-700">{error}</p>}<button disabled={busy} className="w-full bg-primary text-white rounded-xl py-3">{t(busy?'inventoryFlow.saving':editing?'entryFix.save':'entryFix.newPurchase')}</button>{editing&&<button disabled={busy} type="button" onClick={onCancel}>{t('inventoryFlow.cancel')}</button>}</form>
 }

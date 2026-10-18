@@ -61,6 +61,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ shifts:{scripts:['tests/stoploss/pos-expense-page-check.cjs'],components:['pos']},
  todayStockOut:{scripts:['tests/stoploss/inventory-today-stock-out-page-check.cjs'],components:['staff']},
  staffOffline:{scripts:['tests/stoploss/staff-offline-login-page-check.cjs','tests/stoploss/employee-offline-attendance-page-check.cjs'],components:['staff']},
  attendanceReport:{scripts:['tests/stoploss/inventory-attendance-layout-page-check.cjs'],components:['admin']},

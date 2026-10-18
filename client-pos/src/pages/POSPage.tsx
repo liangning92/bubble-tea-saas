@@ -1,3 +1,4 @@
+import { ExpensePaymentFields } from '../../../shared/components/ExpensePaymentFields'
 import {RefundRequestForm} from '../components/RefundRequestForm'
 import { offlineActivityQuote } from '../utils/offlineMembers'
 import { ReprintReceiptButton } from '../components/ReprintReceiptButton'
@@ -285,6 +286,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [expenseCategories, setExpenseCategories] = useState<{ key: string; label: string; labelZh?: string; labelEn?: string; labelId?: string; posVisible?: boolean }[]>([])
   const [expenseCategory, setExpenseCategory] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
+  const [expensePaymentSource,setExpensePaymentSource]=useState('unknown')
   const [expenseQuantity, setExpenseQuantity] = useState('1')
   const [expenseSaving, setExpenseSaving] = useState(false)
   const [expenseRequestId, setExpenseRequestId] = useState(() => crypto.randomUUID())
@@ -1963,7 +1965,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
     setExpenseSaving(true)
     try {
-      await posApi.createPosExpense({ requestId: expenseRequestId, category: expenseCategory, amount, quantity, description: expenseDescription.trim() })
+      await posApi.createPosExpense({ requestId: expenseRequestId, category: expenseCategory, amount, quantity, description: expenseDescription.trim(),paymentSource:expensePaymentSource })
       setShowExpenseModal(false)
       showToast(t('pos.expenseCreated'), 'success')
       setExpenseCategory('')
@@ -5051,6 +5053,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   </select>
                 </div>
 
+                <ExpensePaymentFields source={expensePaymentSource} onSource={setExpensePaymentSource}/>
                 <div className="mb-3"><label className="block text-sm text-gray-500 mb-1">{t('pos.purchaseQuantity')}</label><input type="number" min="1" step="1" aria-label={t('pos.purchaseQuantity')} value={expenseQuantity} onChange={e => setExpenseQuantity(e.target.value)} className="w-full px-3 py-2 border rounded-xl" /></div>
 
                 {/* 金额 */}

@@ -1,3 +1,4 @@
+import { ExpensePaymentFields } from '../../../../shared/components/ExpensePaymentFields'
 import { Link } from 'react-router-dom'
 import { useStoreDateSettings } from '../../hooks/useStoreDateSettings'
 import { storeCalendarDate } from '../../utils/storeDateTime'
@@ -47,6 +48,7 @@ interface PurchaseOrder {
   items: PurchaseOrderItem[]
   refunded?: boolean
   financeExpenseId?: string | null
+  paymentSource?:string
   paidAt?: string | null
   updatedAt: string
   createdAt: string
@@ -94,6 +96,8 @@ export function PurchaseOrderListPage() {
   const [reason,setReason]=useState('')
   const [confirmingPayment,setConfirmingPayment]=useState<PurchaseOrder|null>(null)
   const [paidDate,setPaidDate]=useState('')
+  const [paymentSource,setPaymentSource]=useState('online_payment')
+  const [purchasePaidDate,setPurchasePaidDate]=useState('')
   const [viewMode,setViewMode]=useState<'list'|'board'>('board')
   const [command,setCommand]=useState<{order:PurchaseOrder;action:'reverse'|'refund'}|null>(null)
   const [filterStatus, setFilterStatus] = useState('')
@@ -149,7 +153,7 @@ export function PurchaseOrderListPage() {
       const save=editing?(data:any)=>purchaseOrderApi.update(editing.id,{...data,expectedVersion:editing.updatedAt,reason}):purchaseOrderApi.create
       await save({
         requestId: createRequest.current, storeId: user?.storeId, supplierId: formData.supplierId || undefined,
-        expectedDate: formData.expectedDate || undefined, note: formData.note, items: validItems
+        paymentSource,paidDate:purchasePaidDate||undefined,expectedDate: formData.expectedDate || undefined, note: formData.note, items: validItems
       })
       setShowModal(false)
       setEditing(null)
@@ -166,6 +170,7 @@ export function PurchaseOrderListPage() {
   }
 
   const resetForm = () => {
+    setPaymentSource('online_payment');setPurchasePaidDate(today)
     setFormData({
       supplierId: '',
       expectedDate: '',
@@ -244,7 +249,7 @@ export function PurchaseOrderListPage() {
     return formData.items.reduce((sum,item)=>sum+Number(item.paidAmount||0),0)
   }
 
-  const editOrder=(order:PurchaseOrder)=>{setEditing(order);setReason('');setActionError('');setFormData({supplierId:order.supplierId||'',expectedDate:order.expectedDate?.slice(0,10)||'',note:order.note||'',items:order.items.map(i=>({inventoryId:i.inventoryId,quantity:String(i.inputQuantity??i.quantity),inputUnit:i.inputUnit||i.inventory?.unit||'',paidAmount:String(i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)))}))});setShowModal(true)}
+  const editOrder=(order:PurchaseOrder)=>{setPaymentSource('online_payment');setPurchasePaidDate(order.paidAt?storeCalendarDate(new Date(order.paidAt),dateSettings.timezone):today);setEditing(order);setReason('');setActionError('');setFormData({supplierId:order.supplierId||'',expectedDate:order.expectedDate?.slice(0,10)||'',note:order.note||'',items:order.items.map(i=>({inventoryId:i.inventoryId,quantity:String(i.inputQuantity??i.quantity),inputUnit:i.inputUnit||i.inventory?.unit||'',paidAmount:String(i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)))}))});setShowModal(true)}
   const summary = summarizePurchases(orders, today, dateSettings.timezone)
   const searchedOrders = orders.filter(o => !search || [o.supplier?.name, o.orderNumber, o.onlineOrderNumber, ...o.items.flatMap(i => [i.inventory?.name,formatItemName(i.inventory?.name || '', i18n.language)])].join(' ').toLowerCase().includes(search.toLowerCase()))
   const matchesStatus = (order: PurchaseOrder, status: string) => !status || (status === 'awaiting_receipt' ? ['pending', 'approved', 'awaiting_receipt'].includes(order.status) : order.status === status)
@@ -344,7 +349,7 @@ export function PurchaseOrderListPage() {
 
                 {order.status==='received'&&<button disabled={busyOrders.has(order.id)} className="text-sm text-amber-700 mt-3" onClick={()=>{setCommand({order,action:'reverse'});setReason('')}}>{t('entryFix.reverseReceipt')}</button>}
                 {order.status==='cancelled'&&order.paidAt&&!order.refunded&&<button disabled={busyOrders.has(order.id)} className="text-sm text-amber-700 mt-3" onClick={()=>{setCommand({order,action:'refund'});setReason('')}}>{t('entryFix.refund')}</button>}
-                {!order.paidAt&&order.status!=='cancelled'&&['admin','manager'].includes(user?.role||'')&&<button className="text-sm text-primary underline mt-3" onClick={()=>{setConfirmingPayment(order);setPaidDate(storeCalendarDate(order.createdAt,'Asia/Jakarta'));setReason('');setActionError('')}}>{t('purchaseBoard.confirmPayment')}</button>}
+                {!order.paidAt&&order.status!=='cancelled'&&['admin','manager'].includes(user?.role||'')&&<button className="text-sm text-primary underline mt-3" onClick={()=>{setConfirmingPayment(order);setPaymentSource('online_payment');setPaidDate(storeCalendarDate(order.createdAt,'Asia/Jakarta'));setReason('');setActionError('')}}>{t('purchaseBoard.confirmPayment')}</button>}
                 {/* Actions */}
                 <div className="flex flex-wrap items-center justify-end gap-2 mt-4 border-t pt-3">
                   {['pending','approved','awaiting_receipt'].includes(order.status)&&<button className="text-sm text-primary rounded-lg border border-gray-200 px-3 py-2" onClick={()=>editOrder(order)}>{t('entryFix.edit')}</button>}
@@ -446,6 +451,7 @@ export function PurchaseOrderListPage() {
                  <button className="text-red-600 text-sm justify-self-start" disabled={formData.items.length===1} onClick={()=>removeItem(index)}>{t('inventoryFlow.remove')}</button>
                 </section>})}</div>
               </div>
+              <ExpensePaymentFields fixedSource source="online_payment" onSource={setPaymentSource} date={purchasePaidDate} onDate={setPurchasePaidDate} disabled={!!editing?.paidAt}/>
               <p className="text-sm text-gray-500">{t('entryFix.paymentHint')} {t('entryFix.stockHint')}</p>
               {editing&&<label className="block text-sm">{t('entryFix.reason')}<textarea className="input w-full" value={reason} onChange={e=>setReason(e.target.value)}/></label>}
 
@@ -469,10 +475,11 @@ export function PurchaseOrderListPage() {
       )}
       {confirmingPayment&&<AdminDialog title={t('purchaseBoard.confirmPayment')} onClose={()=>setConfirmingPayment(null)} busy={busyOrders.has(confirmingPayment.id)} className="max-w-md" chrome>
         <p className="text-sm text-gray-600">{t('purchaseBoard.confirmHint')}</p><p className="font-bold text-xl my-3">{formatCurrency(confirmingPayment.totalAmount)}</p>
+        <ExpensePaymentFields fixedSource source="online_payment" onSource={setPaymentSource} allowDrawer={false}/>
         <label className="block mt-3">{t('purchaseBoard.paidDate')}<LocalizedDateTimeInput type="date" value={paidDate} onChange={e=>setPaidDate(e.target.value)} className="input w-full"/></label>
         <label className="block mt-3">{t('entryFix.reason')}<textarea className="input w-full" value={reason} onChange={e=>setReason(e.target.value)}/></label>
         {actionError&&<p role="alert" className="text-red-700">{actionError}</p>}
-        <button className="btn-primary mt-3" disabled={!reason.trim()||!paidDate||busyOrders.has(confirmingPayment.id)} onClick={()=>runOrderAction(confirmingPayment.id,async()=>{await purchaseOrderApi.confirmPayment(confirmingPayment.id,{expectedVersion:confirmingPayment.updatedAt,paidDate,reason});setConfirmingPayment(null)})}>{t('purchaseBoard.confirmPayment')}</button>
+        <button className="btn-primary mt-3" disabled={!reason.trim()||!paidDate||busyOrders.has(confirmingPayment.id)} onClick={()=>runOrderAction(confirmingPayment.id,async()=>{await purchaseOrderApi.confirmPayment(confirmingPayment.id,{expectedVersion:confirmingPayment.updatedAt,paidDate,reason,paymentSource});setConfirmingPayment(null)})}>{t('purchaseBoard.confirmPayment')}</button>
       </AdminDialog>}
       {command&&<AdminDialog title={t(command.action==='reverse'?'entryFix.reverseReceipt':'entryFix.refund')} onClose={()=>setCommand(null)} className="max-w-md" busy={busyOrders.has(command.order.id)} chrome><p className="text-sm text-gray-600">{t(command.action==='reverse'?'entryFix.reverseHint':'entryFix.refundHint')}</p><label className="block mt-3">{t('entryFix.reason')}<textarea className="input w-full" value={reason} onChange={e=>setReason(e.target.value)}/></label>{actionError&&<p role="alert" className="text-red-700">{actionError}</p>}<button className="btn-primary mt-3" disabled={!reason.trim()||busyOrders.has(command.order.id)} onClick={()=>runOrderAction(command.order.id,async()=>{await (command.action==='reverse'?purchaseOrderApi.reverseReceipt:purchaseOrderApi.refund)(command.order.id,reason);setCommand(null)})}>{t('common.confirm')}</button></AdminDialog>}
     </div>

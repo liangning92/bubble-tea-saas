@@ -1,3 +1,4 @@
+import {expensePaymentAdditions} from './expensePaymentUpgrade'
 import {tvModels} from './tvSchemaUpgrade'
 import {inventoryFlowAdditions,inventoryFlowModels,inventoryFlowChecksum,purchasePaymentAdditions} from './inventoryFlowUpgrade'
 import {ledgerColumns,ledgerIndexes,sqliteLedgerTriggers,ledgerChecksum,assertLedgerInstalled} from './inventoryLedger'
@@ -37,7 +38,7 @@ async function checkBaseline(db:Database) {
   const names=(await columns(db,table)).map(c=>c.name)
   for(const field of model.fields.filter(field=>field.kind!=='object')){
    const name=field.dbName||field.name
-   if(!names.includes(name)&&![...additions,...ledgerColumns,...inventoryFlowAdditions,...purchasePaymentAdditions].some(([t,n])=>t===table&&n===name))throw new Error(`SQLITE_UPGRADE_UNSUPPORTED_BASELINE:${table}.${name}`)
+   if(!names.includes(name)&&![...additions,...ledgerColumns,...inventoryFlowAdditions,...purchasePaymentAdditions,...expensePaymentAdditions].some(([t,n])=>t===table&&n===name))throw new Error(`SQLITE_UPGRADE_UNSUPPORTED_BASELINE:${table}.${name}`)
   }
  }
 }

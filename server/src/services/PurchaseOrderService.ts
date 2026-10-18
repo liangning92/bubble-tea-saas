@@ -1,3 +1,5 @@
+import { paymentFields, PaymentSource } from './ExpensePaymentService'
+import { parseBusinessDate } from '../utils/businessDate'
 import {recalculateInventoryConsumers} from './InventoryQuantityService';
 import {loadInventoryActors} from '../utils/inventoryActors';
 import {alignInventoryBatches,receiptBatchDates} from './InventoryBatchService'
@@ -22,8 +24,8 @@ async function view(order: any, db: any = prisma, suppliedActors?: Awaited<Retur
     const inventory = await db.inventory.findMany({ where: { storeId: order.storeId, id: { in: order.items.map((i: any) => i.inventoryId) } }, select: { id: true, name: true, unit: true } });
     const actors = suppliedActors || await loadInventoryActors(db, order.storeId, [order.createdBy, order.receivedBy]);
     const refunded=!!(await db.expense.findFirst({where:{storeId:order.storeId,referenceType:'purchase_refund',referenceId:order.id},select:{id:true}}));
-    const paymentExpense=await db.expense.findFirst({where:{storeId:order.storeId,referenceType:'purchase',referenceId:order.id},select:{id:true}});
-    return { ...order, financeExpenseId:paymentExpense?.id||null, refunded, createdByActor: actors.get(order.createdBy) || null, receivedByActor: actors.get(order.receivedBy) || null, items: order.items.map((i: any) => ({ ...i, lineAmount:i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)), inventory: inventory.find((m: any) => m.id === i.inventoryId) })) };
+    const paymentExpense=await db.expense.findFirst({where:{storeId:order.storeId,referenceType:'purchase',referenceId:order.id},select:{id:true,paymentSource:true,cashSessionId:true,cashOccurredAt:true}});
+    return { ...order, financeExpenseId:paymentExpense?.id||null,paymentSource:paymentExpense?.paymentSource||'unknown',cashSessionId:paymentExpense?.cashSessionId||null, refunded, createdByActor: actors.get(order.createdBy) || null, receivedByActor: actors.get(order.receivedBy) || null, items: order.items.map((i: any) => ({ ...i, lineAmount:i.lineAmount??Math.round((i.inputQuantity??i.quantity)*(i.inputUnitCost??i.unitCost)), inventory: inventory.find((m: any) => m.id === i.inventoryId) })) };
 }
 export async function getPurchaseOrders(filter: PurchaseOrderFilter) {
     const where: any = { storeId: filter.storeId };
@@ -45,6 +47,7 @@ export async function getPendingPurchaseOrders(storeId: string) { return getPurc
 export interface PurchaseInput {
  storeId:string; supplierId?:string; expectedDate?:Date; note?:string; source?:string;
  onlineOrderNumber?:string; createdBy?:string; requestId?:string;
+ paymentSource?:PaymentSource; paidDate?:string;
  items:Array<{inventoryId:string;quantity:number;inputUnit?:string;unitCost?:number;paidAmount?:number}>;
 }
 async function prepareItems(tx:any,data:PurchaseInput){
@@ -73,14 +76,15 @@ async function prepareItems(tx:any,data:PurchaseInput){
 async function audit(tx:any,order:any,actor:string,action:string,oldValue:any,newValue:any){
  await tx.financeAuditLog.create({data:{storeId:order.storeId,userId:actor,action,entityType:'purchase',entityId:order.id,description:action,oldValue:oldValue?JSON.stringify(oldValue):null,newValue:JSON.stringify(newValue)}});
 }
-async function syncExpense(tx:any,order:any){
+async function syncExpense(tx:any,order:any,payment?:{paymentSource?:PaymentSource}){
  if(!order.paidAt)return;
+ if(order.paidAt>new Date()||!Number.isFinite(order.paidAt.getTime()))throw new PurchaseOrderError('INVALID_PAYMENT_DATE',400);
  const materials=await tx.inventory.findMany({where:{storeId:order.storeId,id:{in:order.items.map((i:any)=>i.inventoryId)}},select:{id:true,name:true}});
  const description=order.items.map((i:any)=>`${materials.find((m:any)=>m.id===i.inventoryId)?.name||'Material'} · ${i.inputQuantity??i.quantity} ${i.inputUnit||''}`).join('; ');
  const value={amount:order.totalAmount*100,description,date:order.paidAt};
  const old=await tx.expense.findFirst({where:{storeId:order.storeId,referenceType:'purchase',referenceId:order.id}});
  if(old)await tx.expense.update({where:{id:old.id},data:value});
- else if(order.totalAmount>0)await tx.expense.create({data:{...value,storeId:order.storeId,type:'supplies',category:'supplies',referenceType:'purchase',referenceId:order.id}});
+ else if(order.totalAmount>0)await tx.expense.create({data:{...value,...await paymentFields(tx,order.storeId,'online_payment',order.paidAt),storeId:order.storeId,type:'supplies',category:'supplies',referenceType:'purchase',referenceId:order.id}});
 }
 export async function createPurchaseOrder(data:PurchaseInput){
  const fingerprint=createHash('sha256').update(JSON.stringify(data)).digest('hex');
@@ -88,8 +92,8 @@ export async function createPurchaseOrder(data:PurchaseInput){
  try{return await prisma.$transaction(async tx=>{
   const previous=await replay(tx);if(previous)return previous;
   const {items,totalAmount,paid}=await prepareItems(tx,data);
-  const order=await tx.purchaseOrder.create({data:{storeId:data.storeId,supplierId:data.supplierId||null,orderNumber:`PO-${randomUUID()}`,source:data.source||'admin',status:data.source==='online'?'awaiting_receipt':'pending',onlineOrderNumber:data.onlineOrderNumber,createdBy:data.createdBy,requestId:data.requestId,requestFingerprint:fingerprint,expectedDate:data.expectedDate,note:data.note,totalAmount,paidAt:paid?new Date():null,items:{create:items}},include});
-  await syncExpense(tx,order);await audit(tx,order,data.createdBy||'system','create',null,order);return view(order,tx);
+  const order=await tx.purchaseOrder.create({data:{storeId:data.storeId,supplierId:data.supplierId||null,orderNumber:`PO-${randomUUID()}`,source:data.source||'admin',status:data.source==='online'?'awaiting_receipt':'pending',onlineOrderNumber:data.onlineOrderNumber,createdBy:data.createdBy,requestId:data.requestId,requestFingerprint:fingerprint,expectedDate:data.expectedDate,note:data.note,totalAmount,paidAt:paid?(data.paidDate?parseBusinessDate(data.paidDate):new Date()):null,items:{create:items}},include});
+  await syncExpense(tx,order,data);await audit(tx,order,data.createdBy||'system','create',null,order);return view(order,tx);
  })}catch(e:any){if(e.code==='P2002'){const previous=await replay(prisma);if(previous)return previous}throw e}
 }
 export async function editPurchaseOrder(id:string,data:PurchaseInput,actor:string,expectedVersion:string,reason:string,ownerOnly=false){
@@ -99,17 +103,19 @@ export async function editPurchaseOrder(id:string,data:PurchaseInput,actor:strin
   if(!['pending','approved','awaiting_receipt'].includes(old.status))throw new PurchaseOrderError('REVERSE_RECEIPT_BEFORE_EDIT');
   if(!reason.trim())throw new PurchaseOrderError('CORRECTION_REASON_REQUIRED',400);
   const {items,totalAmount,paid}=await prepareItems(tx,data);
+  const posted=await tx.expense.findFirst({where:{storeId:old.storeId,referenceType:'purchase',referenceId:id}});
+  if(posted?.paymentSource==='drawer_cash'&&old.totalAmount!==totalAmount)throw new PurchaseOrderError('DRAWER_PAYMENT_AMOUNT_IMMUTABLE',400);
   if(old.paidAt&&!paid)throw new PurchaseOrderError('PAID_AMOUNT_REQUIRED',400);
   const changed=await tx.purchaseOrder.updateMany({where:{id,status:old.status,updatedAt:new Date(expectedVersion)},data:{supplierId:data.supplierId||null,expectedDate:data.expectedDate||null,note:data.note||'',onlineOrderNumber:data.onlineOrderNumber===undefined?old.onlineOrderNumber:data.onlineOrderNumber||null,totalAmount,paidAt:old.paidAt||(paid?new Date():null)}});
   if(changed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
   await tx.purchaseOrderItem.deleteMany({where:{purchaseOrderId:id}});
   await tx.purchaseOrderItem.createMany({data:items.map(i=>({...i,purchaseOrderId:id}))});
   const order=await tx.purchaseOrder.findUniqueOrThrow({where:{id},include});
-  await syncExpense(tx,order);await audit(tx,order,actor,'update',old,{...order,reason});return view(order,tx);
+  await syncExpense(tx,order,data);await audit(tx,order,actor,'update',old,{...order,reason});return view(order,tx);
  });
 }
 // Confirm a historical payment without rewriting purchase items or touching inventory.
-export async function confirmPurchasePayment(id:string,storeId:string|undefined,actor:string,expectedVersion:string,paidAt:Date,reason:string){
+export async function confirmPurchasePayment(id:string,storeId:string|undefined,actor:string,expectedVersion:string,paidAt:Date,reason:string,paymentSource:PaymentSource='unknown'){
  return prisma.$transaction(async tx=>{
   const old=await scopedOrder(tx,id,storeId);
   if(old.status==='cancelled')throw new PurchaseOrderError('CANCELLED_PURCHASE_PAYMENT',400);
@@ -120,7 +126,7 @@ export async function confirmPurchasePayment(id:string,storeId:string|undefined,
   const changed=await tx.purchaseOrder.updateMany({where:{id,paidAt:null,status:old.status,updatedAt:new Date(expectedVersion)},data:{paidAt}});
   if(changed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
   const order=await tx.purchaseOrder.findUniqueOrThrow({where:{id},include});
-  await syncExpense(tx,order);await audit(tx,order,actor,'confirm_payment',old,{...order,reason});return view(order,tx);
+  await syncExpense(tx,order,{paymentSource});await audit(tx,order,actor,'confirm_payment',old,{...order,reason});return view(order,tx);
  });
 }
 async function scopedOrder(tx: any, orderId: string, storeId?: string) {
@@ -203,7 +209,7 @@ export async function refundPurchasePayment(id:string,storeId:string,actor:strin
   const claimed=await tx.purchaseOrder.updateMany({where:{id,updatedAt:order.updatedAt,status:'cancelled'},data:{updatedAt:new Date()}});if(claimed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
   if(await tx.expense.findFirst({where:{storeId,referenceType:'purchase_refund',referenceId:id}}))throw new PurchaseOrderError('PURCHASE_ALREADY_REFUNDED');
   const materials=await tx.inventory.findMany({where:{id:{in:order.items.map(i=>i.inventoryId)},storeId},select:{name:true}});
-  await tx.expense.create({data:{storeId,type:'supplies',category:'supplies',amount:-order.totalAmount*100,description:`Refund · ${materials.map(i=>i.name).join(' · ')}: ${reason}`,referenceType:'purchase_refund',referenceId:id}});
+  await tx.expense.create({data:{storeId,paymentSource:'online_payment',type:'supplies',category:'supplies',amount:-order.totalAmount*100,description:`Refund · ${materials.map(i=>i.name).join(' · ')}: ${reason}`,referenceType:'purchase_refund',referenceId:id}});
   await audit(tx,order,actor,'update',null,{refundAmount:order.totalAmount,reason});return {refunded:true};
  });
 }
