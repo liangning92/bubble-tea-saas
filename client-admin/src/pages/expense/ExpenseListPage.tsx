@@ -1,3 +1,4 @@
+import { formatStoreDate } from '../../utils/storeDateTime'
 import { ExpensePaymentFields } from '../../../../shared/components/ExpensePaymentFields'
 import api from '../../services/api'
 import { purchaseDescriptionDisplay } from '../../../../shared/utils/localizedItemName'
@@ -975,11 +976,12 @@ export function ExpenseListPage() {
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1">
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${catColor}`}>
                             {catLabel}
                           </span>
                           <span className="text-xs text-gray-400">{formatDate(expense.date)}</span>
+                          {expense.createdAt&&<span className="text-xs text-gray-500">{t('expensePayment.recordedAt')}: <time dateTime={expense.createdAt}>{formatStoreDate(expense.createdAt,undefined,true)}</time></span>}
                         </div>
                         <p className="text-xs text-gray-500">{t('expensePayment.source')}: {t('expensePayment.'+(expense.paymentSource||'unknown'))}</p>
                         {user?.role==='admin'&&<button type="button" className="text-xs text-primary underline mt-1" onClick={e=>{e.stopPropagation();setPaymentReview(expense);setPaymentSource(['purchase','purchase_refund'].includes(expense.referenceType||'')?'online_payment':expense.paymentSource||'unknown');setPaymentAt('');setPaymentReason('');setPaymentError('')}}>{t('expensePayment.verify')}</button>}

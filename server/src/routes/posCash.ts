@@ -1,3 +1,4 @@
+import { readShiftHandover } from '../services/ShiftHandoverReadService'
 import {offlineWorkSnapshot} from '../services/POSOfflineWorkService'
 import { POS_MANUAL_PAYMENT_METHODS } from '../utils/offlinePolicy'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
@@ -144,12 +145,9 @@ router.get('/shifts', authenticate, authorize('admin', 'manager', 'cashier'), as
 // Reprints read the immutable closed-session purchase snapshot, never re-record cash or costs.
 router.get('/shifts/:id/handover', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res, next) => {
   try {
-    const session = await prisma.shiftSession.findFirst({ where: { id: req.params.id, storeId: req.user!.storeId, status: 'closed' } })
-    if (!session) return res.status(404).json({ code: 404, message: 'SHIFT_HANDOVER_NOT_FOUND' })
-    const snapshot = await prisma.config.findUnique({ where: { storeId_key: { storeId: req.user!.storeId, key: 'pos.shift.purchase:' + session.id } } })
-    const reportRow = await prisma.config.findUnique({where:{storeId_key:{storeId:req.user!.storeId,key:'pos.shift.report:'+session.id}}})
-    const report = reportRow ? JSON.parse(reportRow.value) : null
-    res.json({ code: 200, data: { ...session, expectedCash:report?.expectedCash ?? null, cashDifference:report?.cashDifference ?? null, purchaseExpenses: snapshot ? JSON.parse(snapshot.value) : null, report } })
+    const result = await readShiftHandover(req.user!.storeId, req.params.id)
+    if (!result) return res.status(404).json({ code: 404, message: 'SHIFT_HANDOVER_NOT_FOUND' })
+    res.json({ code: 200, data: result })
   } catch (e) { next(e) }
 })
 

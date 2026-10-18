@@ -26,7 +26,7 @@ const { pathToFileURL } = require('node:url')
       requests.push(url)
       assert.equal(request.method(), 'GET')
       let data = {}
-      if (url.pathname === '/api/expenses') data = { list: [{ id: 'paid-salary', storeId: 'store', type: 'salary', category: 'salary', amount: 65000000, description: 'Synthetic salary · 2026-10', date: '2026-10-11T00:00:00.000Z', referenceType: 'salary', referenceId: 'salary-id' }] }
+      if (url.pathname === '/api/expenses') data = { list: [{ id: 'paid-salary', storeId: 'store', type: 'salary', category: 'salary', amount: 65000000, description: 'Synthetic salary · 2026-10', date: '2026-10-11T00:00:00.000Z', createdAt: '2026-10-18T15:29:59.309Z', referenceType: 'salary', referenceId: 'salary-id' }] }
       if (url.pathname === '/api/expenses/summary') data = { total: 65000000, byCategory: [{ category: 'salary', amount: 65000000 }], pendingSalaryMinor: 245000000, count: 1 }
       if (url.pathname === '/api/expenses/categories') data = { list: [{ key: 'salary', label: '', isDefault: true }, { key: 'other', label: '', isDefault: true }] }
       if (url.pathname === '/api/expenses/recurring') data = { revision: 0, items: [] }
@@ -40,6 +40,7 @@ const { pathToFileURL } = require('node:url')
     await page.goto(origin + '/finance/expenses')
     await expect(page.getByText('待发工资: Rp 2.450.000')).toBeVisible()
     await expect(page.getByText('Synthetic salary · 2026-10')).toBeVisible()
+    await expect(page.locator('time[datetime="2026-10-18T15:29:59.309Z"]')).toHaveText('2026-10-18 22:29')
     await expect(page.getByText('Rp 650.000').first()).toBeVisible()
     const salaryRow = page.getByText('Synthetic salary · 2026-10').locator('xpath=ancestor::div[contains(@class,"shadow-sm")]')
     // Source verification is available without enabling edits or deletion of payroll amounts.

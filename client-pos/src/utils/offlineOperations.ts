@@ -55,7 +55,7 @@ export async function currentOfflineShift(storeId:string,server?:any):Promise<an
  const refundAmount=paidRefunds.reduce((s,o)=>s+o.data.amount,0),refundCashOut=paidRefunds.filter(o=>o.data.payoutMethod==='cash').reduce((s,o)=>s+o.data.amount,0)
  const revenue=extra.reduce((sum,o)=>sum+o.finalAmount,0), qris=extra.filter(o=>o.paymentMethod==='qris').reduce((sum,o)=>sum+o.finalAmount,0)
  const otherNonCash=extra.filter(o=>!['cash','qris'].includes(o.paymentMethod)).reduce((sum,o)=>sum+o.finalAmount,0)
- const expenses=extraOps.filter(o=>o.kind==='expense'&&o.data.paymentSource==='drawer_cash').reduce((sum,o)=>sum+o.data.amount,0)
+ const expenses=extraOps.filter(o=>o.kind==='expense'&&(!o.data.paymentSource||['unknown','drawer_cash'].includes(o.data.paymentSource))).reduce((sum,o)=>sum+o.data.amount,0)
  const cashIns=extraOps.filter(o=>o.kind==='cash'&&o.data.type!=='cash_out').reduce((sum,o)=>sum+o.data.amount,0)
  const cashOuts=extraOps.filter(o=>o.kind==='cash'&&o.data.type==='cash_out').reduce((sum,o)=>sum+o.data.amount,0)
  if(!result.cashReconciliation)throw Error('OFFLINE_SHIFT_BASELINE_REQUIRED')
@@ -68,7 +68,7 @@ export async function currentOfflineShift(storeId:string,server?:any):Promise<an
  result.summaryEvidence=evidence
  Object.assign(result,{offline:!!pointer||extra.length>0||extraOps.length>0,todayCashSales:evidence.cashSales,todayCashIns:evidence.cashIns,todayCashOuts:evidence.cashOuts,todayOrderCount:evidence.orderCount,todayOrderAmount:evidence.orderReceipts,currentBalance:r.expectedCash,expectedCash:r.expectedCash})
  result.purchaseExpenses=result.purchaseExpenses||{total:0,count:0,items:[],source:'pos_reimbursement',currency:'IDR',recordedOnly:true}
- const purchases=extraOps.filter(o=>o.kind==='expense'&&o.data.paymentSource==='drawer_cash').map(o=>({id:o.id,category:o.data.category,quantity:o.data.quantity,amount:o.data.amount,description:o.data.description}))
+ const purchases=extraOps.filter(o=>o.kind==='expense'&&(!o.data.paymentSource||['unknown','drawer_cash'].includes(o.data.paymentSource))).map(o=>({id:o.id,category:o.data.category,quantity:o.data.quantity,amount:o.data.amount,description:o.data.description}))
  result.purchaseExpenses.items.push(...purchases);result.purchaseExpenses.total+=purchases.reduce((s,p)=>s+p.amount,0);result.purchaseExpenses.count+=purchases.length
  result.shift.updatedAt=new Date(Math.max(Date.parse(result.shift.updatedAt||result.shift.openedAt),...rows.map(o=>new Date(o.occurredAt||o.createdAt).getTime()),...ops.map(o=>Date.parse(o.occurredAt)))).toISOString()
  return {code:200,data:result}
@@ -215,7 +215,7 @@ export async function createOfflineMember(data:Record<string,any>){
 export const createOfflineWorkOperation=(kind:'task'|'attendance',data:Record<string,any>)=>queue(kind,data)
 export const createOfflineRefundDecision=(data:Record<string,any>)=>queue('refund-settle',data)
 export const createOfflineRefund=(data:Record<string,any>)=>queue('refund',data)
-export const createOfflineExpense=(data:Record<string,any>)=>queue('expense',data)
+export const createOfflineExpense=(data:Record<string,any>)=>queue('expense',{...data,paymentSource:!data.paymentSource||data.paymentSource==='unknown'?'drawer_cash':data.paymentSource})
 export async function offlineHandover(storeId:string,id:string){const session=(await db.config.get(sessionKey(storeId,id)))?.value;return session?.serverClosed||session?.closed||null}
 export async function localClosedShifts(storeId:string){return (await db.config.where('key').startsWith('offline.shift.session:'+scope(storeId)).toArray()).map(r=>r.value.serverClosed||r.value.closed).filter(Boolean)}
 

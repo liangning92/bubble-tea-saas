@@ -23,19 +23,27 @@ for(const [lang, label, button] of [['zh','用品','记账'],['en','Supplies','R
   assert.equal(await select.locator('option[value="internet"]').textContent(),'网费');
   for(const text of await select.locator('option').allTextContents())assert.ok(text.trim(),'No blank categories');
   await select.selectOption('supplies');
-  await page.getByRole('combobox',{name:lang==='zh'?'付款来源':lang==='en'?'Payment source':'Sumber pembayaran',exact:true}).selectOption('personal');
   await page.locator('input[type=number]').first().fill('3');
   const amountInput=page.locator('input[type=number]').last();await amountInput.click();await amountInput.pressSequentially('53000',{delay:80});assert.equal(await amountInput.inputValue(),'53000');assert.equal(await page.getByRole('button',{name:/加入购物车|Add to Cart|Tambah ke Keranjang/}).count(),0,'Typing a purchase amount must not open product options');
   await page.locator('input[type=text]').last().fill('');
-  for(const width of [1440,820,390]){await page.setViewportSize({width,height:1000});const field=page.getByRole('combobox',{name:lang==='zh'?'付款来源':lang==='en'?'Payment source':'Sumber pembayaran',exact:true});await field.scrollIntoViewIfNeeded();const box=await field.boundingBox();assert.ok(box&&box.x>=0&&box.x+box.width<=width+1,'Payment selector remains visible');}await page.setViewportSize({width:1440,height:1000});
+  for(const width of [1440,820,390]){await page.setViewportSize({width,height:1000});const field=page.getByTestId('pos-expense-cash-note');await field.scrollIntoViewIfNeeded();const box=await field.boundingBox();assert.ok(box&&box.x>=0&&box.x+box.width<=width+1,'Drawer expense explanation remains visible');}await page.setViewportSize({width:1440,height:1000});
   const queuedBefore=await page.evaluate(async()=>{const {offlineOperations}=await import('/src/utils/offlineOperations.ts');return (await offlineOperations('store')).filter(o=>o.kind==='expense').length});
   await page.locator('.fixed.inset-0').getByRole('button',{name:button,exact:true}).click();
   await page.waitForTimeout(200);
   assert.equal(await page.evaluate(async()=>{const {offlineOperations}=await import('/src/utils/offlineOperations.ts');return (await offlineOperations('store')).filter(o=>o.kind==='expense').length}),queuedBefore,'Blank expense name must prevent save');
-  await page.locator('input[type=text]').last().fill('Synthetic purchase');
+  await page.locator('input[type=text]').last().fill('Synthetic purchase '+lang);
   await page.locator('.fixed.inset-0').getByRole('button',{name:button,exact:true}).click();
   await page.waitForTimeout(300);
-  const queued=await page.evaluate(async()=>{const {offlineOperations}=await import('/src/utils/offlineOperations.ts');return (await offlineOperations('store')).filter(o=>o.kind==='expense')});assert.equal(queued.length,queuedBefore+1);const submitted=queued.at(-1).data;assert.equal(submitted.paymentSource,'personal');assert.equal(submitted.amount,53000);assert.equal(submitted.category,'supplies');assert.equal(submitted.quantity,3);assert.equal(submitted.description,'Synthetic purchase');const personalCash=await page.evaluate(async()=>{const {currentOfflineShift}=await import('/src/utils/offlineOperations.ts');return (await currentOfflineShift('store')).data.cashReconciliation});assert.equal(personalCash.expenses,0,'Personal advance must not reduce local drawer cash');
+  const queued=await page.evaluate(async()=>{const {offlineOperations}=await import('/src/utils/offlineOperations.ts');return (await offlineOperations('store')).filter(o=>o.kind==='expense')});assert.equal(queued.length,queuedBefore+1);const submitted=queued.at(-1).data;assert.equal(submitted.paymentSource,'drawer_cash');assert.equal(submitted.amount,53000);assert.equal(submitted.category,'supplies');assert.equal(submitted.quantity,3);assert.equal(submitted.description,'Synthetic purchase '+lang);const personalCash=await page.evaluate(async()=>{const {currentOfflineShift}=await import('/src/utils/offlineOperations.ts');return (await currentOfflineShift('store')).data.cashReconciliation});assert.equal(personalCash.expenses,53000*queued.length,'Each persisted POS expense reduces the local drawer exactly once');assert.equal(personalCash.expectedCash,116000-53000*queued.length);
+  if(lang==='zh'){
+    await page.getByRole('button',{name:'费用',exact:true}).click();
+    await page.locator('select').filter({has:page.locator('option[value="supplies"]')}).last().selectOption('supplies');
+    await page.locator('input[type=number]').first().fill('3');await page.locator('input[type=number]').last().fill('53000');await page.locator('input[type=text]').last().fill('Synthetic purchase '+lang);
+    await page.getByRole('dialog').getByRole('button',{name:button,exact:true}).click();
+    await page.getByRole('heading',{name:'请核对相同费用',exact:true}).waitFor();
+    await page.getByRole('button',{name:'取消',exact:true}).click();
+    assert.equal(await page.evaluate(async()=>{const {offlineOperations}=await import('/src/utils/offlineOperations.ts');return (await offlineOperations('store')).filter(o=>o.kind==='expense').length}),queuedBefore+1,'Cancel duplicate confirmation must not create a second expense');
+  }
   console.log('PASS actual POS UI',lang,'nonempty default/custom categories and exact Rp 53000 payload');
 }
 assert.ok(expenseReads.every(p=>p==='/api/expenses/pos'),'Offline preparation reads only the authorized personal ledger');assert.equal(await page.getByText('培训示例：购买清洁布及垃圾袋',{exact:true}).count(),0,'Expense history is not rendered in the POS entry dialog');

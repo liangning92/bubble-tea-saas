@@ -1,3 +1,4 @@
+import {readShiftHandover} from '../src/services/ShiftHandoverReadService'
 import {afterAll,test,expect} from '@jest/globals'
 import {randomUUID} from 'crypto'
 import prisma from '../src/config/database'
@@ -84,4 +85,20 @@ test('confirmed online purchase is removed from legacy cash even with other unve
  await prisma.config.create({data:{storeId:f.store.id,key:'pos.shift.report:'+f.shift.id,category:'shift_report',value:JSON.stringify({cashReconciliation:r})}})
  const review=(await loadShiftCashReviews(prisma,f.store.id,[f.shift.id])).get(f.shift.id)!.cashReconciliation!
  expect(review.expenses).toBe(42000);expect(review.expectedCash).toBe(258000);expect(review.expenseReview!.excludedAmount).toBe(335200);expect(review.expenseReview!.unknownCount).toBe(1)
+})
+
+test('POS legacy missing or unknown source is current drawer cash with retry deduplication',async()=>{
+ const f=await fixture();await prisma.config.create({data:{storeId:f.store.id,key:'expense.categories',category:'expense',value:JSON.stringify([{key:'supplies',posVisible:true}])}})
+ for(const paymentSource of [undefined,'unknown']){const input={requestId:randomUUID(),category:'supplies',amount:16000,quantity:1,description:'Synthetic drawer payment',...(paymentSource?{paymentSource}:{})};const first=await createPosExpense(f.actor,input);const repeated=await createPosExpense(f.actor,input);expect(first.id).toBe(repeated.id);expect(first.paymentSource).toBe('drawer_cash');expect(first.cashSessionId).toBe(f.shift.id)}
+ const cash=await calculateShiftCash(prisma,f.store.id,f.shift,f.now());expect(cash.expenses).toBe(32000)
+})
+
+test('reprint includes confirmed drawer expense and preserves the original closed report',async()=>{
+ const f=await fixture(),at=new Date();await prisma.shiftSession.update({where:{id:f.shift.id},data:{status:'closed',closedAt:at,actualCash:284000}})
+ const original={version:3,expectedCash:300000,cashDifference:-16000,cashReconciliation:{version:1,source:'occurrence_cash_ledger',expenseCashBasis:'explicit_payment_source_v1',windowStart:f.shift.openedAt.toISOString(),windowEnd:at.toISOString(),revenue:200000,expenses:0,qris:0,cashFromRevenue:200000,openFloat:100000,expectedCash:300000},handoverFinancials:{expenses:0}}
+ await prisma.config.create({data:{storeId:f.store.id,key:'pos.shift.report:'+f.shift.id,category:'shift_report',value:JSON.stringify(original)}})
+ await prisma.expense.create({data:{storeId:f.store.id,type:'operational',category:'supplies',amount:1600000,description:'Synthetic actual drawer payment',date:at,paymentSource:'drawer_cash',cashSessionId:f.shift.id,cashOccurredAt:new Date(at.getTime()-1)}})
+ const report=await readShiftHandover(f.store.id,f.shift.id);expect(report?.report.cashReconciliation.expenses).toBe(16000);expect(report?.report.handoverFinancials.expenses).toBe(16000);expect(report?.expectedCash).toBe(284000);expect(report?.purchaseExpenses.total).toBe(16000);expect(report?.purchaseExpenses.items[0].description).toBe('Synthetic actual drawer payment')
+ const again=await readShiftHandover(f.store.id,f.shift.id);expect(again?.expectedCash).toBe(284000)
+ expect(JSON.parse((await prisma.config.findUniqueOrThrow({where:{storeId_key:{storeId:f.store.id,key:'pos.shift.report:'+f.shift.id}}})).value)).toEqual(original)
 })
