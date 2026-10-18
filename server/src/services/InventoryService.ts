@@ -83,7 +83,7 @@ export async function getInventory(filter: InventoryFilter) {
   }))
   // Filter low stock using safetyStock threshold
   if (filter.lowStock) {
-    return serializeBigInt(enriched.filter(item => item.currentStock <= item.effectiveSafetyStock))
+    return serializeBigInt(enriched.filter(item => !item.calibrationRequired && item.currentStock <= item.effectiveSafetyStock))
   }
 
   return serializeBigInt(enriched)
@@ -241,7 +241,7 @@ export async function stockOut(data: StockOperation) {
 export async function getLowStockAlerts(storeId:string){
  const settings=await getInventoryAlertConfig(storeId)
  if(!settings.enableLowStockAlert)return []
- return (await inventoryForecast(storeId)).filter(row=>inventoryUsageMode({name:row.name})!=='self_produced'&&row.currentStock<=row.effectiveSafetyStock).map(row=>({...row,safetyStock:row.effectiveSafetyStock,shortage:row.suggestedReorderQty,estimatedRestockCost:Math.round(row.suggestedReorderQty*row.avgCost)}))
+ return (await inventoryForecast(storeId)).filter(row=>!('calibrationRequired' in row&&row.calibrationRequired)&&inventoryUsageMode({name:row.name})!=='self_produced'&&row.currentStock<=row.effectiveSafetyStock).map(row=>({...row,safetyStock:row.effectiveSafetyStock,shortage:row.suggestedReorderQty,estimatedRestockCost:Math.round(row.suggestedReorderQty*row.avgCost)}))
 }
 
 // Adjust inventory (for inventory count correction)

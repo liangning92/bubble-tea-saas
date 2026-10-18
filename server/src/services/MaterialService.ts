@@ -130,7 +130,7 @@ export async function updateInventory(id: string, data: Partial<{
 export async function checkLowStockAlerts(storeId: string) {
   if(!(await getInventoryAlertConfig(storeId)).enableLowStockAlert)return []
   const inventory=await prisma.inventory.findMany({where:{storeId}}),forecast=await inventoryForecast(storeId)
-  return forecast.filter(row=>row.currentStock<=row.effectiveSafetyStock).map(row=>({...row,safetyStock:row.effectiveSafetyStock,type:inventory.find(inv=>inv.id===row.inventoryId)?.type,minStock:inventory.find(inv=>inv.id===row.inventoryId)?.minStock}))
+  return forecast.filter(row=>!('calibrationRequired' in row&&row.calibrationRequired)&&row.currentStock<=row.effectiveSafetyStock).map(row=>({...row,safetyStock:row.effectiveSafetyStock,type:inventory.find(inv=>inv.id===row.inventoryId)?.type,minStock:inventory.find(inv=>inv.id===row.inventoryId)?.minStock}))
 }
 
 // ============================================

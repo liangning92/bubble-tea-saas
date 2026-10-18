@@ -149,7 +149,7 @@ export async function getLowStockAlerts(storeId:string,days:number=30){
  const settings=await getInventoryAlertConfig(storeId)
  if(!settings.enableLowStockAlert)return []
  return (await getMaterialUsageForecast(storeId,days))
-  .filter(mat=>inventoryUsageMode({name:mat.name})!=='self_produced'&&mat.currentStock<=mat.effectiveSafetyStock)
+  .filter(mat=>!('calibrationRequired' in mat&&mat.calibrationRequired)&&inventoryUsageMode({name:mat.name})!=='self_produced'&&mat.currentStock<=mat.effectiveSafetyStock)
   .map(mat=>({...mat,urgency:mat.currentStock<=0||(mat.daysUntilStockOut!==null&&mat.daysUntilStockOut<=settings.lowStockCriticalDays)?'critical':'warning'}))
 }
 

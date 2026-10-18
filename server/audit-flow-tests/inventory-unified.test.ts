@@ -10,6 +10,7 @@ import {stockOut,stockIn} from '../src/services/InventoryService'
 import {createRecipe,executeRecipe} from '../src/services/ProcessRecipeService'
 import {createInventoryCount,updateCountItem,submitInventoryCount,completeInventoryCount,getInventoryCountById} from '../src/services/InventoryCountService'
 import {physicalInventoryVariance} from '../src/services/InventoryVarianceService'
+import {getLowStockAlerts} from '../src/services/BomService'
 import {inventoryForecast} from '../src/services/InventoryForecastService'
 beforeAll(async()=>{if(process.env.DATABASE_URL!.startsWith('file:'))await upgradeLocalSqlite(prisma,process.env.DATABASE_URL!);else try{await assertLedgerInstalled(prisma,false)}catch{for(const sql of pgLedgerDDL)await prisma.$executeRawUnsafe(sql)}await upgradeInventoryFlow(prisma,process.env.DATABASE_URL!)})
 afterAll(async()=>{await prisma.$disconnect()})
@@ -77,6 +78,7 @@ test('unverified opening balance and incomplete recipes suppress numerical cover
  const f=await fixture();const at=new Date('2026-10-10T12:00:00Z');await f.sale(at)
  let row=(await inventoryForecast(f.store.id,7,new Date('2026-10-17T12:00:00Z'))).find(r=>r.inventoryId===f.raw.id)!
  expect(row.daysUntilStockOut).toBeNull();expect('calibrationRequired' in row&&row.calibrationRequired).toBe(true)
+ expect(await getLowStockAlerts(f.store.id)).toEqual([])
  await f.observe(1)
  await prisma.config.create({data:{storeId:f.store.id,key:'inventoryPackage:'+f.raw.id,value:JSON.stringify({unit:'bag',quantity:3,baseUnit:'kg'}),category:'inventory'}})
  row=(await inventoryForecast(f.store.id,7,new Date('2026-10-20T12:00:00Z'))).find(r=>r.inventoryId===f.raw.id)!
