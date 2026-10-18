@@ -8,7 +8,7 @@ import {UNIFIED_INVENTORY_KEY,CALIBRATED_PREFIX} from '../src/services/UnifiedIn
 import {recordOrderConsumption,reverseOrderConsumption} from '../src/services/OrderConsumptionService'
 import {stockOut,stockIn} from '../src/services/InventoryService'
 import {createRecipe,executeRecipe} from '../src/services/ProcessRecipeService'
-import {createInventoryCount,updateCountItem,submitInventoryCount,completeInventoryCount,getInventoryCountById} from '../src/services/InventoryCountService'
+import {createInventoryCount,updateCountItem,submitInventoryCount,completeInventoryCount,getInventoryCountById,cancelInventoryCount} from '../src/services/InventoryCountService'
 import {physicalInventoryVariance} from '../src/services/InventoryVarianceService'
 import {getLowStockAlerts} from '../src/services/BomService'
 import {calculateRestockSuggestions} from '../src/services/MaterialService'
@@ -100,3 +100,5 @@ test('whole-store analysis requires two post-cutover counts and provides prepare
 })
 
 test('newly introduced materials never claim a full historical sample',async()=>{const f=await fixture();await f.observe(10);await prisma.inventory.update({where:{id:f.raw.id},data:{createdAt:new Date(Date.now()-2*86400000)}});const row=(await inventoryForecast(f.store.id)).find(r=>r.inventoryId===f.raw.id)!;expect(row.historyDays).toBeLessThanOrEqual(2);expect(row.daysUntilStockOut).toBeNull()})
+
+test('self-made water is omitted from default counts but an explicitly selected count remains valid',async()=>{const f=await fixture();const water=await prisma.inventory.create({data:{storeId:f.store.id,name:'Hot Water',category:'raw',unit:'ml',currentStock:100}});const input={storeId:f.store.id,period:'ad_hoc' as const,startDate:new Date('2026-01-01'),endDate:new Date('2027-01-01')};const normal=await createInventoryCount(input);expect(normal.items.some(i=>i.inventoryId===water.id)).toBe(false);await cancelInventoryCount(normal.id,f.store.id);const explicit=await createInventoryCount({...input,inventoryIds:[water.id]});expect(explicit.items[0].inventoryId).toBe(water.id)})
