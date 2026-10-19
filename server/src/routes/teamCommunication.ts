@@ -38,6 +38,7 @@ router.post('/channels/:id/operations/:planId/scan', run(async (req, res) => ok(
 router.get('/channels/:id/operations/:planId/export', run(async (req, res) => ok(res, await operations.export(actor(req), req.params.id, req.params.planId))))
 router.get('/ai/settings', run(async (req, res) => ok(res, await ai.settings(actor(req)))))
 router.put('/ai/settings', run(async (req, res) => ok(res, await ai.saveSettings(actor(req), req.body))))
+router.post('/ai/connection-check', run(async (req, res) => ok(res, await ai.checkConnection(actor(req), req.body))))
 router.post('/channels/:id/ai/drafts', run(async (req, res) => ok(res, await ai.generate(actor(req), req.params.id, req.body))))
 router.get('/channels/:id/ai/drafts/:draftId', run(async (req, res) => ok(res, await ai.draft(actor(req), req.params.id, req.params.draftId))))
 router.post('/channels/:id/ai/drafts/:draftId/publish', run(async (req, res) => {

@@ -29,6 +29,7 @@ async function browserCheck(check){
  case 'media':if(plan.media)node('scripts/test-media-insights.cjs');break;
  case 'http':
   if(plan.teamCommunication){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py'])}
+  if(plan.aiSettings){if(!plan.teamCommunication)run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--ai-settings'])}
   if(plan.http.length){
    const prepared=spawnSync(process.execPath,['scripts/prepare-order-receipt-runtime.cjs'],{encoding:'utf8',env});if(prepared.status!==0)throw Error(prepared.stderr||'Cannot prepare disposable HTTP runtime');
    const runtime=JSON.parse(prepared.stdout).runtime;
