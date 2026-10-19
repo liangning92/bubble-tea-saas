@@ -141,6 +141,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
           probation: await staffProbation(prisma,s),
           phone: s.user.phone,
           role: s.user.role,
+          accessRole: s.user.role==='admin'?null:await userAccessV2({role:s.user.role,staffId:s.id,storeId:s.storeId}).then(a=>a?{id:a.id,name:a.name,revision:a.revision}:null),
           _count: undefined
         }) : ({ id: s.id, name: s.name, employeeNumber: s.employeeNumber, position: s.position, status: s.status }))),
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }

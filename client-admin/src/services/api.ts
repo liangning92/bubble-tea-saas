@@ -12,7 +12,7 @@ const API_BASE = getApiBase()
 
 const api = axios.create({
   baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' }
+  headers: { 'Content-Type': 'application/json', 'X-Client-App': 'admin' }
 })
 
 api.interceptors.request.use((config) => {
@@ -33,7 +33,7 @@ api.interceptors.response.use(
   async (error) => {
     if(error.response?.data?.message==='STAFF_ACCESS_APPROVAL_REQUIRED' && error.config?.url?.includes('/balance/')){const match=error.config.url.match(/members\/([^/]+)\/balance\/(topup|deduct)/);if(match){const body=typeof error.config.data==='string'?JSON.parse(error.config.data):error.config.data;const result=await requestStaffApproval(api,{action:'members.balance',targetId:match[1],requestId:body.requestId||crypto.randomUUID(),payload:{amount:body.amount,type:match[2],note:body.note||'Member balance adjustment'}});return{...error.response,status:200,data:{code:200,data:JSON.parse(result.result)}}}}
     if(error.response?.status===403 && error.response?.data?.message?.startsWith('STAFF_ACCESS_')) window.dispatchEvent(new Event('staff-access-changed'))
-    if (error.response && error.response.status === 401) {
+    if (error.response?.data?.message === 'MANAGEMENT_ACCESS_REQUIRED' || (error.response && error.response.status === 401)) {
       useAuthStore.getState().logout()
       window.location.href = '/login'
     }

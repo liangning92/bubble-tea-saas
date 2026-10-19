@@ -140,8 +140,8 @@ const AnnouncementListPage = lazy(() => import('./pages/announcement/Announcemen
 const AnnouncementFormPage = lazy(() => import('./pages/announcement/AnnouncementFormPage').then(module => ({ default: module.AnnouncementFormPage })))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated || user?.managementAccess === false) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 

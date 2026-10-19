@@ -1,3 +1,4 @@
+import {canUseManagementRoute} from '../services/ManagementRouteAccess'
 import {isEmployeeAppRoute} from '../services/EmployeeAppAccess'
 import {ACCESS_ROUTE_MANIFEST} from '../services/StaffPermissionRouteManifest'
 import {redactAccessData} from '../services/StaffPermissionV2Core'
@@ -7,6 +8,7 @@ export function declareAccessRoutes(base:string,router:any){
  for(const layer of router.stack||[]){const route=layer.route;if(!route)continue;const path=base+(route.path==='/'?'':route.path);const specs=Object.fromEntries(Object.keys(route.methods).map(method=>[method,{...(ACCESS_ROUTE_MANIFEST[method.toUpperCase()+' '+path]||{permission:'__unclassified__',ownerOnly:false,export:false,personal:false}),routeKey:method.toUpperCase()+' '+path}]));route.accessSpecs=specs;const methods={...route.methods};route.all(async(req:any,res:any,next:any)=>{
   req.accessDeclaration=specs[req.method.toLowerCase()]||specs.get
   try {
+   if(req.user && !canUseManagementRoute(req.user,req.accessDeclaration))return res.status(403).json({code:403,message:'MANAGEMENT_ACCESS_REQUIRED'})
    if(req.user?.accessRole?.version===2){const denied=await enforceAccessV2(req,res,req.user);if(denied)return denied}
    next()
   } catch(error){next(error)}
@@ -21,8 +23,9 @@ export async function enforceAccessV2(req:any,res:any,user:any){
   if(spec.permission)access.modes[spec.permission]='allow'
   if(spec.export)access.modes['data.export']='allow'
  }
- const permission=spec.permission==='personal.tasks'&&['GET','HEAD'].includes(req.method)&&access.modes['hygiene.read']==='allow'?'hygiene.read':spec.permission
- const scopeSelf=(spec.personal||user.employeeApp&&spec.routeKey==='GET /api/auth/me')&&permission!=='hygiene.read'
+ const hygieneManager=!user.employeeApp&&spec.permission==='personal.tasks'&&access.id==='manager'
+ const permission=hygieneManager?(['GET','HEAD'].includes(req.method)?'hygiene.read':'hygiene.write'):spec.permission
+ const scopeSelf=(spec.personal||user.employeeApp&&spec.routeKey==='GET /api/auth/me')&&!hygieneManager
  if(spec.ownerOnly)return res.status(403).json({code:403,message:'STAFF_ACCESS_OWNER_REQUIRED'})
  if(permission&&access.modes[permission]!=='allow')return res.status(403).json({code:403,message:access.modes[permission]==='approval'?'STAFF_ACCESS_APPROVAL_REQUIRED':'STAFF_ACCESS_PERMISSION_DENIED',permission})
  if(spec.export&&access.modes['data.export']!=='allow')return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission:'data.export'})

@@ -6,6 +6,7 @@ export interface User {
   id: string
   phone: string
   role: string
+  managementAccess?: boolean
   storeId: string | null
   staff: {
     id: string
@@ -103,7 +104,7 @@ async function reuseOpenSession() {
   const timeout = setTimeout(() => controller.abort(), 4000)
   try {
     // The API, including revocation and current permissions, remains authoritative.
-    const response = await fetch(`${api}/auth/me`, { headers: { Authorization: `Bearer ${candidate.token}` }, signal: controller.signal })
+    const response = await fetch(`${api}/auth/me`, { headers: { Authorization: `Bearer ${candidate.token}`, 'X-Client-App':'admin' }, signal: controller.signal })
     if (!response.ok) return
     const { data: user } = await response.json()
     if (!loggedOut.has(candidate.token) && validSession(candidate.token, user) && !useAuthStore.getState().isAuthenticated) {

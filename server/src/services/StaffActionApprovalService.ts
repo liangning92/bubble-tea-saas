@@ -1,3 +1,4 @@
+import {hasManagementAccess} from '../utils/managementAccess'
 import {blocksSelfApproval} from '../utils/refundApprovalAccess'
 import prisma from '../config/database'
 import {z} from 'zod'
@@ -15,7 +16,7 @@ const intentSchema=z.discriminatedUnion('action',[
  z.object({action:z.literal('orders.discount'),targetId:z.string().min(1),requestId:z.string().uuid(),payload:z.object({amount:z.number().int().positive().max(2000000000),basket:z.string().min(1).max(100000),note:z.string().trim().min(1).max(300)})})
 ])
 async function currentActor(userId:string,storeId:string,db:any){const user=await db.user.findUnique({where:{id:userId},include:{staff:true}});if(!user||(user.staff&&user.staff.status!=='active')||(user.role!=='admin'&&(user.staff?.storeId||user.storeId)!==storeId))throw new AccessV2Error('STAFF_ACCESS_ACTOR_INACTIVE',403);return{id:user.id,role:user.role,storeId,staffId:user.staff?.id||''}}
-export async function requireApprovalCapability(actor:any,action:string,approving=false,db:any=prisma){if(actor.role==='admin')return;const access=await userAccessV2(actor,db);if(!access)throw new AccessV2Error('STAFF_ACCESS_V2_REQUIRED',403);if(approving?(access.modes[action]!=='allow'||access.modes['approvals.approve']!=='allow'):(access.modes[action]==='deny'&&!(action==='orders.refund'&&access.modes['orders.refund.request']==='allow')))throw new AccessV2Error('STAFF_ACCESS_PERMISSION_DENIED',403)}
+export async function requireApprovalCapability(actor:any,action:string,approving=false,db:any=prisma){if(actor.role==='admin')return;const access=await userAccessV2(actor,db);if(!access)throw new AccessV2Error('STAFF_ACCESS_V2_REQUIRED',403);if(approving&&!hasManagementAccess(actor.role,access))throw new AccessV2Error('MANAGEMENT_ACCESS_REQUIRED',403);if(approving?(access.modes[action]!=='allow'||access.modes['approvals.approve']!=='allow'):(access.modes[action]==='deny'&&!(action==='orders.refund'&&access.modes['orders.refund.request']==='allow')))throw new AccessV2Error('STAFF_ACCESS_PERMISSION_DENIED',403)}
 export async function createActionApproval(actor:any,body:unknown){const intent=intentSchema.parse(body);await requireApprovalCapability(actor,intent.action);let before:any;
  if(intent.action==='members.balance'){before=await prisma.member.findFirst({where:{id:intent.targetId,storeId:actor.storeId},select:{name:true,balance:true}})}
  if(intent.action==='orders.refund'){const request=await prisma.refundRequest.findFirst({where:{id:intent.targetId,order:{storeId:actor.storeId}},include:{order:{select:{id:true,orderNumber:true,finalAmount:true,status:true}}}});if(request&&request.requestedBy!==(actor.staffId||actor.id))throw new AccessV2Error('STAFF_ACCESS_PERSONAL_SCOPE_DENIED',403);before=request}

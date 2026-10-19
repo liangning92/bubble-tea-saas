@@ -44,8 +44,9 @@ export function LoginPage() {
     setError('')
 
     try {
-      const res = await axios.post(`${getApiUrl()}/auth/login`, { phone, password })
+      const res = await axios.post(`${getApiUrl()}/auth/login`, { phone, password }, {headers:{'X-Client-App':'admin'}})
       const { token, user } = res.data.data
+      if(user.managementAccess!==true){setError(t('staffAccessV2.denied'));return}
       login(token, user)
 
       // Handle remember me - only store phone number, never password

@@ -162,7 +162,8 @@ export function StaffDetailPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-3 text-gray-600">
               <User size={18} className="text-gray-400" />
-              <span>{getPositionLabel(staff.position)}</span>
+              <span>{staff.accessRole ? staffRoleLabel(staff.accessRole.id,staff.accessRole.name,accessText) : getRoleLabel(currentRole)}</span>
+              <small className="text-xs text-gray-400" title={accessText.jobTitleHint}>{t('staff.position')}: {getPositionLabel(staff.position)}</small>
             </div>
             <div className="flex items-center gap-3 text-gray-600">
               <Clock size={18} className="text-gray-400" />
@@ -202,7 +203,7 @@ export function StaffDetailPage() {
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-gray-500">{t('staff.systemRole')}</span>
-              <span className="font-medium">{getRoleLabel(currentRole)}</span>
+              <span className="font-medium">{staff.accessRole ? staffRoleLabel(staff.accessRole.id,staff.accessRole.name,accessText) : getRoleLabel(currentRole)}</span>
             </div>
             {staff.accessRole&&<div className="flex justify-between items-center"><span className="text-gray-500">{accessText.role}</span><span className="font-medium">{staffRoleLabel(staff.accessRole.id,staff.accessRole.name,accessText)}</span></div>}
             <div className="text-xs text-gray-400">

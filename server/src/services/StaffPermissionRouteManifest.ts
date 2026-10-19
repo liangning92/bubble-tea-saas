@@ -5150,7 +5150,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
       "manager"
     ],
     "legacyPermission": "inventory.count",
-    "resource": null,
+    "resource": {"model":"inventoryCount","param":"id"},
     "permission": "inventory.count",
     "ownerOnly": false,
     "export": false,
@@ -5162,7 +5162,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
       "manager"
     ],
     "legacyPermission": "inventory.count",
-    "resource": null,
+    "resource": {"model":"inventoryCount","param":"id"},
     "permission": "inventory.count",
     "ownerOnly": false,
     "export": false,
@@ -5578,7 +5578,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "legacyPermission": "hygiene.write",
     "resource": null,
     "permission": "hygiene.write",
-    "ownerOnly": true,
+    "ownerOnly": false,
     "export": false,
     "personal": false
   },
@@ -5651,7 +5651,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "legacyPermission": "hygiene.write",
     "resource": null,
     "permission": "hygiene.write",
-    "ownerOnly": true,
+    "ownerOnly": false,
     "export": false,
     "personal": false
   },

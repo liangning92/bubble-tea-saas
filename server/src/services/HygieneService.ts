@@ -1,3 +1,5 @@
+import {userAccessV2} from './StaffPermissionV2Service'
+import {hasManagementAccess} from '../utils/managementAccess'
 import {createHash} from 'crypto'
 export const offlineTaskId=(templateId:string,staffId:string,date:string,index:number)=>'POSHT-'+createHash('sha256').update(JSON.stringify([templateId,staffId,date,index])).digest('hex').slice(0,40)
 import prisma from '../config/database'
@@ -850,10 +852,12 @@ export function getExecutionTimes(template: any): string[] {
 /**
  * 开始执行任务
  */
-export async function startTask(taskId:string,staffId:string,storeId:string){
+export async function startTask(taskId:string,staffId:string,storeId:string,actor?:any){
+ const manage=await canManageTask(actor,storeId)
  if(!staffId)throw new Error('Staff identity required')
  const task=await prisma.$transaction(async tx=>{
-  const changed=await tx.hygieneTask.updateMany({where:{id:taskId,storeId,status:{in:['pending','overdue']},OR:[{staffId},{staffId:null}]},data:{status:'in_progress',staffId,startedAt:new Date()}})
+  const existing=await tx.hygieneTask.findFirst({where:{id:taskId,storeId},select:{staffId:true}})
+  const changed=await tx.hygieneTask.updateMany({where:{id:taskId,storeId,status:{in:['pending','overdue']},...(manage?{}:{OR:[{staffId},{staffId:null}]})},data:{status:'in_progress',staffId:existing?.staffId||staffId,startedAt:new Date()}})
   if(changed.count!==1)throw new Error('Task unavailable or already claimed')
   return tx.hygieneTask.findUniqueOrThrow({where:{id:taskId}})
  })
@@ -870,7 +874,7 @@ export async function completeTask(taskId: string, staffId: string, staffName: s
   note?: string
   selfRating?: number // 员工自评质量 1-5
   checklistResults?: { checklistId: string; completed: boolean; note?: string }[]
-}) {
+}, actor?:any) {
   // 先获取任务和模板信息
   const existingTask = await prisma.hygieneTask.findUnique({
     where: { id: taskId },
@@ -880,7 +884,7 @@ export async function completeTask(taskId: string, staffId: string, staffName: s
   if (!existingTask) throw new Error('Task not found')
 
   // 验证任务属于当前店铺
-  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId)) throw new Error('Task belongs to another employee')
+  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId && !await canManageTask(actor,storeId))) throw new Error('Task belongs to another employee')
   if (existingTask.storeId !== storeId) {
     throw new Error('Task not found')
   }
@@ -1054,7 +1058,7 @@ export async function approveTask(taskId: string, approverId: string, approverNa
 /**
  * 跳过任务
  */
-export async function skipTask(taskId: string, staffId: string, staffName: string, storeId: string, reason: string) {
+export async function skipTask(taskId: string, staffId: string, staffName: string, storeId: string, reason: string, actor?:any) {
   // 先检查任务状态
   const existingTask = await prisma.hygieneTask.findUnique({
     where: { id: taskId },
@@ -1063,7 +1067,7 @@ export async function skipTask(taskId: string, staffId: string, staffName: strin
   if (!existingTask) throw new Error('Task not found')
 
   // 验证任务属于当前店铺
-  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId)) throw new Error('Task belongs to another employee')
+  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId && !await canManageTask(actor,storeId))) throw new Error('Task belongs to another employee')
   if (existingTask.storeId !== storeId) {
     throw new Error('Task not found')
   }
@@ -1101,7 +1105,7 @@ export async function skipTask(taskId: string, staffId: string, staffName: strin
 export async function reportIssue(taskId: string, staffId: string, staffName: string, storeId: string, data: {
   description: string
   photoUrl?: string
-}) {
+}, actor?:any) {
   // 先检查任务状态
   const existingTask = await prisma.hygieneTask.findUnique({
     where: { id: taskId },
@@ -1110,7 +1114,7 @@ export async function reportIssue(taskId: string, staffId: string, staffName: st
   if (!existingTask) throw new Error('Task not found')
 
   // 验证任务属于当前店铺
-  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId)) throw new Error('Task belongs to another employee')
+  if (!staffId || (existingTask.staffId && existingTask.staffId !== staffId && !await canManageTask(actor,storeId))) throw new Error('Task belongs to another employee')
   if (existingTask.storeId !== storeId) {
     throw new Error('Task not found')
   }
@@ -2039,4 +2043,13 @@ export async function seedDefaultReceiptTemplate(storeId: string) {
   })
 
   return [template]
+}
+
+// Only the authenticated, currently active manager may act on a colleague's task.
+async function canManageTask(actor:any,storeId:string):Promise<boolean>{
+ if(!actor||actor.employeeApp)return false
+ const current=await prisma.user.findUnique({where:{id:actor.id},include:{staff:true}})
+ if(!current||current.staff&&current.staff.status!=='active'||(current.staff?.storeId||current.storeId)!==storeId)return false
+ const access=await userAccessV2({role:current.role,storeId,staffId:current.staff?.id})
+ return current.role==='admin'||hasManagementAccess(current.role,access)&&(!access||access.modes['hygiene.write']==='allow')
 }

@@ -165,6 +165,7 @@ export function MainLayout() {
       api
         .get("/staff-permissions/me")
         .then((response) => {
+          if (current && response.data.data.managementAccess === false) { useAuthStore.getState().logout(); return; }
           if (current)
             setAccess({
               actor: actorKey,
@@ -176,10 +177,12 @@ export function MainLayout() {
           if (current) setAccess({ actor: actorKey, role: null, failed: true });
         });
     void refresh();
+    const timer=window.setInterval(refresh,30000);
     window.addEventListener("focus", refresh);
     window.addEventListener("staff-access-changed", refresh);
     return () => {
       current = false;
+      window.clearInterval(timer);
       window.removeEventListener("focus", refresh);
       window.removeEventListener("staff-access-changed", refresh);
     };
@@ -190,10 +193,11 @@ export function MainLayout() {
   const visibleNavItems = navItems.filter((item) => {
     if (user?.role === "admin") return true;
     if (!ready) return false;
+    if (item.path === "/products" && user?.role !== "admin") return false;
     if (!customRole) return true;
     const groups: Record<string, string[]> = {
       "/dashboard": ["dashboard.read"],
-      "/products": ["products.read"],
+      "/products": ["products.manage"],
       "/inventory": ["inventory.read"],
       "/finance": ["finance.read", "dashboard.read"],
       "/channels": ["channels.read"],
@@ -441,7 +445,7 @@ export function MainLayout() {
               )
             ) : (
               <Suspense fallback={<RouteLoading />}>
-                {customRole?.version === 2 &&
+                {(user?.role !== "admin" && location.pathname.startsWith("/products")) || customRole?.version === 2 &&
                 user?.role !== "admin" &&
                 adminPagePermission(location.pathname) &&
                 !customRole.permissions.includes(
