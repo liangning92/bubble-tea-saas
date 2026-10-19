@@ -1,4 +1,4 @@
-import { inventoryConsumptionCostAdjustment } from './InventoryCostAdjustmentService'
+import { inventoryConsumptionCostAdjustment, inventoryConsumptionCostEntries } from './InventoryCostAdjustmentService'
 import { savedPayrollBasis } from './ProbationService'
 import { requireVerifiedReceiptIncome } from './ReceiptFinancialEvidenceService'
 import { netReceivedAmount } from '../utils/refundAllocation'
@@ -163,6 +163,11 @@ export async function getDailyRevenueTrend(storeId: string, days: number = 30) {
       dailyMap[key].cost += order.items.reduce((s, i) => s + (i.bomCost || 0) * i.quantity, 0)
       dailyMap[key].orders++
     }
+  }
+
+  for (const entry of await inventoryConsumptionCostEntries(prisma, storeId, startDate, endDate)) {
+    const key = formatDate(entry.at)
+    if (dailyMap[key]) dailyMap[key].cost += entry.amount
   }
 
   return Object.entries(dailyMap)
