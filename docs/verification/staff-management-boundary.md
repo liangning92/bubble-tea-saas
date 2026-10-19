@@ -18,7 +18,7 @@ Only administrators and employees explicitly assigned the manager role may enter
 
 The account-role editor now works when V2 is active. An explicit role change updates its policy assignment and revision in the same serializable transaction, invalidates the old user token, and records the real administrator's User ID. It refuses self-demotion and removal of the last active administrator. Existing payroll participation is preserved independently of the new role. A role update does not appoint a real employee or change production data until an administrator explicitly submits it.
 
-Hygiene resource IDs are checked against the assigned store. When a manager performs a colleague's task, the assignee stays intact while completion and activity records identify the manager who acted. The service rechecks the current database identity and assignment before allowing this exception.
+Hygiene resource IDs, area managers and template/task assignees are checked against the assigned store. When a manager performs a colleague's task, the assignee stays intact while completion and activity records identify the manager who acted. The service rechecks the current database identity and assignment before allowing this exception.
 
 ## Validation
 
@@ -30,6 +30,6 @@ python3 scripts/with-docker-test.py -- node tests/stoploss/staff-management-boun
 
 The test creates one labeled temporary PostgreSQL container, an explicitly labeled volume, a random loopback port, and synthetic users and business records. It installs the repository's real inventory ledger triggers. No production connection, volume, account or approval is used. The wrapper removes the batch's resources on completion or failure.
 
-Assertions cover login admission, misleading job titles, current and forged client/role claims, POS catalog/version/channel/activity reads, preserved durable receipt/offline route admission, employee work, role display, hygiene management and real actor attribution, schedule/swap/leave approvals, stock-in/out and count submission/review, cross-store denials, prepared refund verification, administrator-only unprepared refunds and exact original stock restoration/idempotency, session changes, V2 account editing, payroll identity preservation and self/last-admin protection.
+Assertions also exercise the existing employee attachment/private-file multipart upload and private download authentication. Assertions cover login admission, misleading job titles, current and forged client/role claims, POS catalog/version/channel/activity reads, preserved durable receipt/offline route admission, employee work, role display, hygiene management and real actor attribution, schedule/swap/leave approvals, stock-in/out and count submission/review, cross-store denials, prepared refund verification, administrator-only unprepared refunds and exact original stock restoration/idempotency, session changes, V2 account editing, payroll identity preservation and self/last-admin protection.
 
 No schema migration or automatic production policy activation is included. Updating any real assignment, administrator identity, or explicit payroll-participation flag requires a separately reviewed exact account list. Production verification and deployment are outside this PR; the task deliberately does not deploy.

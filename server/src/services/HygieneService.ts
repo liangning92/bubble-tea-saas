@@ -248,6 +248,7 @@ export async function createArea(data: {
     throw new Error('Area code can only contain letters, numbers, and underscores')
   }
 
+  await assertHygieneStaffStore(data.storeId,data)
   // 检查代码是否与预设冲突
   const existing = await prisma.hygieneArea.findUnique({
     where: { storeId_code: { storeId: data.storeId, code: data.code } },
@@ -292,6 +293,7 @@ export async function updateArea(areaId: string, data: Partial<{
     throw new Error('Area not found')
   }
 
+  await assertHygieneStaffStore(existing.storeId,data)
   return prisma.hygieneArea.update({
     where: { id: areaId },
     data,
@@ -458,6 +460,7 @@ export async function createTemplate(data: {
     throw new Error('Estimated minutes must be greater than 0')
   }
 
+  await assertHygieneStaffStore(data.storeId,data)
   const { checklists, staffIds, executionTimes, ...templateData } = data
 
   // 处理 JSON 字段
@@ -531,6 +534,7 @@ export async function updateTemplate(templateId: string, data: Partial<{
     throw new Error('Template not found')
   }
 
+  await assertHygieneStaffStore(existing.storeId,data)
   const { checklists, staffIds, executionTimes, ...templateData } = data
 
   // 处理 JSON 字段
@@ -1239,6 +1243,7 @@ export async function createTemporaryTask(storeId: string, data: {
     }
   }
 
+  await assertHygieneStaffStore(storeId,data)
   const task = await prisma.hygieneTask.create({
     data: {
       storeId,
@@ -1594,13 +1599,15 @@ async function resolveStaffIds(template: any, storeId: string): Promise<string[]
     try {
       const staffIds = JSON.parse(template.staffIds)
       if (Array.isArray(staffIds) && staffIds.length > 0) {
+        await assertHygieneStaffStore(storeId,{staffIds})
         return staffIds
       }
-    } catch { /* ignore */ }
+    } catch (error:any) { if(error.message==='HYGIENE_STAFF_STORE_MISMATCH')throw error }
   }
 
   // 回退到单个 staffId
   if (template.assignedType === 'staff' && template.staffId) {
+    await assertHygieneStaffStore(storeId,{staffId:template.staffId})
     return [template.staffId]
   }
 
@@ -2052,4 +2059,12 @@ async function canManageTask(actor:any,storeId:string):Promise<boolean>{
  if(!current||current.staff&&current.staff.status!=='active'||(current.staff?.storeId||current.storeId)!==storeId)return false
  const access=await userAccessV2({role:current.role,storeId,staffId:current.staff?.id})
  return current.role==='admin'||hasManagementAccess(current.role,access)&&(!access||access.modes['hygiene.write']==='allow')
+}
+
+async function assertHygieneStaffStore(storeId:string,data:any){
+ if(data.staffIds!=null&&(!Array.isArray(data.staffIds)||data.staffIds.some((id:any)=>typeof id!=='string'||!id)))throw Error('HYGIENE_STAFF_STORE_MISMATCH')
+ const ids=[...new Set([data.staffId,data.managerId,data.areaManagerId,...(data.staffIds||[])].filter(Boolean))]
+ if(!ids.length)return
+ const staff=await prisma.staff.findMany({where:{storeId,id:{in:ids as string[]}},select:{id:true}})
+ if(staff.length!==ids.length)throw Error('HYGIENE_STAFF_STORE_MISMATCH')
 }

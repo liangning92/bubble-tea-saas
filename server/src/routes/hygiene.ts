@@ -2,7 +2,7 @@ import prisma from '../config/database'
 import { formatDate } from '../utils/dateUtils'
 import { Router } from 'express'
 import { z } from 'zod'
-import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, canAccessStore, AuthRequest } from '../middlewares/auth'
 import { validateBody, validateQuery } from '../utils/validation'
 import * as HygieneService from '../services/HygieneService'
 
@@ -10,8 +10,8 @@ const router = Router()
 // Resource IDs carry their own store; never trust an omitted store selector.
 function hygieneStore(model:'hygieneArea'|'hygieneTemplate') {
  return async(req:AuthRequest,res:any,next:any)=>{
-  const row=await (prisma[model] as any).findFirst({where:{id:req.params.id,storeId:req.user!.storeId},select:{id:true}})
-  if(!row)return res.status(404).json({code:404,message:'Hygiene resource not found'})
+  const row=await (prisma[model] as any).findUnique({where:{id:req.params.id},select:{id:true,storeId:true}})
+  if(!row||!canAccessStore(req.user!,row.storeId))return res.status(404).json({code:404,message:'Hygiene resource not found'})
   next()
  }
 }
@@ -41,7 +41,7 @@ router.post('/areas', authenticate, authorize('admin', 'manager'), async (req: A
     })
     res.status(201).json({ code: 201, data: area })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
@@ -51,7 +51,7 @@ router.put('/areas/:id', authenticate, authorize('admin', 'manager'), hygieneSto
     const area = await HygieneService.updateArea(req.params.id, req.body)
     res.json({ code: 200, data: area })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
@@ -115,7 +115,7 @@ router.post('/templates', authenticate, authorize('admin', 'manager'), async (re
     })
     res.status(201).json({ code: 201, data: template })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
@@ -125,7 +125,7 @@ router.put('/templates/:id', authenticate, authorize('admin', 'manager'), hygien
     const template = await HygieneService.updateTemplate(req.params.id, req.body)
     res.json({ code: 200, data: template })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
@@ -266,7 +266,7 @@ router.post('/tasks/temporary', authenticate, authorize('admin', 'manager'), asy
     })
     res.status(201).json({ code: 201, data: task })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
@@ -292,7 +292,7 @@ router.post('/tasks/generate', authenticate, authorize('admin', 'manager'), asyn
     const count = await HygieneService.generateDailyTasks(storeId, date)
     res.status(201).json({ code: 201, message: `Generated ${count} tasks`, data: { count } })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
