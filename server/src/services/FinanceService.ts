@@ -1,3 +1,4 @@
+import { inventoryConsumptionCostAdjustment } from './InventoryCostAdjustmentService'
 import { savedPayrollBasis } from './ProbationService'
 import { requireVerifiedReceiptIncome } from './ReceiptFinancialEvidenceService'
 import { netReceivedAmount } from '../utils/refundAllocation'
@@ -64,6 +65,7 @@ export interface RevenueSummary {
   totalOrders: number
   avgOrderValue: number
   totalCost: number
+  inventoryCostAdjustment: number
   grossProfit: number
   grossMargin: number
   ppnCollected: number | null
@@ -103,7 +105,8 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
   const totalOrders = orders.filter(o=>o.status!=='refunded').length
   const avgOrderValue = totalOrders ? Math.round(totalRevenue/totalOrders) : 0
   // Prepared goods remain consumed after a customer dissatisfaction refund.
-  const totalCost = orders.reduce((sum,o)=>sum+(o.refundRequests.some(r=>r.reasonCode==='paid_unprepared')?0:o.items.reduce((n,i)=>n+i.bomCost*i.quantity,0)),0)
+  const inventoryCostAdjustment = await inventoryConsumptionCostAdjustment(prisma, storeId, startDate, endDate)
+  const totalCost = inventoryCostAdjustment + orders.reduce((sum,o)=>sum+(o.refundRequests.some(r=>r.reasonCode==='paid_unprepared')?0:o.items.reduce((n,i)=>n+i.bomCost*i.quantity,0)),0)
   const missingTaxOrders = orders.filter(o=>o.checkoutTaxAmount===null).length
   const ppnCollected = missingTaxOrders ? null : orders.reduce((sum,o)=>sum+Math.round((o.checkoutTaxAmount || 0)*netReceivedAmount(o)/Math.max(1,o.finalAmount)),0)
   const ppnRefunded = missingTaxOrders ? null : orders.reduce((sum,o)=>sum+(o.checkoutTaxAmount || 0)-Math.round((o.checkoutTaxAmount || 0)*netReceivedAmount(o)/Math.max(1,o.finalAmount)),0)
@@ -118,6 +121,7 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
     totalOrders,
     avgOrderValue,
     totalCost,
+    inventoryCostAdjustment,
     grossProfit,
     grossMargin,
     ppnCollected,
@@ -221,7 +225,8 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
   const payroll=await confirmedPayroll(storeId,rawPayroll)
 
   const revenue = orders.reduce((sum, o) => sum + netReceivedAmount(o), 0)
-  const cogs = orders.reduce((sum, o) =>
+  const inventoryCostAdjustment = await inventoryConsumptionCostAdjustment(prisma, storeId, startDate, endDate)
+  const cogs = inventoryCostAdjustment + orders.reduce((sum, o) =>
     sum + (o.refundRequests.some(r => r.reasonCode === 'paid_unprepared') ? 0 : o.items.reduce((s, i) => s + (i.bomCost || 0) * i.quantity, 0)), 0)
 
   const grossProfit = revenue - cogs
@@ -256,6 +261,7 @@ export async function getProfitAnalysis(storeId: string, startDate: Date, endDat
   return {
     revenue,
     cogs,
+    inventoryCostAdjustment,
     grossProfit,
     grossMargin,
     operatingCosts,
@@ -299,7 +305,8 @@ export async function getIncomeStatement(storeId: string, month: number, year: n
     },
     costOfGoods: {
       total: summary.totalCost,
-      details: 'Cost of goods sold (BOM cost)'
+      inventoryCostAdjustment: summary.inventoryCostAdjustment,
+      details: 'Frozen BOM cost plus posted inventory consumption cost corrections'
     },
     grossProfit: {
       amount: summary.grossProfit,
