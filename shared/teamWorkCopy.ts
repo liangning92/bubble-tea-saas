@@ -1,5 +1,5 @@
 const zh = {
- tasks:'行动项跟进', taskHelp:'从已确认纪要生成任务；已读不代表接收，完成须经人工验收。', noTasks:'暂无跟进任务', promote:'创建跟进任务', snapshot:'来源纪要版本',
+ tasks:'行动项跟进', taskHelp:'从已确认纪要或已批准计划生成任务；已读不代表接收，完成须经人工验收。', noTasks:'暂无跟进任务', promote:'创建跟进任务', snapshot:'来源纪要版本',
  assigned:'待接收', accepted:'已接收', submitted:'待验收', changes_requested:'待补充', completed:'已验收', cancelled:'已取消',
  accept:'接收任务', submit:'提交结果', return:'退回补充', complete:'验收通过', cancelTask:'取消任务', note:'结果或处理说明', evidence:'选择本人发送的证据消息', events:'处理记录', assign:'发布任务',
  confirmAction:'确认操作', close:'关闭', saved:'已保存', error:'操作未完成，请核对状态后重试。', conflict:'版本已变化，请刷新后重新操作；输入仍保留。',
@@ -14,7 +14,7 @@ const zh = {
  lookup:'查询上次调用结果', aiApproved:'AI 辅助 · 发送人已确认', blocked:'配置已变化，结果未发布', requestFailed:'AI 不可用，仍可手动沟通。',
 }
 const id: typeof zh = {
- tasks:'Tindak lanjut tugas',taskHelp:'Tugas dibuat dari notulen yang dikonfirmasi. Dibaca bukan berarti diterima; hasil diperiksa manusia.',noTasks:'Belum ada tugas tindak lanjut',promote:'Buat tugas tindak lanjut',snapshot:'Versi notulen sumber',
+ tasks:'Tindak lanjut tugas',taskHelp:'Tugas dibuat dari notulen yang dikonfirmasi atau rencana yang disetujui. Dibaca bukan berarti diterima; hasil diperiksa manusia.',noTasks:'Belum ada tugas tindak lanjut',promote:'Buat tugas tindak lanjut',snapshot:'Versi notulen sumber',
  assigned:'Menunggu diterima',accepted:'Diterima',submitted:'Menunggu pemeriksaan',changes_requested:'Perlu dilengkapi',completed:'Disetujui',cancelled:'Dibatalkan',
  accept:'Terima tugas',submit:'Kirim hasil',return:'Minta perbaikan',complete:'Setujui hasil',cancelTask:'Batalkan tugas',note:'Hasil atau alasan tindakan',evidence:'Pilih pesan bukti yang Anda kirim',events:'Riwayat tindakan',assign:'Terbitkan tugas',
  confirmAction:'Konfirmasi',close:'Tutup',saved:'Tersimpan',error:'Operasi belum selesai. Periksa status sebelum mencoba lagi.',conflict:'Versi berubah. Muat ulang sebelum mencoba lagi; isian tetap disimpan.',
@@ -29,7 +29,7 @@ const id: typeof zh = {
  lookup:'Periksa permintaan terakhir',aiApproved:'Dibantu AI · dikonfirmasi pengirim',blocked:'Konfigurasi berubah; hasil tidak diterbitkan',requestFailed:'AI tidak tersedia. Komunikasi manual tetap dapat digunakan.',
 }
 const en: typeof zh = {
- tasks:'Action follow-up',taskHelp:'Tasks come from confirmed minutes. Read is not accepted; a person reviews completion.',noTasks:'No follow-up tasks',promote:'Create follow-up task',snapshot:'Source minutes version',
+ tasks:'Action follow-up',taskHelp:'Tasks come from confirmed minutes or approved plans. Read is not accepted; a person reviews completion.',noTasks:'No follow-up tasks',promote:'Create follow-up task',snapshot:'Source minutes version',
  assigned:'Awaiting acceptance',accepted:'Accepted',submitted:'Awaiting review',changes_requested:'Changes requested',completed:'Approved',cancelled:'Cancelled',
  accept:'Accept task',submit:'Submit result',return:'Request changes',complete:'Approve result',cancelTask:'Cancel task',note:'Result or action reason',evidence:'Select evidence messages you sent',events:'Action history',assign:'Assign task',
  confirmAction:'Confirm action',close:'Close',saved:'Saved',error:'Operation did not finish. Check its status before retrying.',conflict:'The version changed. Refresh before retrying; your input is retained.',
@@ -47,6 +47,7 @@ export const teamWorkCopy = (language: string) => language.startsWith('zh') ? zh
 export function teamWorkError(language: string, code: string) {
  const w = teamWorkCopy(language), zh = language.startsWith('zh'), en = language.startsWith('en')
  if (code === 'TEAM_VERSION_CONFLICT') return w.conflict
+ if (/TEAM_PLAN_/.test(code)) return zh ? '计划或任务范围已变化，请刷新并核对计划状态、频道成员及指定主管。' : en ? 'Plan or task scope changed. Refresh and check the plan, members and reviewer.' : 'Lingkup rencana atau tugas berubah. Muat ulang dan periksa rencana, anggota serta pemeriksa.'
  if (/TEAM_AI_(?:NOT_CONFIGURED|KEY_REQUIRED)/.test(code)) return zh ? '请先到“设置 → AI设置”配置密钥并启用沟通 AI。' : en ? 'Configure the key and enable communication AI in Settings → AI settings first.' : 'Atur kunci dan aktifkan AI komunikasi di Pengaturan → Pengaturan AI terlebih dahulu.'
  if (/TEAM_AI_(?:PENDING|NEW_REQUEST_REQUIRED)/.test(code)) return w.uncertain
  if (code === 'TEAM_AI_BUDGET_LIMIT') return zh ? '本月估算已达到费用上限，请由管理员核对。' : en ? 'The monthly estimated spending cap has been reached. Ask the administrator to review it.' : 'Perkiraan batas biaya bulanan tercapai. Minta administrator memeriksanya.'
