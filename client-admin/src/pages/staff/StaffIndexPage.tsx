@@ -10,7 +10,6 @@ export function StaffIndexPage() {
   const location = useLocation()
 
   const tabs = [
-    { key: 'communication', label: teamCopy(i18n.language).title, path: '/staff/communication' },
     { key: 'staff', label: t('staff.staffFile'), path: '/staff' },
     { key: 'attendance', label: t('staff.attendance'), path: '/staff/attendance' },
     { key: 'schedule', label: t('staff.schedule'), path: '/staff/schedule' },
@@ -18,6 +17,7 @@ export function StaffIndexPage() {
     { key: 'adjustments', label: t('compensation.title'), path: '/staff/adjustments' },
     { key: 'salary', label: t('staff.salaryTab', '工资'), path: '/staff/salary' },
     { key: 'points', label: t('staff.points'), path: '/staff/points' },
+    { key: 'communication', label: teamCopy(i18n.language).title, path: '/staff/communication' },
   ]
 
   const currentTab = [...tabs].sort((a, b) => b.path.length - a.path.length)
