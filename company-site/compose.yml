@@ -1,0 +1,33 @@
+name: lumba-website
+
+services:
+  website:
+    image: ${LUMBA_IMAGE:?Set LUMBA_IMAGE to the verified immutable SHA image}
+    container_name: lumba-website
+    ports:
+      - "127.0.0.1:8181:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 64
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  default:
+    name: lumba-website-network
