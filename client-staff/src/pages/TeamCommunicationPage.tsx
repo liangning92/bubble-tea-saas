@@ -12,7 +12,7 @@ export function TeamCommunicationPage() {
     return { current,
       request: async (method, url, data) => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return (await http.request({ method, url: API_BASE + url, data, headers: { Authorization: 'Bearer ' + useAuthStore.getState().token, 'X-Client-App': 'employee' } })).data.data },
       upload: (file, requestId) => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return employeeApi.upload(file, 'team', requestId) },
-      download: async url => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return (await http.get(API_BASE + url, { responseType: 'blob', headers: { Authorization: 'Bearer ' + useAuthStore.getState().token, 'X-Client-App': 'employee' } })).data }
+      download: async (url, options) => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return (await http.get(API_BASE + url, { responseType: 'blob', timeout: 60000, signal: options?.signal, onDownloadProgress: event => options?.onProgress?.({ loaded: event.loaded, total: event.total }), headers: { Authorization: 'Bearer ' + useAuthStore.getState().token, 'X-Client-App': 'employee' } })).data }
     }
   }, [user?.id, user?.storeId])
   if (!user) return null
