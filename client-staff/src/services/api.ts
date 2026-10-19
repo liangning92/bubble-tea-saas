@@ -2,6 +2,7 @@ import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 import {attendanceState,localTodayAttendance,queueAttendance,rememberOnlineAttendance,syncAttendance} from '../utils/offlineAttendance'
 import { forgetOfflineLogin, loginBackend, temporaryLoginFailure } from '../utils/offlineAuth'
+import { privateUploadBody } from '../utils/privateUpload'
 
 function getApiBase(): string {
   const configured = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '')
@@ -29,6 +30,19 @@ http.interceptors.response.use(response => response, error => {
 const getAuthHeader = () => {
   const token = useAuthStore.getState().token
   return token ? { Authorization: `Bearer ${token}`, 'X-Client-App': 'employee' } : {}
+}
+
+async function uploadPrivateFile(file: File, purpose?: 'team', uploadRequestId?: string) {
+  const session = useAuthStore.getState()
+  const token = session.token, userId = session.user?.id, storeId = session.user?.storeId, staffId = session.user?.staffId
+  if (!token || !userId || !staffId || !storeId) throw new Error('TEAM_IDENTITY_REQUIRED')
+  const headers = getAuthHeader()
+  const data = await privateUploadBody(file, purpose, uploadRequestId)
+  const current = useAuthStore.getState()
+  if (current.token !== token || current.user?.id !== userId || current.user?.storeId !== storeId || current.user?.staffId !== staffId) {
+    throw new Error('TEAM_IDENTITY_REQUIRED')
+  }
+  return (await http.post(`${API_BASE}/staff-work/my/files`, data, { headers: { ...headers, 'Content-Type': data.type } })).data.data.id
 }
 
 async function loadShiftSettings() {
@@ -561,7 +575,7 @@ export const employeeApi = {
  post: async (path:string,data:any) => (await http.post(`${API_BASE}/staff-work${path}`,data,{headers:getAuthHeader()})).data.data,
  put: async (path:string,data:any) => (await http.put(`${API_BASE}/staff-work${path}`,data,{headers:getAuthHeader()})).data.data,
  delete: async(path:string,data?:any) => http.delete(`${API_BASE}/staff-work${path}`,{headers:getAuthHeader(),data}),
- upload: async(file:File,purpose?:'team',uploadRequestId?:string) => {const data=new FormData();data.append('file',file);if(purpose)data.append('purpose',purpose);if(uploadRequestId)data.append('uploadRequestId',uploadRequestId);return (await http.post(`${API_BASE}/staff-work/my/files`,data,{headers:getAuthHeader()})).data.data.id},
+ upload: uploadPrivateFile,
  file: async(id:string) => {const res=await http.get(`${API_BASE}/staff-work/files/${id}`,{headers:getAuthHeader(),responseType:'blob'});return res.data as Blob},
  permissions: async() => (await http.get(`${API_BASE}/staff-permissions/me`,{headers:getAuthHeader()})).data.data
 }
