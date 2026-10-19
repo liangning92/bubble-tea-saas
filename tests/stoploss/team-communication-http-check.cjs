@@ -57,7 +57,7 @@ async function main() {
   });
   app.post('/fixture/outage', (req, res) => { pauseMessages = req.body.pause === true; res.json({ paused: pauseMessages }); });
   app.use('/api/team', (req, res, next) => {
-    if (req.method === 'POST' && /^\/channels\/[^/]+\/messages$/.test(req.path)) {
+    if (req.method === 'POST' && /^\/channels\/[^/]+\/(?:messages|tasks\/[^/]+\/actions)$/.test(req.path)) {
       if (pauseMessages) return res.status(503).json({ code: 503, message: 'ISOLATED_SERVICE_OUTAGE' });
       if (dropNextResponse) { dropNextResponse = false; res.json = () => { req.socket.destroy(); return res; }; }
     }
@@ -265,6 +265,7 @@ async function main() {
       await prisma.config.createMany({ data: Array.from({ length: 505 }, (_, n) => ({ storeId: 'team-store-a', category: 'staff', key: `team.communication.minuteVersion.${c.id}.${first.id}.${String(n + 2).padStart(6, '0')}`, value: JSON.stringify({ ...first, version: n + 2 }) })) });
       assert.equal((await good('alice', 'GET', `/team/channels/${c.id}/minutes/${first.id}/versions`)).length, 506);
     });
+    await require('./team-communication-followup-check.cjs')({ prisma, good, request, create, send, test, dropResponse: () => { dropNextResponse = true; } });
     await test('rate and length limits apply transactionally, and invalid requests do not allocate sequence numbers', async () => {
       const c = await create('rate', 'group', ['s-bob']);
       const sends = await Promise.all(Array.from({ length: 35 }, (_, n) => request('rate', 'POST', `/team/channels/${c.id}/messages`, { requestId: randomUUID(), text: String(n) })));
@@ -289,7 +290,13 @@ async function main() {
       await prisma.staff.update({ where: { id: 's-bob' }, data: { status: 'active' } });
     });
     // Prepare a clearly synthetic, isolated channel for real UI interaction.
-    await create('owner', 'public', ['s-alice', 's-bob'], 'ISOLATED · Team channel');
+    const qaChannel = await create('owner', 'public', ['s-alice', 's-bob'], 'ISOLATED · Team channel');
+    await send('owner', qaChannel.id, 'Synthetic task: inspect the machine and report the result.');
+    await send('alice', qaChannel.id, 'Synthetic private image', { files: [fileId] });
+    const qaMinute = await good('owner', 'POST', `/team/channels/${qaChannel.id}/rounds/close`, { expectedVersion: 1 });
+    const qaConfirmed = await good('owner', 'PUT', `/team/channels/${qaChannel.id}/minutes/${qaMinute.id}`, { requestId: randomUUID(), expectedVersion: 1,
+      title: qaMinute.title, decisions: ['Synthetic machine inspection'], pending: [], actions: [{text:'Synthetic machine inspection',ownerId:'s-bob',dueDate:'2026-10-22',sourceSeq:[1]}],sourceSeq:[1],status:'confirmed' });
+    await good('owner', 'POST', `/team/channels/${qaChannel.id}/tasks`, { requestId: randomUUID(), roundId: qaMinute.id, minuteVersion: qaConfirmed.version, actionIndex: 0 });
     const report = { base: '8989b6290413af056f51b1e9b00fae2fc4f2267c', checks: results, count: results.length, productionTouched: false };
     fs.mkdirSync(path.join(root, 'output/team-communication'), { recursive: true }); fs.writeFileSync(path.join(root, 'output/team-communication/http-results.json'), JSON.stringify(report, null, 2));
     console.log('RESULT', JSON.stringify({ passed: results.length, failed: 0 }));

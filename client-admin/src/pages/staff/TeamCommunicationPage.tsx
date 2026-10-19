@@ -16,5 +16,5 @@ export function TeamCommunicationPage() {
     }
   }, [user?.id, user?.storeId])
   if (!user) return null
-  return <TeamCommunication client={client} scope={`${location.origin}:${user.storeId}:${user.staff?.id}`} staffId={user.staff?.id || ''} language={i18n.language} administration />
+  return <TeamCommunication client={client} scope={`${location.origin}:${user.storeId}:${user.staff?.id}`} staffId={user.staff?.id || ''} language={i18n.language} administration aiAdmin={user.role === 'admin'} />
 }

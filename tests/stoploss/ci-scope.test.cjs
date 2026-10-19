@@ -1,5 +1,14 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const {selectScope,planRange,imageMatrix}=require('../../scripts/ci-scope.cjs');
+test('team communication selects its isolated HTTP regression without unrelated POS suites',()=>{
+ const f=fixture();try{
+  f.write('server/src/services/TeamAiService.ts');
+  const p=selectScope(['server/src/services/TeamAiService.ts'],f);
+  assert.equal(p.teamCommunication,true);assert.deepEqual(p.components,['api']);assert.deepEqual(p.domains,['teamCommunication']);assert.deepEqual(p.http,[]);
+  const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');
+  assert.match(runner,/if\(plan\.teamCommunication\).*with-docker-test\.py.*test-team-communication\.py/);
+ }finally{f.close()}
+});
 function fixture(){const root=fs.mkdtempSync(path.join(os.tmpdir(),'ci-scope-'));const write=(name,source='')=>{fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true});fs.writeFileSync(path.join(root,name),source)};return {root,write,close:()=>fs.rmSync(root,{recursive:true,force:true})}}
 test('product upload and analysis select API/admin and media checks, without cashier/printing',()=>{
  const f=fixture();try{
