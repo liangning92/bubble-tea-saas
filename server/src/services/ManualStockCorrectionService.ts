@@ -34,7 +34,7 @@ async function snapshot(db: any, storeId: string, type: Direction, row: any) {
     note: typeof note.note === 'string' ? note.note : note.kind ? '' : row.note || '', reason: row.reason || null,
     stockEffect: type === 'stock_in' ? 'physical_in' : internal ? 'internal_transfer' : 'physical_out',
     batchId: row.batchId || null, allocations: note.batchAllocations || [], createdAt: row.createdAt.toISOString(),
-    carryingAmount: note.carryingAmount ?? (type === 'stock_in' ? note.costProvided === false ? null : row.totalAmount : note.totalAmount ?? null),
+    carryingAmount: note.carryingAmount ?? (type === 'stock_in' ? note.costProvided === false ? null : row.totalAmount : typeof note.unitCost === 'number' ? row.quantity * note.unitCost : null),
     ambiguousCost: type === 'stock_in' && note.costProvided === undefined && row.totalAmount === 0,
     originalActor: row.staffId || null }
 }
