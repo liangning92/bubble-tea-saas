@@ -10,6 +10,14 @@ test('team communication selects its isolated HTTP regression without unrelated 
  }finally{f.close()}
 });
 function fixture(){const root=fs.mkdtempSync(path.join(os.tmpdir(),'ci-scope-'));const write=(name,source='')=>{fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true});fs.writeFileSync(path.join(root,name),source)};return {root,write,close:()=>fs.rmSync(root,{recursive:true,force:true})}}
+test('operations plans and shared copy select protected communication checks for their actual clients',()=>{
+ const f=fixture();try{
+  f.write('server/src/services/TeamOperationsService.ts');f.write('shared/teamOperationCopy.ts');f.write('shared/TeamOperations.tsx',"import './teamOperationCopy'");
+  for(const client of ['admin','staff'])f.write(`client-${client}/src/App.tsx`,"import '../../shared/TeamOperations'");
+  const p=selectScope(['server/src/services/TeamOperationsService.ts','shared/teamOperationCopy.ts'],f);
+  assert.equal(p.teamCommunication,true);assert.deepEqual(p.components,['api','admin','staff']);assert.deepEqual(p.domains,['teamCommunication']);assert.equal(p.browser.length,0);
+ }finally{f.close()}
+});
 test('product upload and analysis select API/admin and media checks, without cashier/printing',()=>{
  const f=fixture();try{
   for(const name of ['payment-validation','printer-routing','receipt-layout','order-receipt','ci-scope'])f.write(`tests/stoploss/${name}.test.cjs`);

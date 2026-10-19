@@ -191,7 +191,7 @@ export function InventoryPage() {
     onError: (error: any) => {
       console.error("Delete inventory error:", error);
       notifyAdmin(
-        error?.response?.data?.message || error.message || "Failed to delete",
+        error?.response?.data?.message === "MANUAL_CORRECTION_HISTORY_RETAIN_MATERIAL" ? t("manualStockCorrection.retainMaterial") : error?.response?.data?.message || error.message || "Failed to delete",
       );
     },
   });

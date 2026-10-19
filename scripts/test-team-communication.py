@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """An owned temporary PostgreSQL instance; no production URL, volume or service."""
-import os, subprocess, pathlib, tempfile, time, socket, shutil
+import os, subprocess, pathlib, tempfile, time, socket, shutil, sys
 root = pathlib.Path(__file__).resolve().parents[1]
 run = os.environ.get('BT_TEST_RUN', '')
 assert run.startswith('bt-test-')
@@ -24,7 +24,8 @@ try:
     env = dict(os.environ, NODE_ENV='production', DATABASE_URL='postgresql://team_test@127.0.0.1:' + str(port) + '/team_test',
                JWT_SECRET='synthetic-team-tests-only-key-32-bytes', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
-    command(['node', 'tests/stoploss/team-communication-http-check.cjs'], env=env)
+    script = 'tests/stoploss/team-operations-ui-runtime.cjs' if '--operations-ui' in sys.argv else 'tests/stoploss/team-communication-http-check.cjs'
+    command(['node', script], env=env)
 finally:
     if started: command([tool('pg_ctl'), '-D', str(base / 'pg'), '-m', 'immediate', '-w', 'stop'], stdout=subprocess.DEVNULL)
     shutil.rmtree(base)

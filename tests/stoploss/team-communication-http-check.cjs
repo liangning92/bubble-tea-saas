@@ -57,7 +57,7 @@ async function main() {
   });
   app.post('/fixture/outage', (req, res) => { pauseMessages = req.body.pause === true; res.json({ paused: pauseMessages }); });
   app.use('/api/team', (req, res, next) => {
-    if (req.method === 'POST' && /^\/channels\/[^/]+\/(?:messages|tasks\/[^/]+\/actions)$/.test(req.path)) {
+    if (req.method === 'POST' && /^\/channels\/[^/]+\/(?:messages|tasks\/[^/]+\/actions|operations(?:\/import|\/[^/]+\/(?:actions|scan)))$/.test(req.path)) {
       if (pauseMessages) return res.status(503).json({ code: 503, message: 'ISOLATED_SERVICE_OUTAGE' });
       if (dropNextResponse) { dropNextResponse = false; res.json = () => { req.socket.destroy(); return res; }; }
     }
@@ -265,6 +265,7 @@ async function main() {
       await prisma.config.createMany({ data: Array.from({ length: 505 }, (_, n) => ({ storeId: 'team-store-a', category: 'staff', key: `team.communication.minuteVersion.${c.id}.${first.id}.${String(n + 2).padStart(6, '0')}`, value: JSON.stringify({ ...first, version: n + 2 }) })) });
       assert.equal((await good('alice', 'GET', `/team/channels/${c.id}/minutes/${first.id}/versions`)).length, 506);
     });
+    await require('./team-operations-loop-check.cjs')({ prisma, good, request, create, send, test, registerActor: async who => { tokens[who] = await token(who); }, dropResponse: () => { dropNextResponse = true; } });
     await require('./team-communication-followup-check.cjs')({ prisma, good, request, create, send, test, dropResponse: () => { dropNextResponse = true; } });
     await test('rate and length limits apply transactionally, and invalid requests do not allocate sequence numbers', async () => {
       const c = await create('rate', 'group', ['s-bob']);

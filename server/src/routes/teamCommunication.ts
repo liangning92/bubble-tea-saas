@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { authenticate, AuthRequest } from '../middlewares/auth'
 import { canTeam, teamCommunication, TeamActor, TeamError } from '../services/TeamCommunicationService'
 import { teamAi } from '../services/TeamAiService'
+import { teamOperations } from '../services/TeamOperationsService'
 
 export const teamCommunicationRouter = Router()
 const router = teamCommunicationRouter, service = teamCommunication()
@@ -19,6 +20,12 @@ const run = (fn: (req: AuthRequest, res: any) => Promise<unknown>) => async (req
 }
 const ok = (res: any, data: unknown) => res.json({ code: 200, data })
 const ai = teamAi()
+const operations = teamOperations()
+router.get('/channels/:id/operations', run(async (req, res) => ok(res, await operations.list(actor(req), req.params.id))))
+router.post('/channels/:id/operations/import', run(async (req, res) => ok(res, await operations.import(actor(req), req.params.id, req.body))))
+router.post('/channels/:id/operations/:planId/actions', run(async (req, res) => ok(res, await operations.action(actor(req), req.params.id, req.params.planId, req.body))))
+router.post('/channels/:id/operations/:planId/scan', run(async (req, res) => ok(res, await operations.scan(actor(req), req.params.id, req.params.planId, req.body))))
+router.get('/channels/:id/operations/:planId/export', run(async (req, res) => ok(res, await operations.export(actor(req), req.params.id, req.params.planId))))
 router.get('/ai/settings', run(async (req, res) => ok(res, await ai.settings(actor(req)))))
 router.put('/ai/settings', run(async (req, res) => ok(res, await ai.saveSettings(actor(req), req.body))))
 router.post('/channels/:id/ai/drafts', run(async (req, res) => ok(res, await ai.generate(actor(req), req.params.id, req.body))))

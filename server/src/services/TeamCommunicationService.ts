@@ -25,7 +25,9 @@ export interface TeamTask {
   text: string; ownerId: string; dueDate: string; sourceSeq: number[]; fromSeq: number
   status: 'assigned' | 'accepted' | 'submitted' | 'changes_requested' | 'completed' | 'cancelled'
   version: number; createdAt: string; updatedAt: string
-  events: { action: string; by: string; at: string; note: string; sourceSeq: number[] }[]
+  events: { action: string; by: string; at: string; note: string; sourceSeq: number[]; criteriaConfirmed?: boolean }[]
+  planId?: string; planRevision?: number; reviewerId?: string; acceptByAt?: string; deadlineAt?: string
+  evidenceRequired?: string; acceptanceCriteria?: string; audienceIds?: string[]
 }
 export class TeamError extends Error {
   constructor(public status: number, message: string) { super(message) }
@@ -100,6 +102,15 @@ async function channel(db: DB, a: TeamActor, id: string, auditReason?: string) {
   return { c, fromSeq: auditReason === undefined ? member!.fromSeq : 1 }
 }
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
+export async function assertOperationScope(db: DB, a: TeamActor, c: TeamChannel, input: unknown) {
+  const scope = z.object({ planId: uuid, taskId: uuid, planVersion: z.number().int().positive(), taskVersion: z.number().int().positive() }).passthrough().parse(input)
+  const p = await read(db, a.storeId, `operationPlan.${c.id}.${scope.planId}`)
+  const t: TeamTask = await read(db, a.storeId, `task.${c.id}.${scope.taskId}`)
+  if (!p || !t || p.status !== 'published' || p.approvedRevision !== p.revision || p.version !== scope.planVersion ||
+    t.version !== scope.taskVersion || t.planId !== p.id || t.planRevision !== p.revision || ['completed', 'cancelled'].includes(t.status)) fail(409, 'TEAM_PLAN_SCOPE_CHANGED')
+  if (c.archived || digest(c.members) !== p.audienceHash || !t.audienceIds?.includes(a.staffId)) fail(409, 'TEAM_PLAN_AUDIENCE_CHANGED')
+  return { p, t }
+}
 function manage(a: TeamActor, c: TeamChannel) {
   if (c.ownerId !== a.staffId && !canTeam(a, 'team.manage')) fail(403, 'TEAM_HOST_REQUIRED')
 }
@@ -201,6 +212,7 @@ export function teamCommunication(db: DB = prisma) {
           if (!draft || draft.channelId !== id || draft.status !== 'ready' || draft.kind !== 'draft') fail(409, 'TEAM_AI_DRAFT_NOT_READY')
           if (!settings?.enabled || settings.version !== draft.configVersion) fail(409, 'TEAM_AI_CONFIG_CHANGED')
           if (c.members.some(member => member.fromSeq > draft.sourceFloor) || digest(c.members) !== draft.audienceHash) fail(403, 'TEAM_AI_AUDIENCE_CHANGED')
+          if (draft.operation) await assertOperationScope(tx, a, c, draft.operation)
           ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, approvedBy: a.staffId }
         }
         if (c.archived || c.kind === 'meeting' && !c.round) fail(409, 'TEAM_CHANNEL_CLOSED')
@@ -319,8 +331,11 @@ export function teamCommunication(db: DB = prisma) {
       return list(db, a.storeId, `minuteVersion.${id}.${roundId}.`, 0)
     },
     async tasks(a: TeamActor, id: string, auditReason?: string) {
-      const { fromSeq } = await channel(db, a, id, auditReason)
-      return (await list(db, a.storeId, `task.${id}.`, 201)).filter((t: TeamTask) => t.fromSeq >= fromSeq)
+      const { c, fromSeq } = await channel(db, a, id, auditReason)
+      const plans = new Map<string, any>()
+      const tasks = (await list(db, a.storeId, `task.${id}.`, 201)).filter((t: TeamTask) => t.fromSeq >= fromSeq && (!t.planId || auditReason !== undefined || t.audienceIds?.includes(a.staffId)))
+      for (const t of tasks) if (t.planId && !plans.has(t.planId)) plans.set(t.planId, await read(db, a.storeId, `operationPlan.${id}.${t.planId}`))
+      return tasks.map(t => ({ ...t, ...(t.planId ? { planPaused: plans.get(t.planId)?.status !== 'published' || plans.get(t.planId)?.revision !== t.planRevision || plans.get(t.planId)?.audienceHash !== digest(c.members) } : {}) }))
         .sort((a: TeamTask, b: TeamTask) => b.createdAt.localeCompare(a.createdAt))
     },
     async createTask(a: TeamActor, id: string, input: unknown) {
@@ -365,18 +380,24 @@ export function teamCommunication(db: DB = prisma) {
     async taskAction(a: TeamActor, id: string, taskId: string, input: unknown) {
       uuid.parse(taskId)
       const v = z.object({ requestId: uuid, expectedVersion: z.number().int().positive(),
-        action: z.enum(['accept', 'submit', 'return', 'complete', 'cancel']), note: z.string().trim().max(1000).default(''), sourceSeq: z.array(seq).max(20).default([]) }).strict().parse(input)
+        action: z.enum(['accept', 'submit', 'return', 'complete', 'cancel']), note: z.string().trim().max(1000).default(''), sourceSeq: z.array(seq).max(20).default([]), criteriaConfirmed: z.boolean().default(false) }).strict().parse(input)
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id)
         const key = `task.${id}.${taskId}`, task: TeamTask = await read(tx, a.storeId, key)
-        if (!task || task.fromSeq < fromSeq) fail(404, 'TEAM_TASK_NOT_FOUND')
-        const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, taskId, ...v })
+        if (!task || task.fromSeq < fromSeq || task.planId && !task.audienceIds?.includes(a.staffId)) fail(404, 'TEAM_TASK_NOT_FOUND')
+        const { criteriaConfirmed, ...legacyInput } = v
+        const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, taskId, ...legacyInput, ...(criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
         const old = await read(tx, a.storeId, requestKey)
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return task }
         if (c.archived) fail(409, 'TEAM_CHANNEL_CLOSED')
         if (task.version !== v.expectedVersion) fail(409, 'TEAM_VERSION_CONFLICT')
         if (['completed', 'cancelled'].includes(task.status)) fail(409, 'TEAM_TASK_CLOSED')
+        if (task.planId && v.action !== 'cancel') {
+          const p = await read(tx, a.storeId, `operationPlan.${id}.${task.planId}`)
+          if (!p || p.status !== 'published' || p.revision !== task.planRevision) fail(409, 'TEAM_PLAN_PAUSED')
+          if (digest(c.members) !== p.audienceHash) fail(409, 'TEAM_PLAN_AUDIENCE_CHANGED')
+        }
         if (v.action === 'accept' || v.action === 'submit') {
           if (task.ownerId !== a.staffId) fail(403, 'TEAM_TASK_ASSIGNEE_REQUIRED')
           if (v.action === 'accept' && task.status !== 'assigned' || v.action === 'submit' && !['accepted', 'changes_requested'].includes(task.status)) fail(409, 'TEAM_TASK_TRANSITION')
@@ -387,6 +408,8 @@ export function teamCommunication(db: DB = prisma) {
           }
         } else {
           manage(a, c)
+          if (task.planId && ['return', 'complete'].includes(v.action) && task.reviewerId !== a.staffId) fail(403, 'TEAM_PLAN_REVIEWER_REQUIRED')
+          if (task.planId && v.action === 'complete' && (!v.criteriaConfirmed || !v.note)) fail(400, 'TEAM_PLAN_CRITERIA_REQUIRED')
           if (['return', 'complete'].includes(v.action) && task.status !== 'submitted') fail(409, 'TEAM_TASK_TRANSITION')
           if (['return', 'cancel'].includes(v.action) && !v.note) fail(400, 'TEAM_TASK_NOTE_REQUIRED')
           if (v.sourceSeq.length) fail(400, 'TEAM_INVALID_INPUT')
@@ -394,7 +417,7 @@ export function teamCommunication(db: DB = prisma) {
         if (task.events.length >= 100) fail(409, 'TEAM_TASK_HISTORY_LIMIT')
         const at = new Date().toISOString(), states = { accept: 'accepted', submit: 'submitted', return: 'changes_requested', complete: 'completed', cancel: 'cancelled' } as const
         task.status = states[v.action]; task.version++; task.updatedAt = at
-        task.events.push({ action: v.action, by: a.staffId, at, note: v.note, sourceSeq: v.sourceSeq })
+        task.events.push({ action: v.action, by: a.staffId, at, note: v.note, sourceSeq: v.sourceSeq, ...(v.criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
         await write(tx, a.storeId, key, task)
         await write(tx, a.storeId, requestKey, { hash, taskId })
         await audit(tx, a, id, 'update', { action: 'task', taskId, version: task.version, status: task.status })

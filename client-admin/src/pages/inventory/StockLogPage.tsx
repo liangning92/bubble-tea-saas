@@ -1,3 +1,6 @@
+import { ManualStockCorrection } from '../../components/ManualStockCorrection'
+import { useAuthStore } from '../../stores/auth'
+import { isSalesStockOut, stockLogCost } from '../../utils/inventorySalesCosts'
 import { ReferenceDetails } from '../../components/ReferenceDetails'
 import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
@@ -31,6 +34,9 @@ export function StockLogPage() {
   const dateSettings=useStoreDateSettings()
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
+
+  const isCorrectionAdmin = useAuthStore(state => state.user?.role === 'admin')
+  const [correctionLog, setCorrectionLog] = useState<any>(null)
 
   // State
   const [activeTab, setActiveTab] = useState<LogTab>('all')
@@ -128,11 +134,11 @@ export function StockLogPage() {
     return rawLogs.filter((log: any) => {
       // 1. Tab filter
       if (activeTab === 'withdrawal' || activeTab === 'other') {
-        if(log.type!=='stock_out'||log.reason!==activeTab)return false
+        if(log.type!=='stock_out'||(log.reason!==activeTab && !(activeTab==='other' && log.reason==='receipt_cost_adjustment')))return false
       } else if (activeTab === 'in') {
         if (log.type !== 'stock_in') return false
       } else if (activeTab === 'sold') {
-        if (log.type !== 'stock_out' || log.reason !== 'sold') return false
+        if (!isSalesStockOut(log)) return false
       } else if (activeTab === 'waste') {
         if (log.type !== 'stock_out' || (log.reason !== 'loss' && log.reason !== 'expired')) return false
       } else if (activeTab === 'process') {
@@ -170,16 +176,15 @@ export function StockLogPage() {
     let totalInboundCost = 0
     let totalSalesCost = 0
     let totalWasteCost = 0
+    let costAdjustments = 0
 
     rawLogs.forEach((log: any) => {
-      const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
       if (log.type === 'stock_in') {
-        const amt = Number(log.totalAmount || (log.quantity * (log.unitCost || avgCost)))
-        totalInboundCost += amt
+        totalInboundCost += stockLogCost(log)
       } else if (log.type === 'stock_out') {
-        const itemCost = log.totalAmount ?? Math.round(Number(log.quantity || 0) * avgCost)
-        if (log.reason==='sale_estimate'||log.reason==='sale_estimate_reversal') return <span className="badge badge-info">{t(log.reason==='sale_estimate'?'inventoryUnified.sales':'inventoryUnified.reversal')}</span>
-    if (log.reason === 'sold') {
+        const itemCost = stockLogCost(log)
+        if (log.reason === 'receipt_cost_adjustment') costAdjustments += itemCost
+        if (isSalesStockOut(log)) {
           totalSalesCost += itemCost
         } else if (log.reason === 'loss' || log.reason === 'expired') {
           totalWasteCost += itemCost
@@ -191,6 +196,7 @@ export function StockLogPage() {
       totalInboundCost,
       totalSalesCost,
       totalWasteCost,
+      costAdjustments,
       totalCount: rawLogs.length
     }
   }, [rawLogs])
@@ -320,9 +326,7 @@ export function StockLogPage() {
     const rows = filteredLogs.map((log: any) => {
       const isStockIn = log.type === 'stock_in'
       const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
-      const costValue = isStockIn
-        ? (log.totalAmount || Math.round(Number(log.quantity) * Number(log.unitCost || avgCost)))
-        : Math.round(Number(log.quantity) * avgCost)
+      const costValue = stockLogCost(log)
 
       let reasonText = ''
       if (isInventoryAdjustment(log)) reasonText = t('inventory.reasonAdjust')
@@ -335,7 +339,9 @@ export function StockLogPage() {
           reasonText = t('inventory.reasonPurchase')
         }
       } else {
-        if (log.reason === 'sold') reasonText = t('inventory.reasonSold')
+        if (log.reason === 'sale_estimate' || log.reason === 'sale_estimate_reversal') reasonText = t(log.reason === 'sale_estimate' ? 'inventoryUnified.sales' : 'inventoryUnified.reversal')
+        else if (log.reason === 'receipt_cost_adjustment') reasonText = t('manualStockCorrection.consumptionDifference')
+        else if (log.reason === 'sold') reasonText = t('inventory.reasonSold')
         else if (log.reason === 'process') reasonText = t('inventory.reasonProcess')
         else if (log.reason === 'expired') reasonText = t('inventory.reasonExpired')
         else if (log.reason === 'loss') reasonText = t('inventory.reasonLoss')
@@ -361,7 +367,10 @@ export function StockLogPage() {
         [t('inventory.totalCostValue')]: costValue,
         [t('inventoryActors.operator')]: actorText(log.operator, log.staffId, t),
         [t('purchases.supplier')]: log.supplier?.name || '-',
-        [t('inventory.notes')]: log.note || '-'
+        [t('inventory.notes')]: log.note || '-',
+        [t('manualStockCorrection.original')]: log.manualCorrection?.rootId || '-',
+        [t('manualStockCorrection.reason')]: log.manualCorrection?.reason || '-',
+        [t('manualStockCorrection.action')]: log.manualCorrection ? t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : log.manualCorrection.role === 'consumption_cost' ? 'manualStockCorrection.consumptionDifference' : 'manualStockCorrection.replacement') : log.correctionStatus ? t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected') : '-'
       }
     })
 
@@ -408,6 +417,7 @@ export function StockLogPage() {
 
   // Standard reason badge following design specs
   const getReasonBadge = (log: any) => {
+    if (log.reason === 'receipt_cost_adjustment') return <span className="badge badge-warning">{t('manualStockCorrection.consumptionDifference')}</span>
     if (isInventoryAdjustment(log)) return <span className="badge">{t('inventory.reasonAdjust')}</span>
     if (log.type === 'stock_in') {
       if (isProcessingInbound(log)) {
@@ -506,6 +516,8 @@ export function StockLogPage() {
           <p className="text-2xl font-bold text-gray-900 mt-1">{metrics.totalCount}</p>
         </div>
       </div>
+
+      <div className="card p-4 text-sm"><span className="text-gray-600">{t('manualStockCorrection.consumptionDifference')}: </span><strong>{formatCurrency(metrics.costAdjustments)}</strong><p className="text-xs text-gray-500 mt-1">{t('manualStockCorrection.postingHint')}</p></div>
 
       {/* Sub Tabs */}
       <div className="admin-module-nav">
@@ -617,18 +629,16 @@ export function StockLogPage() {
                   <th className="pb-3 font-medium whitespace-nowrap text-right px-4">{t('inventory.totalCostValue')}</th>
                   <th className="pb-3 font-medium whitespace-nowrap px-4">{t('inventory.operatorOrSupplier')}</th>
                   <th className="pb-3 font-medium min-w-[160px] pl-4">{t('inventory.notes')}</th>
+                  {isCorrectionAdmin && <th className="pb-3 font-medium whitespace-nowrap px-4">{t('manualStockCorrection.actions')}</th>}
                 </tr>
               </thead>
               <tbody>
                 {filteredLogs.map((log: any) => {
-                  const isStockIn = log.type === 'stock_in'
                   const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
                   const unitCost = log.unitCost !== undefined && log.unitCost !== null && log.unitCost >= 0
                     ? Number(log.unitCost)
                     : avgCost
-                  const costValue = isStockIn
-                    ? (log.totalAmount || Math.round(Number(log.quantity) * unitCost))
-                    : Math.round(Number(log.quantity) * avgCost)
+                  const costValue = stockLogCost(log)
 
                   return (
                     <tr key={log.id} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
@@ -662,8 +672,10 @@ export function StockLogPage() {
                         <ActorName actor={log.operator} id={log.staffId}/>{log.supplier?.name && <div className="text-xs text-gray-500 mt-1">{t('purchases.supplier')}: {log.supplier.name}</div>}
                       </td>
                       <td className="py-3 text-sm text-gray-500 pl-4 max-w-xs truncate" title={log.note || ''}>
+                        {log.manualCorrection && <span className="block text-xs text-amber-700" title={log.manualCorrection.reason}>{t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : log.manualCorrection.role === 'consumption_cost' ? 'manualStockCorrection.consumptionDifference' : 'manualStockCorrection.replacement')}</span>}
                         {log.note || '-'}
                       </td>
+                      {isCorrectionAdmin && <td className="py-3 px-4 text-sm whitespace-nowrap">{(log.manualCorrectionEligible || log.manualCorrection) ? <><button type="button" className="btn-secondary min-h-[44px] px-4 border-primary-200 text-primary-700 hover:bg-primary-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500" onClick={() => setCorrectionLog(log.manualCorrection ? {...log,type:log.manualCorrection.type,id:log.manualCorrection.rootId} : log)}>{t(log.correctionStatus || log.manualCorrection ? 'manualStockCorrection.history' : 'manualStockCorrection.title')}</button>{log.correctionStatus && <span className="block text-xs text-gray-500">{t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected')}</span>}</> : '—'}</td>}
                     </tr>
                   )
                 })}
@@ -673,6 +685,7 @@ export function StockLogPage() {
         )}
       </div>
 
+      {correctionLog && <ManualStockCorrection log={correctionLog} items={inventoryItems} onClose={() => setCorrectionLog(null)} onSaved={() => { queryClient.invalidateQueries({queryKey:['inventory-logs-comprehensive']}); queryClient.invalidateQueries({queryKey:['inventory']}); queryClient.invalidateQueries({queryKey:['inventory-all-items']}); queryClient.invalidateQueries({queryKey:['products']}); queryClient.invalidateQueries({queryKey:['bom-products']}); }} />}
       {/* Modal: Quick Stock In */}
       {showStockInModal && (
         <AdminDialog title={t('inventory.quickStockIn')} onClose={() => setShowStockInModal(false)} className="max-w-md" busy={Boolean(stockInMutation.isPending)} trackChanges chrome>
