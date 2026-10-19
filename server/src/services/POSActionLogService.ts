@@ -3,6 +3,8 @@ import { socketManager } from '../socket'
 import { projectCartState, projectClearedCart } from '../utils/posCartState'
 
 export type POSAction =
+  | 'cash_drawer'
+  | 'cart_remove'
   | 'receipt_print'
   | 'login'
   | 'logout'
@@ -37,7 +39,21 @@ export async function logPOSAction(data: {
   // Old installed POS clients classify pending as warning. Normalize new process
   // records here; retain historical audit rows without rewriting their evidence.
   const receiptProcess = data.action === 'receipt_print' && ['pending', 'sent', 'paper-confirmed'].includes(data.metadata?.status)
-  const severity = receiptProcess ? 'info' : data.severity || 'info'
+  let severity: Severity = receiptProcess ? 'info' : data.severity || 'info'
+  // Review signals, never conclusions about misconduct; the client cannot
+  // suppress manual drawer or item-removal evidence by choosing info.
+  if (data.action === 'cash_drawer') severity = data.metadata?.source === 'automatic' || data.metadata?.status === 'sent' ? 'info' : 'warning'
+  if (data.action === 'cart_remove') severity = 'warning'
+  if (data.action === 'cart_clear' && Number(data.metadata?.itemCount) > 0 && severity === 'info') severity = 'warning'
+  if ((data.action === 'cash_drawer' && data.metadata?.status === 'requested' && data.metadata?.source !== 'automatic') || (data.action === 'cart_clear' && severity !== 'info')) {
+    const recent = await prisma.pOSActionLog.count({ where: {
+      storeId: data.storeId, staffId: data.staffId, action: data.action,
+      createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+      severity: { in: ['warning', 'critical'] },
+      ...(data.action === 'cash_drawer' ? { metadata: { contains: '"status":"requested"' } } : {}),
+    } })
+    if (recent >= 2) severity = 'critical'
+  }
   const log = await prisma.pOSActionLog.create({
     data: {
       storeId: data.storeId,
@@ -195,4 +211,25 @@ export async function getAlertStats(storeId: string, startDate?: string, endDate
   ])
 
   return { warningCount, criticalCount, todayTotal }
+}
+
+// Whole-period totals, independent of log pagination. Historical records remain
+// unchanged; old clients without drawer telemetry have unknown coverage.
+export async function getRiskSummary(storeId: string, startDate: Date, endDate: Date) {
+  const groups = await prisma.pOSActionLog.groupBy({
+    by: ['staffId', 'staffName', 'action'],
+    where: { storeId, createdAt: { gte: startDate, lte: endDate }, OR: [
+      { action: 'cart_clear', severity: { in: ['warning', 'critical'] } },
+      { action: 'cart_remove' },
+      { action: 'cash_drawer', severity: { in: ['warning', 'critical'] }, metadata: { contains: '"status":"requested"' } },
+    ] },
+    _count: { id: true },
+  })
+  const staff = new Map<string, { staffId: string; staffName: string; manualDrawer: number; clearedCarts: number; removedItems: number }>()
+  for (const row of groups) {
+    const current = staff.get(row.staffId) || { staffId: row.staffId, staffName: row.staffName, manualDrawer: 0, clearedCarts: 0, removedItems: 0 }
+    current[row.action === 'cash_drawer' ? 'manualDrawer' : row.action === 'cart_clear' ? 'clearedCarts' : 'removedItems'] += row._count.id
+    staff.set(row.staffId, current)
+  }
+  return { staff: [...staff.values()].sort((a, b) => (b.manualDrawer + b.clearedCarts + b.removedItems) - (a.manualDrawer + a.clearedCarts + a.removedItems)), frequencyMinutes: 15, frequencyThreshold: 3 }
 }

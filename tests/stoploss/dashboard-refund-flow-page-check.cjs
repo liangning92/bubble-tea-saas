@@ -19,6 +19,7 @@ for(const [width,height,lang] of [[1440,1000,'zh'],[820,1180,'en'],[390,844,'id'
  else if(url.pathname==='/api/orders')data={list:approved?[]:[order],total:approved?0:1};
  else if(url.pathname==='/api/channels')data={list:[]};
  else if(url.pathname==='/api/finance/shift-sessions')data={sessions:[]};
+ else if(url.pathname==='/api/pos-action-logs/risks')data={staff:[]};
  else if(url.pathname==='/api/pos-action-logs/stats')data={warningCount:0,criticalCount:0,todayTotal:0};
  else if(url.pathname==='/api/pos-action-logs/sessions')data=[];
  else if(url.pathname.includes('alerts')||url.pathname==='/api/orders/received-receipts')data=[];

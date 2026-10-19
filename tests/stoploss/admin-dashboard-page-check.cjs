@@ -10,6 +10,7 @@ for(const scenario of (process.env.DASHBOARD_SCENARIOS||cases.join(',')).split('
  await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());if(url.origin!==origin)return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();requests.push({path:url.pathname,params:Object.fromEntries(url.searchParams),method:req.method()});assert.equal(req.method(),'GET','No mutations in dashboard/navigation checks');let status=200,data={};
  if(url.pathname==='/api/reports/pending-actions')data={actions:[],total:0};
  if(url.pathname==='/api/reports/dashboard'){data=dashboard();if(scenario==='dashboard-empty'){data.today={orders:0,revenue:0,averageOrder:0,cost:0,profit:0};data.recentOrders=[];data.inventory.lowStockItems=[];}if(scenario==='dashboard-malformed')data={};if(['dashboard-error','id-error','zh-error','analysis-url-change','stock-url-change','analysis-precision-change'].includes(scenario)&&fail)status=503;}
+ if(url.pathname==='/api/pos-action-logs/risks')data={staff:[]};
  if(url.pathname==='/api/pos-action-logs/stats'){data={warningCount:1,criticalCount:0,todayTotal:2};if(scenario==='stats-error')status=503;}
  if(url.pathname==='/api/orders/received-receipts')data=[];
  if(url.pathname==='/api/pos-action-logs/sessions'){data=[];if(scenario==='sessions-error')status=503;}

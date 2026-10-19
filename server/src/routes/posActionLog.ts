@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, AuthRequest } from '../middlewares/auth'
-import { logPOSAction, getPOSActionLogs, getActiveSessions, getAlertStats, POSAction, Severity } from '../services/POSActionLogService'
+import { logPOSAction, getPOSActionLogs, getActiveSessions, getAlertStats, getRiskSummary, POSAction, Severity } from '../services/POSActionLogService'
 import prisma from '../config/database'
 
 const router = Router()
@@ -25,6 +25,11 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       return
     }
 
+    const parsed = logActionSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ code: 400, message: 'Invalid POS action' })
+    if (action === 'cash_drawer' && (!['automatic', 'manual', 'test', 'admin_test'].includes(metadata?.source) || !['requested', 'sent', 'unconfirmed'].includes(metadata?.status) || (metadata.source !== 'automatic' && (typeof metadata.reason !== 'string' || metadata.reason.trim().length < 2 || metadata.reason.length > 200)))) {
+      return res.status(400).json({ code: 400, message: 'Drawer source, status and reason required' })
+    }
     const storeId = req.user!.storeId
     const staffId = req.user!.staffId || ''
 
@@ -84,6 +89,14 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     console.error('Get POS action logs error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get logs' })
   }
+})
+
+router.get('/risks', authenticate, async (req: AuthRequest, res) => {
+  const start = new Date(String(req.query.startDate || ''))
+  const end = new Date(String(req.query.endDate || ''))
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start || end.getTime() - start.getTime() > 366 * 86400000) return res.status(400).json({ code: 400, message: 'Invalid risk date range' })
+  try { res.json({ code: 200, data: await getRiskSummary(req.user!.storeId, start, end) }) }
+  catch (error) { console.error('POS risks error:', error); res.status(500).json({ code: 500, message: 'Failed to read risks' }) }
 })
 
 // GET /api/pos-action-logs/stats - Get alert stats for dashboard
