@@ -13,7 +13,7 @@ export type QueryOption = Label & { value: string; group: string; paymentFilter:
 export class RevenueQueryError extends Error { constructor(message: string, public status = 400) { super(message) } }
 const filterSchema = z.object({ period: z.enum(['today','yesterday','week','month','custom']).default('today'), startDate:z.string().optional(), endDate:z.string().optional(), dataset:z.string().max(200).default('net'), paymentMethod:z.string().max(100).optional(), channelId:z.string().max(100).optional(), page:z.coerce.number().int().min(1).max(100000).default(1) })
 export type RevenueQueryFilter = z.infer<typeof filterSchema>
-export type RevenueQueryRow = { id:string; kind:string; date:Date; associationAt:Date; amount:number|null; reference:string; paymentMethod:string|null; channelId:string|null; channel:Label|null; category:string|null; sessionId:string|null; source:string; dateBasis:string; legacyDate:boolean }
+export type RevenueQueryRow = { id:string; kind:string; date:Date; associationAt:Date; amount:number|null; reference:string; items?:{productName:string;quantity:number}[]; paymentMethod:string|null; channelId:string|null; channel:Label|null; category:string|null; sessionId:string|null; source:string; dateBasis:string; legacyDate:boolean }
 const option = (value:string,group:string,labelKey:string,paymentFilter=false,channelFilter=false):QueryOption=>({value,group,labelKey,name:labelKey,paymentFilter,channelFilter})
 
 export async function revenueQueryOptions(db:DB,storeId:string,canRefund=true) {
@@ -50,14 +50,14 @@ export async function revenueQuery(db:DB,storeId:string,input:unknown,canRefund=
  const rows:RevenueQueryRow[]=[]
  const base=(id:string,kind:string,date:Date,amount:number|null,reference:string):RevenueQueryRow=>({id,kind,date,associationAt:date,amount,reference,paymentMethod:null,channelId:null,channel:null,category:null,sessionId:null,source:kind,dateBasis:kind==='order'?'orderAt':kind==='expense'?'expenseDate':kind==='refund'?'approvedAt':'closedAt',legacyDate:false})
  if(['net','orders'].includes(filter.dataset)||filter.dataset.startsWith('payment:')||filter.dataset.startsWith('channel:')){
-  const orders=await db.order.findMany({where:{...orderFilter,status:{in:['completed','paid']},createdAt:{gte:range.start,lte:range.end}},include:{channel:true,refundRequests:{where:{status:{in:['approved','paid']}}}},orderBy:{createdAt:'desc'}})
+  const orders=await db.order.findMany({where:{...orderFilter,status:{in:['completed','paid']},createdAt:{gte:range.start,lte:range.end}},include:{items:{select:{productName:true,quantity:true}},channel:true,refundRequests:{where:{status:{in:['approved','paid']}}}},orderBy:{createdAt:'desc'}})
   await verifyIncome(orders)
-  for(const o of orders)rows.push({...base(o.id,'order',o.createdAt,netReceivedAmount(o),o.orderNumber),paymentMethod:o.paymentMethod,channelId:o.channelId,channel:o.channel})
+  for(const o of orders)rows.push({...base(o.id,'order',o.createdAt,netReceivedAmount(o),o.orderNumber),items:o.items,paymentMethod:o.paymentMethod,channelId:o.channelId,channel:o.channel})
  }
  if(filter.dataset==='refund'){
-  const refunds=await db.refundRequest.findMany({where:{order:orderFilter,status:{in:['approved','paid']},OR:[{approvedAt:{gte:range.start,lte:range.end}},{approvedAt:null,createdAt:{gte:range.start,lte:range.end}}]},include:{order:{include:{channel:true}}},orderBy:{createdAt:'desc'}})
+  const refunds=await db.refundRequest.findMany({where:{order:orderFilter,status:{in:['approved','paid']},OR:[{approvedAt:{gte:range.start,lte:range.end}},{approvedAt:null,createdAt:{gte:range.start,lte:range.end}}]},include:{order:{include:{items:{select:{productName:true,quantity:true}},channel:true}}},orderBy:{createdAt:'desc'}})
   await verifyIncome(refunds.map(r=>r.order))
-  for(const r of refunds)rows.push({...base(r.id,'refund',r.approvedAt||r.createdAt,r.amount===0?r.order.finalAmount:r.amount,r.order.orderNumber),associationAt:r.order.createdAt,paymentMethod:r.order.paymentMethod,channelId:r.order.channelId,channel:r.order.channel,legacyDate:!r.approvedAt,dateBasis:r.approvedAt?'approvedAt':'legacyRequestedAt'})
+  for(const r of refunds)rows.push({...base(r.id,'refund',r.approvedAt||r.createdAt,r.amount===0?r.order.finalAmount:r.amount,r.order.orderNumber),associationAt:r.order.createdAt,items:r.order.items,paymentMethod:r.order.paymentMethod,channelId:r.order.channelId,channel:r.order.channel,legacyDate:!r.approvedAt,dateBasis:r.approvedAt?'approvedAt':'legacyRequestedAt'})
  }
  if(filter.dataset==='expense'||filter.dataset.startsWith('expense:')){
   const expenses=await db.expense.findMany({where:{storeId,date:{gte:range.start,lte:range.end},...(filter.dataset.startsWith('expense:')?{category:filter.dataset.slice(8)}:{})},orderBy:{date:'desc'}})
