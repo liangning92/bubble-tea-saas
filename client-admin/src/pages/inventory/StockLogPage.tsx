@@ -618,7 +618,6 @@ export function StockLogPage() {
               </thead>
               <tbody>
                 {filteredLogs.map((log: any) => {
-                  const isStockIn = log.type === 'stock_in'
                   const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
                   const unitCost = log.unitCost !== undefined && log.unitCost !== null && log.unitCost >= 0
                     ? Number(log.unitCost)
