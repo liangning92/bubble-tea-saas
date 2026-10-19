@@ -134,7 +134,7 @@ export function StockLogPage() {
     return rawLogs.filter((log: any) => {
       // 1. Tab filter
       if (activeTab === 'withdrawal' || activeTab === 'other') {
-        if(log.type!=='stock_out'||log.reason!==activeTab)return false
+        if(log.type!=='stock_out'||(log.reason!==activeTab && !(activeTab==='other' && log.reason==='receipt_cost_adjustment')))return false
       } else if (activeTab === 'in') {
         if (log.type !== 'stock_in') return false
       } else if (activeTab === 'sold') {
@@ -176,12 +176,14 @@ export function StockLogPage() {
     let totalInboundCost = 0
     let totalSalesCost = 0
     let totalWasteCost = 0
+    let costAdjustments = 0
 
     rawLogs.forEach((log: any) => {
       if (log.type === 'stock_in') {
         totalInboundCost += stockLogCost(log)
       } else if (log.type === 'stock_out') {
         const itemCost = stockLogCost(log)
+        if (log.reason === 'receipt_cost_adjustment') costAdjustments += itemCost
         if (isSalesStockOut(log)) {
           totalSalesCost += itemCost
         } else if (log.reason === 'loss' || log.reason === 'expired') {
@@ -194,6 +196,7 @@ export function StockLogPage() {
       totalInboundCost,
       totalSalesCost,
       totalWasteCost,
+      costAdjustments,
       totalCount: rawLogs.length
     }
   }, [rawLogs])
@@ -337,6 +340,7 @@ export function StockLogPage() {
         }
       } else {
         if (log.reason === 'sale_estimate' || log.reason === 'sale_estimate_reversal') reasonText = t(log.reason === 'sale_estimate' ? 'inventoryUnified.sales' : 'inventoryUnified.reversal')
+        else if (log.reason === 'receipt_cost_adjustment') reasonText = t('manualStockCorrection.consumptionDifference')
         else if (log.reason === 'sold') reasonText = t('inventory.reasonSold')
         else if (log.reason === 'process') reasonText = t('inventory.reasonProcess')
         else if (log.reason === 'expired') reasonText = t('inventory.reasonExpired')
@@ -366,7 +370,7 @@ export function StockLogPage() {
         [t('inventory.notes')]: log.note || '-',
         [t('manualStockCorrection.original')]: log.manualCorrection?.rootId || '-',
         [t('manualStockCorrection.reason')]: log.manualCorrection?.reason || '-',
-        [t('manualStockCorrection.action')]: log.manualCorrection ? t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : 'manualStockCorrection.replacement') : log.correctionStatus ? t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected') : '-'
+        [t('manualStockCorrection.action')]: log.manualCorrection ? t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : log.manualCorrection.role === 'consumption_cost' ? 'manualStockCorrection.consumptionDifference' : 'manualStockCorrection.replacement') : log.correctionStatus ? t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected') : '-'
       }
     })
 
@@ -413,6 +417,7 @@ export function StockLogPage() {
 
   // Standard reason badge following design specs
   const getReasonBadge = (log: any) => {
+    if (log.reason === 'receipt_cost_adjustment') return <span className="badge badge-warning">{t('manualStockCorrection.consumptionDifference')}</span>
     if (isInventoryAdjustment(log)) return <span className="badge">{t('inventory.reasonAdjust')}</span>
     if (log.type === 'stock_in') {
       if (isProcessingInbound(log)) {
@@ -511,6 +516,8 @@ export function StockLogPage() {
           <p className="text-2xl font-bold text-gray-900 mt-1">{metrics.totalCount}</p>
         </div>
       </div>
+
+      <div className="card p-4 text-sm"><span className="text-gray-600">{t('manualStockCorrection.consumptionDifference')}: </span><strong>{formatCurrency(metrics.costAdjustments)}</strong><p className="text-xs text-gray-500 mt-1">{t('manualStockCorrection.postingHint')}</p></div>
 
       {/* Sub Tabs */}
       <div className="admin-module-nav">
@@ -665,10 +672,10 @@ export function StockLogPage() {
                         <ActorName actor={log.operator} id={log.staffId}/>{log.supplier?.name && <div className="text-xs text-gray-500 mt-1">{t('purchases.supplier')}: {log.supplier.name}</div>}
                       </td>
                       <td className="py-3 text-sm text-gray-500 pl-4 max-w-xs truncate" title={log.note || ''}>
-                        {log.manualCorrection && <span className="block text-xs text-amber-700" title={log.manualCorrection.reason}>{t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : 'manualStockCorrection.replacement')}</span>}
+                        {log.manualCorrection && <span className="block text-xs text-amber-700" title={log.manualCorrection.reason}>{t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : log.manualCorrection.role === 'consumption_cost' ? 'manualStockCorrection.consumptionDifference' : 'manualStockCorrection.replacement')}</span>}
                         {log.note || '-'}
                       </td>
-                      {isCorrectionAdmin && <td className="py-3 px-4 text-sm whitespace-nowrap">{(log.manualCorrectionEligible || log.manualCorrection) ? <><button type="button" className="text-primary-hover underline py-2" onClick={() => setCorrectionLog(log.manualCorrection ? {...log,type:log.manualCorrection.type,id:log.manualCorrection.rootId} : log)}>{t(log.correctionStatus || log.manualCorrection ? 'manualStockCorrection.history' : 'manualStockCorrection.title')}</button>{log.correctionStatus && <span className="block text-xs text-gray-500">{t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected')}</span>}</> : '—'}</td>}
+                      {isCorrectionAdmin && <td className="py-3 px-4 text-sm whitespace-nowrap">{(log.manualCorrectionEligible || log.manualCorrection) ? <><button type="button" className="btn-secondary min-h-[44px] px-4 border-primary-200 text-primary-700 hover:bg-primary-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500" onClick={() => setCorrectionLog(log.manualCorrection ? {...log,type:log.manualCorrection.type,id:log.manualCorrection.rootId} : log)}>{t(log.correctionStatus || log.manualCorrection ? 'manualStockCorrection.history' : 'manualStockCorrection.title')}</button>{log.correctionStatus && <span className="block text-xs text-gray-500">{t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected')}</span>}</> : '—'}</td>}
                     </tr>
                   )
                 })}

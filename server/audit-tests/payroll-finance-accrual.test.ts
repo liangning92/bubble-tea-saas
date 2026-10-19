@@ -1,5 +1,5 @@
 import {beforeEach,expect,jest,test} from '@jest/globals'
-jest.mock('../src/config/database',()=>({__esModule:true,default:{order:{findMany:jest.fn()},expense:{findMany:jest.fn()},salary:{findMany:jest.fn()},config:{findUnique:jest.fn()}}}))
+jest.mock('../src/config/database',()=>({__esModule:true,default:{stockOutLog:{findMany:jest.fn(async()=>[])},order:{findMany:jest.fn()},expense:{findMany:jest.fn()},salary:{findMany:jest.fn()},config:{findUnique:jest.fn()}}}))
 import prisma from '../src/config/database'
 import {getProfitAnalysis} from '../src/services/FinanceService'
 const db=prisma as any
