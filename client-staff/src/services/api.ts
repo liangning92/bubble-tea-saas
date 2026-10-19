@@ -61,7 +61,7 @@ export const staffApi = {
 
   // Auth
   login: async (phone: string, password: string) => {
-    const response = await http.post(`${API_BASE}/auth/login`, { phone, password }, { timeout: 5000 })
+    const response = await http.post(`${API_BASE}/auth/login`, { phone, password }, { headers: { 'X-Client-App': 'employee' }, timeout: 5000 })
     return response.data
   },
 

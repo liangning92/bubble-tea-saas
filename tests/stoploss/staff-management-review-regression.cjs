@@ -56,6 +56,33 @@ module.exports=async function reviewRegression({db,origin,token,pass,root,out}){
  });
  const row=await db.config.findUnique({where:{storeId_key:{storeId:'store',key:'staff.access.policy.v2'}}});
  await check('corrupt management policy cannot break employee login or profile',async()=>{try{for(const value of ['{invalid-policy',JSON.stringify({version:2})]){await db.config.update({where:{id:row.id},data:{value}});for(const id of ['basic','manager']){const login=await request(id,'POST','auth/login',{phone:'fixture-'+id,password:'SyntheticPassword2026'},'employee');assert.equal(login.status,200,id+' employee login');assert.equal(login.data.data.user.managementAccess,false);const me=await request(id,'GET','auth/me',undefined,'employee',login.data.data.token);assert.equal(me.status,200,id+' employee profile');assert.equal(me.data.data.managementAccess,false);assert.equal((await request(id,'GET','staff-work/my/dashboard',undefined,'employee',login.data.data.token)).status,200);for(const client of [undefined,'pos','admin'])assert.equal((await request(id,'GET','staff',undefined,client,login.data.data.token)).status,503,id+' management request');assert.equal((await request(id,'GET','staff',undefined,'employee',login.data.data.token)).status,403);assert.equal((await request(id,'POST','auth/login',{phone:'fixture-'+id,password:'SyntheticPassword2026'},'admin')).status,503)}assert.equal((await request('basic','POST','auth/login',{phone:'fixture-basic',password:'wrong-fixture-password'},'employee')).status,401)}}finally{await db.config.update({where:{id:row.id},data:{value:row.value}})}return{employeeLogin:200,employeeProfile:200,managementClosed:503,wrongPassword:401}});
+ await check('actual Staff API login and profile work through real Axios when management policy is corrupt',async()=>{
+  // Load the complete production Staff API module. Only browser storage/offline
+  // dependencies are stubbed; Axios sends real requests to this PostgreSQL fixture.
+  const ts=require('typescript'),vm=require('node:vm'),{createRequire}=require('node:module');
+  const source=fs.readFileSync(root+'/client-staff/src/services/api.ts','utf8').replace('import.meta.env.VITE_API_BASE_URL',JSON.stringify(origin+'/api'));
+  const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
+  const state={token:null,user:null,offlineUntil:null,logout(){this.token=null;this.user=null}},exports={};
+  const imports={axios:createRequire(root+'/client-staff/src/services/api.ts')('axios'),'../stores/auth':{useAuthStore:{getState:()=>state}},'../utils/offlineAttendance':{},'../utils/offlineAuth':{forgetOfflineLogin(){},loginBackend:value=>value},'../utils/privateUpload':{}};
+  vm.runInNewContext(code,{exports,require:name=>{assert.ok(Object.hasOwn(imports,name),'unexpected Staff API dependency '+name);return imports[name]},sessionStorage:{setItem(){}},console});
+  const client=exports;client.http.defaults.proxy=false;
+  // Separate synthetic client IP for the unchanged production rate limiter.
+  client.http.defaults.headers.common['X-Forwarded-For']='192.0.2.240';
+  const observed=[];client.http.interceptors.request.use(config=>{if(config.url.endsWith('/auth/login'))observed.push(config.headers.get('X-Client-App'));return config});
+  try{
+   for(const value of [row.value,'{invalid-policy',JSON.stringify({version:2})]){
+    await db.config.update({where:{id:row.id},data:{value}});
+    for(const id of ['basic','manager']){
+     state.token=null;state.user=null;const login=await client.staffApi.login('fixture-'+id,'SyntheticPassword2026');assert.equal(login.code,200);assert.equal(login.data.user.managementAccess,false);state.token=login.data.token;state.user=login.data.user;
+     const profile=await client.staffApi.getMyProfile();assert.equal(profile.code,200);assert.equal(profile.data.id,id);assert.equal(profile.data.managementAccess,false);await client.employeeApi.get('/my/dashboard');
+     if(value!==row.value)await assert.rejects(client.staffPermissionClient.get('/staff'),error=>error.response?.status===503);
+    }
+    await assert.rejects(client.staffApi.login('fixture-basic','wrong-fixture-password'),error=>error.response?.status===401);
+   }
+   assert.ok(observed.length===9&&observed.every(value=>value==='employee'),'actual Staff login must declare employee client without a token');
+  }finally{await db.config.update({where:{id:row.id},data:{value:row.value}})}
+  return{actualStaffModule:true,realAxiosHttp:true,loginAndProfile:200,wrongPassword:401,corruptPolicyManagement:503};
+ });
  fs.mkdirSync(out+'/review-closure',{recursive:true});fs.writeFileSync(out+'/review-closure/regressions.json',JSON.stringify({run:process.env.BT_TEST_RUN,productionWrites:false,results,failed},null,2)+'\n');
  assert.deepEqual(failed,[],'Independent review regressions remain');
  pass('Independent review closure: strict hygiene inputs, scoped BOM reads and employee auth policy-failure isolation');
