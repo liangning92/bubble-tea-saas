@@ -12,7 +12,7 @@ export function TeamCommunicationPage() {
     return { current,
       request: async (method, url, data) => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return (await api.request({ method, url, data })).data.data },
       upload: async (file, requestId) => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); const data = new FormData(); data.append('file', file); data.append('purpose', 'team'); data.append('uploadRequestId', requestId); return (await api.post('/staff-work/my/files', data, { headers: { 'Content-Type': 'multipart/form-data' } })).data.data.id },
-      download: async url => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return (await api.get(url, { responseType: 'blob' })).data }
+      download: async (url, options) => { if (!current()) throw Error('TEAM_IDENTITY_REQUIRED'); return (await api.get(url, { responseType: 'blob', timeout: 60000, signal: options?.signal, onDownloadProgress: event => options?.onProgress?.({ loaded: event.loaded, total: event.total }) })).data }
     }
   }, [user?.id, user?.storeId])
   if (!user) return null
