@@ -4,7 +4,7 @@ This independent static website introduces PT LUMBA MERAH NIAGA INDONESIA and it
 
 ## Isolated service
 
-- Build context: repository root; Dockerfile: `company-site/Dockerfile`.
+- Build context: `company-site`; Dockerfile: `company-site/Dockerfile`.
 - Standalone Compose project and container: `lumba-website`.
 - Origin: `http://127.0.0.1:8181`; container listens on 8080 as an unprivileged user.
 - No database, credentials, persistent volumes, or connection to the existing application network.
@@ -12,7 +12,7 @@ This independent static website introduces PT LUMBA MERAH NIAGA INDONESIA and it
 
 ## Release requirements
 
-Follow repository `AGENTS.md` and `docs/BATCH-BUILD-WORKFLOW.md`: commit only these files, verify the exact GitHub source SHA, build once, and deploy only that verified image. The existing application CI and Docker workflows recognize api/admin/pos/staff; their skipped website checks are not website validation. Add a dedicated manual website verification/build workflow before release.
+Follow repository `AGENTS.md` and `docs/BATCH-BUILD-WORKFLOW.md`: commit only these files, verify the exact GitHub source SHA, build once, and deploy only that verified image. The existing application CI and Docker workflows recognize api/admin/pos/staff; their skipped website checks are not website validation. The dedicated manual `lumba-site.yml` workflow checks the actual container, both languages, and desktop/tablet/phone layouts, then saves its image and integrity manifest. Its optional master-only publication job loads and publishes that same verified image without rebuilding.
 
 Use `ghcr.io/liangning92/lumba-website:sha-<full-source-sha>` with `org.opencontainers.image.revision` and a recorded image/archive digest. Do not rebuild the verified image during deployment. Keep the previous website image for rollback. This service uses its own Compose file; never run the main application's Compose stack or restart Docker for a website update.
 

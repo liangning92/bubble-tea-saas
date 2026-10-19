@@ -1,0 +1,138 @@
+name: Verify and publish LUMBA website
+
+on:
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Full committed source SHA to verify
+        type: string
+        required: true
+      confirmed:
+        description: Execute under the authorized release workflow
+        type: boolean
+        default: false
+      publish:
+        description: Publish the same verified image after successful checks
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lumba-website-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: inputs.confirmed == true && inputs.reviewed_sha == github.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image: ${{ steps.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install only website browser verification dependencies
+        run: |
+          npm ci --prefix company-site --workspaces=false --ignore-scripts
+          cd company-site
+          npx playwright install --with-deps chromium
+      - id: image
+        name: Build the exact independent website image
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          IMAGE_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${IMAGE_OWNER,,}/lumba-website:sha-${SOURCE_SHA}"
+          docker build --platform linux/amd64 --build-arg "SOURCE_SHA=${SOURCE_SHA}" -f company-site/Dockerfile -t "$IMAGE" company-site
+          test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+          echo "ref=$IMAGE" >> "$GITHUB_OUTPUT"
+      - name: Verify the actual origin, both languages and three screen sizes
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+        run: |
+          set -euo pipefail
+          docker run -d --name lumba-site-verification --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges:true -p 127.0.0.1:18181:8080 "$IMAGE"
+          for attempt in $(seq 1 20); do
+            if curl --fail --silent http://127.0.0.1:18181/healthz; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18181/healthz
+          node company-site/verify.cjs http://127.0.0.1:18181/ "$RUNNER_TEMP/lumba-evidence"
+      - name: Save the same verified image and integrity manifest
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/lumba-verified"
+          docker save "$IMAGE" -o "$RUNNER_TEMP/lumba-verified/image.tar"
+          IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
+          TAR_SHA=$(sha256sum "$RUNNER_TEMP/lumba-verified/image.tar" | cut -d' ' -f1)
+          HTML_SHA=$(sha256sum company-site/public/index.html | cut -d' ' -f1)
+          jq -n --arg sourceSha "$SOURCE_SHA" --arg image "$IMAGE" --arg imageId "$IMAGE_ID" --arg imageTarSha256 "$TAR_SHA" --arg htmlSha256 "$HTML_SHA" '{sourceSha:$sourceSha,image:$image,imageId:$imageId,imageTarSha256:$imageTarSha256,htmlSha256:$htmlSha256}' > "$RUNNER_TEMP/lumba-verified/manifest.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumba-verified-${{ github.sha }}
+          path: ${{ runner.temp }}/lumba-verified/
+          retention-days: 3
+          compression-level: 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lumba-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/lumba-evidence/
+          retention-days: 14
+      - name: Remove the verification container
+        if: always()
+        run: docker rm -f lumba-site-verification 2>/dev/null || true
+
+  publish:
+    needs: verify
+    if: inputs.publish == true && github.ref == 'refs/heads/master' && needs.verify.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumba-verified-${{ github.sha }}
+          path: verified-image/
+      - name: Verify and load the already checked image without rebuilding
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          IMAGE: ${{ needs.verify.outputs.image }}
+        run: |
+          set -euo pipefail
+          jq -e --arg sha "$SOURCE_SHA" --arg image "$IMAGE" '.sourceSha == $sha and .image == $image' verified-image/manifest.json
+          test "$(sha256sum verified-image/image.tar | cut -d' ' -f1)" = "$(jq -r .imageTarSha256 verified-image/manifest.json)"
+          docker load -i verified-image/image.tar
+          test "$(docker image inspect "$IMAGE" --format '{{.Id}}')" = "$(jq -r .imageId verified-image/manifest.json)"
+          test "$(docker image inspect "$IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$SOURCE_SHA"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish only the immutable source tag
+        env:
+          IMAGE: ${{ needs.verify.outputs.image }}
+        run: |
+          set -euo pipefail
+          if docker manifest inspect "$IMAGE" > existing-manifest.json 2> registry-error.txt; then
+            IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
+            jq -e --arg id "$IMAGE_ID" '.config.digest == $id' existing-manifest.json
+          else
+            if ! grep -Eiq 'manifest unknown|no such manifest|MANIFEST_UNKNOWN' registry-error.txt; then
+              echo 'Registry state is unknown; refusing publication'
+              exit 1
+            fi
+            docker push "$IMAGE"
+          fi
