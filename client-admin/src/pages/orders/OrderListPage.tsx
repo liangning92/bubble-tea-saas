@@ -123,7 +123,6 @@ export function OrderListPage() {
     if (!await confirmPreparedRefund(selectedRefund, t)) return
     try {
       await adminApi.approveRefund(selectedRefund.id, { verifiedPrepared: selectedRefund.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRefund.reasonCode === 'paid_unprepared', note: refundNote })
-      notifyAdmin(t('orders.refundApproved'))
       setSelectedRefund(null)
       setRefundAction(null)
       setRefundNote('')
@@ -140,7 +139,6 @@ export function OrderListPage() {
     }
     try {
       await adminApi.rejectRefund(selectedRefund.id, { note: refundNote })
-      notifyAdmin(t('orders.refundRejected'))
       setSelectedRefund(null)
       setRefundAction(null)
       setRefundNote('')

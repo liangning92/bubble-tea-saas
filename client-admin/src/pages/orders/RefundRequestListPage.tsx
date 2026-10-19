@@ -64,7 +64,6 @@ export function RefundRequestListPage() {
     setSubmitting(true)
     try {
       await adminApi.approveRefund(selectedRequest.id, { verifiedPrepared: selectedRequest.reasonCode === 'customer_dissatisfied', verifiedUnprepared: selectedRequest.reasonCode === 'paid_unprepared', note: actionNote })
-      notifyAdmin(t('orders.refundApproved'))
       setSelectedRequest(null)
       setActionNote('')
       void queryClient.invalidateQueries()
@@ -85,7 +84,6 @@ export function RefundRequestListPage() {
     setSubmitting(true)
     try {
       await adminApi.rejectRefund(selectedRequest.id, { note: actionNote })
-      notifyAdmin(t('orders.refundRejected'))
       setSelectedRequest(null)
       setActionNote('')
       void queryClient.invalidateQueries()

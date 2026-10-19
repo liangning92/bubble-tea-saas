@@ -41,7 +41,6 @@ export function OvertimeRequestPage() {
     reason: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitSuccess, setSubmitSuccess] = useState(false)
 
   const loadData = async () => {
     setIsLoading(true)
@@ -70,12 +69,10 @@ export function OvertimeRequestPage() {
     try {
       const response = editingId?await staffApi.editRequest('overtime',editingId,{...formData,expectedVersion:editingVersion}):await staffApi.createOvertimeRequest(formData)
       if (response.code === 201 || response.code === 200) {
-        setSubmitSuccess(true)
         setFormData({ date: '', startTime: '18:00', endTime: '22:00', reason: '' })
         setShowForm(false)
         setEditingId(null)
         loadData()
-        setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
         await dialogs.alert(response.message || t('overtime.submitFailed'))
       }
@@ -238,7 +235,6 @@ export function OvertimeRequestPage() {
         </div>
       </div>
 
-      {submitSuccess && <div role="status" className="employee-success-toast">{t('overtime.submitSuccess')}</div>}
     </div>
   )
 }

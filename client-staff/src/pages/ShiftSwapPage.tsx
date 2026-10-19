@@ -54,7 +54,6 @@ export function ShiftSwapPage() {
   const [colleagues, setColleagues] = useState<Array<{ id: string; name: string; employeeNumber: string }>>([])
   const [shifts, setShifts] = useState<Array<{ key: string; name: string; startTime: string; endTime: string }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitSuccess, setSubmitSuccess] = useState(false)
 
   const loadData = async (quiet = false) => {
     if (!quiet) setIsLoading(true)
@@ -91,12 +90,10 @@ export function ShiftSwapPage() {
     try {
       const response = editingId?await staffApi.editRequest('shift-swap',editingId,{...formData,expectedVersion:editingVersion}):await staffApi.createShiftSwap(formData)
       if (response.code === 201 || response.code === 200) {
-        setSubmitSuccess(true)
         setFormData({ targetStaffId: '', originalDate: '', originalShift: '', targetDate: '', targetShift: '', reason: '' })
         setShowForm(false)
         setEditingId(null)
         loadData()
-        setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
         await dialogs.alert(response.message || t('shiftSwap.submitFailed'))
       }
@@ -319,7 +316,6 @@ export function ShiftSwapPage() {
         </div>
       </div>
 
-      {submitSuccess && <div role="status" className="employee-success-toast">{t('shiftSwap.submitSuccess')} · {t('swapFlow.success')}</div>}
     </div>
   )
 }
