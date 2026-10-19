@@ -1,6 +1,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { teamCopy } from './teamCopy'
 import { TeamPending, pendingMessages, removePending, savePending } from './teamOutbox'
+import { TeamTasks, TeamTask } from './TeamTasks'
+import { TeamAttachment } from './TeamAttachment'
+import { TeamAi, TeamAiSettings } from './TeamAi'
+import { teamWorkCopy } from './teamWorkCopy'
 
 export interface TeamClient {
   request: (method: 'get' | 'post' | 'put', url: string, data?: unknown) => Promise<any>
@@ -13,7 +17,7 @@ interface Channel {
   members: { staffId: string; fromSeq: number }[]; member: boolean; canEdit: boolean; canAudit: boolean; unread: number
   round: { id: string; title: string } | null
 }
-interface Message { id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string }
+interface Message { id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: { provider: string; model: string; approvedBy: string } }
 interface Minute {
   id: string; title: string; participants: string[]; fromSeq: number; toSeq: number; startedAt: string; endedAt: string
   version: number; status: 'draft' | 'confirmed'; decisions: string[]; pending: string[]; sourceSeq: number[]
@@ -25,14 +29,15 @@ const field = 'w-full rounded-lg border border-gray-300 bg-white p-2 text-sm'
 const numbers = (value: string) => value.split(',').filter(v => v.trim()).map(v => Number(v.trim()))
 const lines = (value: string) => value.split('\n').map(v => v.trim()).filter(Boolean)
 const errorCode = (e: any) => e?.response?.data?.message || e?.message || 'TEAM_OPERATION_FAILED'
-export function TeamCommunication({ client, scope, staffId, language, administration = false }: {
-  client: TeamClient; scope: string; staffId: string; language: string; administration?: boolean
+export function TeamCommunication({ client, scope, staffId, language, administration = false, aiAdmin = false }: {
+  client: TeamClient; scope: string; staffId: string; language: string; administration?: boolean; aiAdmin?: boolean
 }) {
-  const w = teamCopy(language)
+  const w = teamCopy(language), work = teamWorkCopy(language)
   const [channels, setChannels] = useState<Channel[]>([]), [directory, setDirectory] = useState<{ id: string; name: string }[]>([])
   const [capabilities, setCapabilities] = useState({ manage: false, audit: false })
   const [selectedId, setSelectedId] = useState(''), [meta, setMeta] = useState<Channel | null>(null)
   const [messages, setMessages] = useState<Message[]>([]), [minutes, setMinutes] = useState<Minute[]>([])
+  const [tasks, setTasks] = useState<TeamTask[]>([])
   const [receipts, setReceipts] = useState<{ staffId: string; seq: number }[]>([])
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [loaded, setLoaded] = useState(false)
   const [auditInput, setAuditInput] = useState(''), [auditReason, setAuditReason] = useState('')
@@ -104,7 +109,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
     return () => clearInterval(timer)
   }, [client, scope, online, queueReady])
   useEffect(() => {
-    setMessages([]); setMinutes([]); setReceipts([]); setMeta(null); setEditing(null); setVersions([]); setError('')
+    setMessages([]); setMinutes([]); setTasks([]); setReceipts([]); setMeta(null); setEditing(null); setVersions([]); setError('')
     if (!selectedId || !currentChannel?.member && !auditReason) return
     let active = true, inFlight = false, cursor = 0, stopped = false
     const pull = async () => {
@@ -113,10 +118,11 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       try {
         const response = await client.request('get', `/team/channels/${selectedId}/messages?after=${cursor}${auditReason ? '&auditReason=' + encodeURIComponent(auditReason) : ''}`)
         const records = await client.request('get', `/team/channels/${selectedId}/minutes${query}`)
+        const followUps = await client.request('get', `/team/channels/${selectedId}/tasks${query}`)
         if (!active || !client.current()) return
         setMeta({ ...currentChannel!, ...response.channel, canEdit: response.canEdit })
         setMessages(previous => [...new Map([...previous, ...response.messages].map((m: Message) => [m.seq, m])).values()].sort((a, b) => a.seq - b.seq))
-        cursor = response.cursor; setMinutes(records); setError('')
+        cursor = response.cursor; setMinutes(records); setTasks(followUps); setError('')
         if (!auditReason && document.visibilityState === 'visible') {
           await client.request('put', `/team/channels/${selectedId}/read`, { seq: cursor })
           const values = await client.request('get', `/team/channels/${selectedId}/receipts`)
@@ -126,7 +132,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       } catch (e: any) {
         if (active) {
           setError(errorCode(e))
-          if ([401, 403, 404].includes(e.response?.status)) { setMessages([]); setMinutes([]); setMeta(null); stopped = true }
+          if ([401, 403, 404].includes(e.response?.status)) { setMessages([]); setMinutes([]); setTasks([]); setMeta(null); stopped = true }
         }
       } finally { inFlight = false }
     }
@@ -156,14 +162,6 @@ export function TeamCommunication({ client, scope, staffId, language, administra
     if (busy) return; setBusy(true); setError(''); setSaved('')
     try { await fn(); await reload(); setRefreshKey(v => v + 1) } catch (e) { setError(errorCode(e)) } finally { setBusy(false) }
   }
-  async function download(fileId: string) {
-    try {
-      const blob = await client.download(`/team/channels/${selectedId}/files/${fileId}${query}`)
-      if (!client.current()) return
-      const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = 'attachment' + (blob.type === 'application/pdf' ? '.pdf' : blob.type === 'image/png' ? '.png' : '.jpg'); a.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 30000)
-    } catch (e) { setError(errorCode(e)) }
-  }
   async function saveMinute(status: 'draft' | 'confirmed') {
     if (!editing) return
     if (editing.actions.some(a => !a.text.trim() || !a.ownerId || !a.dueDate || !a.sourceSeq.length)) { setError(w.sourceRequired); return }
@@ -175,6 +173,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
   return <main className="space-y-4 p-4 text-gray-900" data-testid="team-communication">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-bold">{administration ? w.admin : w.title}</h1><p className="text-sm text-gray-500">{w.subtitle}</p></div><div className="flex gap-2"><button className={button} onClick={() => { void reload(); setRefreshKey(v => v + 1) }}>{w.refresh}</button><button className={primary} onClick={() => setCreating(v => !v)}>{w.newChat}</button></div></header>
     <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">{w.notice}</p>
+    {aiAdmin && <TeamAiSettings key={scope} client={client} language={language} />}
     {!online && <p role="status" className="rounded-lg bg-yellow-50 p-3">{w.offline}</p>}
     {error && <p role="alert" className="break-words rounded-lg bg-red-50 p-3 text-sm text-red-700">{error === 'TEAM_VERSION_CONFLICT' ? w.conflict : w.error} <span>{error}</span></p>}
     {saved && <p role="status">{saved}</p>}
@@ -195,13 +194,15 @@ export function TeamCommunication({ client, scope, staffId, language, administra
           </header>
           {(currentChannel?.member || auditReason) && <>
             {auditReason && <p className="rounded-lg bg-purple-50 p-3 text-sm">{w.audit} · {w.readOnly}</p>}
-            <section className="rounded-xl border bg-white p-4"><h3 className="mb-3 font-semibold">{w.history}</h3><div className="max-h-[55vh] space-y-3 overflow-auto" aria-live="polite" data-testid="team-messages">{messages.length === 0 && <p className="text-sm text-gray-500">{w.noMessages}</p>}{messages.map(m => <article id={`team-message-${m.seq}`} key={m.id} className={`rounded-lg p-3 ${m.authorId === staffId ? 'bg-red-50' : 'bg-gray-50'}`}><p className="text-xs text-gray-500">#{m.seq} · {m.authorName} · {date(m.createdAt)}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{m.text}</p>{m.files.map((id, i) => <button key={id} className="mr-3 mt-2 text-sm text-red-700 underline" onClick={() => void download(id)}>{w.attachment} {i + 1}</button>)}</article>)}</div>
+            <section className="rounded-xl border bg-white p-4"><h3 className="mb-3 font-semibold">{w.history}</h3><div className="max-h-[55vh] space-y-3 overflow-auto" aria-live="polite" data-testid="team-messages">{messages.length === 0 && <p className="text-sm text-gray-500">{w.noMessages}</p>}{messages.map(m => <article id={`team-message-${m.seq}`} key={m.id} className={`rounded-lg p-3 ${m.authorId === staffId ? 'bg-red-50' : 'bg-gray-50'}`}><p className="text-xs text-gray-500">#{m.seq} · {m.authorName} · {date(m.createdAt)}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{m.text}</p>{m.ai && <p className="mt-1 text-xs text-purple-700">{work.aiApproved} · {m.ai.model}</p>}{m.files.map(id => <TeamAttachment key={id} client={client} language={language} url={`/team/channels/${selectedId}/files/${id}${query}`} />)}</article>)}</div>
               {outbox.filter(m => m.channelId === selectedId && !messages.some(message => message.requestId === m.id)).map(m => <article key={m.id} className="mt-3 rounded-lg border border-dashed p-3 text-sm"><p className="whitespace-pre-wrap break-words">{m.text}</p><p>{m.files.length ? `${w.attachment}: ${m.files.length} · ` : ''}{m.error ? w.failed + ' (' + m.error + ')' : w.pending}</p><button className={button} onClick={() => { void savePending({ ...m, retryable: true, nextRetryAt: 0 }).then(() => flush()) }}>{w.retry}</button></article>)}
               {currentChannel?.member && !meta?.archived && !currentChannel.archived && <>{meta?.kind === 'meeting' && !meta.round ? <p className="mt-4 text-sm">{w.ended}</p> : <form className="mt-4 space-y-2 border-t pt-4" onSubmit={send}><textarea aria-label={w.message} className={field} maxLength={4000} value={text} onChange={e => setText(e.target.value)} rows={3} /><label className="block text-sm">{w.attach}<input type="file" multiple accept="image/jpeg,image/png,application/pdf" onChange={e => { const values = Array.from(e.target.files || []); if (values.length > 5 || values.some(file => file.size > 8 * 1024 * 1024 || !['image/jpeg', 'image/png', 'application/pdf'].includes(file.type))) { setError(w.fileLimit); return } setFiles(values) }} /></label><p className="text-xs text-gray-500">{w.fileLimit}</p>{files.length > 0 && <p className="text-xs">{files.map(f => f.name).join('、')}</p>}<button className={primary} disabled={busy || !queueReady || !text.trim() && !files.length}>{w.send}</button></form>}</>}
               {meta?.canEdit && currentChannel?.member && !meta.archived && <div className="mt-3 flex gap-2">{meta.round ? <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/rounds/close`, { expectedVersion: meta.version }))}>{w.close}</button> : meta.kind === 'meeting' && <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/rounds/start`, { expectedVersion: meta.version }))}>{w.start}</button>}</div>}
               {!!receipts.length && <details className="mt-4 text-xs text-gray-500"><summary>{w.receipts}</summary>{receipts.map(r => <p key={r.staffId}>{name(r.staffId)} · {w.allRead} #{r.seq}</p>)}</details>}
             </section>
-            <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="font-semibold">{w.minutes}</h3><p className="text-xs text-gray-500">{w.manual} · {w.notShared}</p>{minutes.map(m => <article key={m.id} className="space-y-2 rounded-lg border p-3 text-sm"><h4 className="font-semibold">{m.title} · {w.version} {m.version} · {w[m.status]}</h4><p>{date(m.startedAt)} — {date(m.endedAt)}</p><p>{w.participants}: {m.participants.map(name).join('、')}</p><p>{w.range}: {m.toSeq >= m.fromSeq ? `#${m.fromSeq} — #${m.toSeq}` : w.noMessages}</p><p className="whitespace-pre-wrap">{w.decisions}: {m.decisions.join('\n')}</p><p className="whitespace-pre-wrap">{w.questions}: {m.pending.join('\n')}</p>{m.actions.map((a, i) => <p key={i}>{a.text} · {name(a.ownerId)} · {a.dueDate} · {a.sourceSeq.map(n => '#' + n).join(', ')}</p>)}<div className="flex flex-wrap gap-2">{m.toSeq >= m.fromSeq && <a className={button} href={`#team-message-${m.fromSeq}`}>{w.messagesLink}</a>}{meta?.canEdit && <button className={button} onClick={() => { setEditing(structuredClone(m)); setVersions([]) }}>{w.edit}</button>}<button className={button} onClick={() => void client.request('get', `/team/channels/${selectedId}/minutes/${m.id}/versions${query}`).then(setVersions).catch(e => setError(errorCode(e)))}>{w.versions}</button></div></article>)}
+            {aiAdmin && currentChannel?.member && !auditReason && !meta?.archived && <TeamAi key={'ai:' + scope + selectedId} client={client} language={language} channelId={selectedId} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} />}
+            <TeamTasks key={'tasks:' + scope + selectedId + auditReason} tasks={tasks} client={client} channelId={selectedId} staffId={staffId} language={language} name={name} canManage={!!meta?.canEdit && !!currentChannel?.member && !auditReason} readOnly={!!auditReason || !!meta?.archived} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} />
+            <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="font-semibold">{w.minutes}</h3><p className="text-xs text-gray-500">{w.manual} · {w.notShared}</p>{minutes.map(m => <article key={m.id} className="space-y-2 rounded-lg border p-3 text-sm"><h4 className="font-semibold">{m.title} · {w.version} {m.version} · {w[m.status]}</h4><p>{date(m.startedAt)} — {date(m.endedAt)}</p><p>{w.participants}: {m.participants.map(name).join('、')}</p><p>{w.range}: {m.toSeq >= m.fromSeq ? `#${m.fromSeq} — #${m.toSeq}` : w.noMessages}</p><p className="whitespace-pre-wrap">{w.decisions}: {m.decisions.join('\n')}</p><p className="whitespace-pre-wrap">{w.questions}: {m.pending.join('\n')}</p>{m.actions.map((a, i) => <div key={i} className="space-y-2 rounded-lg border p-2"><p>{a.text} · {name(a.ownerId)} · {a.dueDate} · {a.sourceSeq.map(n => '#' + n).join(', ')}</p>{m.status === 'confirmed' && meta?.canEdit && currentChannel?.member && !auditReason && !meta.archived && <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/tasks`, { requestId: crypto.randomUUID(), roundId: m.id, minuteVersion: m.version, actionIndex: i }))}>{work.promote}</button>}</div>)}<div className="flex flex-wrap gap-2">{m.toSeq >= m.fromSeq && <a className={button} href={`#team-message-${m.fromSeq}`}>{w.messagesLink}</a>}{meta?.canEdit && <button className={button} onClick={() => { setEditing(structuredClone(m)); setVersions([]) }}>{w.edit}</button>}<button className={button} onClick={() => void client.request('get', `/team/channels/${selectedId}/minutes/${m.id}/versions${query}`).then(setVersions).catch(e => setError(errorCode(e)))}>{w.versions}</button></div></article>)}
               {!!versions.length && <details open className="rounded-lg bg-gray-50 p-3"><summary>{w.versions}</summary>{versions.map(m => <pre key={m.id + m.version} className="my-2 whitespace-pre-wrap break-words text-xs">{w.version} {m.version} · {w[m.status]}{'\n'}{m.decisions.join('\n')}{'\n'}{m.pending.join('\n')}{'\n'}{m.actions.map(a => `${a.text} · ${name(a.ownerId)} · ${a.dueDate}`).join('\n')}</pre>)}</details>}
               {editing && <form className="space-y-3 rounded-xl border border-red-200 p-3" onSubmit={e => { e.preventDefault(); void act(() => saveMinute('draft')) }}><h4 className="font-bold">{w.edit} · {w.version} {editing.version}</h4><label className="block">{w.channelTitle}<input className={field} value={editing.title} maxLength={120} onChange={e => setEditing({ ...editing, title: e.target.value })} /></label><label className="block">{w.decisions}<textarea className={field} value={editing.decisions.join('\n')} onChange={e => setEditing({ ...editing, decisions: e.target.value.split('\n') })} onBlur={() => setEditing({ ...editing, decisions: lines(editing.decisions.join('\n')) })} /></label><label className="block">{w.questions}<textarea className={field} value={editing.pending.join('\n')} onChange={e => setEditing({ ...editing, pending: e.target.value.split('\n') })} onBlur={() => setEditing({ ...editing, pending: lines(editing.pending.join('\n')) })} /></label><label className="block">{w.references}<input className={field} key={editing.id + editing.version} defaultValue={editing.sourceSeq.join(',')} onBlur={e => setEditing({ ...editing, sourceSeq: numbers(e.target.value) })} /></label><h5>{w.actions}</h5>{editing.actions.map((a, i) => <div key={i} className="grid gap-2 rounded-lg border p-3"><label>{w.action}<input className={field} value={a.text} maxLength={1000} onChange={e => setEditing({ ...editing, actions: editing.actions.map((v, n) => n === i ? { ...v, text: e.target.value } : v) })} /></label><label>{w.owner}<select className={field} value={a.ownerId} onChange={e => setEditing({ ...editing, actions: editing.actions.map((v, n) => n === i ? { ...v, ownerId: e.target.value } : v) })}><option value="">—</option>{directory.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label><label>{w.due}<input className={field} type="date" value={a.dueDate} onChange={e => setEditing({ ...editing, actions: editing.actions.map((v, n) => n === i ? { ...v, dueDate: e.target.value } : v) })} /></label><label>{w.references}<input className={field} defaultValue={a.sourceSeq.join(',')} onBlur={e => setEditing({ ...editing, actions: editing.actions.map((v, n) => n === i ? { ...v, sourceSeq: numbers(e.target.value) } : v) })} /></label><button type="button" className={button} onClick={() => setEditing({ ...editing, actions: editing.actions.filter((_, n) => n !== i) })}>{w.remove}</button></div>)}<button type="button" className={button} onClick={() => setEditing({ ...editing, actions: [...editing.actions, { text: '', ownerId: '', dueDate: '', sourceSeq: [] }] })}>{w.addAction}</button><div className="flex flex-wrap gap-2"><button className={primary} disabled={busy}>{w.save}</button><button type="button" className={button} disabled={busy} onClick={() => void act(() => saveMinute('confirmed'))}>{w.confirm}</button><button type="button" className={button} onClick={() => setEditing(null)}>{w.cancel}</button></div></form>}
             </section>

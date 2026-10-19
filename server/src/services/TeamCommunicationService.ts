@@ -20,6 +20,13 @@ export interface TeamChannel {
   archived: boolean; round: { id: string; title: string; fromSeq: number; startedAt: string; participants: string[] } | null
   createdAt: string
 }
+export interface TeamTask {
+  id: string; channelId: string; roundId: string; minuteVersion: number; actionIndex: number
+  text: string; ownerId: string; dueDate: string; sourceSeq: number[]; fromSeq: number
+  status: 'assigned' | 'accepted' | 'submitted' | 'changes_requested' | 'completed' | 'cancelled'
+  version: number; createdAt: string; updatedAt: string
+  events: { action: string; by: string; at: string; note: string; sourceSeq: number[] }[]
+}
 export class TeamError extends Error {
   constructor(public status: number, message: string) { super(message) }
 }
@@ -176,7 +183,7 @@ export function teamCommunication(db: DB = prisma) {
       return { channel: c, messages, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
         canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), audit: auditReason !== undefined }
     },
-    async send(a: TeamActor, id: string, input: unknown) {
+    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string) {
       const v = messageSchema.parse(input)
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
@@ -184,6 +191,18 @@ export function teamCommunication(db: DB = prisma) {
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
+        let ai: { provider: string; model: string; draftId: string; approvedBy: string } | undefined
+        if (aiDraftId) {
+          uuid.parse(aiDraftId)
+          if (a.role !== 'admin' || a.employeeApp || v.requestId !== aiDraftId || v.files.length) fail(403, 'TEAM_AI_ADMIN_REQUIRED')
+          await lock(tx, a.storeId, 'ai-budget')
+          const draft = await read(tx, a.storeId, `aiDraft.${a.staffId}.${aiDraftId}`)
+          const settings = await read(tx, a.storeId, 'ai.settings')
+          if (!draft || draft.channelId !== id || draft.status !== 'ready' || draft.kind !== 'draft') fail(409, 'TEAM_AI_DRAFT_NOT_READY')
+          if (!settings?.enabled || settings.version !== draft.configVersion) fail(409, 'TEAM_AI_CONFIG_CHANGED')
+          if (c.members.some(member => member.fromSeq > draft.sourceFloor) || digest(c.members) !== draft.audienceHash) fail(403, 'TEAM_AI_AUDIENCE_CHANGED')
+          ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, approvedBy: a.staffId }
+        }
         if (c.archived || c.kind === 'meeting' && !c.round) fail(409, 'TEAM_CHANNEL_CLOSED')
         await lock(tx, a.storeId, 'rate.' + a.staffId)
         const rateKey = 'rate.' + a.staffId, now = Date.now()
@@ -198,12 +217,17 @@ export function teamCommunication(db: DB = prisma) {
         if (!c.round.participants.includes(a.staffId)) c.round.participants.push(a.staffId)
         const employee = await identity(tx, a)
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
-          authorId: a.staffId, authorName: employee.name, text: v.text, files: v.files, createdAt: new Date(now).toISOString() }
+          authorId: a.staffId, authorName: employee.name, text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
         await write(tx, a.storeId, channelKey(id), c)
         await write(tx, a.storeId, requestKey, { hash, message })
         await write(tx, a.storeId, rateKey, [...recent, now])
+        if (ai) {
+          const key = `aiDraft.${a.staffId}.${aiDraftId}`, draft = await read(tx, a.storeId, key)
+          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, approvedAt: new Date(now).toISOString() })
+          await audit(tx, a, id, 'update', { action: 'ai_publish', draftId: aiDraftId, messageId: message.id })
+        }
         return message
       })
     },
@@ -294,6 +318,89 @@ export function teamCommunication(db: DB = prisma) {
       if (!m || m.fromSeq < fromSeq) fail(404, 'TEAM_MINUTES_NOT_FOUND')
       return list(db, a.storeId, `minuteVersion.${id}.${roundId}.`, 0)
     },
+    async tasks(a: TeamActor, id: string, auditReason?: string) {
+      const { fromSeq } = await channel(db, a, id, auditReason)
+      return (await list(db, a.storeId, `task.${id}.`, 201)).filter((t: TeamTask) => t.fromSeq >= fromSeq)
+        .sort((a: TeamTask, b: TeamTask) => b.createdAt.localeCompare(a.createdAt))
+    },
+    async createTask(a: TeamActor, id: string, input: unknown) {
+      const v = z.object({ requestId: uuid, roundId: uuid, minuteVersion: z.number().int().positive(), actionIndex: z.number().int().min(0).max(39) }).strict().parse(input)
+      return db.$transaction(async (tx: DB) => {
+        await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
+        const { c, fromSeq } = await channel(tx, a, id); manage(a, c)
+        if (c.archived) fail(409, 'TEAM_CHANNEL_CLOSED')
+        const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, ...v })
+        const previous = await read(tx, a.storeId, requestKey)
+        if (previous) {
+          if (previous.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT')
+          const task = await read(tx, a.storeId, `task.${id}.${previous.taskId}`)
+          if (!task || task.fromSeq < fromSeq) fail(404, 'TEAM_TASK_NOT_FOUND')
+          return task
+        }
+        const m = await read(tx, a.storeId, `minutes.${id}.${v.roundId}`)
+        if (!m || m.fromSeq < fromSeq) fail(404, 'TEAM_MINUTES_NOT_FOUND')
+        if (m.version !== v.minuteVersion) fail(409, 'TEAM_VERSION_CONFLICT')
+        if (m.status !== 'confirmed' || !m.actions[v.actionIndex]) fail(409, 'TEAM_CONFIRMED_ACTION_REQUIRED')
+        const action = m.actions[v.actionIndex]
+        if (!c.members.some(member => member.staffId === action.ownerId && member.fromSeq <= m.fromSeq)) fail(403, 'TEAM_TASK_OWNER_ACCESS')
+        await activeMembers(tx, a.storeId, [action.ownerId])
+        // Unchanged action snapshots deduplicate across minute versions and double clicks.
+        const originKey = `taskOrigin.${id}.${v.roundId}.${digest(action)}`, existing = await read(tx, a.storeId, originKey)
+        if (existing) {
+          await write(tx, a.storeId, requestKey, { hash, taskId: existing.taskId })
+          return read(tx, a.storeId, `task.${id}.${existing.taskId}`)
+        }
+        if ((await list(tx, a.storeId, `task.${id}.`, 201)).length >= 200) fail(409, 'TEAM_TASK_LIMIT')
+        const at = new Date().toISOString()
+        const task: TeamTask = { id: randomUUID(), channelId: id, roundId: v.roundId, minuteVersion: m.version, actionIndex: v.actionIndex,
+          ...action, fromSeq: m.fromSeq, status: 'assigned', version: 1, createdAt: at, updatedAt: at,
+          events: [{ action: 'assign', by: a.staffId, at, note: '', sourceSeq: action.sourceSeq }] }
+        await write(tx, a.storeId, `task.${id}.${task.id}`, task)
+        await write(tx, a.storeId, originKey, { taskId: task.id })
+        await write(tx, a.storeId, requestKey, { hash, taskId: task.id })
+        await audit(tx, a, id, 'create', { action: 'task', taskId: task.id, roundId: v.roundId, minuteVersion: m.version })
+        return task
+      })
+    },
+    async taskAction(a: TeamActor, id: string, taskId: string, input: unknown) {
+      uuid.parse(taskId)
+      const v = z.object({ requestId: uuid, expectedVersion: z.number().int().positive(),
+        action: z.enum(['accept', 'submit', 'return', 'complete', 'cancel']), note: z.string().trim().max(1000).default(''), sourceSeq: z.array(seq).max(20).default([]) }).strict().parse(input)
+      return db.$transaction(async (tx: DB) => {
+        await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
+        const { c, fromSeq } = await channel(tx, a, id)
+        const key = `task.${id}.${taskId}`, task: TeamTask = await read(tx, a.storeId, key)
+        if (!task || task.fromSeq < fromSeq) fail(404, 'TEAM_TASK_NOT_FOUND')
+        const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, taskId, ...v })
+        const old = await read(tx, a.storeId, requestKey)
+        if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return task }
+        if (c.archived) fail(409, 'TEAM_CHANNEL_CLOSED')
+        if (task.version !== v.expectedVersion) fail(409, 'TEAM_VERSION_CONFLICT')
+        if (['completed', 'cancelled'].includes(task.status)) fail(409, 'TEAM_TASK_CLOSED')
+        if (v.action === 'accept' || v.action === 'submit') {
+          if (task.ownerId !== a.staffId) fail(403, 'TEAM_TASK_ASSIGNEE_REQUIRED')
+          if (v.action === 'accept' && task.status !== 'assigned' || v.action === 'submit' && !['accepted', 'changes_requested'].includes(task.status)) fail(409, 'TEAM_TASK_TRANSITION')
+          if (v.action === 'submit' && (!v.note || !v.sourceSeq.length)) fail(400, 'TEAM_TASK_EVIDENCE_REQUIRED')
+          for (const n of v.sourceSeq) {
+            const message = await read(tx, a.storeId, `message.${id}.${pad(n)}`)
+            if (!message || n < fromSeq || n < task.fromSeq || message.authorId !== a.staffId) fail(400, 'TEAM_TASK_EVIDENCE_REQUIRED')
+          }
+        } else {
+          manage(a, c)
+          if (['return', 'complete'].includes(v.action) && task.status !== 'submitted') fail(409, 'TEAM_TASK_TRANSITION')
+          if (['return', 'cancel'].includes(v.action) && !v.note) fail(400, 'TEAM_TASK_NOTE_REQUIRED')
+          if (v.sourceSeq.length) fail(400, 'TEAM_INVALID_INPUT')
+        }
+        if (task.events.length >= 100) fail(409, 'TEAM_TASK_HISTORY_LIMIT')
+        const at = new Date().toISOString(), states = { accept: 'accepted', submit: 'submitted', return: 'changes_requested', complete: 'completed', cancel: 'cancelled' } as const
+        task.status = states[v.action]; task.version++; task.updatedAt = at
+        task.events.push({ action: v.action, by: a.staffId, at, note: v.note, sourceSeq: v.sourceSeq })
+        await write(tx, a.storeId, key, task)
+        await write(tx, a.storeId, requestKey, { hash, taskId })
+        await audit(tx, a, id, 'update', { action: 'task', taskId, version: task.version, status: task.status })
+        return task
+      })
+    },
     async attachment(a: TeamActor, id: string, fileId: string, auditReason?: string) {
       uuid.parse(fileId); const { fromSeq } = await channel(db, a, id, auditReason)
       const prefix = TEAM_PREFIX + `fileGrant.${id}.${fileId}.`
@@ -305,3 +412,5 @@ export function teamCommunication(db: DB = prisma) {
     }
   }
 }
+// Shared protected persistence and channel checks for the communication-only AI service.
+export { read as readTeam, write as writeTeam, lock as lockTeam, channel as accessTeamChannel, audit as auditTeam }
