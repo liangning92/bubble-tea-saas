@@ -29,7 +29,7 @@ const en = {
  keyRequired:'Enter the key for the selected region.', consentRequired:'Confirm the data destination above.',
  keyInvalid:'The key must contain 10–8192 printable characters without spaces.', modelInvalid:'Use a MiniMax model name.', ratesInvalid:'Enter positive estimate rates and a positive budget, or leave the budget blank.',
  rejected:'The provider rejected this key. Check its region and API entitlement.', budgetLimit:'The estimate cap has been reached.',
- rateLimit:'Too many requests. Wait before checking again.', unavailable:'Connection could not be verified. Review the region, key and model.',
+ rateLimit:'Too many requests. Wait before checking again.', unavailable:'Connection could not be verified. Review the region, key and model.', outcomeUnknown:'No reliable result. Check the original request before trying again.',
  resultChanged:'Configuration changed during the check. This result does not verify the current version.',
  responseMismatch:'The save response did not match your changes. Entries are preserved; reload the saved version to verify.',
  checkVersion:'Connection result applies to saved version', denied:'Only this store’s authorized administrator can manage AI settings.'
@@ -66,7 +66,7 @@ const zh: Copy = {
  keyRequired:'请输入所选地区的密钥。', consentRequired:'请确认上方的数据目的地。',
  keyInvalid:'密钥须为 10–8192 个不含空格的可打印字符。', modelInvalid:'请输入 MiniMax 模型名称。', ratesInvalid:'请输入有效的正数单价和费用上限；不设上限请留空。',
  rejected:'供应商拒绝此密钥，请核对地区及 API 使用资格。', budgetLimit:'已达到估算费用上限。',
- rateLimit:'请求较频繁，请稍后再验证。', unavailable:'连接验证失败，请核对地区、密钥和模型。',
+ rateLimit:'请求较频繁，请稍后再验证。', unavailable:'连接验证失败，请核对地区、密钥和模型。', outcomeUnknown:'未取得可靠结果，请先核对原请求，不要重复验证。',
  resultChanged:'验证期间配置已变更，此结果不能验证当前版本。',
  responseMismatch:'保存结果与本次更改不一致。表单已保留，请重新载入已保存版本核对。',
  checkVersion:'连接结果对应已保存版本', denied:'仅本店有权限的管理员可管理 AI 设置。'
@@ -102,7 +102,7 @@ const id: Copy = {
  keyRequired:'Masukkan kunci untuk wilayah terpilih.', consentRequired:'Konfirmasikan tujuan data di atas.',
  keyInvalid:'Kunci harus berisi 10–8192 karakter cetak tanpa spasi.', modelInvalid:'Gunakan nama model MiniMax.', ratesInvalid:'Isi tarif dan batas biaya positif; kosongkan batas jika tidak dibatasi.',
  rejected:'Penyedia menolak kunci. Periksa wilayah dan hak akses API.', budgetLimit:'Batas perkiraan biaya tercapai.',
- rateLimit:'Terlalu banyak permintaan. Tunggu sebelum memeriksa lagi.', unavailable:'Koneksi gagal diverifikasi. Periksa wilayah, kunci dan model.',
+ rateLimit:'Terlalu banyak permintaan. Tunggu sebelum memeriksa lagi.', unavailable:'Koneksi gagal diverifikasi. Periksa wilayah, kunci dan model.', outcomeUnknown:'Hasil belum pasti. Periksa permintaan awal sebelum mencoba lagi.',
  resultChanged:'Konfigurasi berubah saat diperiksa. Hasil ini tidak memverifikasi versi saat ini.',
  responseMismatch:'Hasil penyimpanan tidak sesuai perubahan. Isian dipertahankan; muat ulang versi tersimpan untuk memeriksa.',
  checkVersion:'Hasil koneksi berlaku untuk versi tersimpan', denied:'Hanya administrator berwenang toko ini dapat mengelola pengaturan AI.'

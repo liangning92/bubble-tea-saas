@@ -64,7 +64,7 @@ export function TeamAiSettings({client,language,children}:{client:Pick<TeamClien
    if(!current()||request!==epoch.current)return
    if(result.configVersion!==snapshot.version||result.region!==snapshot.region||result.model!==snapshot.model){setConnection(null);setError(c.resultChanged);return}
    setConnection(result)
-  }catch(e){if(current()&&request===epoch.current){setError(aiSettingsError(language,errorCode(e)));if(!(e as any)?.response)setConnection({configVersion:snapshot.version,region:snapshot.region,model:snapshot.model,status:'uncertain',checkedAt:new Date().toISOString()})}}
+  }catch(e){if(current()&&request===epoch.current){const response=(e as any)?.response,unknown=!response||response.status>=500||response.status===408;setError(unknown?c.outcomeUnknown:aiSettingsError(language,errorCode(e)));if(unknown)setConnection({configVersion:snapshot.version,region:snapshot.region,model:snapshot.model,status:'uncertain',checkedAt:new Date().toISOString()})}}
   finally{if(current()&&request===epoch.current){setChecking(false);setCheckConsent(false)}}
  }
  async function refreshStatus(){
@@ -97,7 +97,7 @@ export function TeamAiSettings({client,language,children}:{client:Pick<TeamClien
     <div className="rounded-lg bg-gray-50 p-4"><p role="status" data-testid="ai-connection-state" className="text-sm font-semibold">{checking?c.checking:connectionStatus==='ready'?c.ready:connectionStatus==='failed'?c.failed:connectionStatus==='uncertain'?c.uncertain:connectionStatus==='checking'?c.checking:c.unverified}</p>
      <p className="mt-1 text-xs text-gray-600">{c.checkVersion} {base.version} · {regionName(base.region)} · {base.model}</p>
      {!base.enabled&&<p className="mt-2 text-xs text-gray-600">{c.paused}</p>}
-     {!dirty&&validConnection?.error&&<p className="mt-2 text-sm text-red-700">{aiSettingsError(language,validConnection.error)}</p>}
+     {!dirty&&validConnection?.error&&<p className="mt-2 text-sm text-red-700">{connectionStatus==='uncertain'?c.outcomeUnknown:aiSettingsError(language,validConnection.error)}</p>}
      {!dirty&&validConnection?.checkedAt&&<time className="mt-1 block text-xs text-gray-500">{new Date(validConnection.checkedAt).toLocaleString(language)}</time>}
      {dirty?<p className="mt-3 text-sm text-amber-800">{c.checkDirty}</p>:base.keyConfigured&&<label className="mt-3 flex items-start gap-2 text-xs text-gray-600"><input className="mt-0.5 shrink-0" type="checkbox" checked={checkConsent} disabled={busy||checking} data-testid="ai-check-consent" onChange={e=>setCheckConsent(e.target.checked)}/>{c.checkConsent}</label>}
      <div className="mt-3 flex flex-wrap gap-2"><button type="button" className={button} disabled={busy||checking||dirty||!base.keyConfigured||!checkConsent||connectionStatus==='checking'||connectionStatus==='uncertain'} onClick={()=>void check()}>{c.check}</button><button type="button" className={button} disabled={busy||checking} onClick={()=>void refreshStatus()}>{c.refresh}</button></div>

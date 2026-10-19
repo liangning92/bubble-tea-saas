@@ -23,6 +23,11 @@ const defaults = () => ({ version: 0, enabled: false, provider: 'minimax' as con
 type Settings = ReturnType<typeof defaults>
 export interface TeamAiResult { text: string; inputTokens: number; outputTokens: number; providerRequestId: string }
 type Transport = (key: string, model: string, system: string, input: string, region: MiniMaxRegion, outputLimit?: number) => Promise<TeamAiResult>
+class ProviderResponseError extends TeamError {
+  constructor(public providerHttpStatus: number) {
+    super(502, providerHttpStatus === 401 ? 'TEAM_AI_CREDENTIAL_REJECTED' : providerHttpStatus === 429 ? 'TEAM_AI_PROVIDER_RATE_LIMIT' : 'TEAM_AI_PROVIDER_FAILED')
+  }
+}
 async function masterKey() {
   const root = path.resolve(process.env.UPLOADS_PATH || path.resolve(__dirname, '../../uploads'), '.employee-private')
   await fs.mkdir(root, { recursive: true, mode: 0o700 })
@@ -57,7 +62,7 @@ async function minimax(key: string, model: string, system: string, input: string
     body: JSON.stringify({ model, messages: [{ role: 'system', content: system }, { role: 'user', content: input }],
       stream: false, reasoning_split: true, max_completion_tokens: outputLimit, temperature: 0.3, service_tier: 'standard',
       ...(model === 'MiniMax-M3' ? { thinking: { type: 'disabled' } } : {}) }) })
-  if (!response.ok) denied(response.status === 401 ? 'TEAM_AI_CREDENTIAL_REJECTED' : response.status === 429 ? 'TEAM_AI_PROVIDER_RATE_LIMIT' : 'TEAM_AI_PROVIDER_FAILED', 502)
+  if (!response.ok) throw new ProviderResponseError(response.status)
   const raw = await response.text()
   if (raw.length > 524288) denied('TEAM_AI_INVALID_RESULT', 502)
   const result = JSON.parse(raw), choice = result.choices?.[0]
@@ -76,16 +81,25 @@ const settingsSchema = z.object({ expectedVersion: z.number().int().nonnegative(
   monthlyBudgetUsd: z.number().positive().max(100000).nullable(), inputPerMillionUsd: z.number().positive().max(1000),
   outputPerMillionUsd: z.number().positive().max(1000), apiKey: z.string().min(10).max(8192).regex(/^[\x21-\x7e]+$/).optional(), removeKey: z.boolean().default(false) }).strict()
 type Connection = { requestId: string; configVersion: number; region: MiniMaxRegion; model: string; checkedAt: string;
-  status: 'checking' | 'ready' | 'failed' | 'uncertain'; error?: string }
+  status: 'checking' | 'ready' | 'failed' | 'uncertain'; error?: string; providerHttpStatus?: number }
+function explicitRejection(value: Pick<Connection, 'providerHttpStatus' | 'error'>) {
+  return value.providerHttpStatus === 401 && value.error === 'TEAM_AI_CREDENTIAL_REJECTED' ||
+    value.providerHttpStatus === 429 && value.error === 'TEAM_AI_PROVIDER_RATE_LIMIT'
+}
+function connectionMatches(value: Connection, config: Pick<Settings, 'version' | 'region' | 'model'>) {
+  return value.configVersion === config.version && value.region === config.region && value.model === config.model
+}
 function visibleConnection(value: Connection) {
   const { requestId: _, ...visible } = value, checkedAt = Date.parse(value.checkedAt)
+  // Old generic failures carry no proof of rejection. Keep their billing risk.
+  if (value.status === 'failed' && !explicitRejection(value)) return { ...visible, status: 'uncertain' as const }
   return value.status === 'checking' && (!Number.isFinite(checkedAt) || Date.now() - checkedAt > 60000)
     ? { ...visible, status: 'uncertain' as const, error: 'TEAM_AI_PROVIDER_UNAVAILABLE' } : visible
 }
 // Read-only projection: a previous configuration can never verify the current one.
 export async function readAiConnection(db: any, storeId: string, config: Pick<Settings, 'version' | 'region' | 'model'>) {
   const value: Connection | null = await readTeam(db, storeId, 'ai.connection')
-  if (!value || value.configVersion !== config.version || value.region !== config.region || value.model !== config.model) return null
+  if (!value || !connectionMatches(value, config)) return null
   return visibleConnection(value)
 }
 async function reserveUsage(tx: any, storeId: string, config: Settings, text: string, outputLimit = 4096) {
@@ -180,7 +194,8 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
           return { previous }
         }
         const latest: Connection | null = await readTeam(tx, a.storeId, 'ai.connection')
-        if (latest?.configVersion === config.version && ['checking', 'uncertain'].includes(latest.status)) denied(latest.status === 'checking' ? 'TEAM_AI_PENDING' : 'TEAM_AI_NEW_REQUEST_REQUIRED', 409)
+        const latestStatus = latest ? visibleConnection(latest).status : null
+        if (latest?.configVersion === config.version && (latestStatus === 'checking' || latestStatus === 'uncertain')) denied(latestStatus === 'checking' ? 'TEAM_AI_PENDING' : 'TEAM_AI_NEW_REQUEST_REQUIRED', 409)
         const reservation = await reserveUsage(tx, a.storeId, config, text, outputLimit)
         const pending: Connection = { requestId: v.requestId, configVersion: config.version, model: config.model, region: config.region, status: 'checking', checkedAt: new Date().toISOString() }
         await writeTeam(tx, a.storeId, key, pending); await writeTeam(tx, a.storeId, 'ai.connection', pending)
@@ -188,21 +203,26 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
         return { config, ...reservation, pending }
       })
       if (prepared.previous) return visibleConnection(prepared.previous)
-      let outcome: TeamAiResult | undefined, failure: string | undefined
+      let outcome: TeamAiResult | undefined, failure: string | undefined, providerHttpStatus: number | undefined
       try {
         outcome = await transport(await decrypt(a.storeId, prepared.config.secret, prepared.config.region), prepared.config.model,
           'Check API connectivity only. Reply OK. No tools or business data are available.', text, prepared.config.region, outputLimit)
         if (!validResult(outcome, outputLimit)) { outcome = undefined; denied('TEAM_AI_INVALID_RESULT', 502) }
-      } catch (error) { failure = error instanceof TeamError ? error.message : 'TEAM_AI_PROVIDER_UNAVAILABLE'; outcome = undefined }
+      } catch (error) {
+        failure = error instanceof TeamError ? error.message : 'TEAM_AI_PROVIDER_UNAVAILABLE'
+        providerHttpStatus = error instanceof ProviderResponseError ? error.providerHttpStatus : undefined
+        outcome = undefined
+      }
       const result = await db.$transaction(async tx => {
         await lockTeam(tx, a.storeId, 'ai-budget')
         if (outcome) await settleUsage(tx, a.storeId, prepared, outcome)
         // Unknown or rejected responses retain the conservative reservation; never auto-retry.
-        const definite = ['TEAM_AI_CREDENTIAL_REJECTED', 'TEAM_AI_PROVIDER_RATE_LIMIT', 'TEAM_AI_PROVIDER_FAILED'].includes(failure || '')
-        const final: Connection = { ...prepared.pending, checkedAt: new Date().toISOString(), status: outcome ? 'ready' : definite ? 'failed' : 'uncertain', ...(failure ? { error: failure } : {}) }
+        const definite = explicitRejection({ providerHttpStatus, error: failure })
+        const final: Connection = { ...prepared.pending, checkedAt: new Date().toISOString(), status: outcome ? 'ready' : definite ? 'failed' : 'uncertain',
+          ...(failure ? { error: failure } : {}), ...(providerHttpStatus ? { providerHttpStatus } : {}) }
         await writeTeam(tx, a.storeId, key, final)
         const latest: Connection | null = await readTeam(tx, a.storeId, 'ai.connection')
-        if (latest?.requestId === v.requestId) await writeTeam(tx, a.storeId, 'ai.connection', final)
+        if (latest?.requestId === v.requestId && connectionMatches(latest, prepared.config)) await writeTeam(tx, a.storeId, 'ai.connection', final)
         const config: Settings = { ...defaults(), ...await readTeam(tx, a.storeId, 'ai.settings') }
         return { final, changed: config.version !== v.expectedVersion }
       })

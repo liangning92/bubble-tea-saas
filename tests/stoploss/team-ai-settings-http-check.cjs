@@ -11,8 +11,14 @@ global.fetch=async(url,options)=>{
  assert(['https://api.minimax.io/v1/chat/completions','https://api.minimax.cn/v1/chat/completions'].includes(String(url)),'Unexpected outbound request');
  modelCalls.push({url:String(url),body:JSON.parse(options.body)});
  assert.equal(options.redirect,'error');assert.equal(JSON.parse(options.body).max_completion_tokens,32);assert(!options.body.includes('Synthetic Store'));
- if(mode==='401')return new Response('',{status:401});if(mode==='timeout')throw Error('SYNTHETIC_TIMEOUT');
- if(mode==='pause'){started();await new Promise(resolve=>{release=resolve})}
+ const observedMode=mode;
+ if(observedMode.startsWith('pause')){started();await new Promise(resolve=>{release=resolve})}
+ if(observedMode==='pause500')return new Response('Synthetic gateway failure',{status:500});
+ if(/^\d{3}$/.test(observedMode))return new Response('Synthetic rejection or gateway failure',{status:Number(observedMode)});
+ if(['timeout','reset','abort'].includes(observedMode)){const error=Error('SYNTHETIC_'+observedMode);if(observedMode==='abort')error.name='AbortError';throw error}
+ if(observedMode==='invalid-json')return new Response('{');
+ if(observedMode==='incomplete')return new Response(JSON.stringify({choices:[{finish_reason:'length',message:{content:'partial'}}]}));
+ if(observedMode==='missing-usage')return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:'OK'}}]}));
  return new Response(JSON.stringify({id:'synthetic-provider-result',choices:[{finish_reason:'stop',message:{content:'OK'}}],usage:{prompt_tokens:20,completion_tokens:1}}));
 };
 async function test(name,fn){await fn();passed.push(name);console.log('PASS '+name)}
@@ -26,9 +32,9 @@ const check=(expectedVersion,requestId=randomUUID(),expected=200)=>request('owne
  const tenant=await prisma.tenant.create({data:{name:'Synthetic AI settings'}});
  for(const id of ['a','b'])await prisma.store.create({data:{id:'ai-store-'+id,tenantId:tenant.id,name:'Synthetic Store '+id}});
  const password=await bcrypt.hash('synthetic-settings-only',4);
- for(const [id,role,phone,store]of [['owner','admin','08000000001','a'],['cashier','cashier','08000000002','a'],['manager','manager','08000000003','a'],['other','admin','08000000004','b']])await prisma.user.create({data:{id:'u-ai-'+id,phone,password,role,storeId:'ai-store-'+store,staff:{create:{id:'s-ai-'+id,storeId:'ai-store-'+store,name:'Synthetic '+id,employeeNumber:'AI-'+id}}}});
+ for(const [id,role,phone,store]of [['owner','admin','08000000001','a'],['backup','admin','08000000005','a'],['cashier','cashier','08000000002','a'],['manager','manager','08000000003','a'],['other','admin','08000000004','b']])await prisma.user.create({data:{id:'u-ai-'+id,phone,password,role,storeId:'ai-store-'+store,staff:{create:{id:'s-ai-'+id,storeId:'ai-store-'+store,name:'Synthetic '+id,employeeNumber:'AI-'+id}}}});
  const jwt=require(root+'/server/node_modules/jsonwebtoken'),{config}=require(root+'/server/dist/config/env');
- for(const id of ['owner','cashier','manager','other']){const u=await prisma.user.findUnique({where:{id:'u-ai-'+id},include:{staff:true}});tokens[id]=jwt.sign({id:u.id,role:u.role,phone:u.phone,storeId:u.storeId,staffId:u.staff.id,issuedAtMs:Date.now()},config.jwt.secret,{expiresIn:'1h'})}
+ for(const id of ['owner','backup','cashier','manager','other']){const u=await prisma.user.findUnique({where:{id:'u-ai-'+id},include:{staff:true}});tokens[id]=jwt.sign({id:u.id,role:u.role,phone:u.phone,storeId:u.storeId,staffId:u.staff.id,issuedAtMs:Date.now()},config.jwt.secret,{expiresIn:'1h'})}
  const app=express();app.use(express.json());for(const [basePath,moduleName,exportName]of [['/api/team','teamCommunication','teamCommunicationRouter'],['/api/ai','aiPermissions','aiPermissionsRouter']])app.use(basePath,authenticateBeforeRouting,declareAccessRoutes(basePath,require(root+'/server/dist/routes/'+moduleName)[exportName]));
  server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));origin='http://127.0.0.1:'+server.address().port;
  await test('anonymous, employee, manager and foreign-store requests cannot use this connection',async()=>{await request(null,'POST','team/ai/connection-check',{},401);for(const role of ['cashier','manager'])await request(role,'POST','team/ai/connection-check',{expectedVersion:0,requestId:randomUUID(),consent:true},403);assert.equal((await settings()).connection,null);await request('other','POST','team/ai/connection-check',{expectedVersion:1,requestId:randomUUID(),consent:true},409);assert.equal(modelCalls.length,0)});
@@ -46,5 +52,6 @@ const check=(expectedVersion,requestId=randomUUID(),expected=200)=>request('owne
  await test('stale checking projects unknown and old versions never project ready',async()=>{const current=await settings(),row=await prisma.config.findUnique({where:{storeId_key:{storeId:'ai-store-a',key:'team.communication.ai.connection'}}}),value=JSON.parse(row.value);value.status='checking';value.checkedAt=new Date(Date.now()-120000).toISOString();await prisma.config.update({where:{id:row.id},data:{value:JSON.stringify(value)}});assert.equal((await readAiConnection(prisma,'ai-store-a',current)).status,'uncertain');assert.equal(await readAiConnection(prisma,'ai-store-a',{...current,version:current.version+1}),null)});
  await test('shared budget rejects before an outbound call',async()=>{await clearRate();await save(4,{region:'global',monthlyBudgetUsd:0.000001});const calls=modelCalls.length;mode='ok';await check(5,randomUUID(),409);assert.equal(modelCalls.length,calls)});
  await test('business execution remains forbidden, real actor audited, key removal explicit',async()=>{await request('owner','POST','ai/execute',{executionEnabled:true},403);const logs=await prisma.financeAuditLog.findMany({where:{storeId:'ai-store-a'},select:{userId:true,newValue:true}}),checks=logs.filter(l=>l.newValue?.includes('ai_connection_check'));assert(checks.length>=4);assert(checks.every(l=>l.userId==='u-ai-owner'));assert(!JSON.stringify(logs).includes('synthetic-cn-key'));const removed=await save(5,{region:'global',removeKey:true});assert.equal(removed.keyConfigured,false);assert.equal(removed.enabled,false);assert.equal(removed.connection,null)});
+ await require('./team-ai-settings-outcomes.cjs')({prisma,request,settings,save,check,clearRate,test,setMode:value=>{mode=value},waitStarted:()=>new Promise(resolve=>{started=resolve}),resume:()=>release(),calls:()=>modelCalls.length,root});
  fs.mkdirSync(root+'/output/ai-settings',{recursive:true});fs.writeFileSync(root+'/output/ai-settings/http-results.json',JSON.stringify({run:process.env.BT_TEST_RUN,passed,modelCalls:modelCalls.length,allProviderRequestsMocked:true,productionWrites:false},null,2)+'\n');
 }finally{if(server)await new Promise(r=>server.close(r));await prisma.$disconnect();global.fetch=realFetch}})().catch(e=>{console.error(e);process.exitCode=1});
