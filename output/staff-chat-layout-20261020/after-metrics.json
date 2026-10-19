@@ -1,0 +1,68 @@
+[
+  {
+    "composer": {
+      "bottom": 720,
+      "height": 57,
+      "left": 0,
+      "right": 375,
+      "top": 663,
+      "width": 375,
+      "x": 0,
+      "y": 663
+    },
+    "height": 720,
+    "messageHeight": 606,
+    "navVisible": false,
+    "overflow": false,
+    "ratio": 0.8416666666666667,
+    "scrollHeight": 2253,
+    "scrollTop": 1647,
+    "shortMessages": 6,
+    "visibleMessageHeight": 606,
+    "width": 375
+  },
+  {
+    "composer": {
+      "bottom": 720,
+      "height": 57,
+      "left": 0,
+      "right": 390,
+      "top": 663,
+      "width": 390,
+      "x": 0,
+      "y": 663
+    },
+    "height": 720,
+    "messageHeight": 606,
+    "navVisible": false,
+    "overflow": false,
+    "ratio": 0.8416666666666667,
+    "scrollHeight": 2253,
+    "scrollTop": 1647,
+    "shortMessages": 6,
+    "visibleMessageHeight": 606,
+    "width": 390
+  },
+  {
+    "composer": {
+      "bottom": 720,
+      "height": 57,
+      "left": 0,
+      "right": 430,
+      "top": 663,
+      "width": 430,
+      "x": 0,
+      "y": 663
+    },
+    "height": 720,
+    "messageHeight": 606,
+    "navVisible": false,
+    "overflow": false,
+    "ratio": 0.8416666666666667,
+    "scrollHeight": 2253,
+    "scrollTop": 1647,
+    "shortMessages": 6,
+    "visibleMessageHeight": 606,
+    "width": 430
+  }
+]

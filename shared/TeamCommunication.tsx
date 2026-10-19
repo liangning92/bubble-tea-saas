@@ -1,9 +1,9 @@
 import './teamChat.css'
 import { prepareTeamPhotos } from './teamPhoto'
 import type { AttachmentOptions } from './teamAttachmentResource'
-import { TeamChatMessages } from './TeamChatMessages'
+import { TeamChatMessages, type TeamScrollPositions } from './TeamChatMessages'
 import { teamChatCopy } from './teamChatCopy'
-import { FormEvent, useEffect, useRef, useState } from 'react'
+import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { teamCopy } from './teamCopy'
 import { TeamPending, pendingMessages, removePending, savePending } from './teamOutbox'
 import { TeamTasks, TeamTask } from './TeamTasks'
@@ -34,17 +34,23 @@ const field = 'w-full rounded-lg border border-gray-300 bg-white p-2 text-sm'
 const numbers = (value: string) => value.split(',').filter(v => v.trim()).map(v => Number(v.trim()))
 const lines = (value: string) => value.split('\n').map(v => v.trim()).filter(Boolean)
 const errorCode = (e: any) => e?.response?.data?.message || e?.message || 'TEAM_OPERATION_FAILED'
-export function TeamCommunication({ client, scope, staffId, language, administration = false, aiAdmin = false }: {
-  client: TeamClient; scope: string; staffId: string; language: string; administration?: boolean; aiAdmin?: boolean
+export function TeamCommunication({ client, scope, staffId, language, administration = false, aiAdmin = false, compact = false, navigation }: {
+  client: TeamClient; scope: string; staffId: string; language: string; administration?: boolean; aiAdmin?: boolean; compact?: boolean
+  navigation?: { channelId: string; select: (id: string) => void }
 }) {
   const w = teamCopy(language), work = teamWorkCopy(language), chat = teamChatCopy(language)
   const [search, setSearch] = useState(''), [panel, setPanel] = useState<'chat' | 'work'>('chat')
-  const filePicker = useRef<HTMLInputElement>(null)
+  const filePicker = useRef<HTMLInputElement>(null), composerInput = useRef<HTMLTextAreaElement>(null), conversationInfo = useRef<HTMLDetailsElement>(null)
+  const drafts = useRef(new Map<string, { text: string; files: File[]; original: boolean }>())
+  const scrollPositions = useRef<TeamScrollPositions>(new Map())
   const [sendOriginal, setSendOriginal] = useState(false), [preparing, setPreparing] = useState(false)
   const [channels, setChannels] = useState<Channel[]>([]), [directory, setDirectory] = useState<{ id: string; name: string }[]>([])
   const [capabilities, setCapabilities] = useState({ manage: false, audit: false })
-  const [selectedId, setSelectedId] = useState(''), [meta, setMeta] = useState<Channel | null>(null)
-  const [messages, setMessages] = useState<Message[]>([]), [minutes, setMinutes] = useState<Minute[]>([])
+  const [internalId, setInternalId] = useState(''), [meta, setMeta] = useState<Channel | null>(null)
+  const selectedId = navigation?.channelId ?? internalId
+  const setSelectedId = (id: string) => navigation ? navigation.select(id) : setInternalId(id)
+  const selectedRef = useRef(selectedId)
+  const [messages, setMessages] = useState<Message[]>([]), [messageChannelId, setMessageChannelId] = useState(''), [minutes, setMinutes] = useState<Minute[]>([])
   const [tasks, setTasks] = useState<TeamTask[]>([])
   const [receipts, setReceipts] = useState<{ staffId: string; seq: number }[]>([])
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [loaded, setLoaded] = useState(false)
@@ -60,6 +66,33 @@ export function TeamCommunication({ client, scope, staffId, language, administra
   const name = (id: string) => directory.find(m => m.id === id)?.name || id
   const query = auditReason ? '?auditReason=' + encodeURIComponent(auditReason) : ''
   const date = (s: string) => new Date(s).toLocaleString(language.startsWith('zh') ? 'zh-CN' : language.startsWith('en') ? 'en-GB' : 'id-ID')
+  function updateDraft(value: Partial<{ text: string; files: File[]; original: boolean }>) {
+    if (compact) drafts.current.set(selectedId, { text, files, original: sendOriginal, ...value })
+    if (value.text !== undefined) setText(value.text)
+    if (value.files !== undefined) setFiles(value.files)
+    if (value.original !== undefined) setSendOriginal(value.original)
+  }
+  useLayoutEffect(() => {
+    selectedRef.current = selectedId
+    const draft = compact ? drafts.current.get(selectedId) : undefined
+    setText(draft?.text || ''); setFiles(draft?.files || []); setSendOriginal(draft?.original || false)
+    setPanel('chat'); setAuditInput(''); setAuditReason(''); setManaging(false); setSaved('')
+  }, [selectedId, compact])
+  useLayoutEffect(() => {
+    if (!compact || !composerInput.current) return
+    const input = composerInput.current
+    input.style.height = '0px'
+    input.style.height = input.scrollHeight + 'px'
+  }, [text, compact, selectedId, panel])
+  useEffect(() => {
+    if (!compact) return
+    const dismiss = (event: PointerEvent | KeyboardEvent) => {
+      const menu = conversationInfo.current
+      if (menu?.open && (event.type === 'keydown' ? (event as KeyboardEvent).key === 'Escape' : !menu.contains(event.target as Node))) menu.open = false
+    }
+    document.addEventListener('pointerdown', dismiss); document.addEventListener('keydown', dismiss)
+    return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', dismiss) }
+  }, [compact])
   async function reload() {
     try {
       const [list, people, permissions] = await Promise.all([
@@ -126,7 +159,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       try {
         const response = await client.request('get', `/team/channels/${selectedId}/messages?after=${cursor}${auditReason ? '&auditReason=' + encodeURIComponent(auditReason) : ''}`)
         if (!active || !client.current()) return
-        setMeta({ ...currentChannel!, ...response.channel, canEdit: response.canEdit })
+        setMeta({ ...currentChannel!, ...response.channel, canEdit: response.canEdit }); setMessageChannelId(selectedId)
         setMessages(previous => [...new Map([...previous, ...response.messages].map((m: Message) => [m.seq, m])).values()].sort((a, b) => a.seq - b.seq))
         cursor = response.cursor; setError('')
         const [records, followUps] = await Promise.all([client.request('get', `/team/channels/${selectedId}/minutes${query}`), client.request('get', `/team/channels/${selectedId}/tasks${query}`)])
@@ -158,7 +191,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
     if (acknowledged.length) void Promise.all(acknowledged.map(m => removePending(m.id))).then(async () => { if (client.current()) setOutbox(await pendingMessages(scope)) }).catch(() => setError('OUTBOX_STORAGE_FAILED'))
   }, [messages, outbox, scope, client, staffId])
   function select(c: Channel) {
-    setSelectedId(c.id); setSendOriginal(false); setPanel('chat'); setAuditInput(''); setAuditReason(''); setManaging(false); setText(''); setFiles([]); setSaved('')
+    setSelectedId(c.id)
   }
   async function send(event: FormEvent) {
     event.preventDefault(); if (!selectedId || busy || !queueReady || !text.trim() && !files.length) return
@@ -170,7 +203,8 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       setPreparing(false)
       if (!client.current()) return
       const value: TeamPending = { id: crypto.randomUUID(), scope, channelId: selectedId, text: text.trim(), files: preparedFiles, uploaded: [], createdAt: new Date().toISOString() }
-      await savePending(value); setOutbox(await pendingMessages(scope)); setText(''); setFiles([])
+      await savePending(value); setOutbox(await pendingMessages(scope)); drafts.current.delete(selectedId)
+      if (selectedRef.current === selectedId) { setText(''); setFiles([]); if (compact) setSendOriginal(false) }
       void flush()
     } catch (e) { setError(errorCode(e)) } finally { setBusy(false); setPreparing(false) }
   }
@@ -186,9 +220,12 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       pending: editing.pending, actions: editing.actions, sourceSeq: editing.sourceSeq, status })
     setEditing(null); setSaved(w.saved); setMinutes(previous => previous.map(m => m.id === result.id ? result : m))
   }
-  return <main className={`team-app ${selectedId ? 'team-has-selection' : ''}`} data-testid="team-communication">
+  const privacy = <details className="team-privacy"><summary>{chat.privacy}</summary><p>{w.notice}</p></details>
+  const receiptDetails = !!receipts.length && <details className="team-receipts mt-4 text-xs text-gray-500"><summary>{w.receipts}</summary>{receipts.map(r => <p key={r.staffId}>{name(r.staffId)} · {w.allRead} #{r.seq}</p>)}</details>
+  const roundControls = meta?.canEdit && currentChannel?.member && !meta.archived && <div className="team-round-controls mt-3 flex gap-2">{meta.round ? <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/rounds/close`, { expectedVersion: meta.version }))}>{w.close}</button> : meta.kind === 'meeting' && <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/rounds/start`, { expectedVersion: meta.version }))}>{w.start}</button>}</div>
+  return <main className={`team-app ${compact ? 'team-compact' : ''} ${selectedId ? 'team-has-selection' : ''}`} data-testid="team-communication">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-bold">{administration ? w.admin : w.title}</h1><p className="text-sm text-gray-500">{w.subtitle}</p></div><div className="flex gap-2"><button className={button} onClick={() => { void reload(); setRefreshKey(v => v + 1) }}>{w.refresh}</button><button className={primary} onClick={() => setCreating(v => !v)}>{w.newChat}</button></div></header>
-    <details className="team-privacy"><summary>{chat.privacy}</summary><p>{w.notice}</p></details>
+    {(!compact || !selectedId) && privacy}
     {!online && <p role="status" className="rounded-lg bg-yellow-50 p-3">{w.offline}</p>}
     {error && <p role="alert" className="break-words rounded-lg bg-red-50 p-3 text-sm text-red-700">{error === 'TEAM_VERSION_CONFLICT' ? w.conflict : w.error} <span>{error}</span></p>}
     {saved && <p role="status">{saved}</p>}
@@ -202,7 +239,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       <aside className="team-sidebar"><div className="team-sidebar-heading"><h2>{w.channels}</h2><span>{channels.length}</span></div><input className="team-search" type="search" aria-label={chat.search} placeholder={chat.search} value={search} onChange={e => setSearch(e.target.value)} />{!loaded ? <p className="p-4">{w.loading}</p> : !channels.length ? <p className="p-4 text-sm text-gray-500">{w.empty}</p> : <div className="team-channel-list">{channels.filter(c => c.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(c => <button key={c.id} disabled={busy} aria-pressed={selectedId === c.id} className={`team-channel ${selectedId === c.id ? 'team-channel-active' : ''}`} onClick={() => select(c)}><span className="team-avatar" aria-hidden="true">{c.title.slice(0, 1).toLocaleUpperCase()}</span><span className="team-channel-text"><span className="team-channel-title">{c.title}</span><span className="team-channel-kind">{w[c.kind as 'direct']} {c.archived ? '· ' + w.archived : ''}</span>{outbox.some(m => m.channelId === c.id) && <span className="team-pending-label">{w.pending}: {outbox.filter(m => m.channelId === c.id).length}</span>}</span>{c.unread > 0 && <span aria-label={`${c.unread} ${w.unread}`} className="team-unread">{c.unread}</span>}</button>)}{!channels.some(c => c.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())) && <p className="p-4 text-sm text-gray-500">{chat.searchEmpty}</p>}</div>}</aside>
       <section className="team-conversation">
         {!selectedId ? <p className="rounded-xl border bg-white p-8 text-center text-gray-500">{w.select}</p> : <>
-          <header className="team-conversation-header"><div className="team-conversation-title"><button type="button" className="team-mobile-back team-control" aria-label={chat.back} disabled={busy} onClick={() => setSelectedId('')}>←</button><span className="team-avatar" aria-hidden="true">{currentChannel?.title.slice(0, 1).toLocaleUpperCase()}</span><div className="min-w-0"><h2>{currentChannel?.title}</h2><p>{w[currentChannel?.kind as 'direct']}</p></div></div><details className="team-conversation-info"><summary>{chat.info}</summary><p className="text-xs text-gray-500">{w.members}: {currentChannel?.members.map(m => name(m.staffId)).join('、')}</p>
+          <header className="team-conversation-header"><div className="team-conversation-title"><button type="button" className="team-mobile-back team-control" aria-label={compact && panel === 'work' ? chat.chat : chat.back} disabled={busy} onClick={() => panel === 'work' && compact ? setPanel('chat') : setSelectedId('')}>←</button><span className="team-avatar" aria-hidden="true">{currentChannel?.title.slice(0, 1).toLocaleUpperCase()}</span><div className="min-w-0"><h2 title={currentChannel?.title}>{currentChannel?.title}</h2><p>{w[currentChannel?.kind as 'direct']}</p></div>{compact && <button type="button" className="team-work-entry" aria-label={panel === 'work' ? chat.chat : chat.work} title={chat.work} aria-pressed={panel === 'work'} onClick={() => setPanel(panel === 'work' ? 'chat' : 'work')}><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m3 6 2 2 3-4M11 6h10M3 13h4m4 0h10M3 20h4m4 0h10" /></svg>{tasks.some(t => !['completed', 'cancelled'].includes(t.status)) && <i aria-hidden="true" />}</button>}</div><details ref={conversationInfo} className="team-conversation-info"><summary aria-label={chat.info}>{compact ? <span aria-hidden="true">⋯</span> : chat.info}</summary>{compact && <><h3>{chat.info}</h3><p>{currentChannel?.title} · {w[currentChannel?.kind as 'direct']}</p>{privacy}{receiptDetails}{roundControls}<p>{w.fileLimit}</p></>}<p className="text-xs text-gray-500">{w.members}: {currentChannel?.members.map(m => name(m.staffId)).join('、')}</p>
             {currentChannel?.canEdit && <button className={button} onClick={() => { setMemberIds(currentChannel.members.map(m => m.staffId)); setHostId(currentChannel.ownerId); setManaging(v => !v) }}>{w.manage}</button>}
             {managing && <div className="space-y-3 border-t pt-3"><p className="text-sm text-gray-500">{w.joined}</p><div className="grid grid-cols-2 gap-2">{directory.map(m => <label key={m.id} className="text-sm"><input type="checkbox" disabled={currentChannel?.kind === 'direct'} checked={memberIds.includes(m.id)} onChange={e => setMemberIds(e.target.checked ? [...memberIds, m.id] : memberIds.filter(id => id !== m.id))} /> {m.name}</label>)}</div><label className="block text-sm">{w.transferred}<select className={field} value={hostId} onChange={e => setHostId(e.target.value)}>{directory.filter(m => memberIds.includes(m.id)).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label><div className="flex flex-wrap gap-2"><button className={primary} disabled={busy} onClick={() => void act(async () => { await client.request('put', `/team/channels/${selectedId}/members`, { expectedVersion: currentChannel!.version, members: memberIds, ownerId: hostId, archived: currentChannel!.archived }); setManaging(false) })}>{w.apply}</button>{!currentChannel?.archived && <button className={button} disabled={busy} onClick={() => void act(() => client.request('put', `/team/channels/${selectedId}/members`, { expectedVersion: currentChannel!.version, members: memberIds, ownerId: hostId, archived: true }))}>{w.archive}</button>}</div></div>}
             {!currentChannel?.member && <div className="space-y-2"><p className="text-sm">{w.memberOnly}</p>{capabilities.audit && <><label className="block text-sm">{w.auditReason}<input className={field} value={auditInput} maxLength={500} onChange={e => setAuditInput(e.target.value)} /></label><button className={button} disabled={auditInput.trim().length < 5} onClick={() => setAuditReason(auditInput.trim())}>{w.auditOpen}</button></>}</div>}
@@ -211,16 +248,15 @@ export function TeamCommunication({ client, scope, staffId, language, administra
           {(currentChannel?.member || auditReason) && <>
             {auditReason && <p className="rounded-lg bg-purple-50 p-3 text-sm">{w.audit} · {w.readOnly}</p>}
             <section className="team-chat-panel" hidden={panel !== 'chat'} aria-label={chat.chat}>
-              <TeamChatMessages messages={messages} client={client} staffId={staffId} channelId={selectedId} query={query} language={language}>
+              <TeamChatMessages key={selectedId} scrollPositions={compact ? scrollPositions.current : undefined} messages={messageChannelId === selectedId ? messages : []} client={client} staffId={staffId} channelId={selectedId} query={query} language={language}>
               {outbox.filter(m => m.channelId === selectedId && !messages.some(message => message.requestId === m.id)).map(m => <article key={m.id} className="team-bubble team-bubble-own team-pending"><p className="team-message-text">{m.text}</p><p className="team-pending-label">{m.files.length ? `${w.attachment}: ${m.files.length} · ` : ''}{m.error ? w.failed : w.pending}</p>{m.error && <button className="team-control" onClick={() => { void savePending({ ...m, retryable: true, nextRetryAt: 0 }).then(() => flush()) }}>{w.retry}</button>}</article>)}
               </TeamChatMessages>
               {currentChannel?.member && !meta?.archived && !currentChannel.archived && <>{meta?.kind === 'meeting' && !meta.round ? <p className="mt-4 text-sm">{w.ended}</p> : <form className="team-composer" onSubmit={send}>
-                {files.length > 0 && <div className="team-selected-files">{files.map((file, index) => <span key={index}>▧ {file.name}<button type="button" aria-label={`${chat.removeFile}: ${file.name}`} onClick={() => setFiles(values => values.filter((_, i) => i !== index))}>×</button></span>)}</div>}
-                <div className="team-composer-row"><button type="button" className="team-attach-button" disabled={busy} aria-label={w.attach} title={w.fileLimit} onClick={() => filePicker.current?.click()}>＋</button><input ref={filePicker} className="sr-only" aria-hidden="true" tabIndex={-1} type="file" multiple accept="image/jpeg,image/png,application/pdf" onChange={e => { const values = Array.from(e.target.files || []); if (values.length > 5 || values.some(file => file.size > 8 * 1024 * 1024 || !['image/jpeg', 'image/png', 'application/pdf'].includes(file.type))) { setError(w.fileLimit); return } setFiles(values); e.target.value = '' }} /><textarea disabled={busy} aria-label={w.message} placeholder={w.message} maxLength={4000} value={text} onChange={e => setText(e.target.value)} rows={2} /><button className="team-send" disabled={busy || !queueReady || !text.trim() && !files.length}>{preparing ? chat.preparing : w.send} <span aria-hidden="true">➤</span></button></div>
-                <div className="team-photo-quality"><label><input type="checkbox" disabled={busy} checked={sendOriginal} onChange={e => setSendOriginal(e.target.checked)} /> {chat.original}</label><span>{chat.photoHelp}</span></div><details className="team-composer-help"><summary>{w.attachment} · {chat.hint}</summary><p>{w.fileLimit}</p></details>
+                {files.length > 0 && <div className="team-selected-files">{files.map((file, index) => <span key={index}>▧ {file.name}<button type="button" aria-label={`${chat.removeFile}: ${file.name}`} onClick={() => updateDraft({ files: files.filter((_, i) => i !== index) })}>×</button></span>)}</div>}
+                <div className="team-composer-row"><button type="button" className="team-attach-button" disabled={busy} aria-label={w.attach} title={w.fileLimit} onClick={() => filePicker.current?.click()}>＋</button><input ref={filePicker} className="sr-only" aria-hidden="true" tabIndex={-1} type="file" multiple accept="image/jpeg,image/png,application/pdf" onChange={e => { const values = Array.from(e.target.files || []); if (values.length > 5 || values.some(file => file.size > 8 * 1024 * 1024 || !['image/jpeg', 'image/png', 'application/pdf'].includes(file.type))) { setError(w.fileLimit); return } updateDraft({ files: values, ...(compact ? { original: false } : {}) }); e.target.value = '' }} /><textarea ref={composerInput} disabled={busy} aria-label={w.message} placeholder={w.message} maxLength={4000} value={text} onChange={e => updateDraft({ text: e.target.value })} rows={compact ? 1 : 2} /><button className="team-send" disabled={busy || !queueReady || !text.trim() && !files.length}>{preparing ? chat.preparing : w.send} <span aria-hidden="true">➤</span></button></div>
+                {(!compact || files.some(file => file.type.startsWith('image/'))) && <div className="team-photo-quality"><label><input type="checkbox" disabled={busy} checked={sendOriginal} onChange={e => updateDraft({ original: e.target.checked })} /> {chat.original}</label><span>{chat.photoHelp}</span></div>}{!compact && <details className="team-composer-help"><summary>{w.attachment} · {chat.hint}</summary><p>{w.fileLimit}</p></details>}
               </form>}</>}
-              {meta?.canEdit && currentChannel?.member && !meta.archived && <div className="mt-3 flex gap-2">{meta.round ? <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/rounds/close`, { expectedVersion: meta.version }))}>{w.close}</button> : meta.kind === 'meeting' && <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/rounds/start`, { expectedVersion: meta.version }))}>{w.start}</button>}</div>}
-              {!!receipts.length && <details className="mt-4 text-xs text-gray-500"><summary>{w.receipts}</summary>{receipts.map(r => <p key={r.staffId}>{name(r.staffId)} · {w.allRead} #{r.seq}</p>)}</details>}
+              {!compact && <>{roundControls}{receiptDetails}</>}
             </section>
             <div className="team-work-panel" hidden={panel !== 'work'}>
             {aiAdmin && currentChannel?.member && !auditReason && !meta?.archived && <TeamAi key={'ai:' + scope + selectedId} client={client} language={language} channelId={selectedId} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} />}
