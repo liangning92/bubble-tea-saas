@@ -1,8 +1,12 @@
+import './teamChat.css'
+import { prepareTeamPhotos } from './teamPhoto'
+import type { AttachmentOptions } from './teamAttachmentResource'
+import { TeamChatMessages } from './TeamChatMessages'
+import { teamChatCopy } from './teamChatCopy'
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { teamCopy } from './teamCopy'
 import { TeamPending, pendingMessages, removePending, savePending } from './teamOutbox'
 import { TeamTasks, TeamTask } from './TeamTasks'
-import { TeamAttachment } from './TeamAttachment'
 import { TeamAi } from './TeamAi'
 import { teamWorkCopy } from './teamWorkCopy'
 import { TeamOperations } from './TeamOperations'
@@ -10,7 +14,7 @@ import { TeamOperations } from './TeamOperations'
 export interface TeamClient {
   request: (method: 'get' | 'post' | 'put', url: string, data?: unknown) => Promise<any>
   upload: (file: File, requestId: string) => Promise<string>
-  download: (url: string) => Promise<Blob>
+  download: (url: string, options?: AttachmentOptions) => Promise<Blob>
   current: () => boolean
 }
 interface Channel {
@@ -33,7 +37,10 @@ const errorCode = (e: any) => e?.response?.data?.message || e?.message || 'TEAM_
 export function TeamCommunication({ client, scope, staffId, language, administration = false, aiAdmin = false }: {
   client: TeamClient; scope: string; staffId: string; language: string; administration?: boolean; aiAdmin?: boolean
 }) {
-  const w = teamCopy(language), work = teamWorkCopy(language)
+  const w = teamCopy(language), work = teamWorkCopy(language), chat = teamChatCopy(language)
+  const [search, setSearch] = useState(''), [panel, setPanel] = useState<'chat' | 'work'>('chat')
+  const filePicker = useRef<HTMLInputElement>(null)
+  const [sendOriginal, setSendOriginal] = useState(false), [preparing, setPreparing] = useState(false)
   const [channels, setChannels] = useState<Channel[]>([]), [directory, setDirectory] = useState<{ id: string; name: string }[]>([])
   const [capabilities, setCapabilities] = useState({ manage: false, audit: false })
   const [selectedId, setSelectedId] = useState(''), [meta, setMeta] = useState<Channel | null>(null)
@@ -118,12 +125,13 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       inFlight = true
       try {
         const response = await client.request('get', `/team/channels/${selectedId}/messages?after=${cursor}${auditReason ? '&auditReason=' + encodeURIComponent(auditReason) : ''}`)
-        const records = await client.request('get', `/team/channels/${selectedId}/minutes${query}`)
-        const followUps = await client.request('get', `/team/channels/${selectedId}/tasks${query}`)
         if (!active || !client.current()) return
         setMeta({ ...currentChannel!, ...response.channel, canEdit: response.canEdit })
         setMessages(previous => [...new Map([...previous, ...response.messages].map((m: Message) => [m.seq, m])).values()].sort((a, b) => a.seq - b.seq))
-        cursor = response.cursor; setMinutes(records); setTasks(followUps); setError('')
+        cursor = response.cursor; setError('')
+        const [records, followUps] = await Promise.all([client.request('get', `/team/channels/${selectedId}/minutes${query}`), client.request('get', `/team/channels/${selectedId}/tasks${query}`)])
+        if (!active || !client.current()) return
+        setMinutes(records); setTasks(followUps)
         if (!auditReason && document.visibilityState === 'visible') {
           await client.request('put', `/team/channels/${selectedId}/read`, { seq: cursor })
           const values = await client.request('get', `/team/channels/${selectedId}/receipts`)
@@ -140,24 +148,31 @@ export function TeamCommunication({ client, scope, staffId, language, administra
     pollRef.current = pull
     void pull()
     const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void pull() }, 3000)
-    return () => { active = false; clearInterval(timer); pollRef.current = null }
-  }, [client, scope, selectedId, auditReason, refreshKey, currentChannel?.member])
+    const resume = () => { if (document.visibilityState === 'visible') void pull() }
+    window.addEventListener('focus', resume); document.addEventListener('visibilitychange', resume)
+    return () => { active = false; clearInterval(timer); pollRef.current = null; window.removeEventListener('focus', resume); document.removeEventListener('visibilitychange', resume) }
+  }, [client, scope, selectedId, auditReason, currentChannel?.member])
+  useEffect(() => { void pollRef.current?.() }, [refreshKey])
   useEffect(() => {
     const acknowledged = outbox.filter(pending => messages.some(message => message.authorId === staffId && message.requestId === pending.id))
     if (acknowledged.length) void Promise.all(acknowledged.map(m => removePending(m.id))).then(async () => { if (client.current()) setOutbox(await pendingMessages(scope)) }).catch(() => setError('OUTBOX_STORAGE_FAILED'))
   }, [messages, outbox, scope, client, staffId])
   function select(c: Channel) {
-    setSelectedId(c.id); setAuditInput(''); setAuditReason(''); setManaging(false); setText(''); setFiles([]); setSaved('')
+    setSelectedId(c.id); setSendOriginal(false); setPanel('chat'); setAuditInput(''); setAuditReason(''); setManaging(false); setText(''); setFiles([]); setSaved('')
   }
   async function send(event: FormEvent) {
     event.preventDefault(); if (!selectedId || busy || !queueReady || !text.trim() && !files.length) return
     setBusy(true); setError('')
     try {
       if ((await pendingMessages(scope)).length >= 100) throw new Error('TEAM_OUTBOX_LIMIT')
-      const value: TeamPending = { id: crypto.randomUUID(), scope, channelId: selectedId, text: text.trim(), files, uploaded: [], createdAt: new Date().toISOString() }
+      setPreparing(!sendOriginal && files.length > 0)
+      const preparedFiles = sendOriginal ? files : await prepareTeamPhotos(files)
+      setPreparing(false)
+      if (!client.current()) return
+      const value: TeamPending = { id: crypto.randomUUID(), scope, channelId: selectedId, text: text.trim(), files: preparedFiles, uploaded: [], createdAt: new Date().toISOString() }
       await savePending(value); setOutbox(await pendingMessages(scope)); setText(''); setFiles([])
-      await flush()
-    } catch (e) { setError(errorCode(e)) } finally { setBusy(false) }
+      void flush()
+    } catch (e) { setError(errorCode(e)) } finally { setBusy(false); setPreparing(false) }
   }
   async function act(fn: () => Promise<unknown>) {
     if (busy) return; setBusy(true); setError(''); setSaved('')
@@ -171,42 +186,51 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       pending: editing.pending, actions: editing.actions, sourceSeq: editing.sourceSeq, status })
     setEditing(null); setSaved(w.saved); setMinutes(previous => previous.map(m => m.id === result.id ? result : m))
   }
-  return <main className="space-y-4 p-4 text-gray-900" data-testid="team-communication">
+  return <main className={`team-app ${selectedId ? 'team-has-selection' : ''}`} data-testid="team-communication">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-bold">{administration ? w.admin : w.title}</h1><p className="text-sm text-gray-500">{w.subtitle}</p></div><div className="flex gap-2"><button className={button} onClick={() => { void reload(); setRefreshKey(v => v + 1) }}>{w.refresh}</button><button className={primary} onClick={() => setCreating(v => !v)}>{w.newChat}</button></div></header>
-    <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">{w.notice}</p>
+    <details className="team-privacy"><summary>{chat.privacy}</summary><p>{w.notice}</p></details>
     {!online && <p role="status" className="rounded-lg bg-yellow-50 p-3">{w.offline}</p>}
     {error && <p role="alert" className="break-words rounded-lg bg-red-50 p-3 text-sm text-red-700">{error === 'TEAM_VERSION_CONFLICT' ? w.conflict : w.error} <span>{error}</span></p>}
     {saved && <p role="status">{saved}</p>}
-    {creating && <form className="space-y-3 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void act(async () => { const c = await client.request('post', '/team/channels', { requestId: crypto.randomUUID(), title: newTitle, kind, members }); setCreating(false); setNewTitle(''); setMembers([]); setSelectedId(c.id) }) }}>
+    {creating && <form className="space-y-3 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void act(async () => { const c = await client.request('post', '/team/channels', { requestId: crypto.randomUUID(), title: newTitle, kind, members }); setCreating(false); setNewTitle(''); setMembers([]); setPanel('chat'); setSelectedId(c.id) }) }}>
       <label className="block text-sm">{w.channelTitle}<input className={field} maxLength={120} required value={newTitle} onChange={e => setNewTitle(e.target.value)} /></label>
       <select aria-label={w.newChat} className={field} value={kind} onChange={e => { setKind(e.target.value); setMembers([]) }}>{(['direct', 'group', 'meeting', ...(capabilities.manage ? ['public'] : [])] as const).map(value => <option key={value} value={value}>{w[value as 'direct']}</option>)}</select>
       <fieldset><legend className="mb-2 text-sm font-medium">{w.members}</legend><div className="grid max-h-48 grid-cols-2 gap-2 overflow-auto">{directory.filter(m => m.id !== staffId).map(m => <label className="flex items-center gap-2 text-sm" key={m.id}><input type={kind === 'direct' ? 'radio' : 'checkbox'} name="team-member" checked={members.includes(m.id)} onChange={e => setMembers(kind === 'direct' ? [m.id] : e.target.checked ? [...members, m.id] : members.filter(id => id !== m.id))} />{m.name}</label>)}</div></fieldset>
       <div className="flex gap-2"><button className={primary} disabled={busy || !members.length}>{w.create}</button><button type="button" className={button} onClick={() => setCreating(false)}>{w.cancel}</button></div>
     </form>}
-    <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-      <aside className="min-w-0 rounded-xl border bg-white p-3"><h2 className="mb-2 font-semibold">{w.channels}</h2>{!loaded ? <p>{w.loading}</p> : !channels.length ? <p className="text-sm text-gray-500">{w.empty}</p> : <div className="flex gap-2 overflow-auto lg:max-h-[70vh] lg:flex-col">{channels.map(c => <button key={c.id} className={`min-w-40 rounded-lg border p-3 text-left text-sm lg:min-w-0 ${selectedId === c.id ? 'border-red-500 bg-red-50' : 'border-transparent bg-gray-50'}`} onClick={() => select(c)}><span className="block break-words font-semibold">{c.title}</span><span className="text-xs text-gray-500">{w[c.kind as 'direct']} {c.archived ? '· ' + w.archived : ''}</span>{c.unread > 0 && <span aria-label={`${c.unread} ${w.unread}`} className="ml-2 inline-flex whitespace-nowrap rounded-full bg-red-600 px-2 text-xs text-white">{c.unread}</span>}{outbox.some(m => m.channelId === c.id) && <span className="mt-1 block text-xs text-amber-700">{w.pending}: {outbox.filter(m => m.channelId === c.id).length}</span>}</button>)}</div>}</aside>
-      <section className="min-w-0 space-y-4">
+    <div className="team-shell">
+      <aside className="team-sidebar"><div className="team-sidebar-heading"><h2>{w.channels}</h2><span>{channels.length}</span></div><input className="team-search" type="search" aria-label={chat.search} placeholder={chat.search} value={search} onChange={e => setSearch(e.target.value)} />{!loaded ? <p className="p-4">{w.loading}</p> : !channels.length ? <p className="p-4 text-sm text-gray-500">{w.empty}</p> : <div className="team-channel-list">{channels.filter(c => c.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(c => <button key={c.id} disabled={busy} aria-pressed={selectedId === c.id} className={`team-channel ${selectedId === c.id ? 'team-channel-active' : ''}`} onClick={() => select(c)}><span className="team-avatar" aria-hidden="true">{c.title.slice(0, 1).toLocaleUpperCase()}</span><span className="team-channel-text"><span className="team-channel-title">{c.title}</span><span className="team-channel-kind">{w[c.kind as 'direct']} {c.archived ? '· ' + w.archived : ''}</span>{outbox.some(m => m.channelId === c.id) && <span className="team-pending-label">{w.pending}: {outbox.filter(m => m.channelId === c.id).length}</span>}</span>{c.unread > 0 && <span aria-label={`${c.unread} ${w.unread}`} className="team-unread">{c.unread}</span>}</button>)}{!channels.some(c => c.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())) && <p className="p-4 text-sm text-gray-500">{chat.searchEmpty}</p>}</div>}</aside>
+      <section className="team-conversation">
         {!selectedId ? <p className="rounded-xl border bg-white p-8 text-center text-gray-500">{w.select}</p> : <>
-          <header className="space-y-3 rounded-xl border bg-white p-4"><h2 className="font-bold">{currentChannel?.title}</h2><p className="text-xs text-gray-500">{w.members}: {currentChannel?.members.map(m => name(m.staffId)).join('、')}</p>
+          <header className="team-conversation-header"><div className="team-conversation-title"><button type="button" className="team-mobile-back team-control" aria-label={chat.back} disabled={busy} onClick={() => setSelectedId('')}>←</button><span className="team-avatar" aria-hidden="true">{currentChannel?.title.slice(0, 1).toLocaleUpperCase()}</span><div className="min-w-0"><h2>{currentChannel?.title}</h2><p>{w[currentChannel?.kind as 'direct']}</p></div></div><details className="team-conversation-info"><summary>{chat.info}</summary><p className="text-xs text-gray-500">{w.members}: {currentChannel?.members.map(m => name(m.staffId)).join('、')}</p>
             {currentChannel?.canEdit && <button className={button} onClick={() => { setMemberIds(currentChannel.members.map(m => m.staffId)); setHostId(currentChannel.ownerId); setManaging(v => !v) }}>{w.manage}</button>}
             {managing && <div className="space-y-3 border-t pt-3"><p className="text-sm text-gray-500">{w.joined}</p><div className="grid grid-cols-2 gap-2">{directory.map(m => <label key={m.id} className="text-sm"><input type="checkbox" disabled={currentChannel?.kind === 'direct'} checked={memberIds.includes(m.id)} onChange={e => setMemberIds(e.target.checked ? [...memberIds, m.id] : memberIds.filter(id => id !== m.id))} /> {m.name}</label>)}</div><label className="block text-sm">{w.transferred}<select className={field} value={hostId} onChange={e => setHostId(e.target.value)}>{directory.filter(m => memberIds.includes(m.id)).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label><div className="flex flex-wrap gap-2"><button className={primary} disabled={busy} onClick={() => void act(async () => { await client.request('put', `/team/channels/${selectedId}/members`, { expectedVersion: currentChannel!.version, members: memberIds, ownerId: hostId, archived: currentChannel!.archived }); setManaging(false) })}>{w.apply}</button>{!currentChannel?.archived && <button className={button} disabled={busy} onClick={() => void act(() => client.request('put', `/team/channels/${selectedId}/members`, { expectedVersion: currentChannel!.version, members: memberIds, ownerId: hostId, archived: true }))}>{w.archive}</button>}</div></div>}
             {!currentChannel?.member && <div className="space-y-2"><p className="text-sm">{w.memberOnly}</p>{capabilities.audit && <><label className="block text-sm">{w.auditReason}<input className={field} value={auditInput} maxLength={500} onChange={e => setAuditInput(e.target.value)} /></label><button className={button} disabled={auditInput.trim().length < 5} onClick={() => setAuditReason(auditInput.trim())}>{w.auditOpen}</button></>}</div>}
+            </details><div className="team-tabs"><button type="button" aria-pressed={panel === 'chat'} onClick={() => setPanel('chat')}>{chat.chat}</button><button type="button" aria-pressed={panel === 'work'} onClick={() => setPanel('work')}>{chat.work}{tasks.filter(t => !['completed', 'cancelled'].includes(t.status)).length > 0 && <span> · {tasks.filter(t => !['completed', 'cancelled'].includes(t.status)).length}</span>}</button></div>
           </header>
           {(currentChannel?.member || auditReason) && <>
             {auditReason && <p className="rounded-lg bg-purple-50 p-3 text-sm">{w.audit} · {w.readOnly}</p>}
-            <section className="rounded-xl border bg-white p-4"><h3 className="mb-3 font-semibold">{w.history}</h3><div className="max-h-[55vh] space-y-3 overflow-auto" aria-live="polite" data-testid="team-messages">{messages.length === 0 && <p className="text-sm text-gray-500">{w.noMessages}</p>}{messages.map(m => <article id={`team-message-${m.seq}`} key={m.id} className={`rounded-lg p-3 ${m.authorId === staffId ? 'bg-red-50' : 'bg-gray-50'}`}><p className="text-xs text-gray-500">#{m.seq} · {m.authorName} · {date(m.createdAt)}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{m.text}</p>{m.ai && <p className="mt-1 text-xs text-purple-700">{work.aiApproved} · {m.ai.model}</p>}{m.files.map(id => <TeamAttachment key={id} client={client} language={language} url={`/team/channels/${selectedId}/files/${id}${query}`} />)}</article>)}</div>
-              {outbox.filter(m => m.channelId === selectedId && !messages.some(message => message.requestId === m.id)).map(m => <article key={m.id} className="mt-3 rounded-lg border border-dashed p-3 text-sm"><p className="whitespace-pre-wrap break-words">{m.text}</p><p>{m.files.length ? `${w.attachment}: ${m.files.length} · ` : ''}{m.error ? w.failed + ' (' + m.error + ')' : w.pending}</p><button className={button} onClick={() => { void savePending({ ...m, retryable: true, nextRetryAt: 0 }).then(() => flush()) }}>{w.retry}</button></article>)}
-              {currentChannel?.member && !meta?.archived && !currentChannel.archived && <>{meta?.kind === 'meeting' && !meta.round ? <p className="mt-4 text-sm">{w.ended}</p> : <form className="mt-4 space-y-2 border-t pt-4" onSubmit={send}><textarea aria-label={w.message} className={field} maxLength={4000} value={text} onChange={e => setText(e.target.value)} rows={3} /><label className="block text-sm">{w.attach}<input type="file" multiple accept="image/jpeg,image/png,application/pdf" onChange={e => { const values = Array.from(e.target.files || []); if (values.length > 5 || values.some(file => file.size > 8 * 1024 * 1024 || !['image/jpeg', 'image/png', 'application/pdf'].includes(file.type))) { setError(w.fileLimit); return } setFiles(values) }} /></label><p className="text-xs text-gray-500">{w.fileLimit}</p>{files.length > 0 && <p className="text-xs">{files.map(f => f.name).join('、')}</p>}<button className={primary} disabled={busy || !queueReady || !text.trim() && !files.length}>{w.send}</button></form>}</>}
+            <section className="team-chat-panel" hidden={panel !== 'chat'} aria-label={chat.chat}>
+              <TeamChatMessages messages={messages} client={client} staffId={staffId} channelId={selectedId} query={query} language={language}>
+              {outbox.filter(m => m.channelId === selectedId && !messages.some(message => message.requestId === m.id)).map(m => <article key={m.id} className="team-bubble team-bubble-own team-pending"><p className="team-message-text">{m.text}</p><p className="team-pending-label">{m.files.length ? `${w.attachment}: ${m.files.length} · ` : ''}{m.error ? w.failed : w.pending}</p>{m.error && <button className="team-control" onClick={() => { void savePending({ ...m, retryable: true, nextRetryAt: 0 }).then(() => flush()) }}>{w.retry}</button>}</article>)}
+              </TeamChatMessages>
+              {currentChannel?.member && !meta?.archived && !currentChannel.archived && <>{meta?.kind === 'meeting' && !meta.round ? <p className="mt-4 text-sm">{w.ended}</p> : <form className="team-composer" onSubmit={send}>
+                {files.length > 0 && <div className="team-selected-files">{files.map((file, index) => <span key={index}>▧ {file.name}<button type="button" aria-label={`${chat.removeFile}: ${file.name}`} onClick={() => setFiles(values => values.filter((_, i) => i !== index))}>×</button></span>)}</div>}
+                <div className="team-composer-row"><button type="button" className="team-attach-button" disabled={busy} aria-label={w.attach} title={w.fileLimit} onClick={() => filePicker.current?.click()}>＋</button><input ref={filePicker} className="sr-only" aria-hidden="true" tabIndex={-1} type="file" multiple accept="image/jpeg,image/png,application/pdf" onChange={e => { const values = Array.from(e.target.files || []); if (values.length > 5 || values.some(file => file.size > 8 * 1024 * 1024 || !['image/jpeg', 'image/png', 'application/pdf'].includes(file.type))) { setError(w.fileLimit); return } setFiles(values); e.target.value = '' }} /><textarea disabled={busy} aria-label={w.message} placeholder={w.message} maxLength={4000} value={text} onChange={e => setText(e.target.value)} rows={2} /><button className="team-send" disabled={busy || !queueReady || !text.trim() && !files.length}>{preparing ? chat.preparing : w.send} <span aria-hidden="true">➤</span></button></div>
+                <div className="team-photo-quality"><label><input type="checkbox" disabled={busy} checked={sendOriginal} onChange={e => setSendOriginal(e.target.checked)} /> {chat.original}</label><span>{chat.photoHelp}</span></div><details className="team-composer-help"><summary>{w.attachment} · {chat.hint}</summary><p>{w.fileLimit}</p></details>
+              </form>}</>}
               {meta?.canEdit && currentChannel?.member && !meta.archived && <div className="mt-3 flex gap-2">{meta.round ? <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/rounds/close`, { expectedVersion: meta.version }))}>{w.close}</button> : meta.kind === 'meeting' && <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/rounds/start`, { expectedVersion: meta.version }))}>{w.start}</button>}</div>}
               {!!receipts.length && <details className="mt-4 text-xs text-gray-500"><summary>{w.receipts}</summary>{receipts.map(r => <p key={r.staffId}>{name(r.staffId)} · {w.allRead} #{r.seq}</p>)}</details>}
             </section>
+            <div className="team-work-panel" hidden={panel !== 'work'}>
             {aiAdmin && currentChannel?.member && !auditReason && !meta?.archived && <TeamAi key={'ai:' + scope + selectedId} client={client} language={language} channelId={selectedId} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} />}
             {aiAdmin && currentChannel?.member && !auditReason && !meta?.archived && <TeamOperations key={'operations:' + scope + selectedId} client={client} scope={scope} staffId={staffId} language={language} channelId={selectedId} directory={directory.filter(d => currentChannel.members.some(m => m.staffId === d.id))} tasks={tasks} onChanged={() => setRefreshKey(v => v + 1)} />}
             <TeamTasks key={'tasks:' + scope + selectedId + auditReason} tasks={tasks} client={client} channelId={selectedId} staffId={staffId} language={language} name={name} canManage={!!meta?.canEdit && !!currentChannel?.member && !auditReason} readOnly={!!auditReason || !!meta?.archived} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} />
-            <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="font-semibold">{w.minutes}</h3><p className="text-xs text-gray-500">{w.manual} · {w.notShared}</p>{minutes.map(m => <article key={m.id} className="space-y-2 rounded-lg border p-3 text-sm"><h4 className="font-semibold">{m.title} · {w.version} {m.version} · {w[m.status]}</h4><p>{date(m.startedAt)} — {date(m.endedAt)}</p><p>{w.participants}: {m.participants.map(name).join('、')}</p><p>{w.range}: {m.toSeq >= m.fromSeq ? `#${m.fromSeq} — #${m.toSeq}` : w.noMessages}</p><p className="whitespace-pre-wrap">{w.decisions}: {m.decisions.join('\n')}</p><p className="whitespace-pre-wrap">{w.questions}: {m.pending.join('\n')}</p>{m.actions.map((a, i) => <div key={i} className="space-y-2 rounded-lg border p-2"><p>{a.text} · {name(a.ownerId)} · {a.dueDate} · {a.sourceSeq.map(n => '#' + n).join(', ')}</p>{m.status === 'confirmed' && meta?.canEdit && currentChannel?.member && !auditReason && !meta.archived && <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/tasks`, { requestId: crypto.randomUUID(), roundId: m.id, minuteVersion: m.version, actionIndex: i }))}>{work.promote}</button>}</div>)}<div className="flex flex-wrap gap-2">{m.toSeq >= m.fromSeq && <a className={button} href={`#team-message-${m.fromSeq}`}>{w.messagesLink}</a>}{meta?.canEdit && <button className={button} onClick={() => { setEditing(structuredClone(m)); setVersions([]) }}>{w.edit}</button>}<button className={button} onClick={() => void client.request('get', `/team/channels/${selectedId}/minutes/${m.id}/versions${query}`).then(setVersions).catch(e => setError(errorCode(e)))}>{w.versions}</button></div></article>)}
+            <section className="space-y-3 rounded-xl border bg-white p-4"><h3 className="font-semibold">{w.minutes}</h3><p className="text-xs text-gray-500">{w.manual} · {w.notShared}</p>{minutes.map(m => <article key={m.id} className="space-y-2 rounded-lg border p-3 text-sm"><h4 className="font-semibold">{m.title} · {w.version} {m.version} · {w[m.status]}</h4><p>{date(m.startedAt)} — {date(m.endedAt)}</p><p>{w.participants}: {m.participants.map(name).join('、')}</p><p>{w.range}: {m.toSeq >= m.fromSeq ? `#${m.fromSeq} — #${m.toSeq}` : w.noMessages}</p><p className="whitespace-pre-wrap">{w.decisions}: {m.decisions.join('\n')}</p><p className="whitespace-pre-wrap">{w.questions}: {m.pending.join('\n')}</p>{m.actions.map((a, i) => <div key={i} className="space-y-2 rounded-lg border p-2"><p>{a.text} · {name(a.ownerId)} · {a.dueDate} · {a.sourceSeq.map(n => '#' + n).join(', ')}</p>{m.status === 'confirmed' && meta?.canEdit && currentChannel?.member && !auditReason && !meta.archived && <button className={button} disabled={busy} onClick={() => void act(() => client.request('post', `/team/channels/${selectedId}/tasks`, { requestId: crypto.randomUUID(), roundId: m.id, minuteVersion: m.version, actionIndex: i }))}>{work.promote}</button>}</div>)}<div className="flex flex-wrap gap-2">{m.toSeq >= m.fromSeq && <a className={button} href={`#team-message-${m.fromSeq}`} onClick={() => setPanel('chat')}>{w.messagesLink}</a>}{meta?.canEdit && <button className={button} onClick={() => { setEditing(structuredClone(m)); setVersions([]) }}>{w.edit}</button>}<button className={button} onClick={() => void client.request('get', `/team/channels/${selectedId}/minutes/${m.id}/versions${query}`).then(setVersions).catch(e => setError(errorCode(e)))}>{w.versions}</button></div></article>)}
               {!!versions.length && <details open className="rounded-lg bg-gray-50 p-3"><summary>{w.versions}</summary>{versions.map(m => <pre key={m.id + m.version} className="my-2 whitespace-pre-wrap break-words text-xs">{w.version} {m.version} · {w[m.status]}{'\n'}{m.decisions.join('\n')}{'\n'}{m.pending.join('\n')}{'\n'}{m.actions.map(a => `${a.text} · ${name(a.ownerId)} · ${a.dueDate}`).join('\n')}</pre>)}</details>}
               {editing && <form className="space-y-3 rounded-xl border border-red-200 p-3" onSubmit={e => { e.preventDefault(); void act(() => saveMinute('draft')) }}><h4 className="font-bold">{w.edit} · {w.version} {editing.version}</h4><label className="block">{w.channelTitle}<input className={field} value={editing.title} maxLength={120} onChange={e => setEditing({ ...editing, title: e.target.value })} /></label><label className="block">{w.decisions}<textarea className={field} value={editing.decisions.join('\n')} onChange={e => setEditing({ ...editing, decisions: e.target.value.split('\n') })} onBlur={() => setEditing({ ...editing, decisions: lines(editing.decisions.join('\n')) })} /></label><label className="block">{w.questions}<textarea className={field} value={editing.pending.join('\n')} onChange={e => setEditing({ ...editing, pending: e.target.value.split('\n') })} onBlur={() => setEditing({ ...editing, pending: lines(editing.pending.join('\n')) })} /></label><label className="block">{w.references}<input className={field} key={editing.id + editing.version} defaultValue={editing.sourceSeq.join(',')} onBlur={e => setEditing({ ...editing, sourceSeq: numbers(e.target.value) })} /></label><h5>{w.actions}</h5>{editing.actions.map((a, i) => <div key={i} className="grid gap-2 rounded-lg border p-3"><label>{w.action}<input className={field} value={a.text} maxLength={1000} onChange={e => setEditing({ ...editing, actions: editing.actions.map((v, n) => n === i ? { ...v, text: e.target.value } : v) })} /></label><label>{w.owner}<select className={field} value={a.ownerId} onChange={e => setEditing({ ...editing, actions: editing.actions.map((v, n) => n === i ? { ...v, ownerId: e.target.value } : v) })}><option value="">—</option>{directory.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label><label>{w.due}<input className={field} type="date" value={a.dueDate} onChange={e => setEditing({ ...editing, actions: editing.actions.map((v, n) => n === i ? { ...v, dueDate: e.target.value } : v) })} /></label><label>{w.references}<input className={field} defaultValue={a.sourceSeq.join(',')} onBlur={e => setEditing({ ...editing, actions: editing.actions.map((v, n) => n === i ? { ...v, sourceSeq: numbers(e.target.value) } : v) })} /></label><button type="button" className={button} onClick={() => setEditing({ ...editing, actions: editing.actions.filter((_, n) => n !== i) })}>{w.remove}</button></div>)}<button type="button" className={button} onClick={() => setEditing({ ...editing, actions: [...editing.actions, { text: '', ownerId: '', dueDate: '', sourceSeq: [] }] })}>{w.addAction}</button><div className="flex flex-wrap gap-2"><button className={primary} disabled={busy}>{w.save}</button><button type="button" className={button} disabled={busy} onClick={() => void act(() => saveMinute('confirmed'))}>{w.confirm}</button><button type="button" className={button} onClick={() => setEditing(null)}>{w.cancel}</button></div></form>}
             </section>
+            </div>
           </>}
         </>}
       </section>

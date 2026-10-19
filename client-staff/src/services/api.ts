@@ -42,7 +42,7 @@ async function uploadPrivateFile(file: File, purpose?: 'team', uploadRequestId?:
   if (current.token !== token || current.user?.id !== userId || current.user?.storeId !== storeId || current.user?.staffId !== staffId) {
     throw new Error('TEAM_IDENTITY_REQUIRED')
   }
-  return (await http.post(`${API_BASE}/staff-work/my/files`, data, { headers: { ...headers, 'Content-Type': data.type } })).data.data.id
+  return (await http.post(`${API_BASE}/staff-work/my/files`, data, { timeout: 60000, headers: { ...headers, 'Content-Type': data.type } })).data.data.id
 }
 
 async function loadShiftSettings() {
