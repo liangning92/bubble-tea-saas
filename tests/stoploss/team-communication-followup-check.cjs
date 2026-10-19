@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
 module.exports = async ({ prisma, good, request, create, send, test, dropResponse }) => {
  const fixture = async () => {
@@ -149,5 +150,64 @@ module.exports = async ({ prisma, good, request, create, send, test, dropRespons
    await assert.rejects(require(path.resolve('server/dist/services/TeamCommunicationService')).teamCommunication(prisma).send(owner,aiChannel.id,{requestId:d.id,text:d.text},d.id),e=>e.message==='TEAM_AI_DRAFT_NOT_READY');
   } finally {global.fetch=original;}
   await configure({enabled:false,removeKey:true});
+ });
+ await test('regional settings normalize legacy records read-only and keep legacy credentials on the international endpoint',async()=>{
+  const crypto=require('node:crypto');assert(process.env.UPLOADS_PATH.includes(process.env.BT_TEST_RUN));
+  const master=fs.readFileSync(path.join(process.env.UPLOADS_PATH,'.employee-private','.team-ai-master.key'));
+  const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',master,iv);cipher.setAAD(Buffer.from(owner.storeId));
+  const encrypted=Buffer.concat([cipher.update('synthetic-minimax-key-only','utf8'),cipher.final()]);
+  const legacy=[iv,cipher.getAuthTag(),encrypted].map(v=>v.toString('base64')).join('.');
+  const where={storeId_key:{storeId:owner.storeId,key:'team.communication.ai.settings'}};
+  const row=await prisma.config.findUniqueOrThrow({where});const old=JSON.parse(row.value);delete old.region;
+  await prisma.config.update({where,data:{value:JSON.stringify({...old,enabled:true,secret:legacy})}});
+  const before=(await prisma.config.findUniqueOrThrow({where})).value;
+  const value=await good('owner','GET','/team/ai/settings');assert.equal(value.region,'global');assert.equal(value.endpoint,'https://api.minimax.io/v1/chat/completions');assert.equal(value.protocol,'openai');
+  assert.equal((await prisma.config.findUniqueOrThrow({where})).value,before,'read must not migrate ciphertext or settings');
+  await resetRate();let calls=0;const original=global.fetch;
+  global.fetch=async(url,options)=>{calls++;assert.equal(url,value.endpoint);assert.equal(options.headers.Authorization,'Bearer synthetic-minimax-key-only');return new Response(JSON.stringify({id:'legacy',choices:[{finish_reason:'stop',message:{content:'合成兼容测试'}}],usage:{prompt_tokens:1,completion_tokens:1}}))};
+  try{await teamAi(prisma).generate(owner,aiChannel.id,{requestId:randomUUID(),kind:'draft',instruction:'纯合成',sourceSeq:[],consent:true});assert.equal(calls,1)}finally{global.fetch=original}
+ });
+ await test('region changes cannot reuse saved credentials or bypass destination confirmation; arbitrary hosts are rejected locally',async()=>{
+  const before=await ai.settings(owner),where={storeId_key:{storeId:owner.storeId,key:'team.communication.ai.settings'}};
+  const stored=(await prisma.config.findUniqueOrThrow({where})).value;
+  const input={expectedVersion:before.version,provider:'minimax',model:'MiniMax-M3',enabled:true,monthlyBudgetUsd:null,inputPerMillionUsd:0.3,outputPerMillionUsd:1.2};
+  let calls=0;const original=global.fetch;global.fetch=async(url,...args)=>{if(String(url).startsWith('http://127.0.0.1:'))return original(url,...args);calls++;throw Error('Configuration must not call a provider')};
+  try{
+   const response=await request('owner','PUT','/team/ai/settings',{...input,region:'cn'});assert.equal(response.status,409);assert.equal(response.body.message,'TEAM_AI_REGION_KEY_REQUIRED');
+   const confirmation=await request('owner','PUT','/team/ai/settings',{...input,region:'cn',apiKey:'synthetic-minimax-cn-key-only'});assert.equal(confirmation.status,409);assert.equal(confirmation.body.message,'TEAM_AI_REGION_CONFIRM_REQUIRED');
+   for(const extra of [{region:'custom'},{region:'constructor'},{region:'cn',endpoint:'https://example.invalid'},{region:'cn',baseUrl:'http://127.0.0.1'}])assert.equal((await request('owner','PUT','/team/ai/settings',{...input,...extra})).status,400);
+   assert.equal((await prisma.config.findUniqueOrThrow({where})).value,stored);assert.equal(calls,0);
+  }finally{global.fetch=original}
+ });
+ await test('China uses only the fixed official endpoint and region-bound ciphertext; omitted region retains China without moving the key',async()=>{
+  const saved=await configure({region:'cn',targetConfirmed:true,apiKey:'synthetic-minimax-cn-key-only'});assert.equal(saved.endpoint,'https://api.minimax.cn/v1/chat/completions');assert.equal(saved.region,'cn');
+  assert.equal((await configure({model:'MiniMax-M3'})).region,'cn');
+  const stored=await prisma.config.findUniqueOrThrow({where:{storeId_key:{storeId:owner.storeId,key:'team.communication.ai.settings'}}});assert(!stored.value.includes('synthetic-minimax-cn-key-only'));assert(JSON.parse(stored.value).secret.startsWith('v2.cn.'));
+  await resetRate();let calls=0;const original=global.fetch;
+  global.fetch=async(url,options)=>{calls++;assert.equal(url,saved.endpoint);assert.equal(options.headers.Authorization,'Bearer synthetic-minimax-cn-key-only');assert.equal(options.redirect,'error');const body=JSON.parse(options.body);assert.equal(body.model,'MiniMax-M3');assert.equal(body.thinking.type,'disabled');assert.equal(body.stream,false);assert(!body.tools);return new Response(JSON.stringify({id:'cn',choices:[{finish_reason:'stop',message:{content:'合成中国区草稿'}}],usage:{prompt_tokens:1,completion_tokens:1}}))};
+  try{const d=await teamAi(prisma).generate(owner,aiChannel.id,{requestId:randomUUID(),kind:'draft',instruction:'纯合成',sourceSeq:[],consent:true});assert.equal(d.region,'cn');assert.equal(d.status,'ready');assert.equal(calls,1)}finally{global.fetch=original}
+ });
+ await test('changing ciphertext region metadata is rejected before budget reservation or provider transmission',async()=>{
+  const where={storeId_key:{storeId:owner.storeId,key:'team.communication.ai.settings'}};const row=await prisma.config.findUniqueOrThrow({where});const value=JSON.parse(row.value);
+  const budgetKey={storeId_key:{storeId:owner.storeId,key:`team.communication.aiBudget.${new Date().toISOString().slice(0,7)}`}};
+  const before=(await prisma.config.findUniqueOrThrow({where:budgetKey})).value;let calls=0;const original=global.fetch;global.fetch=async()=>{calls++;throw Error('No cross-region request allowed')};
+  try{
+   await prisma.config.update({where,data:{value:JSON.stringify({...value,region:'global'})}});
+   await assert.rejects(teamAi(prisma).generate(owner,aiChannel.id,{requestId:randomUUID(),kind:'draft',instruction:'纯合成',sourceSeq:[],consent:true}),e=>e.message==='TEAM_AI_CREDENTIAL_REGION_MISMATCH');
+   assert.equal(calls,0);assert.equal((await prisma.config.findUniqueOrThrow({where:budgetKey})).value,before);
+  }finally{global.fetch=original;await prisma.config.update({where,data:{value:row.value}})}
+ });
+ await test('upstream China 401 is stored as uncertain and querying or replaying the same request never transmits again',async()=>{
+  await resetRate();let calls=0;const original=global.fetch;global.fetch=async(url,...args)=>{if(String(url).startsWith('http://127.0.0.1:'))return original(url,...args);calls++;assert.equal(url,'https://api.minimax.cn/v1/chat/completions');return new Response('',{status:401})};
+  const input={requestId:randomUUID(),kind:'draft',instruction:'纯合成',sourceSeq:[],consent:true};
+  try{
+   const failed=await request('owner','POST',`/team/channels/${aiChannel.id}/ai/drafts`,input);assert.equal(failed.status,502);assert.equal(failed.body.message,'TEAM_AI_CREDENTIAL_REJECTED');
+   const queried=await good('owner','GET',`/team/channels/${aiChannel.id}/ai/drafts/${input.requestId}`);assert.equal(queried.status,'uncertain');assert.equal(queried.error,'TEAM_AI_CREDENTIAL_REJECTED');assert.equal(queried.text,'');
+   assert.equal((await request('owner','POST',`/team/channels/${aiChannel.id}/ai/drafts`,input)).status,409);assert.equal(calls,1);
+  }finally{global.fetch=original}
+ });
+ await test('region changes while a model is in flight withhold the old-region result',async()=>{
+  await resetRate();const scoped=teamAi(prisma,async(_key,_model,_system,_input,region)=>{assert.equal(region,'cn');await configure({region:'global',apiKey:'synthetic-minimax-key-only',targetConfirmed:true});return {text:'Must be withheld',inputTokens:1,outputTokens:1,providerRequestId:'region-change'}});
+  const d=await scoped.generate(owner,aiChannel.id,{requestId:randomUUID(),kind:'draft',instruction:'纯合成',sourceSeq:[],consent:true});assert.equal(d.status,'blocked');assert.equal(d.text,'');await configure({enabled:false,removeKey:true});
  });
 };

@@ -4,7 +4,7 @@ const SERVICES=['api','admin','pos','staff'];
 const domains={
  manualStockCorrection:{paths:/(?:ManualStockCorrection|manual-inventory-correction)/i,tests:/manual-inventory-correction/i},
  posRisk:{paths:/(?:POSRiskSummary|POSMonitorPage|POSActionLogService|posActionLog|drawerAudit|DrawerReasonDialog|pos-risk)/i,tests:/pos-risk|pos-cart|cleared-cart|receipt-monitor/i},
- teamCommunication:{paths:/(?:TeamCommunication|TeamTasks|TeamAi|TeamAttachment|teamCopy|teamWorkCopy|teamOutbox|team-communication)/i,tests:/team-communication/i},
+ teamCommunication:{paths:/(?:TeamCommunication|TeamOperations|TeamTasks|TeamAi|TeamAttachment|teamCopy|teamWorkCopy|teamOperationCopy|teamOutbox|team-communication|team-operations)/i,tests:/team-communication|team-operations/i},
  todayStockOut:{paths:/(?:TodayStockOutService|TodayStockOuts|inventory-today-stock-out)/i,tests:/inventory-today-stock-out/i},
  staffOffline:{paths:/(?:^client-staff\/.*(?:offlineAuth|OfflineSession|employee-sw)|staff-offline-login|QRCameraScannerModal|OfflineAttendance|AttendanceQRService|attendanceQR\.ts|employee-offline-attendance)/i,tests:/staff-offline-login/i},
  attendanceReport:{paths:/(?:AttendanceReportService|attendanceReport|AttendanceDashboardPage|inventory-attendance-layout)/i,tests:/attendance-report/i},
