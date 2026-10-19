@@ -306,6 +306,7 @@ app.use('/api/points-rules', declareAccessRoutes('/api/points-rules', pointsRule
 app.use('/api/rewards', declareAccessRoutes('/api/rewards', rewardCatalogRouter))
 app.use('/api/revenue', declareAccessRoutes('/api/revenue', revenueRouter))
 app.use('/api/payments', declareAccessRoutes('/api/payments', paymentRouter))
+app.use('/api/team', (_req, res) => res.status(503).json({ code: 503, message: 'TEAM_COMMUNICATION_ROLLBACK_MAINTENANCE' }))
 app.use('/api/team', declareAccessRoutes('/api/team', teamCommunicationRouter))
 app.use('/api/ai', declareAccessRoutes('/api/ai', aiPermissionsRouter))
 app.use('/api/staff-work', declareAccessRoutes('/api/staff-work', employeeWorkspaceRouter))
