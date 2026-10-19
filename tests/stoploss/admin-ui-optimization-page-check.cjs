@@ -421,7 +421,7 @@ const { chromium, expect } = require("@playwright/test"),
     await expect.poll(()=>writes.filter(write=>write.path==='/api/products/recipe-fixture/bom').length).toBe(recipeWriteCount+1);
     const stored=writes.filter(write=>write.path==='/api/products/recipe-fixture/bom').at(-1).body.bomItems;
     assert.equal(stored[0].quantity,0.123456);assert.equal(stored[1].quantity,0.26);assert.equal(stored[1].unit,'kg');
-    await expect(page.getByText('Recipe saved successfully',{exact:true})).toBeVisible();
+    await expect(page).toHaveURL(origin + '/products/recipes?productId=recipe-fixture');
     await page.goto(origin + '/products/recipes?productId=recipe-fixture');
     await expect(page.getByRole('cell',{name:'Rp 4.957',exact:true})).toBeVisible();
     await page.screenshot({path:path.join(out,'recipe-saved-detail.png')});

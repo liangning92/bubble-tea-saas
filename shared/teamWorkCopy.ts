@@ -47,7 +47,7 @@ export const teamWorkCopy = (language: string) => language.startsWith('zh') ? zh
 export function teamWorkError(language: string, code: string) {
  const w = teamWorkCopy(language), zh = language.startsWith('zh'), en = language.startsWith('en')
  if (code === 'TEAM_VERSION_CONFLICT') return w.conflict
- if (/TEAM_AI_(?:NOT_CONFIGURED|KEY_REQUIRED)/.test(code)) return zh ? '请先在 MiniMax 设置中配置密钥并启用沟通 AI。' : en ? 'Configure the key and enable communication AI in MiniMax settings first.' : 'Atur kunci dan aktifkan AI komunikasi di pengaturan MiniMax terlebih dahulu.'
+ if (/TEAM_AI_(?:NOT_CONFIGURED|KEY_REQUIRED)/.test(code)) return zh ? '请先到“设置 → AI设置”配置密钥并启用沟通 AI。' : en ? 'Configure the key and enable communication AI in Settings → AI settings first.' : 'Atur kunci dan aktifkan AI komunikasi di Pengaturan → Pengaturan AI terlebih dahulu.'
  if (/TEAM_AI_(?:PENDING|NEW_REQUEST_REQUIRED)/.test(code)) return w.uncertain
  if (code === 'TEAM_AI_BUDGET_LIMIT') return zh ? '本月估算已达到费用上限，请由管理员核对。' : en ? 'The monthly estimated spending cap has been reached. Ask the administrator to review it.' : 'Perkiraan batas biaya bulanan tercapai. Minta administrator memeriksanya.'
  if (/RATE_LIMIT/.test(code)) return zh ? '请求较频繁，请稍后再试。' : en ? 'Too many requests. Please try again later.' : 'Terlalu banyak permintaan. Coba lagi nanti.'
