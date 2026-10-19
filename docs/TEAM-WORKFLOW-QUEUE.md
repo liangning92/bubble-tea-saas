@@ -43,6 +43,6 @@ action 支持 `approve_reply`、`approve_task`、`reconcile`、`retry`、`dismis
 
 ## 验证
 
-`npm run build:server`；通过 `scripts/with-docker-test.py` 和 `scripts/test-team-communication.py` 运行完整团队 HTTP 回归。新增夹具 `tests/stoploss/team-workflow-queue-check.cjs` 使用临时 PostgreSQL、合成账号及注入模型，网络守卫禁止真实外呼。已验证 63 组（原有 47 组 + 新增 16 组），包括事务回滚、并发租约、未知计费、人工核对、三次上限、分页、暂停与完整证据验收闭环。
+`npm run build:server`；通过 `scripts/with-docker-test.py` 和 `scripts/test-team-communication.py` 运行完整团队 HTTP 回归。新增夹具 `tests/stoploss/team-workflow-queue-check.cjs` 使用临时 PostgreSQL、合成账号及注入模型，网络守卫禁止真实外呼。64 组（原有 47、新增 17）通过，包括事务回滚、并发租约、未知计费、人工核对、三次上限、分页、暂停与完整证据验收闭环；配置变化阻断崩溃恢复时，仍保留可能计费的标记。范围单元 96 项、审计 26 组共 203 项通过；最终固定 SHA 的 CI 另行记录。
 
 CI 范围识别覆盖队列、服务、消费者和夹具；单独改夹具也会安装服务端依赖并执行沟通 HTTP 检查，不选择无关 POS 回归。真实模型连通性是独立验收，不能把这些模拟结果当作已经接通供应商。

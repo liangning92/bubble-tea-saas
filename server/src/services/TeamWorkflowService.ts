@@ -134,7 +134,9 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         } else if (v.action === 'reconcile') {
           if (!v.approved || !['uncertain', 'blocked'].includes(j.status)) fail('TEAM_WORKFLOW_RECONCILE_REQUIRED', 400)
           const { p } = await scope(tx, a.storeId, j)
-          j.result = parseResult(await readTeam(tx, a.storeId, `aiDraft.${a.staffId}.${j.aiRequestId}`), j.sourceSeq)
+          const stored = await readTeam(tx, a.storeId, `aiDraft.${a.staffId}.${j.aiRequestId}`)
+          j.result = parseResult(stored, j.sourceSeq)
+          j.billingStatus = stored.usage ? 'usage_recorded' : 'possible'
           j.status = 'awaiting_approval'; j.claimEpoch = p.epoch
           delete j.error; delete j.leaseToken; delete j.leaseUntil
         } else if (v.action === 'retry') {
@@ -177,12 +179,16 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         if (!j || !['queued', 'retry_wait', 'processing'].includes(j.status) || j.nextAttemptAt && j.nextAttemptAt > now || j.status === 'processing' && j.leaseUntil! > now) return null
         const p = await readTeam<WorkflowPolicy>(tx, storeId, `workflow.policy.${channelId}`)
         if (!p?.enabled || p.paused) return null
+        // A crash can leave a committed provider reservation before job settlement.
+        // Preserve that billing risk even if permissions/config now block recovery.
+        const stored = j.aiRequestId ? await readTeam(tx, storeId, `aiDraft.${j.operatorStaffId}.${j.aiRequestId}`) : null
+        if (stored) j.billingStatus = stored.usage ? 'usage_recorded' : 'possible'
         try { await scope(tx, storeId, j) } catch (e) {
           if (!(e instanceof TeamError)) throw e
           j.status = 'blocked'; j.error = e.message; await save(tx, storeId, j, now); return null
         }
         if (j.status === 'processing') {
-          const d = await readTeam(tx, storeId, `aiDraft.${j.operatorStaffId}.${j.aiRequestId}`)
+          const d = stored
           j.billingStatus = d?.usage ? 'usage_recorded' : d ? 'possible' : 'not_started'
           if (d && d.status !== 'ready') {
             j.status = d.status === 'blocked' ? 'blocked' : 'uncertain'; j.error = 'TEAM_WORKFLOW_RECOVERY_REVIEW_REQUIRED'

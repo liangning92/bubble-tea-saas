@@ -172,6 +172,14 @@ module.exports = async ({prisma, good, request, create, send, test, dropResponse
     await workflow.process(owner.storeId,next.c.id,next.m.seq);assert.equal((await getJob(next.c,next.m)).error,'TEAM_WORKFLOW_SCOPE_CHANGED');assert.equal(calls,before);await policy(next.c,{enabled:false});
     const changed=await fixture();await configure();await workflow.process(owner.storeId,changed.c.id,changed.m.seq);assert.equal((await getJob(changed.c,changed.m)).error,'TEAM_AI_CONFIG_CHANGED');assert.equal(calls,before);await policy(changed.c,{enabled:false});
   });
+  await test('recovery blocked by changed config still exposes the in-flight provider reservation as possible billing',async()=>{
+    const {c,m}=await fixture();let started,release;const ready=new Promise(r=>started=r),gate=new Promise(r=>release=r);
+    const slow=teamWorkflow(prisma,teamAi(prisma,async(...args)=>{started();await gate;return transport(...args)}),()=>now);
+    const pending=slow.process(owner.storeId,c.id,m.seq);await ready;now+=120001;await configure();
+    await slow.process(owner.storeId,c.id,m.seq);
+    const j=await getJob(c,m);assert.equal(j.status,'blocked');assert.equal(j.error,'TEAM_AI_CONFIG_CHANGED');assert.equal(j.billingStatus,'possible');
+    release();await pending;await policy(c,{enabled:false});
+  });
   await test('failed final approval audit rolls back both the reused message service and the job decision',async()=>{
     const {c,m}=await fixture();let j=await workflow.process(owner.storeId,c.id,m.seq);const before=(await good('alice','GET',`/team/channels/${c.id}/messages`)).messages.length;
     const faulty=injectTx(tx=>({financeAuditLog:new Proxy(tx.financeAuditLog,{get(target,key){if(key==='create')return args=>{
