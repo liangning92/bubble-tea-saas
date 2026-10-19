@@ -1,3 +1,4 @@
+import {hygieneAreaCreateInput,hygieneAreaUpdateBody,hygieneTemplateCreateInput,hygieneTemplateUpdateBody,areaWriteData,templateWriteData,checklistWriteData} from './HygieneInput'
 import {userAccessV2} from './StaffPermissionV2Service'
 import {hasManagementAccess} from '../utils/managementAccess'
 import {createHash} from 'crypto'
@@ -222,36 +223,28 @@ export async function getAreas(storeId: string) {
 /**
  * 创建自定义区域
  */
-export async function createArea(data: {
-  storeId: string
-  name: string
-  code: string
-  icon?: string
-  color?: string
-  priority?: number
-  description?: string
-  managerId?: string
-}) {
+export async function createArea(data: unknown) {
+  const input=hygieneAreaCreateInput.parse(data)
   // 验证必填字段
-  if (!data.name || data.name.trim() === '') {
+  if (!input.name || input.name.trim() === '') {
     throw new Error('Area name is required')
   }
-  if (!data.code || data.code.trim() === '') {
+  if (!input.code || input.code.trim() === '') {
     throw new Error('Area code is required')
   }
-  if (!data.storeId || data.storeId.trim() === '') {
+  if (!input.storeId || input.storeId.trim() === '') {
     throw new Error('Store ID is required')
   }
 
   // 验证代码格式（只能是字母、数字、下划线）
-  if (!/^[a-zA-Z0-9_]+$/.test(data.code)) {
+  if (!/^[a-zA-Z0-9_]+$/.test(input.code)) {
     throw new Error('Area code can only contain letters, numbers, and underscores')
   }
 
-  await assertHygieneStaffStore(data.storeId,data)
+  await assertHygieneStaffStore(input.storeId,input)
   // 检查代码是否与预设冲突
   const existing = await prisma.hygieneArea.findUnique({
-    where: { storeId_code: { storeId: data.storeId, code: data.code } },
+    where: { storeId_code: { storeId: input.storeId, code: input.code } },
   })
 
   if (existing) {
@@ -260,14 +253,15 @@ export async function createArea(data: {
 
   // 获取当前最大 sortOrder
   const maxOrder = await prisma.hygieneArea.aggregate({
-    where: { storeId: data.storeId },
+    where: { storeId: input.storeId },
     _max: { sortOrder: true },
   })
 
   return prisma.hygieneArea.create({
     data: {
-      ...data,
-      sortOrder: data.priority || (maxOrder._max.sortOrder || 0) + 1,
+      storeId:input.storeId,
+      ...areaWriteData(input),
+      sortOrder: input.priority || (maxOrder._max.sortOrder || 0) + 1,
     },
   })
 }
@@ -275,16 +269,8 @@ export async function createArea(data: {
 /**
  * 更新区域
  */
-export async function updateArea(areaId: string, data: Partial<{
-  name: string
-  icon: string
-  color: string
-  priority: number
-  description: string
-  managerId: string
-  isActive: boolean
-  sortOrder: number
-}>) {
+export async function updateArea(areaId: string, data: unknown) {
+  const input=hygieneAreaUpdateBody.parse(data)
   // 检查区域是否存在
   const existing = await prisma.hygieneArea.findUnique({
     where: { id: areaId },
@@ -293,10 +279,10 @@ export async function updateArea(areaId: string, data: Partial<{
     throw new Error('Area not found')
   }
 
-  await assertHygieneStaffStore(existing.storeId,data)
+  await assertHygieneStaffStore(existing.storeId,input)
   return prisma.hygieneArea.update({
     where: { id: areaId },
-    data,
+    data:areaWriteData(input),
   })
 }
 
@@ -410,179 +396,44 @@ export async function getTemplateById(id: string, storeId?: string) {
 /**
  * 创建模板
  */
-export async function createTemplate(data: {
-  storeId: string
-  areaCode: string
-  name: string
-  description?: string
-  category?: string
-  frequency?: string
-  specificDays?: number[]
-  time?: string
-  executionTimes?: string[] // 新增：每日多次执行时间
-  priority?: number
-  estimatedMinutes?: number
-  standardBefore?: string
-  standardDuring?: string
-  standardAfter?: string
-  toolsRequired?: string[]
-  photoRequired?: boolean
-  evidenceType?: string
-  assignedType?: string
-  shift?: string
-  staffId?: string
-  staffIds?: string[] // 新增：多个员工ID
-  areaManagerId?: string
-  requiresApproval?: boolean
-  alertMinutesBefore?: number
-  autoGenerate?: boolean
-  regulationCode?: string
-  checklists?: { item: string; description?: string; isRequired?: boolean }[]
-}) {
-  // 验证必填字段
-  if (!data.storeId || data.storeId.trim() === '') {
-    throw new Error('Store ID is required')
-  }
-  if (!data.areaCode || data.areaCode.trim() === '') {
-    throw new Error('Area code is required')
-  }
-  if (!data.name || data.name.trim() === '') {
-    throw new Error('Template name is required')
-  }
-
-  // 验证 priority 范围
-  if (data.priority !== undefined && (data.priority < 1 || data.priority > 4)) {
-    throw new Error('Priority must be between 1 and 4')
-  }
-
-  // 验证 estimatedMinutes 范围
-  if (data.estimatedMinutes !== undefined && data.estimatedMinutes < 1) {
-    throw new Error('Estimated minutes must be greater than 0')
-  }
-
-  await assertHygieneStaffStore(data.storeId,data)
-  const { checklists, staffIds, executionTimes, ...templateData } = data
-
-  // 处理 JSON 字段
-  const processed: any = {
-    ...templateData,
-    toolsRequired: templateData.toolsRequired ? JSON.stringify(templateData.toolsRequired) : null,
-    specificDays: templateData.specificDays ? JSON.stringify(templateData.specificDays) : null,
-    executionTimes: executionTimes ? JSON.stringify(executionTimes) : null, // 新增
-    staffIds: staffIds ? JSON.stringify(staffIds) : null, // 新增
-  }
-
-  // 计算下次触发时间
-  processed.nextTriggerAt = calculateNextTrigger(templateData.frequency, templateData.time)
-
+export async function createTemplate(data: unknown) {
+  const input=hygieneTemplateCreateInput.parse(data)
+  await assertHygieneStaffStore(input.storeId,input)
   const template = await prisma.hygieneTemplate.create({
     data: {
-      ...processed,
-      checklists: checklists ? {
-        create: checklists.map((c, idx) => ({
-          item: c.item,
-          description: c.description,
-          isRequired: c.isRequired ?? true,
-          order: idx,
-        })),
-      } : undefined,
+      storeId:input.storeId,
+      ...templateWriteData(input),
+      nextTriggerAt:calculateNextTrigger(input.frequency,input.time),
+      checklists:input.checklists?{create:input.checklists.map(checklistWriteData)}:undefined,
     },
-    include: { checklists: { orderBy: { order: 'asc' } } },
+    include:{checklists:{orderBy:{order:'asc'}}},
   })
-
-  // 广播到前台
-  socketManager.emitToStore(templateData.storeId, 'hygiene:template:created', template)
-
+  socketManager.emitToStore(input.storeId,'hygiene:template:created',template)
   return template
 }
 
 /**
  * 更新模板
  */
-export async function updateTemplate(templateId: string, data: Partial<{
-  areaCode: string
-  name: string
-  description: string
-  category: string
-  frequency: string
-  specificDays: number[]
-  time: string
-  executionTimes: string[] // 新增：每日多次执行时间
-  priority: number
-  estimatedMinutes: number
-  standard: string
-  toolsRequired: string[]
-  photoRequired: boolean
-  evidenceType: string
-  assignedType: string
-  shift: string
-  staffId: string
-  staffIds: string[] // 新增：多个员工ID
-  areaManagerId: string
-  requiresApproval: boolean
-  alertMinutesBefore: number
-  autoGenerate: boolean
-  regulationCode: string
-  status: string
-  checklists: { item: string; description?: string; isRequired?: boolean }[]
-}>) {
-  // 检查模板是否存在
-  const existing = await prisma.hygieneTemplate.findUnique({
-    where: { id: templateId },
+export async function updateTemplate(templateId: string, data: unknown) {
+  // Parse before reading or writing, including before checklist replacement.
+  const input=hygieneTemplateUpdateBody.parse(data)
+  const existing=await prisma.hygieneTemplate.findUnique({where:{id:templateId}})
+  if(!existing)throw new Error('Template not found')
+  await assertHygieneStaffStore(existing.storeId,input)
+  const template=await prisma.$transaction(async tx=>{
+    if(input.checklists!==undefined)await tx.hygieneChecklist.deleteMany({where:{templateId}})
+    return tx.hygieneTemplate.update({
+      where:{id:templateId},
+      data:{
+        ...templateWriteData(input),
+        nextTriggerAt:input.frequency||input.time?calculateNextTrigger(input.frequency,input.time):undefined,
+        checklists:input.checklists?{create:input.checklists.map(checklistWriteData)}:undefined,
+      },
+      include:{checklists:{orderBy:{order:'asc'}}},
+    })
   })
-  if (!existing) {
-    throw new Error('Template not found')
-  }
-
-  await assertHygieneStaffStore(existing.storeId,data)
-  const { checklists, staffIds, executionTimes, ...templateData } = data
-
-  // 处理 JSON 字段
-  const processed: any = { ...templateData }
-  if (templateData.toolsRequired !== undefined) {
-    processed.toolsRequired = templateData.toolsRequired ? JSON.stringify(templateData.toolsRequired) : null
-  }
-  if (templateData.specificDays !== undefined) {
-    processed.specificDays = templateData.specificDays ? JSON.stringify(templateData.specificDays) : null
-  }
-  if (staffIds !== undefined) {
-    processed.staffIds = staffIds ? JSON.stringify(staffIds) : null
-  }
-  if (executionTimes !== undefined) {
-    processed.executionTimes = executionTimes ? JSON.stringify(executionTimes) : null
-  }
-
-  // 如果频率或时间变了，重新计算触发时间
-  if (templateData.frequency || templateData.time) {
-    processed.nextTriggerAt = calculateNextTrigger(templateData.frequency, templateData.time)
-  }
-
-  // 更新检查清单（先删后建）
-  if (checklists !== undefined) {
-    await prisma.hygieneChecklist.deleteMany({ where: { templateId } })
-  }
-
-  const template = await prisma.hygieneTemplate.update({
-    where: { id: templateId },
-    data: {
-      ...processed,
-      ...(checklists ? {
-        checklists: {
-          create: checklists.map((c, idx) => ({
-            item: c.item,
-            description: c.description,
-            isRequired: c.isRequired ?? true,
-            order: idx,
-          })),
-        },
-      } : {}),
-    },
-    include: { checklists: { orderBy: { order: 'asc' } } },
-  })
-
-  // 广播更新
-  socketManager.emitToStore(template.storeId, 'hygiene:template:updated', template)
-
+  socketManager.emitToStore(template.storeId,'hygiene:template:updated',template)
   return template
 }
 
@@ -1734,7 +1585,7 @@ export async function seedDefaultTemplates(storeId: string) {
       frequency: 'daily',
       priority: 1,
       estimatedMinutes: 15,
-      standard: '检查所有原料生产日期和保质期，及时处理过期原料',
+      standardDuring: '检查所有原料生产日期和保质期，及时处理过期原料',
       photoRequired: true,
       checklists: [
         { item: '茶叶检查', description: '检查各类茶叶保质期', isRequired: true },
@@ -1750,7 +1601,7 @@ export async function seedDefaultTemplates(storeId: string) {
       frequency: 'daily',
       priority: 1,
       estimatedMinutes: 5,
-      standard: '冰箱温度应在 0-4°C，超出范围需调整',
+      standardDuring: '冰箱温度应在 0-4°C，超出范围需调整',
       photoRequired: true,
       checklists: [
         { item: '冷藏柜温度', description: '记录温度数值', isRequired: true },
@@ -1766,7 +1617,7 @@ export async function seedDefaultTemplates(storeId: string) {
       frequency: 'daily',
       priority: 2,
       estimatedMinutes: 10,
-      standard: '使用消毒水擦拭台面，保持干净整洁',
+      standardDuring: '使用消毒水擦拭台面，保持干净整洁',
       photoRequired: true,
       checklists: [
         { item: '收银台消毒', description: '喷洒消毒水并擦拭', isRequired: true },
@@ -1781,7 +1632,7 @@ export async function seedDefaultTemplates(storeId: string) {
       frequency: 'daily',
       priority: 2,
       estimatedMinutes: 15,
-      standard: '先清扫后拖地，重点区域消毒',
+      standardDuring: '先清扫后拖地，重点区域消毒',
       photoRequired: false,
       checklists: [
         { item: '用餐区清扫', description: '清扫垃圾和杂物', isRequired: true },
@@ -1797,7 +1648,7 @@ export async function seedDefaultTemplates(storeId: string) {
       frequency: 'weekly',
       priority: 2,
       estimatedMinutes: 30,
-      standard: '按照制冰机说明书进行除垢和消毒',
+      standardDuring: '按照制冰机说明书进行除垢和消毒',
       photoRequired: true,
       checklists: [
         { item: '关机断电', description: '安全第一', isRequired: true },
@@ -1814,7 +1665,7 @@ export async function seedDefaultTemplates(storeId: string) {
       frequency: 'weekly',
       priority: 2,
       estimatedMinutes: 20,
-      standard: '使用食品级除垢剂，去除水垢',
+      standardDuring: '使用食品级除垢剂，去除水垢',
       photoRequired: true,
       checklists: [
         { item: '设备降温', description: '等待设备冷却', isRequired: true },
@@ -1830,7 +1681,7 @@ export async function seedDefaultTemplates(storeId: string) {
       frequency: 'daily',
       priority: 1,
       estimatedMinutes: 10,
-      standard: '确认所有设备正常运转',
+      standardDuring: '确认所有设备正常运转',
       photoRequired: true,
       checklists: [
         { item: '封口机测试', description: '确认能正常工作', isRequired: true },
@@ -1848,7 +1699,7 @@ export async function seedDefaultTemplates(storeId: string) {
       frequency: 'daily',
       priority: 2,
       estimatedMinutes: 20,
-      standard: '完成当日最后一次清洁',
+      standardDuring: '完成当日最后一次清洁',
       photoRequired: true,
       checklists: [
         { item: '台面清洁消毒', description: '彻底清洁', isRequired: true },

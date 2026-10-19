@@ -5,10 +5,15 @@ import {convertQuantity} from '../utils/inventoryUnits'
 import {inventoryQuantityCost} from './InventoryQuantityService'
 import prisma from '../config/database'
 
+export class BomScopeError extends Error {constructor(message='BOM resource not found',public status=404){super(message)}}
+function requireStore(storeId:string){if(typeof storeId!=='string'||!storeId)throw new BomScopeError('BOM store scope required',403)}
+
+
 /**
  * 获取所有产品的BOM成本分析
  */
 export async function getProductsWithBomCost(storeId: string) {
+  requireStore(storeId)
   const products = await prisma.product.findMany({
     where: { storeId, deletedAt: null },
     include: {
@@ -22,7 +27,7 @@ export async function getProductsWithBomCost(storeId: string) {
   })
 
   return Promise.all(products.map(async product => {
-    const bomCost = await calculateBomCost(product.bomItems)
+    const bomCost = await calculateBomCost(product.bomItems,storeId)
     const defaultSpec = product.specs[0]
     const sellingPrice = defaultSpec?.price || 0
     const profit = sellingPrice - bomCost
@@ -47,9 +52,10 @@ export async function getProductsWithBomCost(storeId: string) {
 /**
  * 获取单个产品的BOM明细
  */
-export async function getProductBomDetail(productId: string) {
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
+export async function getProductBomDetail(productId: string,storeId:string) {
+  requireStore(storeId)
+  const product = await prisma.product.findFirst({
+    where: { id: productId,storeId },
     include: {
       images: { include: { media: true }, orderBy: { position: 'asc' } },
       category: { select: { name: true } },
@@ -64,11 +70,12 @@ export async function getProductBomDetail(productId: string) {
 
   const bomDetails = await Promise.all(product.bomItems.map(async (item) => {
     const inv = item.inventory
+    if(!inv||inv.storeId!==storeId)throw new BomScopeError()
     const recipeUnit = ((item as any).unit || inv?.unit || '个').toLowerCase()
 
     // 对于 semi_finished 类型，使用 getInventoryCostBreakdown 递归计算
     if (inv?.type === 'semi_finished' && inv.processRecipeId) {
-      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity, item.unit)
+      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity, item.unit,storeId)
       return {
         inventoryId: inv.id,
         name: inv.name,
@@ -131,9 +138,13 @@ export async function getProductBomDetail(productId: string) {
   }
 }
 
-async function calculateBomCost(bomItems: {inventoryId:string;quantity:number;unit:string}[]) {
+async function calculateBomCost(bomItems: {inventoryId:string;quantity:number;unit:string;inventory:{storeId:string}}[],storeId:string) {
+ requireStore(storeId)
  let total=0
- for(const item of bomItems)total+=await inventoryQuantityCost(prisma,item.inventoryId,item.quantity,item.unit)
+ for(const item of bomItems){
+  if(item.inventory.storeId!==storeId)throw new BomScopeError()
+  total+=await inventoryQuantityCost(prisma,item.inventoryId,item.quantity,item.unit,0,storeId)
+ }
  return Math.round(total)
 }
 
@@ -156,25 +167,29 @@ export async function getLowStockAlerts(storeId:string,days:number=30){
 /**
  * 计算单个产品成本
  */
-export async function calculateProductCost(productId: string): Promise<number> {
+export async function calculateProductCost(productId: string,storeId:string): Promise<number> {
+  requireStore(storeId)
+  if(!await prisma.product.findFirst({where:{id:productId,storeId},select:{id:true}}))throw new BomScopeError()
   const bomItems = await prisma.bOMItem.findMany({
     where: { productId },
     include: { inventory: true }
   })
 
-  return calculateBomCost(bomItems)
+  return calculateBomCost(bomItems,storeId)
 }
 
 /**
  * 获取原料的成本分解（支持 semi_finished 递归展开）
  * 用于配方编辑页面显示每个原料的成本来源
  */
-export async function getInventoryCostBreakdown(inventoryId:string,quantity:number,unit?:string) {
- const inv=await prisma.inventory.findUnique({where:{id:inventoryId}})
- if(!inv)return {type:'unknown',cost:0,breakdown:null}
- const cost=Math.round(await inventoryQuantityCost(prisma,inventoryId,quantity,unit||inv.unit))
+export async function getInventoryCostBreakdown(inventoryId:string,quantity:number,unit:string|undefined,storeId:string) {
+ requireStore(storeId)
+ const inv=await prisma.inventory.findFirst({where:{id:inventoryId,storeId}})
+ if(!inv)throw new BomScopeError()
+ const cost=Math.round(await inventoryQuantityCost(prisma,inventoryId,quantity,unit||inv.unit,0,storeId))
  if(inv.type!=='semi_finished'||!inv.processRecipeId)return {type:inv.type,cost,breakdown:null}
- const recipe=await prisma.processRecipe.findUniqueOrThrow({where:{id:inv.processRecipeId},include:{items:{include:{inventory:true}}}})
+ const recipe=await prisma.processRecipe.findFirst({where:{id:inv.processRecipeId,storeId},include:{items:{include:{inventory:true}}}})
+ if(!recipe||recipe.items.some(item=>item.inventory&&item.inventory.storeId!==storeId))throw new BomScopeError()
  const output=recipe.items.find(i=>i.type==='output')!
  const multiplier=convertQuantity(quantity,unit||inv.unit,recipe.outputUnit)/output.quantity
  const breakdown=await Promise.all(recipe.items.filter(i=>i.type==='input'&&i.inventory).map(async input=>{

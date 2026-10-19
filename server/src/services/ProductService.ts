@@ -670,7 +670,7 @@ export async function getProductCostDetail(productId: string) {
 
     // For semi_finished items, use getInventoryCostBreakdown recursively
     if (inv?.type === 'semi_finished' && inv.processRecipeId) {
-      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity, item.unit)
+      const breakdown = await getInventoryCostBreakdown(inv.id, item.quantity, item.unit,product.storeId)
       return {
         id: item.id,
         inventoryId: item.inventoryId,

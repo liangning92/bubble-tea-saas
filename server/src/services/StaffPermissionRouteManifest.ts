@@ -6081,80 +6081,56 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "GET /api/bom/products": {
-    "legacyRoles": [
-      "manager",
-      "cashier",
-      "staff"
-    ],
+    "legacyRoles": ["admin"],
     "legacyPermission": "inventory.read",
     "resource": null,
     "permission": "inventory.read",
-    "ownerOnly": false,
+    "ownerOnly": true,
     "export": false,
     "personal": false
   },
   "GET /api/bom/products/:id": {
-    "legacyRoles": [
-      "manager",
-      "cashier",
-      "staff"
-    ],
+    "legacyRoles": ["admin"],
     "legacyPermission": "inventory.read",
-    "resource": null,
+    "resource": {"model":"product","param":"id"},
     "permission": "inventory.read",
-    "ownerOnly": false,
+    "ownerOnly": true,
     "export": false,
     "personal": false
   },
   "GET /api/bom/materials/usage": {
-    "legacyRoles": [
-      "manager",
-      "cashier",
-      "staff"
-    ],
+    "legacyRoles": ["admin"],
     "legacyPermission": "inventory.read",
     "resource": null,
     "permission": "inventory.read",
-    "ownerOnly": false,
+    "ownerOnly": true,
     "export": false,
     "personal": false
   },
   "GET /api/bom/materials/low-stock-alert": {
-    "legacyRoles": [
-      "manager",
-      "cashier",
-      "staff"
-    ],
+    "legacyRoles": ["admin"],
     "legacyPermission": "inventory.read",
     "resource": null,
     "permission": "inventory.read",
-    "ownerOnly": false,
+    "ownerOnly": true,
     "export": false,
     "personal": false
   },
   "GET /api/bom/recipes/:productId/cost": {
-    "legacyRoles": [
-      "manager",
-      "cashier",
-      "staff"
-    ],
+    "legacyRoles": ["admin"],
     "legacyPermission": "inventory.read",
-    "resource": null,
+    "resource": {"model":"product","param":"productId"},
     "permission": "inventory.read",
-    "ownerOnly": false,
+    "ownerOnly": true,
     "export": false,
     "personal": false
   },
   "GET /api/bom/inventory/:inventoryId/breakdown": {
-    "legacyRoles": [
-      "manager",
-      "cashier",
-      "staff"
-    ],
+    "legacyRoles": ["admin"],
     "legacyPermission": "inventory.read",
-    "resource": null,
+    "resource": {"model":"inventory","param":"inventoryId"},
     "permission": "inventory.read",
-    "ownerOnly": false,
+    "ownerOnly": true,
     "export": false,
     "personal": false
   },

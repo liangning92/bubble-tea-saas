@@ -1,3 +1,4 @@
+import {hygieneAreaCreateBody,hygieneAreaUpdateBody,hygieneTemplateCreateBody,hygieneTemplateUpdateBody} from '../services/HygieneInput'
 import prisma from '../config/database'
 import { formatDate } from '../utils/dateUtils'
 import { Router } from 'express'
@@ -33,7 +34,7 @@ router.get('/areas', authenticate, async (req: AuthRequest, res) => {
 })
 
 // POST /api/hygiene/areas
-router.post('/areas', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/areas', authenticate, authorize('admin', 'manager'), validateBody(hygieneAreaCreateBody), async (req: AuthRequest, res) => {
   try {
     const area = await HygieneService.createArea({
       ...req.body,
@@ -46,7 +47,7 @@ router.post('/areas', authenticate, authorize('admin', 'manager'), async (req: A
 })
 
 // PUT /api/hygiene/areas/:id
-router.put('/areas/:id', authenticate, authorize('admin', 'manager'), hygieneStore('hygieneArea'), async (req: AuthRequest, res) => {
+router.put('/areas/:id', authenticate, authorize('admin', 'manager'), hygieneStore('hygieneArea'), validateBody(hygieneAreaUpdateBody), async (req: AuthRequest, res) => {
   try {
     const area = await HygieneService.updateArea(req.params.id, req.body)
     res.json({ code: 200, data: area })
@@ -107,7 +108,7 @@ router.get('/templates/:id', authenticate, async (req: AuthRequest, res) => {
 })
 
 // POST /api/hygiene/templates
-router.post('/templates', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/templates', authenticate, authorize('admin', 'manager'), validateBody(hygieneTemplateCreateBody), async (req: AuthRequest, res) => {
   try {
     const template = await HygieneService.createTemplate({
       ...req.body,
@@ -120,7 +121,7 @@ router.post('/templates', authenticate, authorize('admin', 'manager'), async (re
 })
 
 // PUT /api/hygiene/templates/:id
-router.put('/templates/:id', authenticate, authorize('admin', 'manager'), hygieneStore('hygieneTemplate'), async (req: AuthRequest, res) => {
+router.put('/templates/:id', authenticate, authorize('admin', 'manager'), hygieneStore('hygieneTemplate'), validateBody(hygieneTemplateUpdateBody), async (req: AuthRequest, res) => {
   try {
     const template = await HygieneService.updateTemplate(req.params.id, req.body)
     res.json({ code: 200, data: template })
