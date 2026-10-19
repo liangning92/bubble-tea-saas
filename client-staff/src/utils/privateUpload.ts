@@ -14,7 +14,14 @@ export async function privateUploadBody(file: File, purpose?: 'team', uploadRequ
     throw new Error('STAFF_UPLOAD_REQUEST_INVALID')
   }
   let bytes: ArrayBuffer
-  try { bytes = await file.arrayBuffer() } catch { throw new Error('STAFF_FILE_READ_FAILED') }
+  let readTimer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const deadline = new Promise<ArrayBuffer>((_resolve, reject) => {
+      readTimer = setTimeout(() => reject(new Error('STAFF_FILE_READ_FAILED')), 15000)
+    })
+    bytes = await Promise.race([file.arrayBuffer(), deadline])
+  } catch { throw new Error('STAFF_FILE_READ_FAILED') }
+  finally { if (readTimer !== undefined) clearTimeout(readTimer) }
   if (bytes.byteLength !== file.size) throw new Error('STAFF_FILE_READ_FAILED')
 
   const boundary = 'youme-private-' + crypto.randomUUID()

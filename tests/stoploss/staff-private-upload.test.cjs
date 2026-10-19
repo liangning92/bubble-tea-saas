@@ -3,7 +3,7 @@ const crypto=require('node:crypto'),{Readable}=require('node:stream'),ts=require
 const busboy=require('../../server/node_modules/busboy');
 const source=fs.readFileSync('client-staff/src/utils/privateUpload.ts','utf8');
 const output=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
-const sandbox={exports:{},Blob,crypto:crypto.webcrypto};vm.runInNewContext(output,sandbox);
+const sandbox={exports:{},Blob,crypto:crypto.webcrypto,setTimeout,clearTimeout};vm.runInNewContext(output,sandbox);
 const {privateUploadBody}=sandbox.exports, requestId=crypto.randomUUID()+':0';
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64');
 function parse(body,type){return new Promise((resolve,reject)=>{const parser=busboy({headers:{'content-type':type}}),fields={},files=[];
@@ -44,4 +44,9 @@ test('an account switch while reading a queued file never uploads old bytes usin
  vm.runInNewContext(code,sessionSandbox);const upload=sessionSandbox.exports.uploadPrivateFile(file,'team',requestId);
  state={token:'synthetic-b',user:{id:'b',storeId:'store-b',staffId:'staff-b'}};releaseRead(png.buffer.slice(png.byteOffset,png.byteOffset+png.byteLength));
  await assert.rejects(upload,{message:'TEAM_IDENTITY_REQUIRED'});assert.equal(calls,0);
+});
+test('an unresponsive file read has a deadline and cannot hold the pending queue forever',async()=>{
+ let expire,cleared=false;const timed={exports:{},Blob,crypto:crypto.webcrypto,setTimeout:callback=>{expire=callback;return 1},clearTimeout:id=>{assert.equal(id,1);cleared=true}};
+ vm.runInNewContext(output,timed);const file={size:png.length,type:'image/png',arrayBuffer:()=>new Promise(()=>{})};
+ const request=timed.exports.privateUploadBody(file,'team',requestId);expire();await assert.rejects(request,{message:'STAFF_FILE_READ_FAILED'});assert(cleared);
 });
