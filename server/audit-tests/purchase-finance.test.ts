@@ -1,5 +1,5 @@
 import {beforeEach,expect,jest,test} from '@jest/globals'
-jest.mock('../src/config/database',()=>({__esModule:true,default:{order:{findMany:jest.fn()},expense:{findMany:jest.fn()},salary:{findMany:jest.fn()},config:{findUnique:jest.fn()},bankAccount:{findMany:jest.fn()},inventory:{findMany:jest.fn()},purchaseOrder:{aggregate:jest.fn()},stockInLog:{aggregate:jest.fn()}}}))
+jest.mock('../src/config/database',()=>({__esModule:true,default:{stockOutLog:{findMany:jest.fn(async()=>[])},order:{findMany:jest.fn()},expense:{findMany:jest.fn()},salary:{findMany:jest.fn()},config:{findUnique:jest.fn()},bankAccount:{findMany:jest.fn()},inventory:{findMany:jest.fn()},purchaseOrder:{aggregate:jest.fn()},stockInLog:{aggregate:jest.fn()}}}))
 jest.mock('../src/services/FixedAssetService',()=>({getDepreciationSchedule:jest.fn(async()=>[])}))
 import prisma from '../src/config/database'
 import {getProfitAnalysis,getCashFlow,getBalanceSheet} from '../src/services/FinanceService'

@@ -68,6 +68,30 @@ if(!/^\/tmp\/pos-idempotency-runtime-[\w-]+$/.test(runtime||'')||!['sqlite','pos
  const legacy=await send('POST','stock_in','legacy-in',{...legacyBody,requestId:crypto.randomUUID(),legacyCostMode:'current_average'});assert.equal(legacy.status,200,JSON.stringify(legacy));assert.equal((await db.inventory.findUnique({where:{id:'legacy'}})).currentStock,90);assert.equal(legacy.data.events[0].reversedCarryingAmount,200);
  await inventory('purchase-only');await receipt('po-log','purchase-only',10,100,{purchaseOrderId:'synthetic-po'});assert.equal((await send('GET','stock_in','po-log')).status,409);
  console.log('PASS '+provider+' concurrent correction isolation, live BOM recosting, invalid amounts and ledger metadata/history');
+ // Value-only corrections split the receipt difference without replaying physical movements.
+ await inventory('revalue',4865,159.6457765667574);const rvSource=await receipt('revalue-in','revalue',50,200000);
+ await db.batch.update({where:{id:rvSource.batchId},data:{quantity:21.666666666}});
+ const rvCount=await db.inventoryCount.create({data:{storeId:'store',period:'ad_hoc',startDate:new Date(),endDate:new Date(),status:'in_progress',items:{create:{inventoryId:'revalue',systemQty:4865,countedQty:4865,variance:0,countedAt:new Date()}}},include:{items:true}});
+ await db.config.create({data:{storeId:'store',key:'inventory_calibrated_v1:revalue',value:new Date(Date.now()+10000).toISOString(),category:'inventory'}});
+ const basis=(await send('GET','stock_in','revalue-in')).data.revaluation;assert.ok(Math.abs(basis.remainingQuantity-21.666666666)<1e-8);
+ const rvBody=body({inventoryId:'revalue',quantity:50,totalAmount:4000,note:'Verified supplier total'},{action:'revalue'});
+ const rv=await send('POST','stock_in','revalue-in',rvBody);assert.equal(rv.status,200,JSON.stringify(rv));
+ const delta=rv.data.events[0].costDifference;assert.equal(delta.totalDifference,-196000);assert.ok(Math.abs(delta.inventoryDifference+84933.33333072)<1e-6);assert.ok(Math.abs(delta.consumptionDifference+111066.66666928)<1e-6);assert.ok(Math.abs(delta.inventoryDifference+delta.consumptionDifference+196000)<1e-7);
+ const rvInv=await db.inventory.findUnique({where:{id:'revalue'}});assert.equal(rvInv.currentStock,4865);assert.ok(Math.abs(rvInv.avgCost-(4865*159.6457765667574+delta.inventoryDifference)/4865)<1e-8);
+ const rvBatch=await db.batch.findUnique({where:{id:rvSource.batchId}});assert.equal(rvBatch.quantity,21.666666666);assert.equal(rvBatch.unitCost,80);
+ assert.deepEqual(await db.inventoryCount.findUnique({where:{id:rvCount.id},include:{items:true}}),rvCount,'count and its observed quantities are untouched');
+ assert.equal((await send('POST','stock_in','revalue-in',rvBody)).data.version,rv.data.version);assert.equal(await db.stockOutLog.count({where:{inventoryId:'revalue',reason:'receipt_cost_adjustment'}}),1,'retry cannot double post cost');
+ const rvSums=await db.stockInLog.aggregate({where:{inventoryId:'revalue'},_sum:{quantity:true,totalAmount:true}});assert.equal(rvSums._sum.quantity,50);assert.equal(rvSums._sum.totalAmount,4000);
+ const {inventoryConsumptionCostAdjustment}=require(path.resolve('server/src/services/InventoryCostAdjustmentService.ts'));const adjustment=await inventoryConsumptionCostAdjustment(db,'store',new Date(0),new Date(Date.now()+10000));assert.ok(Math.abs(adjustment-delta.consumptionDifference)<1e-6);
+ const finance=require(path.resolve('server/src/services/FinanceService.ts'));const summary=await finance.getRevenueSummary('store',new Date(0),new Date(Date.now()+10000));assert.ok(Math.abs(summary.totalCost-delta.consumptionDifference)<1e-6);assert.equal(summary.inventoryCostAdjustment,summary.totalCost);
+ const trend=await finance.getDailyRevenueTrend('store',1);assert.ok(Math.abs(trend.reduce((sum,row)=>sum+row.cost,0)-summary.inventoryCostAdjustment)<1e-6,'daily costs reconcile to posted correction');
+ const profit=await finance.getProfitAnalysis('store',new Date(0),new Date(Date.now()+10000));assert.equal(profit.inventoryCostAdjustment,summary.totalCost);assert.equal(profit.cogs,summary.totalCost);
+ for(const replacement of [{inventoryId:'revalue',quantity:49,totalAmount:5000,note:''},{inventoryId:'b',quantity:50,totalAmount:5000,note:''}])assert.equal((await send('POST','stock_in','revalue-in',body(replacement,{action:'revalue',expectedVersion:rv.data.version}))).status,409);
+ const rvBack=await send('POST','stock_in','revalue-in',body({inventoryId:'revalue',quantity:50,totalAmount:200000,note:'Second audited correction'},{action:'revalue',expectedVersion:rv.data.version}));assert.equal(rvBack.status,200,JSON.stringify(rvBack));assert.ok(Math.abs((await db.inventory.findUnique({where:{id:'revalue'}})).avgCost-159.6457765667574)<1e-8);assert.ok(Math.abs(await inventoryConsumptionCostAdjustment(db,'store',new Date(0),new Date(Date.now()+10000)))<1e-7);
+ await inventory('fully-used',0,10);const fully=await receipt('fully-used-in','fully-used',20,200);await db.batch.update({where:{id:fully.batchId},data:{quantity:0,status:'used'}});
+ const full=await send('POST','stock_in','fully-used-in',body({inventoryId:'fully-used',quantity:20,totalAmount:400,note:'All consumed'},{action:'revalue'}));assert.equal(full.status,200,JSON.stringify(full));assert.equal(full.data.events[0].costDifference.inventoryDifference,0);assert.equal(full.data.events[0].costDifference.consumptionDifference,200);assert.equal((await db.inventory.findUnique({where:{id:'fully-used'}})).currentStock,0);
+ await db.inventoryCount.update({where:{id:rvCount.id},data:{status:'cancelled'}});
+ console.log('PASS '+provider+' partial/full consumption value split, active/completed count boundaries unchanged, signed profit posting, repeated corrections, idempotency and amount-only guard');
  if(process.env.MANUAL_CORRECTION_HOLD){
    await inventory('ui-manual-receipt',100,10);await receipt('ui-in','ui-manual-receipt',20,200);
    await inventory('ui-manual-issue',100,10);await out('ui-out','ui-manual-issue',10,100,'withdrawal',{stockEffect:'internal_transfer'});

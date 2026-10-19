@@ -1,6 +1,6 @@
 import prisma from '../config/database'
 import { createHash, randomUUID } from 'crypto'
-import { alignInventoryBatches, consumeInventoryBatches } from './InventoryBatchService'
+import { alignInventoryBatches, consumeInventoryBatches, availableBatches } from './InventoryBatchService'
 import { markConsumptionDayDirty } from './OrderConsumptionService'
 import { recalculateInventoryConsumers } from './InventoryQuantityService'
 import { unifiedInventorySince, calibrationAt } from './UnifiedInventoryService'
@@ -38,15 +38,26 @@ async function snapshot(db: any, storeId: string, type: Direction, row: any) {
     ambiguousCost: type === 'stock_in' && note.costProvided === undefined && row.totalAmount === 0,
     originalActor: row.staffId || null }
 }
+
+async function revaluationBasis(db: any, current: any) {
+  if (!current || current.stockEffect !== 'physical_in' || !current.batchId) return null
+  const inventory = await db.inventory.findUnique({ where: { id: current.inventoryId } })
+  const batches = await db.batch.findMany({ where: { inventoryId: current.inventoryId, status: 'active' }, orderBy: { createdAt: 'desc' } })
+  const batch = await db.batch.findFirst({ where: { id: current.batchId, inventoryId: current.inventoryId } })
+  if (!inventory || !batch || batch.quantity < -1e-7 || batch.quantity > current.quantity + 1e-7) return null
+  const remainingQuantity = availableBatches(batches, inventory.currentStock).find((b: any) => b.id === current.batchId)?.quantity || 0
+  return { remainingQuantity, consumedQuantity: current.quantity - remainingQuantity, quantity: current.quantity, totalAmount: current.totalAmount, carryingAmount: current.carryingAmount ?? current.quantity * Number(inventory.avgCost), averageAmount: current.quantity * Number(inventory.avgCost) }
+}
+
 export async function getManualCorrection(storeId: string, type: Direction, id: string, db: any = prisma) {
   const row = await root(db, storeId, type, id), saved = await db.config.findUnique({ where: { storeId_key: { storeId, key: key(type, id) } } })
   const state = saved ? parse(saved.value) : { version: 'original', current: await snapshot(db, storeId, type, row), events: [] }
   const actors = await loadInventoryActors(db, storeId, [state.current?.originalActor, row.staffId, ...state.events.map((e: any) => e.actorId)])
-  return { ...state, original: await snapshot(db, storeId, type, row), originalActor: actors.get(row.staffId) || null,
+  return { ...state, revaluation: await revaluationBasis(db, state.current), original: await snapshot(db, storeId, type, row), originalActor: actors.get(row.staffId) || null,
     events: state.events.map((e: any) => ({ ...e, actor: actors.get(e.actorId) || { id: e.actorId, name: e.actorName, employeeNumber: '' } })) }
 }
 export interface CorrectionInput {
-  requestId: string; expectedVersion: string; action: 'correct' | 'cancel'; reason: string
+  requestId: string; expectedVersion: string; action: 'correct' | 'cancel' | 'revalue'; reason: string
   replacement?: { inventoryId: string; quantity: number; totalAmount: number; note: string }
   legacyCostMode?: 'recorded' | 'current_average'
 }
@@ -68,7 +79,7 @@ export async function correctManualStock(storeId: string, type: Direction, id: s
     if (!state.current) fail('MANUAL_CORRECTION_ALREADY_CANCELLED')
     if (!input.reason?.trim() || input.reason.length > 1000) fail('MANUAL_CORRECTION_REASON_REQUIRED')
     const before = state.current, desired = input.action === 'cancel' ? null : input.replacement
-    if (input.action === 'correct' && (!desired || !Number.isFinite(desired.quantity) || desired.quantity <= 0 || !Number.isSafeInteger(desired.totalAmount) || desired.totalAmount < 0 || desired.totalAmount > 2147483647 || desired.note.length > 2000)) fail('MANUAL_CORRECTION_INVALID_INPUT')
+    if (input.action !== 'cancel' && (!desired || !Number.isFinite(desired.quantity) || desired.quantity <= 0 || !Number.isSafeInteger(desired.totalAmount) || desired.totalAmount < 0 || desired.totalAmount > 2147483647 || desired.note.length > 2000)) fail('MANUAL_CORRECTION_INVALID_INPUT')
     const inventoryIds = [...new Set<string>([before.inventoryId, ...(desired ? [desired.inventoryId] : [])])].sort(), inventories = new Map<string, any>()
     for (const inventoryId of inventoryIds) {
       const inv = await tx.inventory.findFirst({ where: { id: inventoryId, storeId } })
@@ -82,7 +93,9 @@ export async function correctManualStock(storeId: string, type: Direction, id: s
     const after: any = desired ? { ...before, ...desired, materialName: inventories.get(desired.inventoryId).name, unit: inventories.get(desired.inventoryId).unit, unitCost: desired.totalAmount / desired.quantity, carryingAmount: desired.totalAmount, ambiguousCost: false } : null
     const metadataOnly = after && same(before, after)
     if (metadataOnly) { after.carryingAmount = before.carryingAmount; after.ambiguousCost = before.ambiguousCost }
-    const changesStock = before.stockEffect !== 'internal_transfer' && !metadataOnly
+    const revalue = input.action === 'revalue'
+    if (revalue && (type !== 'stock_in' || !after || before.inventoryId !== after.inventoryId || before.quantity !== after.quantity || after.totalAmount === before.totalAmount)) fail('MANUAL_CORRECTION_REVALUE_AMOUNT_ONLY')
+    const changesStock = before.stockEffect !== 'internal_transfer' && !metadataOnly && !revalue
     if (changesStock) {
       for (const inventoryId of inventoryIds) {
         const observed = await calibrationAt(tx, storeId, inventoryId)
@@ -103,7 +116,25 @@ export async function correctManualStock(storeId: string, type: Direction, id: s
       balances.push({ inventoryId, beforeStock: inv.currentStock, beforeAvgCost: Number(inv.avgCost), afterStock: Math.max(0, stock), afterAvgCost: avgCost })
       inventories.set(inventoryId, { ...inv, currentStock: Math.max(0, stock), avgCost })
     }
-    let reversedCarryingAmount: number | null = null
+    let reversedCarryingAmount: number | null = null, costDifference: any = null
+    if (revalue) {
+      const basis = await revaluationBasis(tx, before)
+      if (!basis) fail('MANUAL_CORRECTION_RECEIPT_BATCH_MISSING')
+      if (before.ambiguousCost && !input.legacyCostMode) fail('MANUAL_CORRECTION_LEGACY_COST_CHOICE_REQUIRED')
+      const inv = inventories.get(before.inventoryId)
+      const previousAmount = before.ambiguousCost ? input.legacyCostMode === 'current_average' ? basis.averageAmount : before.totalAmount : basis.carryingAmount
+      const totalDifference = after.totalAmount - previousAmount
+      const inventoryDifference = totalDifference * basis.remainingQuantity / before.quantity
+      const consumptionDifference = totalDifference - inventoryDifference
+      // A value-only operation keeps physical counts and their observation boundaries intact.
+      if (inventoryDifference) await change(inv.id, 0, inventoryDifference)
+      else balances.push({inventoryId:inv.id,beforeStock:inv.currentStock,afterStock:inv.currentStock,beforeAvgCost:Number(inv.avgCost),afterAvgCost:Number(inv.avgCost)})
+      await tx.batch.update({ where: { id: before.batchId }, data: { unitCost: after.unitCost } })
+      reversedCarryingAmount = previousAmount
+      costDifference = { ...basis, previousAmount, correctedAmount: after.totalAmount, totalDifference, inventoryDifference, consumptionDifference, basis: 'remaining_batch_proportion_at_correction', postingAt: now }
+      if (consumptionDifference) await tx.stockOutLog.create({data:{inventoryId:inv.id,quantity:0,reason:'receipt_cost_adjustment',operationId:'manual-correction:'+eventId+':consumption-cost',staffId:actorId,note:JSON.stringify({version:1,kind:'receipt-cost-adjustment',unitCost:0,totalAmount:consumptionDifference,note:input.reason.trim(),costDifference,manualCorrection:{type,rootId:id,eventId,role:'consumption_cost',action:input.action,reason:input.reason.trim(),actorId,actorName,at:now}})}})
+      await recalculateInventoryConsumers(tx, inventoryIds)
+    }
     if (changesStock) {
       const inv = inventories.get(before.inventoryId)
       let carrying = before.carryingAmount
@@ -155,7 +186,7 @@ export async function correctManualStock(storeId: string, type: Direction, id: s
     const reversal = await append(before, -1, 'reversal')
     if (after) { const replacement = await append(after, 1, 'replacement'); after.logId = replacement.id }
     await markConsumptionDayDirty(tx, storeId, new Date(now))
-    const event = { id: eventId, at: now, action: input.action, reason: input.reason.trim(), actorId, actorName, before, after, balances, reversalLogId: reversal.id, legacyCostMode: input.legacyCostMode || null, reversedCarryingAmount, metadataOnly: !!metadataOnly }
+    const event = { id: eventId, at: now, action: input.action, reason: input.reason.trim(), actorId, actorName, before, after, balances, reversalLogId: reversal.id, legacyCostMode: input.legacyCostMode || null, reversedCarryingAmount, metadataOnly: !!metadataOnly, costDifference }
     const result = { version: eventId, current: after, events: [...state.events, event] }
     await tx.config.update({ where: { storeId_key: { storeId, key: stateKey } }, data: { value: JSON.stringify(result) } })
     await tx.financeAuditLog.create({ data: { storeId, userId: actorId, action: 'update', entityType: 'manual_inventory_correction', entityId: id, description: input.reason.trim(), oldValue: JSON.stringify(before), newValue: JSON.stringify(event) } })
