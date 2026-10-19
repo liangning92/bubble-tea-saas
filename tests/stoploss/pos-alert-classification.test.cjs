@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
 function service(db,events=[]){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync('server/src/services/POSActionLogService.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,{module:m,exports:m.exports,require:n=>({'../config/database':{__esModule:true,default:db},'../socket':{socketManager:{emitToStore:(...a)=>events.push(a)}},'../utils/posCartState':{}}[n]),Date,Set,console});return m.exports;}
 test('old clients cannot turn normal receipt process events into cashier alerts; real behavior warnings still broadcast',async()=>{
- const rows=[],events=[];const s=service({pOSActionLog:{create:async({data})=>{rows.push(data);return {...data,id:'log'}}}},events);
+ const rows=[],events=[];const s=service({pOSActionLog:{count:async()=>0,create:async({data})=>{rows.push(data);return {...data,id:'log'}}}},events);
  for(const status of ['pending','sent','paper-confirmed'])await s.logPOSAction({storeId:'owned',action:'receipt_print',metadata:{status},severity:'warning'});
  assert.ok(rows.every(r=>r.severity==='info'));assert.equal(events.length,0);
  await s.logPOSAction({storeId:'owned',action:'receipt_print',metadata:{status:'unknown'},severity:'warning'});
