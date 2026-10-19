@@ -29,7 +29,14 @@ const workRoutes = new Set([
 
 export function canUseManagementRoute(user: any, spec: Declaration): boolean {
   if (user.role === 'admin' && !user.employeeApp) return true
-  if (hasManagementAccess(user.role, user.accessRole) && !user.employeeApp) return !['products.manage','products.write','prices.write'].includes(spec.permission || '') && !spec.routeKey.includes('/api/product-analysis')
+  if (hasManagementAccess(user.role, user.accessRole) && !user.employeeApp) {
+    if (['products.manage','products.write','prices.write'].includes(spec.permission || '')) return false
+    if (spec.routeKey.includes('/api/product-analysis')) return false
+    if (spec.routeKey.includes('/api/products') && !workRoutes.has(spec.routeKey)) return false
+    if (!spec.routeKey.startsWith('GET ') && spec.routeKey.includes('/api/bom')) return false
+    if (spec.permission === 'products.read' && !spec.routeKey.startsWith('GET ') && !workRoutes.has(spec.routeKey)) return false
+    return true
+  }
   if (spec.ownerOnly) return false
   if (user.employeeApp) return isEmployeeAppRoute(spec.routeKey, spec)
   if (spec.personal || workRoutes.has(spec.routeKey)) return true

@@ -1,3 +1,4 @@
+import {staffAccessLabels,staffRoleLabel} from '../../../shared/staffAccessLabels';
 import {useMarketingCopy} from "../components/marketing/MarketingLayout";
 import { permissionForPage } from "../../../shared/StaffAccess";
 import { StaffApprovalDialog } from "../../../shared/StaffApprovalDialog";
@@ -145,6 +146,7 @@ export function MainLayout() {
   const [access, setAccess] = useState<{
     actor: string;
     role: {
+      id?: string;
       name: string;
       permissions: string[];
       version?: number;
@@ -242,6 +244,11 @@ export function MainLayout() {
     }
     return path;
   };
+
+  const landingPage = visibleNavItems[0] ? navigationTarget(visibleNavItems[0].path) : null;
+  useEffect(() => {
+    if (ready && customRole && user?.role !== "admin" && location.pathname === "/dashboard" && !customRole.permissions.includes("dashboard.read") && landingPage) navigate(landingPage, { replace: true });
+  }, [ready, customRole, user?.role, location.pathname, landingPage, navigate]);
 
   // 监听 i18n 语言变化，强制 React 重新渲染
   useEffect(() => {
@@ -385,7 +392,7 @@ export function MainLayout() {
                     {user?.staff?.name || "User"}
                   </p>
                   <p className="text-xs text-gray-500 capitalize">
-                    {customRole?.name || user?.role}
+                    {customRole ? staffRoleLabel(customRole.id||'',customRole.name,staffAccessLabels(i18n.language)) : user?.role}
                   </p>
                 </div>
                 <button

@@ -176,7 +176,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ code: 401, message: 'Invalid or expired token' })
     }
 
-    const assignedAccess = await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
+    const assignedAccess = currentUser.employeeApp ? null : await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
     if (req.headers['x-client-app'] === 'admin' && !hasManagementAccess(currentUser.role, assignedAccess)) return res.status(403).json({code:403,message:'MANAGEMENT_ACCESS_REQUIRED'})
     if (currentUser.employeeApp) {
       currentUser.accessRole = employeeAppAccess(currentUser.role)
