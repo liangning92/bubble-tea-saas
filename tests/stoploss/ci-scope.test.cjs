@@ -10,6 +10,13 @@ test('team communication selects its isolated HTTP regression without unrelated 
  }finally{f.close()}
 });
 function fixture(){const root=fs.mkdtempSync(path.join(os.tmpdir(),'ci-scope-'));const write=(name,source='')=>{fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true});fs.writeFileSync(path.join(root,name),source)};return {root,write,close:()=>fs.rmSync(root,{recursive:true,force:true})}}
+test('workflow queue, service, worker and fixture changes retain the isolated communication regression',()=>{
+ const f=fixture();try{
+  for(const file of ['server/src/services/TeamWorkflowQueue.ts','server/src/services/TeamWorkflowService.ts','server/src/workers/teamWorkflow.ts','tests/stoploss/team-workflow-queue-check.cjs']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.teamCommunication,true,file);assert.equal(p.needsServer,true);assert.equal(p.needsDependencies,true);assert.deepEqual(p.http,[]);assert(!p.components.includes('pos'));assert.equal(p.browser.length,0);
+  }
+ }finally{f.close()}
+});
 test('operations plans and shared copy select protected communication checks for their actual clients',()=>{
  const f=fixture();try{
   f.write('server/src/services/TeamOperationsService.ts');f.write('shared/teamOperationCopy.ts');f.write('shared/TeamOperations.tsx',"import './teamOperationCopy'");

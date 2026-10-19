@@ -5,6 +5,7 @@ import { authenticate, AuthRequest } from '../middlewares/auth'
 import { canTeam, teamCommunication, TeamActor, TeamError } from '../services/TeamCommunicationService'
 import { teamAi } from '../services/TeamAiService'
 import { teamOperations } from '../services/TeamOperationsService'
+import { teamWorkflow } from '../services/TeamWorkflowService'
 
 export const teamCommunicationRouter = Router()
 const router = teamCommunicationRouter, service = teamCommunication()
@@ -21,6 +22,15 @@ const run = (fn: (req: AuthRequest, res: any) => Promise<unknown>) => async (req
 const ok = (res: any, data: unknown) => res.json({ code: 200, data })
 const ai = teamAi()
 const operations = teamOperations()
+const workflow = teamWorkflow()
+const workflowAfter = (req: AuthRequest) => z.coerce.number().int().nonnegative().max(999999999999).parse(req.query.after ?? 0)
+router.get('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.policy(actor(req), req.params.id))))
+router.put('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.savePolicy(actor(req), req.params.id, req.body))))
+router.get('/channels/:id/workflow/jobs', run(async (req, res) => ok(res, await workflow.jobs(actor(req), req.params.id, workflowAfter(req)))))
+router.get('/channels/:id/workflow/events', run(async (req, res) => ok(res, await workflow.events(actor(req), req.params.id, workflowAfter(req)))))
+router.post('/channels/:id/workflow/jobs/:seq/actions', run(async (req, res) => ok(res, await workflow.action(actor(req), req.params.id,
+  z.coerce.number().int().positive().max(999999999999).parse(req.params.seq), req.body))))
+router.get('/channels/:id/workflow/export', run(async (req, res) => ok(res, await workflow.export(actor(req), req.params.id, workflowAfter(req)))))
 router.get('/channels/:id/operations', run(async (req, res) => ok(res, await operations.list(actor(req), req.params.id))))
 router.post('/channels/:id/operations/import', run(async (req, res) => ok(res, await operations.import(actor(req), req.params.id, req.body))))
 router.post('/channels/:id/operations/:planId/actions', run(async (req, res) => ok(res, await operations.action(actor(req), req.params.id, req.params.planId, req.body))))

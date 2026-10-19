@@ -59,7 +59,7 @@ async function main() {
   });
   app.post('/fixture/outage', (req, res) => { pauseMessages = req.body.pause === true; res.json({ paused: pauseMessages }); });
   app.use('/api/team', (req, res, next) => {
-    if (req.method === 'POST' && /^\/channels\/[^/]+\/(?:messages|tasks\/[^/]+\/actions|operations(?:\/import|\/[^/]+\/(?:actions|scan)))$/.test(req.path)) {
+    if (req.method === 'POST' && /^\/channels\/[^/]+\/(?:messages|tasks\/[^/]+\/actions|workflow\/jobs\/[^/]+\/actions|operations(?:\/import|\/[^/]+\/(?:actions|scan)))$/.test(req.path)) {
       if (pauseMessages) return res.status(503).json({ code: 503, message: 'ISOLATED_SERVICE_OUTAGE' });
       if (dropNextResponse) { dropNextResponse = false; res.json = () => { req.socket.destroy(); return res; }; }
     }
@@ -273,6 +273,7 @@ async function main() {
     });
     await require('./team-operations-loop-check.cjs')({ prisma, good, request, create, send, test, registerActor: async who => { tokens[who] = await token(who); }, dropResponse: () => { dropNextResponse = true; } });
     await require('./team-communication-followup-check.cjs')({ prisma, good, request, create, send, test, dropResponse: () => { dropNextResponse = true; } });
+    await require('./team-workflow-queue-check.cjs')({ prisma, good, request, create, send, test, dropResponse: () => { dropNextResponse = true; } });
     await test('rate and length limits apply transactionally, and invalid requests do not allocate sequence numbers', async () => {
       const c = await create('rate', 'group', ['s-bob']);
       const sends = await Promise.all(Array.from({ length: 35 }, (_, n) => request('rate', 'POST', `/team/channels/${c.id}/messages`, { requestId: randomUUID(), text: String(n) })));

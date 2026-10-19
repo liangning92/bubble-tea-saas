@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
+import { enqueueTeamWorkflow } from './TeamWorkflowQueue'
 
 export const TEAM_PREFIX = 'team.communication.'
 export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
@@ -240,6 +241,7 @@ export function teamCommunication(db: DB = prisma) {
           await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, approvedAt: new Date(now).toISOString() })
           await audit(tx, a, id, 'update', { action: 'ai_publish', draftId: aiDraftId, messageId: message.id })
         }
+        await enqueueTeamWorkflow(tx, a, c, message, { read, write })
         return message
       })
     },
