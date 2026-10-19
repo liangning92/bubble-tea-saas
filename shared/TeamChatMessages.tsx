@@ -5,12 +5,13 @@ import { teamChatCopy } from './teamChatCopy'
 import type { TeamClient } from './TeamCommunication'
 interface ChatMessage { id: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: { model: string } }
 export type TeamScrollPositions = Map<string, { top: number; bottom: boolean }>
-export function TeamChatMessages({ messages, client, staffId, channelId, query, language, children, scrollPositions }: {
- messages: ChatMessage[]; client: TeamClient; staffId: string; channelId: string; query: string; language: string; children: ReactNode; scrollPositions?: TeamScrollPositions
+export function TeamChatMessages({ messages, client, staffId, channelId, query, language, children, scrollPositions, historyReady = true, historyFailed = false }: {
+ messages: ChatMessage[]; client: TeamClient; staffId: string; channelId: string; query: string; language: string; children: ReactNode; scrollPositions?: TeamScrollPositions; historyReady?: boolean; historyFailed?: boolean
 }) {
  const copy = teamChatCopy(language), work = teamWorkCopy(language)
  const scroll = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), bottom = useRef(true), initial = useRef(true), manualScroll = useRef(false)
  const [away, setAway] = useState(false)
+ const restoring = initial.current && !historyReady && !historyFailed && scrollPositions?.get(channelId)?.bottom === false
  const locale = language.startsWith('zh') ? 'zh-CN' : language.startsWith('en') ? 'en-GB' : 'id-ID'
  const jump = () => { if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; bottom.current = true; manualScroll.current = false; setAway(false); scrollPositions?.set(channelId, { top: scroll.current?.scrollTop || 0, bottom: true }) }
  useLayoutEffect(() => { initial.current = true; bottom.current = true; setAway(false) }, [channelId])
@@ -18,10 +19,13 @@ export function TeamChatMessages({ messages, client, staffId, channelId, query, 
   if (!scroll.current?.clientHeight) return
   if (initial.current && (messages.length || Children.count(children))) {
    const saved = scrollPositions?.get(channelId)
-   if (saved && !saved.bottom) { scroll.current.scrollTop = saved.top; bottom.current = false; setAway(true) } else jump()
+   if (saved && !saved.bottom) {
+    if (!historyReady) return
+    scroll.current.scrollTop = saved.top; bottom.current = false; setAway(true)
+   } else jump()
    initial.current = false
   } else if (bottom.current && !initial.current) jump()
- }, [messages.length, children])
+ }, [messages.length, children, historyReady])
  useEffect(() => {
   if (!scrollPositions || !scroll.current || !content.current) return
   const observer = new ResizeObserver(() => { if (bottom.current && !initial.current && scroll.current?.clientHeight) jump() })
@@ -34,15 +38,20 @@ export function TeamChatMessages({ messages, client, staffId, channelId, query, 
   return () => { observer.disconnect(); document.removeEventListener('click', reference, true) }
  }, [channelId, scrollPositions])
  const day = (s: string) => new Date(s).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
- return <div className="team-message-area">
-  <div ref={scroll} className="team-messages" role="log" tabIndex={scrollPositions ? 0 : undefined} aria-live="polite" aria-relevant="additions" data-testid="team-messages"
-  onWheel={event => { if (event.deltaY < 0 || !bottom.current) manualScroll.current = true }}
+ return <div className="team-message-area" aria-busy={restoring || undefined}>
+  {restoring && <p role="status" style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>{work.loading}</p>}
+  <div ref={scroll} style={restoring ? { visibility: 'hidden' } : undefined} className="team-messages" role="log" tabIndex={scrollPositions ? 0 : undefined} aria-live="polite" aria-relevant="additions" data-testid="team-messages"
+  onWheel={event => { if (initial.current || event.deltaY < 0 || !bottom.current) manualScroll.current = true }}
   onTouchMove={() => { manualScroll.current = true }}
   onTouchEnd={() => { const el = scroll.current; if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 80) manualScroll.current = false }}
   onPointerDown={event => { const el = scroll.current; if (el && event.target === el && event.clientX >= el.getBoundingClientRect().left + el.clientWidth) manualScroll.current = true }}
   onKeyDown={event => { if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) manualScroll.current = true }}
   onScroll={() => {
-   const el = scroll.current!; if (!el.clientHeight || initial.current) return
+   const el = scroll.current!; if (!el.clientHeight) return
+   if (initial.current) {
+    if (!manualScroll.current) return
+    initial.current = false; bottom.current = false
+   }
    if (scrollPositions && bottom.current && !manualScroll.current) { jump(); return }
    bottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setAway(!bottom.current)
    if (bottom.current) manualScroll.current = false

@@ -50,6 +50,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
   const selectedId = navigation?.channelId ?? internalId
   const setSelectedId = (id: string) => navigation ? navigation.select(id) : setInternalId(id)
   const selectedRef = useRef(selectedId)
+  const [historyReady, setHistoryReady] = useState(false)
   const [messages, setMessages] = useState<Message[]>([]), [messageChannelId, setMessageChannelId] = useState(''), [minutes, setMinutes] = useState<Minute[]>([])
   const [tasks, setTasks] = useState<TeamTask[]>([])
   const [receipts, setReceipts] = useState<{ staffId: string; seq: number }[]>([])
@@ -150,7 +151,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
     return () => clearInterval(timer)
   }, [client, scope, online, queueReady])
   useEffect(() => {
-    setMessages([]); setMinutes([]); setTasks([]); setReceipts([]); setMeta(null); setEditing(null); setVersions([]); setError('')
+    setMessages([]); setHistoryReady(false); setMinutes([]); setTasks([]); setReceipts([]); setMeta(null); setEditing(null); setVersions([]); setError('')
     if (!selectedId || !currentChannel?.member && !auditReason) return
     let active = true, inFlight = false, cursor = 0, stopped = false
     const pull = async () => {
@@ -161,7 +162,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
         if (!active || !client.current()) return
         setMeta({ ...currentChannel!, ...response.channel, canEdit: response.canEdit }); setMessageChannelId(selectedId)
         setMessages(previous => [...new Map([...previous, ...response.messages].map((m: Message) => [m.seq, m])).values()].sort((a, b) => a.seq - b.seq))
-        cursor = response.cursor; setError('')
+        cursor = response.cursor; setHistoryReady(!response.hasMore); setError('')
         const [records, followUps] = await Promise.all([client.request('get', `/team/channels/${selectedId}/minutes${query}`), client.request('get', `/team/channels/${selectedId}/tasks${query}`)])
         if (!active || !client.current()) return
         setMinutes(records); setTasks(followUps)
@@ -248,7 +249,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
           {(currentChannel?.member || auditReason) && <>
             {auditReason && <p className="rounded-lg bg-purple-50 p-3 text-sm">{w.audit} · {w.readOnly}</p>}
             <section className="team-chat-panel" hidden={panel !== 'chat'} aria-label={chat.chat}>
-              <TeamChatMessages key={selectedId} scrollPositions={compact ? scrollPositions.current : undefined} messages={messageChannelId === selectedId ? messages : []} client={client} staffId={staffId} channelId={selectedId} query={query} language={language}>
+              <TeamChatMessages key={selectedId} historyFailed={!!error} historyReady={!compact || messageChannelId === selectedId && historyReady} scrollPositions={compact ? scrollPositions.current : undefined} messages={messageChannelId === selectedId ? messages : []} client={client} staffId={staffId} channelId={selectedId} query={query} language={language}>
               {outbox.filter(m => m.channelId === selectedId && !messages.some(message => message.requestId === m.id)).map(m => <article key={m.id} className="team-bubble team-bubble-own team-pending"><p className="team-message-text">{m.text}</p><p className="team-pending-label">{m.files.length ? `${w.attachment}: ${m.files.length} · ` : ''}{m.error ? w.failed : w.pending}</p>{m.error && <button className="team-control" onClick={() => { void savePending({ ...m, retryable: true, nextRetryAt: 0 }).then(() => flush()) }}>{w.retry}</button>}</article>)}
               </TeamChatMessages>
               {currentChannel?.member && !meta?.archived && !currentChannel.archived && <>{meta?.kind === 'meeting' && !meta.round ? <p className="mt-4 text-sm">{w.ended}</p> : <form className="team-composer" onSubmit={send}>

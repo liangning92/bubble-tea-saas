@@ -16,8 +16,12 @@ if (params.has('keyboardtest') && nativeViewport) {
  Object.defineProperty(window, 'visualViewport', { value: testViewport, configurable: true })
  window.addEventListener('resize', () => testViewport.dispatchEvent(new Event('resize')))
 }
-const channel = { id: 'synthetic-chat', title: '合成测试频道 · 门店工作沟通 · 长标题不会挤掉操作入口', kind: 'group', ownerId: 'qa-a', lastSeq: 24, version: 1, archived: false, members: [{ staffId: 'qa-a', fromSeq: 1 }, { staffId: 'qa-b', fromSeq: 1 }], member: true, canEdit: false, canAudit: false, unread: 0, round: null }
-const messages = Array.from({ length: 24 }, (_, i) => ({ id: `qa-${i+1}`, requestId: `fixture-${i+1}`, seq: i+1, authorId: i % 2 ? 'qa-b' : 'qa-a', authorName: i % 2 ? '合成员工' : '合成主管', text: `合成短消息 ${i+1}：今天工作顺利。`, files: [] as string[], createdAt: `2026-10-19T08:${String(i).padStart(2, '0')}:00Z` }))
+const messageCount = params.has('pagination') ? 300 : 24
+let holdPages = false
+const waitingPages: (() => void)[] = [], requestedCursors: number[] = []
+const paginationChanges = new EventTarget()
+const channel = { id: 'synthetic-chat', title: '合成测试频道 · 门店工作沟通 · 长标题不会挤掉操作入口', kind: 'group', ownerId: 'qa-a', lastSeq: messageCount, version: 1, archived: false, members: [{ staffId: 'qa-a', fromSeq: 1 }, { staffId: 'qa-b', fromSeq: 1 }], member: true, canEdit: false, canAudit: false, unread: 0, round: null }
+const messages = Array.from({ length: messageCount }, (_, i) => ({ id: `qa-${i+1}`, requestId: `fixture-${i+1}`, seq: i+1, authorId: i % 2 ? 'qa-b' : 'qa-a', authorName: i % 2 ? '合成员工' : '合成主管', text: `合成短消息 ${i+1}：今天工作顺利。`, files: [] as string[], createdAt: new Date(Date.UTC(2026, 9, 19, 8, i)).toISOString() }))
 if (params.get('content') === 'long') { messages[22].text = '长消息与长网址 https://example.invalid/' + 'longtext'.repeat(80) + '\n' + '合成长消息，不包含真实员工资料。'.repeat(30); messages[23].files = ['synthetic-image'] }
 const client: TeamClient = {
  current: () => true,
@@ -26,7 +30,16 @@ const client: TeamClient = {
   if (url === '/team/channels') return [channel, { ...channel, id: 'synthetic-other', title: '另一个合成会话' }]
   if (url === '/team/directory') return [{ id: 'qa-a', name: '合成主管' }, { id: 'qa-b', name: '合成员工' }]
   if (url === '/team/capabilities') return { manage: false, audit: false }
-  if (url.includes('/messages?')) return { channel, canEdit: false, cursor: 24, messages: url.includes('after=0') && params.get('content') !== 'empty' ? messages : [], hasMore: false }
+  if (url.includes('/messages?')) {
+   const after = Number(new URL(url, 'http://fixture.invalid').searchParams.get('after'))
+   if (params.has('pagination')) {
+    requestedCursors.push(after)
+    if (holdPages && after > 0 && after < messageCount) await new Promise<void>(resolve => { waitingPages.push(resolve); paginationChanges.dispatchEvent(new Event('change')) })
+    paginationChanges.dispatchEvent(new Event('change'))
+    return { channel, canEdit: false, cursor: Math.min(after + 100, messageCount), messages: messages.slice(after, after + 100), hasMore: after + 100 < messageCount }
+   }
+   return { channel, canEdit: false, cursor: messageCount, messages: after === 0 && params.get('content') !== 'empty' ? messages : [], hasMore: false }
+  }
   if (url.endsWith('/read') && method === 'put') return {}
   if (url.endsWith('/receipts')) return [{ staffId: 'qa-a', seq: 24 }, { staffId: 'qa-b', seq: 24 }]
   if (url.endsWith('/minutes') || url.endsWith('/tasks')) return []
@@ -46,6 +59,17 @@ function Fixture() {
  {params.has('phototest') && <button style={{ position: 'fixed', top: 80, left: 10, zIndex: 100, background: '#fff' }} onClick={async () => {
   const blob = await client.download('/synthetic-only'), input = document.querySelector<HTMLInputElement>('input[type=file]')!
   const transfer = new DataTransfer(); transfer.items.add(new File([blob], 'synthetic-photo.png', { type: 'image/png' })); input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }))
- }}>选择页面内合成照片</button>}</>
+ }}>选择页面内合成照片</button>}
+ {params.has('pagination') && <PaginationControls />}</>
+}
+function PaginationControls() {
+ const [, rerender] = useState(0)
+ React.useEffect(() => { const update = () => rerender(n => n + 1); paginationChanges.addEventListener('change', update); return () => paginationChanges.removeEventListener('change', update) }, [])
+ return <aside style={{ position: 'fixed', bottom: 80, left: 10, zIndex: 100, background: '#fff', border: '1px solid #888', padding: 8, maxWidth: 280, fontSize: 12 }}>
+  <label><input type="checkbox" checked={holdPages} onChange={e => { holdPages = e.target.checked; rerender(n => n + 1) }} />暂停后续分页</label>
+  <button onClick={() => { requestedCursors.length = 0; paginationChanges.dispatchEvent(new Event('change')) }}>清空请求记录</button>
+  <button onClick={() => { waitingPages.shift()?.(); paginationChanges.dispatchEvent(new Event('change')) }}>放行一页</button>
+  <output aria-label="分页请求记录">请求游标：{requestedCursors.join(',')}；等待：{waitingPages.length}</output>
+ </aside>
 }
 createRoot(document.getElementById('root')!).render(<BrowserRouter><Fixture /></BrowserRouter>)

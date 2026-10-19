@@ -57,3 +57,32 @@ file URL access is disabled. It was attempted once, not retried, and no browser
 permissions were changed. The in-page photo case verifies display/draft logic,
 not native file selection. Physical iPhone Safari/IME behavior remains a
 separate pre-release device check.
+
+## Paged reading-position regression
+
+Open `/team?pagination=1`. This uses 300 synthetic messages, exactly 100 per
+response. Initially leave “暂停后续分页” unchecked and open the first channel.
+After message 300 appears, scroll upward two pages and record the reading
+position (390×720: scrollTop 25237, messages 278–285). Return to the list, check
+“暂停后续分页”, clear the request record, and reenter the same channel. “放行一页”
+releases one waiting request. Check the 100-, 200-, and 300-message states.
+
+Before the fix, the saved offset clamps to 8539.5, then follows the next pages
+to 17608 and 26677. After the fix, the log stays hidden behind the transient
+loading status for the first two pages and restores 25237 once history is
+complete. Only cursors 0/100/200 should load history, once each; cursor 300 may
+continue the existing 3-second tail polling. Repeated tail polls must not move
+the restored position. No production endpoint or upload is involved.
+
+Run the real component's focused scroll regressions:
+
+```sh
+node --test tests/stoploss/team-communication-scroll-restoration.test.cjs
+```
+
+For the recorded red/green comparison, set
+`TEAM_CHAT_SOURCE_REF=47a1f364212e8ce34df4713491b7fbf2088a1d04` before that
+command: the first test must fail on that original source (exit 1), while all
+four tests pass on the corrected source. The tests execute the transpiled
+component with hook scheduling and clamped scroll geometry; browser evidence
+is retained separately, rather than inferred from those mocks.
