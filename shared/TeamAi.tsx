@@ -5,7 +5,7 @@ import { teamOperationCopy } from './teamOperationCopy'
 const button = 'rounded-lg border px-3 py-2 text-sm disabled:opacity-50'
 const field = 'mt-1 w-full rounded-lg border bg-white p-2 text-sm'
 const code = (e: any) => e?.response?.data?.message || 'TEAM_AI_PROVIDER_UNAVAILABLE'
-interface Draft { id: string; kind: string; text: string; status: string; model: string; sourceSeq: number[]; usage?: { estimatedUsd: number } }
+interface Draft { id: string; kind: string; text: string; status: string; model: string; sourceSeq: number[]; error?: string; usage?: { estimatedUsd: number } }
 export interface OperationScope { planId: string; taskId: string; planVersion: number; taskVersion: number; purpose: 'explain' | 'followup' | 'remind' }
 export function TeamAi({ client, language, channelId, messages, onChanged, operation }: { client: TeamClient; language: string; channelId: string;
  messages: { seq: number; text: string }[]; onChanged: () => void; operation?: OperationScope }) {
@@ -47,6 +47,7 @@ export function TeamAi({ client, language, channelId, messages, onChanged, opera
   {draft && <div className="mt-4 space-y-3 border-t pt-3">
    <p className="text-sm font-medium">{w.privateDraft} · {draft.model}</p>
    {['pending','uncertain','blocked','sent'].includes(draft.status) && <p role="status" className="text-sm">{w[draft.status as 'pending']}</p>}
+   {draft.error && <p role="alert" className="break-words text-sm text-red-700">{teamWorkError(language, draft.error)}</p>}
    {!!draft.text && <textarea className={field} aria-label={w.privateDraft} readOnly={draft.status !== 'ready' || draft.kind !== 'draft'} maxLength={3800} rows={8} value={text} onChange={e => { setText(e.target.value); setApproved(false) }}/>}
    {draft.usage && <p className="text-xs text-gray-500">${draft.usage.estimatedUsd.toFixed(6)} · {w.estimate}</p>}
    {draft.status === 'ready' && draft.kind === 'draft' && <><label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={approved} onChange={e => setApproved(e.target.checked)}/>{w.approve}</label><button type="button" className={button} disabled={busy || !approved || !text.trim()} onClick={() => void publish()}>{w.publish}</button></>}

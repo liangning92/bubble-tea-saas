@@ -10,7 +10,8 @@ const {teamOperations}=require(root+'/server/dist/services/TeamOperationsService
 const {teamAi}=require(root+'/server/dist/services/TeamAiService');
 const db=new URL(process.env.DATABASE_URL);assert.equal(db.pathname,'/team_test');assert.equal(db.hostname,'127.0.0.1');
 assert(process.env.BT_TEST_RUN?.startsWith('bt-test-'));assert(process.env.UPLOADS_PATH?.includes(process.env.BT_TEST_RUN));
-global.fetch=async(url)=>{assert.equal(url,'https://api.minimax.io/v1/chat/completions','All real outbound calls are disabled in this fixture');return new Response(JSON.stringify({id:'mock-ui-only',choices:[{finish_reason:'stop',message:{content:'Mohon periksa mesin uji dan kirim hasil sesuai tugas yang disetujui.'}}],usage:{prompt_tokens:100,completion_tokens:20}}));};
+let modelUnauthorized=false,mockModelCalls=0;
+global.fetch=async(url)=>{assert(['https://api.minimax.io/v1/chat/completions','https://api.minimax.cn/v1/chat/completions'].includes(url),'All real outbound calls are disabled in this fixture');mockModelCalls++;if(modelUnauthorized)return new Response('',{status:401});return new Response(JSON.stringify({id:'mock-ui-only',choices:[{finish_reason:'stop',message:{content:'Mohon periksa mesin uji dan kirim hasil sesuai tugas yang disetujui.'}}],usage:{prompt_tokens:100,completion_tokens:20}}));};
 async function main(){
  const tenant=await prisma.tenant.create({data:{name:'ISOLATED operations UI'}});
  await prisma.store.create({data:{id:'ops-ui-store',tenantId:tenant.id,name:'ISOLATED operations store'}});
@@ -24,12 +25,13 @@ async function main(){
  const app=express();app.use(express.json({limit:'256kb'}));app.use(express.urlencoded({extended:false,limit:'4kb'}));
  // Visible, test-only fault controls. These routes are never mounted by the production app.
  let uploadPaused=false;
- const controls=()=>'<html lang="zh"><meta charset="utf-8"><h1>隔离上传故障控制</h1><p role="status">上传故障：'+(uploadPaused?'已开启':'已恢复')+'</p><form method="post"><button name="mode" value="fail">暂停上传</button><button name="mode" value="restore">恢复上传</button></form></html>';
+ const controls=()=>'<html lang="zh"><meta charset="utf-8"><h1>隔离故障控制</h1><p role="status">上传故障：'+(uploadPaused?'已开启':'已恢复')+'</p><p>模拟模型401：'+(modelUnauthorized?'已开启':'已关闭')+'；模拟模型调用次数：'+mockModelCalls+'</p><form method="post"><button name="mode" value="fail">暂停上传</button><button name="mode" value="restore">恢复上传</button><button name="mode" value="ai401">模拟模型401</button><button name="mode" value="aiRestore">恢复模型</button></form></html>';
+ app.use('/fixture/control',(_req,res,next)=>{res.set('Cache-Control','no-store');next();});
  app.get('/fixture/control',(_req,res)=>res.type('html').send(controls()));
- app.post('/fixture/control',(req,res)=>{if(!['fail','restore'].includes(req.body.mode))return res.status(400).send('Invalid fixture command');uploadPaused=req.body.mode==='fail';return res.type('html').send(controls());});
+ app.post('/fixture/control',(req,res)=>{if(!['fail','restore','ai401','aiRestore'].includes(req.body.mode))return res.status(400).send('Invalid fixture command');if(req.body.mode.startsWith('ai'))modelUnauthorized=req.body.mode==='ai401';else uploadPaused=req.body.mode==='fail';return res.type('html').send(controls());});
  app.use('/api/staff-work/my/files',(req,res,next)=>{if(uploadPaused&&req.method==='POST')return res.status(503).json({code:503,message:'ISOLATED_UPLOAD_OUTAGE'});next();});
  for(const [base,moduleName,exportName] of [
-  ['/api/auth','auth','authRouter'],['/api/team','teamCommunication','teamCommunicationRouter'],['/api/staff-work','employeeWorkspace','employeeWorkspaceRouter'],['/api/staff-permissions','staffPermissions','staffPermissionsRouter'],['/api/config','config','configRouter']]){
+  ['/api/auth','auth','authRouter'],['/api/team','teamCommunication','teamCommunicationRouter'],['/api/staff-work','employeeWorkspace','employeeWorkspaceRouter'],['/api/staff-permissions','staffPermissions','staffPermissionsRouter'],['/api/config','config','configRouter'],['/api/ai','aiPermissions','aiPermissionsRouter']]){
   const router=require(root+'/server/dist/routes/'+moduleName)[exportName];
   if(base==='/api/auth')app.use(base,declareAccessRoutes(base,router));else app.use(base,authenticateBeforeRouting,declareAccessRoutes(base,router));
  }

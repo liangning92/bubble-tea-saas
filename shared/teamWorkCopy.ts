@@ -8,6 +8,10 @@ const zh = {
  settings:'MiniMax 设置', enabled:'启用沟通 AI', model:'模型名称', apiKey:'API 密钥（留空保留原值）', keyReady:'已配置密钥', keyMissing:'尚未配置密钥', removeKey:'清除已保存的密钥',
  budget:'每月费用上限 USD（留空为不设上限）', unlimited:'当前不设费用上限', estimate:'本月估算含待核对预留，按 UTC 月计算；以供应商账单为准', inputPrice:'每百万输入 token 价格 USD', outputPrice:'每百万输出 token 价格 USD',
  save:'保存设置', prices:'模型与价格需按 MiniMax 账户核实；切换模型后同时核对单价。',
+ region:'MiniMax 服务地区', globalRegion:'国际区', cnRegion:'中国区', endpoint:'官方调用地址（OpenAI 兼容）',
+ regionHelp:'地区须与密钥来源平台一致；地址固定，不接受自定义主机。切换地区不会沿用已保存的密钥，请本人重新输入目标地区密钥。',
+ regionConsent:'我确认将新输入的密钥用于以上官方域名；不沿用已保存密钥。', configOnly:'保存只校验配置格式，不调用模型，也不代表供应商已接受密钥。',
+ subscriptionHelp:'Token Plan／M Plan 的模型与用途需按账号权益核实，不能把订阅名称当作门店后台授权。USD 为内部估算，不等于订阅实际扣费。',
  translate:'翻译成中文', draft:'拟写印尼语消息', report:'生成中文汇报', instruction:'中文工作要求或追问目标', sources:'选择来源消息（最多20条）',
  consent:'我确认将所选工作文字及上述要求发送给 MiniMax，不含私人资料。', generate:'生成草稿（可能计费）', generating:'正在生成，请勿重复提交',
  privateDraft:'AI 草稿，仅本人可见，请核对原文、数量和日期。', approve:'已核对内容与频道成员，批准发送', publish:'批准并发送到当前频道', sent:'已发送', pending:'处理中', uncertain:'结果待核对，请先查询；重新生成可能再次计费。',
@@ -23,6 +27,10 @@ const id: typeof zh = {
  settings:'Pengaturan MiniMax',enabled:'Aktifkan AI komunikasi',model:'Nama model',apiKey:'Kunci API (kosong untuk mempertahankan)',keyReady:'Kunci sudah diatur',keyMissing:'Kunci belum diatur',removeKey:'Hapus kunci tersimpan',
  budget:'Batas biaya bulanan USD (kosong = tanpa batas)',unlimited:'Tanpa batas biaya saat ini',estimate:'Perkiraan termasuk reservasi yang belum dikonfirmasi, bulan UTC; tagihan penyedia menjadi acuan',inputPrice:'Harga per sejuta token input USD',outputPrice:'Harga per sejuta token output USD',
  save:'Simpan pengaturan',prices:'Periksa model dan harga di akun MiniMax. Periksa harga kembali saat mengganti model.',
+ region:'Wilayah layanan MiniMax',globalRegion:'Global',cnRegion:'Tiongkok',endpoint:'Endpoint resmi (kompatibel OpenAI)',
+ regionHelp:'Wilayah harus sesuai asal kunci. Host tetap; host khusus tidak diterima. Perubahan wilayah tidak memakai ulang kunci tersimpan; masukkan kunci wilayah tujuan.',
+ regionConsent:'Saya menyetujui penggunaan kunci baru pada domain resmi di atas, tanpa memakai ulang kunci tersimpan.',configOnly:'Penyimpanan hanya memeriksa format, tidak memanggil model atau membuktikan kunci diterima penyedia.',
+ subscriptionHelp:'Periksa model dan penggunaan Token Plan/M Plan sesuai hak akun; nama paket bukan izin backend toko. USD hanya perkiraan internal, bukan tagihan langganan.',
  translate:'Terjemahkan ke Mandarin',draft:'Susun pesan bahasa Indonesia',report:'Buat laporan Mandarin',instruction:'Tujuan kerja atau pertanyaan dalam Mandarin',sources:'Pilih pesan sumber (maksimal 20)',
  consent:'Saya menyetujui pengiriman teks kerja yang dipilih dan instruksi ke MiniMax, tanpa data pribadi.',generate:'Buat draf (dapat dikenai biaya)',generating:'Sedang membuat; jangan kirim ulang',
  privateDraft:'Draf AI privat. Periksa sumber, jumlah, dan tanggal.',approve:'Isi dan anggota kanal sudah diperiksa; setujui pengiriman',publish:'Setujui dan kirim ke kanal ini',sent:'Terkirim',pending:'Diproses',uncertain:'Hasil perlu diperiksa. Periksa dahulu; pembuatan ulang dapat dikenai biaya lagi.',
@@ -38,6 +46,10 @@ const en: typeof zh = {
  settings:'MiniMax settings',enabled:'Enable communication AI',model:'Model name',apiKey:'API key (leave blank to keep)',keyReady:'Key configured',keyMissing:'Key not configured',removeKey:'Remove saved key',
  budget:'Monthly budget USD (blank = no cap)',unlimited:'No spending cap set',estimate:'Estimate includes unconfirmed reservations, UTC billing month; provider invoice is authoritative',inputPrice:'USD per million input tokens',outputPrice:'USD per million output tokens',
  save:'Save settings',prices:'Verify model and rates with your MiniMax account. Review rates when changing models.',
+ region:'MiniMax service region',globalRegion:'Global',cnRegion:'China',endpoint:'Official endpoint (OpenAI compatible)',
+ regionHelp:'Match the key’s platform region. Hosts are fixed; custom hosts are rejected. Changing region never reuses a saved key; enter the destination region’s key yourself.',
+ regionConsent:'I approve using the newly entered key with the official domain above, without reusing the saved key.',configOnly:'Saving validates format only; it does not call the model or confirm that the provider accepts the key.',
+ subscriptionHelp:'Verify Token Plan/M Plan model and usage entitlements; a plan name does not authorize a store backend. USD is an internal estimate, not the subscription bill.',
  translate:'Translate to Chinese',draft:'Draft an Indonesian message',report:'Create Chinese report',instruction:'Work instruction or follow-up goal in Chinese',sources:'Select source messages (up to 20)',
  consent:'I approve sending the selected work text and instruction to MiniMax, excluding private information.',generate:'Generate draft (may incur charges)',generating:'Generating; do not resubmit',
  privateDraft:'Private AI draft. Verify sources, quantities and dates.',approve:'I checked the text and channel members and approve sending',publish:'Approve and send to this channel',sent:'Sent',pending:'Processing',uncertain:'Outcome needs verification. Check first; generating again may incur another charge.',
@@ -47,6 +59,10 @@ export const teamWorkCopy = (language: string) => language.startsWith('zh') ? zh
 export function teamWorkError(language: string, code: string) {
  const w = teamWorkCopy(language), zh = language.startsWith('zh'), en = language.startsWith('en')
  if (code === 'TEAM_VERSION_CONFLICT') return w.conflict
+ if (code === 'TEAM_AI_CREDENTIAL_REJECTED') return zh ? 'MiniMax 拒绝了密钥。请在“设置 → AI设置”核对服务地区、密钥来源及类型；先查询原请求，不要反复生成。' : en ? 'MiniMax rejected the key. Check the service region, key platform and type in AI settings. Check the existing request before generating again.' : 'MiniMax menolak kunci. Periksa wilayah, asal dan jenis kunci di Pengaturan AI. Periksa permintaan lama sebelum membuat lagi.'
+ if (/TEAM_AI_(?:REGION_KEY_REQUIRED|CREDENTIAL_REGION_MISMATCH)/.test(code)) return w.regionHelp
+ if (code === 'TEAM_AI_REGION_CONFIRM_REQUIRED') return w.regionConsent
+ if (code === 'TEAM_AI_REGION_INVALID') return zh ? '服务地区无效，请选择中国区或国际区。' : en ? 'Choose China or Global as the service region.' : 'Pilih wilayah Tiongkok atau Global.'
  if (/TEAM_PLAN_/.test(code)) return zh ? '计划或任务范围已变化，请刷新并核对计划状态、频道成员及指定主管。' : en ? 'Plan or task scope changed. Refresh and check the plan, members and reviewer.' : 'Lingkup rencana atau tugas berubah. Muat ulang dan periksa rencana, anggota serta pemeriksa.'
  if (/TEAM_AI_(?:NOT_CONFIGURED|KEY_REQUIRED)/.test(code)) return zh ? '请先到“设置 → AI设置”配置密钥并启用沟通 AI。' : en ? 'Configure the key and enable communication AI in Settings → AI settings first.' : 'Atur kunci dan aktifkan AI komunikasi di Pengaturan → Pengaturan AI terlebih dahulu.'
  if (/TEAM_AI_(?:PENDING|NEW_REQUEST_REQUIRED)/.test(code)) return w.uncertain
