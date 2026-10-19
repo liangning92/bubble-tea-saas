@@ -1,3 +1,5 @@
+import { auditedDrawer } from '../utils/drawerAudit'
+import { DrawerReasonDialog } from '../components/DrawerReasonDialog'
 import {RefundRequestForm} from '../components/RefundRequestForm'
 import { offlineActivityQuote } from '../utils/offlineMembers'
 import { ReprintReceiptButton } from '../components/ReprintReceiptButton'
@@ -704,6 +706,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     return `${prefix}${String(currentSeq).padStart(2, '0')}`
   }
 
+  const [drawerDialog, setDrawerDialog] = useState(false)
+  const drawerBusy = useRef(false)
+  const drawerDialogRef = useRef(false)
+  drawerDialogRef.current = drawerDialog
   const auditQueue = useRef<Promise<unknown>>(Promise.resolve())
   const hasCartAudit = useRef(false)
 
@@ -1528,7 +1534,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         // 检测测试钱箱标志
         if (hs.testCashDrawer && hs.testCashDrawer !== hardwareSettings.testCashDrawer) {
           const target = printerTarget('receipt', hs)
-          if (target) electronAPI?.openCashDrawer?.({ ...target, cashDrawerPulse: hs.cashDrawerPulse || 100 }).then((result: { success?: boolean; warnings?: string[] }) => { if (!result?.success) showToast(t('printerRouting.failed'), 'warning'); else if (result.warnings?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning') }).catch(() => showToast(t('printerRouting.failed'), 'warning'))
+          if (target) await sendAuditedDrawer(target, 'admin_test', t('posRisk.adminTestReason'), hs.cashDrawerPulse || 100)
           // 清除测试标志
           posApi.setConfig(user.storeId, 'hardwareSettings', { ...hs, testCashDrawer: null }, 'pos')
         }
@@ -2019,6 +2025,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (useOrderStore.getState().isInstallingUpdate) { e.preventDefault(); return }
+      if (drawerDialogRef.current) {
+        if (e.key === 'Escape' && !drawerBusy.current) setDrawerDialog(false)
+        return
+      }
       if (showExpenseModal) {
         if (e.key === 'Escape') setShowExpenseModal(false)
         return
@@ -2317,7 +2327,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     })
   }
 
+  const auditRemoval = (idx: number, quantity: number) => {
+    if (!cart[idx] || quantity <= 0) return
+    logPOSAction({ action: 'cart_remove', entityId: cart[idx].id, description: 'Unpaid item quantity reduced',
+      metadata: { removedQuantity: quantity, productName: cart[idx].productName, cartSnapshot: cartAuditSnapshot(cart), appVersion }, severity: 'warning' })
+  }
+
   const changeQty = (idx: number, delta: number) => {
+    if (delta < 0) auditRemoval(idx, Math.min(cart[idx]?.quantity || 0, -delta))
     setCart(prev => {
       const updated = prev.map((item, i) =>
         i === idx ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item
@@ -2327,6 +2344,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   }
 
   const removeItem = (idx: number) => {
+    auditRemoval(idx, cart[idx]?.quantity || 0)
     setCart(prev => prev.filter((_, i) => i !== idx))
   }
 
@@ -2614,23 +2632,30 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     return selection.target
   }
 
-  // 手动/快捷键打开钱箱
-  const handleOpenCashDrawer = async () => {
-    const target = printerTarget('receipt')
-    if (!target) return
+  const sendAuditedDrawer = async (target: any, source: 'manual' | 'test' | 'admin_test', reason: string, pulse: number) => {
+    if (drawerBusy.current) return
+    drawerBusy.current = true
+    const actor = useAuthStore.getState().user
     try {
-      const res = await electronAPI?.openCashDrawer?.({
-        ...target,
-        cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
-      })
-      if (res?.success) {
-        showToast(t('pos.cashDrawerOpened', 'Cash drawer opened successfully'), 'success')
-      } else {
-        showToast((t('pos.cashDrawerFailed', 'Failed to open cash drawer')) + (res?.error ? `: ${res.error}` : ''), 'error')
-      }
-    } catch (err: any) {
-      showToast(t('pos.cashDrawerFailed', 'Failed to open cash drawer') + ': ' + (err?.message || ''), 'error')
-    }
+      const result = await auditedDrawer(
+        event => posApi.logPOSAction({ ...event, sessionId: posSessionId }),
+        async () => {
+          if (!actor || useAuthStore.getState().user?.id !== actor.id || useAuthStore.getState().user?.storeId !== actor.storeId) throw new Error('ACTOR_CHANGED')
+          return electronAPI?.openCashDrawer?.({ ...target, cashDrawerPulse: pulse })
+        },
+        { source, reason, appVersion }, crypto.randomUUID(),
+      )
+      showToast(t(result.success ? 'posRisk.sent' : 'posRisk.unconfirmed'), result.success ? 'success' : 'warning')
+      if (result.auditPending) showToast(t('posRisk.outcomePending'), 'warning')
+      setDrawerDialog(false)
+    } catch { showToast(t('posRisk.auditFailed'), 'error') }
+    finally { drawerBusy.current = false }
+  }
+  // F6 and the manual control share one reason dialog; neither sends directly.
+  const handleOpenCashDrawer = () => setDrawerDialog(true)
+  const submitDrawer = async (reason: string) => {
+    const target = printerTarget('receipt')
+    if (target) await sendAuditedDrawer(target, 'manual', reason, hardwareSettings.cashDrawerPulse || 100)
   }
 
   // 测试打印小票
@@ -2718,20 +2743,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const handleTestCashDrawer = async () => {
     const target = printerTarget('receipt', hardwareSettings, selectedPrinterForSetup)
     if (!target) return
-    const targetName = target.printerName || target.printerHost
-    try {
-      const res = await electronAPI?.openCashDrawer?.({
-        ...target,
-        cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
-      })
-      if (res?.success) {
-        showToast((t('pos.cashDrawerOpened', 'Cash drawer test triggered')) + (targetName ? ` (${targetName})` : ''), 'success')
-      } else {
-        showToast((t('pos.cashDrawerFailed', 'Failed to open cash drawer')) + (res?.error ? `: ${res.error}` : ''), 'error')
-      }
-    } catch (err: any) {
-      showToast(t('pos.cashDrawerFailed', 'Failed to open cash drawer') + ': ' + (err?.message || ''), 'error')
-    }
+    await sendAuditedDrawer(target, 'test', t('posRisk.testReason'), hardwareSettings.cashDrawerPulse || 100)
   }
 
   const resumeOrder = async (order: typeof suspendedOrders[0]) => {
@@ -3072,6 +3084,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 仅当未开启自动打印小票时，才单独下发独立的 openCashDrawer 指令。
       // Reuse the same unique receipt id after a lost response.
     const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
+      if (shouldOpenDrawer) logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout drawer command planned', metadata: { source: 'automatic', status: 'requested', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
       if (shouldOpenDrawer && posReceipt.autoPrint === false) {
         const target = printerTarget('receipt')
         try {
@@ -3079,6 +3092,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             ...target,
             cashDrawerPulse: hardwareSettings.cashDrawerPulse || 100
           })
+          logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout drawer command result', metadata: { source: 'automatic', status: drawerResult?.success ? 'sent' : 'unconfirmed', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
           if (drawerResult && !drawerResult.success) {
             showToast(t('printerRouting.failed'), 'warning')
           }
@@ -3097,6 +3111,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           pickupNumber: finalPickupNum,
           openCashDrawer: shouldOpenDrawer
         })
+        if (shouldOpenDrawer) logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout receipt and drawer command result', metadata: { source: 'automatic', status: printResult ? 'sent' : 'unconfirmed', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
         receiptSent = printResult
         if (!printResult) {
           showToast(t('printerRouting.failed'), 'warning')
@@ -3597,6 +3612,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             </div>
           </div>
         </header>
+        {drawerDialog && <DrawerReasonDialog submit={submitDrawer} close={()=>setDrawerDialog(false)} />}
         <ReceiptRecovery storeId={user?.storeId} target={()=>printerTarget('receipt')} audit={(orderNum,status,error)=>logPOSAction({action:'receipt_print',entityId:orderNum,description:'Receipt recovery: '+status,metadata:{orderNumber:orderNum,status,error,appVersion},severity:status==='sent'||status==='paper-confirmed'?'info':'warning'})}/>
 
       {/* 渠道选择弹窗 - 解锁后必须先选择 */}

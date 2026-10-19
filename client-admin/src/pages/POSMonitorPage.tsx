@@ -1,3 +1,4 @@
+import { POSRiskSummary, DrawerLogDetails, RemovedItemDetails } from '../components/POSRiskSummary'
 import { formatNumber } from '../utils/numberDisplay'
 import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod,queryInstantRange} from '../utils/queryPeriods'
@@ -30,6 +31,8 @@ import {
 const RECEIPT_REASON_KEYS:Record<string,string> = {PAYMENT_CONFIG_UNAVAILABLE:'receiptPaymentConfig',PAYMENT_METHOD_DISABLED:'receiptPaymentDisabled',OPEN_SHIFT_REQUIRED:'receiptShift',SHIFT_DISABLED:'receiptShift',INVENTORY_INSUFFICIENT:'receiptInventory'}
 
 const ACTION_KEY_MAP: Record<string, string> = {
+  cash_drawer: 'cashDrawer',
+  cart_remove: 'cartRemove',
   login: 'actionLogin',
   logout: 'actionLogout',
   cart_add: 'actionCartAdd',
@@ -193,6 +196,12 @@ export function POSMonitorPage() {
     refetchInterval: autoRefresh ? 30000 : false,
   })
 
+  const { data: riskData, isError: riskError, isPending: riskPending, refetch: refetchRisks } = useQuery({
+    queryKey: ['pos-risk-summary',context.storeId,startDate,endDate], enabled:context.valid,
+    queryFn: async()=>{const response=await posActionLogApi.risks({startDate:startDate!,endDate:endDate!});return requireRead(response,Array.isArray(response.data?.data?.staff))},
+    refetchInterval:autoRefresh?15000:false,
+  })
+
   // Fetch active sessions
   const { data: sessionsData, isError:sessionsError, isPending:sessionsPending, refetch:refetchSessions } = useQuery({
     queryKey: ['pos-active-sessions',context.storeId],
@@ -206,7 +215,7 @@ export function POSMonitorPage() {
     // Changing the anchor triggers fresh queries for relative ranges; fixed URL
     // ranges retain their keys and are explicitly refetched with current sessions.
     setRangeClock(Date.now())
-    return Promise.all([refetch(),refetchStats(),refetchSessions()])
+    return Promise.all([refetch(),refetchStats(),refetchSessions(),refetchRisks()])
   }
 
   const logs = data?.data?.data?.logs || []
@@ -224,8 +233,8 @@ export function POSMonitorPage() {
   }
 
   if (!context.valid) return <DashboardReadFailure scope />
-  if (logsError || statsError || sessionsError || receiptError) return <DashboardReadFailure retry={refreshAll} />
-  if (isLoading || statsPending || sessionsPending || receiptPending) return <p>{t('common.loading')}</p>
+  if (logsError || statsError || sessionsError || receiptError || riskError) return <DashboardReadFailure retry={refreshAll} />
+  if (isLoading || statsPending || sessionsPending || receiptPending || riskPending) return <p>{t('common.loading')}</p>
   return (
     <div className="p-6">
       <DashboardContextNotice range={{startDate,endDate}} />
@@ -297,6 +306,7 @@ export function POSMonitorPage() {
         </div>
       </div>
 
+      <POSRiskSummary staff={riskData?.data?.data?.staff || []} select={(staffId,action)=>setFilter({...filter,category:'behavior',severity:'',staffId,action,page:1})} />
       {/* Active Sessions Alert */}
       {activeSessions.length > 0 && (
         <div className="card border-orange-200 bg-orange-50/50 mb-6">
@@ -313,7 +323,7 @@ export function POSMonitorPage() {
                   <div>
                     <p className="font-medium">{session.staffName}</p>
                     <p className="text-xs text-gray-500">
-                      {t('posMonitor.lastAction')}: {ACTION_KEY_MAP[session.lastAction] ? t(`posMonitor.${ACTION_KEY_MAP[session.lastAction]}`) : session.lastAction} · {formatTime(session.lastActionAt)}
+                      {t('posMonitor.lastAction')}: {ACTION_KEY_MAP[session.lastAction] ? t(`${['cash_drawer','cart_remove'].includes(session.lastAction)?'posRisk':'posMonitor'}.${ACTION_KEY_MAP[session.lastAction]}`) : session.lastAction} · {formatTime(session.lastActionAt)}
                     </p>
                   </div>
                 </div>
@@ -402,13 +412,14 @@ export function POSMonitorPage() {
           >
             <option value="">{t('posMonitor.allActions')}</option>
             {Object.keys(ACTION_KEY_MAP).filter(key => filter.category === 'all' || (filter.category === 'printing' ? key === 'receipt_print' : key !== 'receipt_print')).map((key) => (
-              <option key={key} value={key}>{t(`posMonitor.${ACTION_KEY_MAP[key]}`)}</option>
+              <option key={key} value={key}>{t(`${['cash_drawer','cart_remove'].includes(key)?'posRisk':'posMonitor'}.${ACTION_KEY_MAP[key]}`)}</option>
             ))}
           </select>
 
-          {(filter.severity || filter.action) && (
+          {filter.staffId && <span className="text-sm font-medium">{riskData?.data?.data?.staff?.find((row:any)=>row.staffId===filter.staffId)?.staffName || filter.staffId}</span>}
+          {(filter.severity || filter.action || filter.staffId) && (
             <button
-              onClick={() => setFilter({ ...filter, severity: '', action: '', page: 1 })}
+              onClick={() => setFilter({ ...filter, severity: '', action: '', staffId: '', page: 1 })}
               className="text-sm text-red-500 hover:text-red-700"
             >
               {t('posMonitor.clearFilters')}
@@ -453,11 +464,13 @@ export function POSMonitorPage() {
                     <span className="font-medium text-sm">{log.staffName}</span>
                     <span className="text-gray-400">·</span>
                     <span className="text-sm text-gray-600">
-                      {ACTION_KEY_MAP[log.action] ? t(`posMonitor.${ACTION_KEY_MAP[log.action]}`) : t('posReceiptLog.otherAction')}
+                      {ACTION_KEY_MAP[log.action] ? t(`${['cash_drawer','cart_remove'].includes(log.action) ? 'posRisk' : 'posMonitor'}.${ACTION_KEY_MAP[log.action]}`) : t('posReceiptLog.otherAction')}
                     </span>
                     {log.action === 'receipt_print' ? <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${['failed','unknown','unrecorded'].includes(readReceiptLog(log)!.status) ? 'bg-orange-100 text-orange-700 border-orange-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>{t(`posReceiptLog.badge_${readReceiptLog(log)!.status}`)}</span> : <SeverityBadge severity={log.severity} />}
                   </div>
                   {log.action === 'receipt_print' ? <ReceiptLogDetails log={log} /> : <p className="text-sm text-gray-500 mt-0.5 break-words">{log.description}</p>}
+                  {log.action === 'cart_remove' && <RemovedItemDetails metadata={log.metadata} />}
+                  {log.action === 'cash_drawer' && <DrawerLogDetails metadata={log.metadata} />}
                   {log.action === 'checkout_failed' && <POSFailureDetails metadata={log.metadata} />}
                   {log.action === 'cart_clear' && log.severity !== 'info' && <ClearedCartDetails log={log} />}
                   {(log.metadata || log.action === 'receipt_print') && (log.severity !== 'info' || log.action === 'receipt_print') && <details className="mt-2 text-xs text-gray-500"><summary className="cursor-pointer">{t('posMonitor.rawRecord')}</summary><pre className="mt-1 whitespace-pre-wrap break-words">{log.action === 'receipt_print' ? JSON.stringify({ action: log.action, severity: log.severity, description: log.description, metadata: log.metadata }, null, 2) : typeof log.metadata === 'string' ? log.metadata : JSON.stringify(log.metadata, null, 2)}</pre></details>}

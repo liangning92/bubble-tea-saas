@@ -862,6 +862,7 @@ export const receiptTemplateApi = {
 }
 
 export const posActionLogApi = {
+  risks: (params: { startDate: string; endDate: string }) => api.get('/pos-action-logs/risks', { params }),
   list: (params: { category?: string; page?: number; limit?: number; staffId?: string; severity?: string; action?: string; startDate?: string; endDate?: string }) =>
     api.get('/pos-action-logs', { params }),
   getStats: (params?: { startDate?: string; endDate?: string }) =>
