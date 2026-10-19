@@ -2,7 +2,7 @@
 export const costQueryKeys = new Set([
   'inventory', 'inventory-all-items', 'inventory-alerts', 'inventory-alert-center',
   'materials', 'material-alerts', 'materials-for-recipe', 'process-recipes',
-  'products', 'bom-products', 'bom-product'
+  'products', 'bom-products', 'bom-product', 'finance'
 ])
 export const COST_SYNC_EVENT = 'inventory-costs-changed'
 export const COST_SYNC_INTERVAL = 10_000
