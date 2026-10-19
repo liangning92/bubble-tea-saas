@@ -144,6 +144,56 @@ module.exports = async ({prisma, good, request, create, send, test, dropResponse
     j=await act(c,m,j,'retry',{acknowledgePossibleCharge:true});j=await unreliable.process(owner.storeId,c.id,m.seq);
     assert.equal(j.status,'awaiting_approval');assert.notEqual(j.aiRequestId,original);assert.equal(j.attempt,2);assert.equal(count,2);await policy(c,{enabled:false});
   });
+  await test('P2-1 all attempt billing survives explicit retry, pre-transport failure and later success in jobs and Chinese export',async()=>{
+    const {c,m}=await fixture();let count=0;
+    const failing=teamWorkflow(prisma,teamAi(prisma,async(...args)=>{count++;if(count===1)throw Error('synthetic first attempt timeout');return transport(...args)}),()=>now);
+    let j=await failing.process(owner.storeId,c.id,m.seq);const firstId=j.aiRequestId;assert.equal(j.billingStatus,'possible');
+    j=await act(c,m,j,'retry',{acknowledgePossibleCharge:true});
+    const k='aiBudget.'+new Date().toISOString().slice(0,7),b=await readTeam(prisma,owner.storeId,k);
+    await writeTeam(prisma,owner.storeId,k,{...b,calls:[Date.now(),Date.now(),Date.now()]});
+    j=await failing.process(owner.storeId,c.id,m.seq);assert.equal(j.status,'retry_wait');assert.equal(count,1);
+    assert.equal(j.billingStatus,'possible');assert.equal(j.billingAttempts.length,2);
+    assert.deepEqual(j.billingAttempts.map(a=>a.billingStatus),['possible','not_started']);
+    assert.equal(j.billingAttempts[0].requestId,firstId);assert.equal(j.billingAttempts[0].status,'uncertain');
+    assert.equal(await readTeam(prisma,owner.storeId,`aiDraft.s-owner.${j.aiRequestId}`),null);
+    assert.equal((await getJob(c,m)).billingStatus,'possible');
+    const report=await good('owner','GET',`/team/channels/${c.id}/workflow/export`);
+    assert.equal(report.details[0].billingStatus,'possible');assert.equal(report.details[0].billingAttempts[0].requestId,firstId);
+    assert(report.textZh.includes('存在未决费用风险'));assert(report.textZh.includes('未决尝试：1'));
+    await resetRate();now=j.nextAttemptAt+1;j=await failing.process(owner.storeId,c.id,m.seq);
+    assert.equal(j.status,'awaiting_approval');assert.equal(j.billingStatus,'possible');assert.equal(count,2);
+    assert.deepEqual(j.billingAttempts.map(a=>a.billingStatus),['possible','not_started','usage_recorded']);
+    assert(j.billingAttempts[2].usage);assert.equal(j.billingAttempts[0].status,'uncertain');
+    // Reconstruct history for an older job with only the latest requestId field.
+    const legacy={...j};delete legacy.billingAttempts;legacy.billingStatus='not_started';
+    await writeTeam(prisma,owner.storeId,workflowJobKey(c.id,m.seq),legacy);
+    assert.equal((await getJob(c,m)).billingStatus,'possible');
+    assert.equal((await good('owner','GET',`/team/channels/${c.id}/workflow/export`)).details[0].billingAttempts.length,3);
+    await policy(c,{enabled:false});
+  });
+  await test('P2-2 paused and disabled expired leases reconcile pending billing without model calls, including read-only projections',async()=>{
+    for(const mode of ['paused','disabled']){
+      const {c,m}=await fixture();let started,release,count=0;const ready=new Promise(r=>started=r),gate=new Promise(r=>release=r);
+      const slow=teamWorkflow(prisma,teamAi(prisma,async(...args)=>{count++;started();await gate;return transport(...args)}),()=>now);
+      const pending=slow.process(owner.storeId,c.id,m.seq);await ready;
+      try{
+        await policy(c,mode==='paused'?{paused:true}:{enabled:false});now+=120001;
+        const persisted=await readTeam(prisma,owner.storeId,workflowJobKey(c.id,m.seq));assert.equal(persisted.billingStatus,'not_started');
+        assert.equal((await getJob(c,m)).billingStatus,'possible');
+        const report=await good('owner','GET',`/team/channels/${c.id}/workflow/export`);
+        assert.equal(report.details[0].billingStatus,'possible');assert.equal(report.details[0].billingAttempts[0].status,'pending');
+        assert(report.textZh.includes('存在未决费用风险'));
+        assert.equal(await slow.process(owner.storeId,c.id,m.seq),null);assert.equal(count,1);
+        const reconciled=await readTeam(prisma,owner.storeId,workflowJobKey(c.id,m.seq));assert.equal(reconciled.billingStatus,'possible');
+        assert.equal(reconciled.billingAttempts[0].requestId,reconciled.aiRequestId);
+        assert.equal(reconciled.leaseToken,persisted.leaseToken);assert.equal(reconciled.attempt,1);
+        assert.equal(await slow.process(owner.storeId,c.id,m.seq),null);assert.equal(count,1);
+        assert.equal((await readTeam(prisma,owner.storeId,workflowJobKey(c.id,m.seq))).version,reconciled.version);
+      }finally{release();await pending}
+      const final=await getJob(c,m);assert.equal(final.status,'blocked');assert.equal(final.billingStatus,'usage_recorded');assert.equal(count,1);
+      assert.equal(final.replyMessageId,undefined);await policy(c,{enabled:false});
+    }
+  });
   await test('pre-transport rate failure backs off durably and retries only when due without a duplicate charge',async()=>{
     const {c,m}=await fixture(),k='aiBudget.'+new Date().toISOString().slice(0,7),b=await readTeam(prisma,owner.storeId,k);
     await writeTeam(prisma,owner.storeId,k,{...b,calls:[Date.now(),Date.now(),Date.now()]});const before=calls;

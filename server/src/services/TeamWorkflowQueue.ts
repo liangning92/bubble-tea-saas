@@ -8,6 +8,11 @@ export interface WorkflowPolicy {
   automaticSend: false; consent: true; employeeIds: string[]; operatorUserId: string; operatorStaffId: string
   audienceHash: string; aiConfigVersion: number; hash: string
 }
+export interface WorkflowBillingAttempt {
+  attempt: number; requestId: string; status: string
+  billingStatus: 'not_started' | 'possible' | 'usage_recorded'
+  usage?: { inputTokens: number; outputTokens: number; estimatedUsd: number }; error?: string
+}
 export interface WorkflowJob {
   id: string; channelId: string; sourceSeq: number; sourceAuthorId: string; sourceHash: string; policyHash: string
   operatorUserId: string; operatorStaffId: string; sourceFloor: number; version: number; attempt: number
@@ -15,6 +20,7 @@ export interface WorkflowJob {
   createdAt: string; updatedAt: string; leaseToken?: string; leaseUntil?: number; claimEpoch?: number
   nextAttemptAt?: number; error?: string; aiRequestId?: string; replyMessageId?: string; planId?: string
   billingStatus?: 'not_started' | 'possible' | 'usage_recorded'
+  billingAttempts?: WorkflowBillingAttempt[]
   result?: { replyText: string; summaryZh: string; suggestedTask: null | {
     category: 'communication' | 'training' | 'inspection'; text: string; evidenceRequired: string; acceptanceCriteria: string
   }; exceptions: string[] }

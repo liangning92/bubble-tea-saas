@@ -4,7 +4,7 @@ import prisma from '../config/database'
 import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam, teamCommunication, TEAM_PREFIX } from './TeamCommunicationService'
 import { teamAi } from './TeamAiService'
 import { operationContent, teamOperations } from './TeamOperationsService'
-import { WorkflowPolicy, WorkflowJob, workflowHash as hash, workflowPad as pad, workflowJobKey, workflowEvent } from './TeamWorkflowQueue'
+import { WorkflowPolicy, WorkflowJob, WorkflowBillingAttempt, workflowHash as hash, workflowPad as pad, workflowJobKey, workflowEvent } from './TeamWorkflowQueue'
 
 const fail = (code: string, status = 409): never => { throw new TeamError(status, code) }
 const uuid = z.string().uuid(), seq = z.number().int().positive().max(999999999999)
@@ -23,6 +23,27 @@ const derivedId = (id: string, suffix: string) => {
   const bytes = createHash('sha256').update(`team-workflow.v1:${id}:${suffix}`).digest().subarray(0, 16)
   bytes[6] = (bytes[6] & 15) | 80; bytes[8] = (bytes[8] & 63) | 128
   const h = bytes.toString('hex'); return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+/** Project every attempt, including legacy jobs whose earlier IDs are derivable.
+ * Never turn an unresolved earlier reservation into "not started" when a later
+ * attempt fails before transport. Reading projections performs no provider call. */
+async function refreshBilling(db: any, storeId: string, j: WorkflowJob) {
+  const before = JSON.stringify([j.billingStatus, j.billingAttempts])
+  const attempts: WorkflowBillingAttempt[] = []
+  for (let n = 1; n <= Math.min(j.attempt, 3); n++) {
+    const requestId = n === j.attempt && j.aiRequestId ? j.aiRequestId : derivedId(j.id, 'model-' + n)
+    const previous = j.billingAttempts?.find(a => a.requestId === requestId)
+    const draft = await readTeam(db, storeId, `aiDraft.${j.operatorStaffId}.${requestId}`)
+    const fallback = previous || { attempt: n, requestId, status: 'not_started', billingStatus: 'not_started' as const }
+    attempts.push(draft ? { attempt: n, requestId, status: draft.status,
+      billingStatus: draft.usage ? 'usage_recorded' : 'possible',
+      ...(draft.usage ? { usage: { inputTokens: draft.usage.inputTokens, outputTokens: draft.usage.outputTokens, estimatedUsd: draft.usage.estimatedUsd } } : {}),
+      ...(draft.error ? { error: draft.error } : {}) } : fallback)
+  }
+  j.billingAttempts = attempts
+  j.billingStatus = attempts.some(a => a.billingStatus === 'possible') ? 'possible' :
+    attempts.some(a => a.billingStatus === 'usage_recorded') ? 'usage_recorded' : 'not_started'
+  return before !== JSON.stringify([j.billingStatus, j.billingAttempts])
 }
 async function admin(db: any, a: TeamActor, id: string) {
   if (a.role !== 'admin' || a.employeeApp || !await db.user.findFirst({ where: { id: a.id, storeId: a.storeId, role: 'admin' }, select: { id: true } })) fail('TEAM_WORKFLOW_ADMIN_REQUIRED', 403)
@@ -110,6 +131,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
       z.number().int().nonnegative().max(999999999999).parse(after)
       const page: WorkflowJob[] = await rows(db, a.storeId, `workflow.job.${id}.`, pad(Math.max(after, fromSeq - 1)), 101)
       const visible = page.slice(0, 100).filter(j => j.operatorUserId === a.id && j.operatorStaffId === a.staffId)
+      await Promise.all(visible.map(j => refreshBilling(db, a.storeId, j)))
       return { jobs: visible, cursor: page.slice(0, 100).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 100, automaticSend: false }
     },
     async events(a: TeamActor, id: string, after = 0) {
@@ -124,6 +146,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
       return db.$transaction(async (tx: any) => {
         await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { fromSeq } = await admin(tx, a, id), j = await visibleJob(tx, a, id, sourceSeq, fromSeq)
+        await refreshBilling(tx, a.storeId, j)
         const key = `workflow.request.${a.staffId}.${v.requestId}`, requestHash = hash({ id, sourceSeq, ...v })
         const old = await readTeam(tx, a.storeId, key)
         if (old) { if (old.hash !== requestHash) fail('TEAM_REQUEST_CONFLICT'); return j }
@@ -136,7 +159,6 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           const { p } = await scope(tx, a.storeId, j)
           const stored = await readTeam(tx, a.storeId, `aiDraft.${a.staffId}.${j.aiRequestId}`)
           j.result = parseResult(stored, j.sourceSeq)
-          j.billingStatus = stored.usage ? 'usage_recorded' : 'possible'
           j.status = 'awaiting_approval'; j.claimEpoch = p.epoch
           delete j.error; delete j.leaseToken; delete j.leaseUntil
         } else if (v.action === 'retry') {
@@ -166,6 +188,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           }
           if (j.replyMessageId && (!j.result.suggestedTask || j.planId)) j.status = 'reviewed'
         }
+        await refreshBilling(tx, a.storeId, j)
         await save(tx, a.storeId, j, clock())
         await writeTeam(tx, a.storeId, key, { hash: requestHash, jobId: j.id })
         await auditTeam(tx, a, id, 'update', { action: 'workflow_' + v.action, jobId: j.id, note: v.note, requestId: v.requestId, approved: v.approved })
@@ -176,20 +199,26 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
       const prepared = await db.$transaction(async (tx: any) => {
         await lockTeam(tx, storeId, 'channel.' + uuid.parse(channelId))
         const j = await readTeam<WorkflowJob>(tx, storeId, workflowJobKey(channelId, sourceSeq)), now = clock()
-        if (!j || !['queued', 'retry_wait', 'processing'].includes(j.status) || j.nextAttemptAt && j.nextAttemptAt > now || j.status === 'processing' && j.leaseUntil! > now) return null
+        if (!j || !['queued', 'retry_wait', 'processing'].includes(j.status)) return null
+        // Pause/disable blocks execution, not accounting reconciliation. Jobs and
+        // exports also derive this projection when no consumer remains alive.
+        const billingChanged = await refreshBilling(tx, storeId, j)
+        if (j.nextAttemptAt && j.nextAttemptAt > now || j.status === 'processing' && j.leaseUntil! > now) {
+          if (billingChanged) await save(tx, storeId, j, now)
+          return null
+        }
         const p = await readTeam<WorkflowPolicy>(tx, storeId, `workflow.policy.${channelId}`)
-        if (!p?.enabled || p.paused) return null
-        // A crash can leave a committed provider reservation before job settlement.
-        // Preserve that billing risk even if permissions/config now block recovery.
+        if (!p?.enabled || p.paused) {
+          if (billingChanged) await save(tx, storeId, j, now)
+          return null
+        }
         const stored = j.aiRequestId ? await readTeam(tx, storeId, `aiDraft.${j.operatorStaffId}.${j.aiRequestId}`) : null
-        if (stored) j.billingStatus = stored.usage ? 'usage_recorded' : 'possible'
         try { await scope(tx, storeId, j) } catch (e) {
           if (!(e instanceof TeamError)) throw e
           j.status = 'blocked'; j.error = e.message; await save(tx, storeId, j, now); return null
         }
         if (j.status === 'processing') {
           const d = stored
-          j.billingStatus = d?.usage ? 'usage_recorded' : d ? 'possible' : 'not_started'
           if (d && d.status !== 'ready') {
             j.status = d.status === 'blocked' ? 'blocked' : 'uncertain'; j.error = 'TEAM_WORKFLOW_RECOVERY_REVIEW_REQUIRED'
             await save(tx, storeId, j, now); return null
@@ -200,6 +229,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           j.attempt++; j.aiRequestId = derivedId(j.id, 'model-' + j.attempt)
         }
         j.status = 'processing'; j.claimEpoch = p.epoch; j.leaseToken = randomUUID(); j.leaseUntil = now + 120000
+        await refreshBilling(tx, storeId, j)
         await save(tx, storeId, j, now)
         return j
       }) as WorkflowJob | null
@@ -217,13 +247,17 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
       return db.$transaction(async (tx: any) => {
         await lockTeam(tx, storeId, 'channel.' + channelId)
         const j = await readTeam<WorkflowJob>(tx, storeId, workflowJobKey(channelId, sourceSeq))
-        if (!j || j.leaseToken !== prepared.leaseToken || j.status !== 'processing') return j
+        if (!j) return j
+        const billingChanged = await refreshBilling(tx, storeId, j)
+        if (j.leaseToken !== prepared.leaseToken || j.status !== 'processing') {
+          if (billingChanged) await save(tx, storeId, j, clock())
+          return j
+        }
         try { await scope(tx, storeId, j, prepared.claimEpoch) } catch (e) {
           if (!(e instanceof TeamError)) throw e
           error = e.message; result = undefined
         }
         const d = await readTeam(tx, storeId, `aiDraft.${j.operatorStaffId}.${j.aiRequestId}`)
-        j.billingStatus = d?.usage ? 'usage_recorded' : d ? 'possible' : 'not_started'
         if (result && !error) { j.status = 'awaiting_approval'; j.result = result; delete j.error }
         else {
           j.error = error || 'TEAM_WORKFLOW_RESULT_REVIEW_REQUIRED'
@@ -257,15 +291,17 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         const { fromSeq } = await admin(tx, a, id)
         const page: WorkflowJob[] = await rows(tx, a.storeId, `workflow.job.${id}.`, pad(Math.max(after, fromSeq - 1)), 51)
         const jobs = page.slice(0, 50).filter(j => j.operatorUserId === a.id && j.operatorStaffId === a.staffId)
+        await Promise.all(jobs.map(j => refreshBilling(tx, a.storeId, j)))
         const details = []
         for (const j of jobs) details.push({ sourceSeq: j.sourceSeq, status: j.status, error: j.error, attempt: j.attempt,
           aiDraftUnverified: j.result?.summaryZh || null, exceptions: j.result?.exceptions || [], replyApproved: !!j.replyMessageId,
-          billingStatus: j.billingStatus, task: j.planId ? await atomicServices(tx).operations.export(a, id, j.planId) : null })
+          billingStatus: j.billingStatus, billingAttempts: j.billingAttempts, task: j.planId ? await atomicServices(tx).operations.export(a, id, j.planId) : null })
         const labels: Record<string, string> = { queued: '排队中', processing: '处理中', retry_wait: '等待安全重试', awaiting_approval: '待人工处理', reviewed: '草稿已人工处理（任务验收另计）', uncertain: '结果不明，可能已计费', blocked: '已阻断，待复核', dismissed: '已人工关闭' }
+        const billingLabels = { not_started: '尚未调用', possible: '存在未决费用风险，待核对', usage_recorded: '已有用量记录（以供应商账单为准）' }
         return { channelId: id, generatedAt: new Date(clock()).toISOString(), automaticSend: false,
           cursor: page.slice(0, 50).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 50,
           title: '员工沟通处理纪要', source: 'manual_admin_export', details,
-          textZh: details.map(d => `消息 #${d.sourceSeq}：${labels[d.status]}；AI 草稿（员工陈述，未核实）：${d.aiDraftUnverified || '尚无'}；回复${d.replyApproved ? '已人工批准发送' : '未发送'}；异常：${d.error || d.exceptions.join('；') || '无'}${d.task ? '\n' + d.task.summaryZh : ''}`).join('\n\n') }
+          textZh: details.map(d => `消息 #${d.sourceSeq}：${labels[d.status]}；费用：${billingLabels[d.billingStatus]}；未决尝试：${d.billingAttempts.filter(a => a.billingStatus === 'possible').map(a => a.attempt).join('、') || '无'}；AI 草稿（员工陈述，未核实）：${d.aiDraftUnverified || '尚无'}；回复${d.replyApproved ? '已人工批准发送' : '未发送'}；异常：${d.error || d.exceptions.join('；') || '无'}${d.task ? '\n' + d.task.summaryZh : ''}`).join('\n\n') }
       })
     }
   }
