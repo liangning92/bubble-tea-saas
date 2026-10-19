@@ -115,3 +115,5 @@
 .team-photo-quality>span{display:none}
 }
 
+/* Staff keeps its existing fixed navigation; reserve space for all six entries. */
+.employee-shell .team-messages{height:clamp(190px,calc(100dvh - 510px),580px)}
