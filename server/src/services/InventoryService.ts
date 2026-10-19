@@ -1,3 +1,4 @@
+import { manualCorrectionMetadata } from './ManualStockCorrectionService'
 import {unifiedInventorySince,CALIBRATED_PREFIX} from './UnifiedInventoryService'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {validateInventoryProcessLink} from '../utils/inventoryProcessLink'
@@ -142,7 +143,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
     const totalAmount=Math.round((unitCost||0)*data.quantity)
     const baseCost=quantity>0?totalAmount/quantity:0
     if(!Number.isSafeInteger(totalAmount)||totalAmount>2147483647||baseCost>2147483647)throw new Error('INVALID_STOCK_COST')
-    const logNote=JSON.stringify({version:1,kind:'receipt',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit,ledgerUnit:inventory.unit,ledgerQuantity:quantity,inputUnitCost:unitCost??0,pack,note:note||''})
+    const logNote=JSON.stringify({version:1,kind:'receipt',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit,ledgerUnit:inventory.unit,ledgerQuantity:quantity,inputUnitCost:unitCost??0,costProvided:unitCost!==undefined,carryingAmount:unitCost!==undefined?totalAmount:null,pack,note:note||''})
 
     // Missing cost preserves the carrying average; an explicit zero is a free receipt.
     const avgCost = Number(inventory.avgCost)
@@ -219,7 +220,7 @@ export async function stockOut(data: StockOperation) {
     if(changed.count!==1)throw new Error('INVENTORY_CONCURRENT_CHANGE_RETRY')
     const updated=await tx.inventory.findUniqueOrThrow({where:{id:inventoryId}})
 
-    if(!internalIssue)await consumeInventoryBatches(tx,inventory,quantity)
+    const batchAllocations = !internalIssue ? await consumeInventoryBatches(tx,inventory,quantity) : []
     // Create stock out log
     await tx.stockOutLog.create({
       data: {
@@ -228,7 +229,7 @@ export async function stockOut(data: StockOperation) {
         staffId,
         quantity,
         reason,
-        note:JSON.stringify({version:1,kind:'manual-out',stockEffect:internalIssue?'internal_transfer':'physical_out',unitCost:Number(inventory.avgCost),totalAmount:Math.round(quantity*Number(inventory.avgCost)),note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
+        note:JSON.stringify({version:1,kind:'manual-out',batchAllocations,carryingAmount:quantity*Number(inventory.avgCost),stockEffect:internalIssue?'internal_transfer':'physical_out',unitCost:Number(inventory.avgCost),totalAmount:Math.round(quantity*Number(inventory.avgCost)),note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
         orderId
       }
     })
@@ -385,7 +386,7 @@ export async function getStockInLogs(
   })
 
   const actors = await loadInventoryActors(prisma, filter.storeId, logs.map(inventoryLogActorId))
-  return logs.map((l: any) => ({
+  return manualCorrectionMetadata(prisma, filter.storeId, 'stock_in', logs.map((l: any) => ({
     operator: actors.get(inventoryLogActorId(l) || '') || null,
     ...l,
     unitCost: Number(l.unitCost || 0),
@@ -394,7 +395,7 @@ export async function getStockInLogs(
       ...l.inventory,
       avgCost: Number(l.inventory.avgCost || 0)
     } : null
-  }))
+  })))
 }
 
 // Get stock out logs
@@ -452,7 +453,7 @@ export async function getStockOutLogs(
   })
 
   const actors = await loadInventoryActors(prisma, filter.storeId, logs.map(inventoryLogActorId))
-  return logs.map((l:any)=>{let valuation:any;try{valuation=JSON.parse(l.note||'null')}catch{}
+  return manualCorrectionMetadata(prisma, filter.storeId, 'stock_out', logs.map((l:any)=>{let valuation:any;try{valuation=JSON.parse(l.note||'null')}catch{}
     return ({
     unitCost:valuation?.unitCost??Number(l.inventory?.avgCost||0),
     totalAmount:valuation?.totalAmount??Math.round(l.quantity*Number(l.inventory?.avgCost||0)),
@@ -463,7 +464,7 @@ export async function getStockOutLogs(
       ...l.inventory,
       avgCost: Number(l.inventory.avgCost || 0)
     } : null
-  })})
+  })}))
 }
 
 // Create inventory item
@@ -542,6 +543,10 @@ export async function updateInventory(
 export async function deleteInventory(inventoryId: string) {
   // Delete in a transaction to handle foreign key constraints
   return prisma.$transaction(async (tx) => {
+    // Serialize deletion against corrections; never erase their source or signed trail.
+    await tx.inventory.update({where:{id:inventoryId},data:{currentStock:{increment:0}}})
+    const historyWhere={inventoryId,operationId:{startsWith:'manual-correction:'}}
+    if(await tx.stockInLog.findFirst({where:historyWhere,select:{id:true}})||await tx.stockOutLog.findFirst({where:historyWhere,select:{id:true}}))throw new Error('MANUAL_CORRECTION_HISTORY_RETAIN_MATERIAL')
     // Delete related records first
     await tx.stockInLog.deleteMany({ where: { inventoryId } })
     await tx.stockOutLog.deleteMany({ where: { inventoryId } })

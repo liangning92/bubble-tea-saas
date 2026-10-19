@@ -1,3 +1,5 @@
+import { ManualStockCorrection } from '../../components/ManualStockCorrection'
+import { useAuthStore } from '../../stores/auth'
 import { isSalesStockOut, stockLogCost } from '../../utils/inventorySalesCosts'
 import { ReferenceDetails } from '../../components/ReferenceDetails'
 import { formatNumber } from '../../utils/numberDisplay'
@@ -32,6 +34,9 @@ export function StockLogPage() {
   const dateSettings=useStoreDateSettings()
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
+
+  const isCorrectionAdmin = useAuthStore(state => state.user?.role === 'admin')
+  const [correctionLog, setCorrectionLog] = useState<any>(null)
 
   // State
   const [activeTab, setActiveTab] = useState<LogTab>('all')
@@ -358,7 +363,10 @@ export function StockLogPage() {
         [t('inventory.totalCostValue')]: costValue,
         [t('inventoryActors.operator')]: actorText(log.operator, log.staffId, t),
         [t('purchases.supplier')]: log.supplier?.name || '-',
-        [t('inventory.notes')]: log.note || '-'
+        [t('inventory.notes')]: log.note || '-',
+        [t('manualStockCorrection.original')]: log.manualCorrection?.rootId || '-',
+        [t('manualStockCorrection.reason')]: log.manualCorrection?.reason || '-',
+        [t('manualStockCorrection.action')]: log.manualCorrection ? t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : 'manualStockCorrection.replacement') : log.correctionStatus ? t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected') : '-'
       }
     })
 
@@ -614,6 +622,7 @@ export function StockLogPage() {
                   <th className="pb-3 font-medium whitespace-nowrap text-right px-4">{t('inventory.totalCostValue')}</th>
                   <th className="pb-3 font-medium whitespace-nowrap px-4">{t('inventory.operatorOrSupplier')}</th>
                   <th className="pb-3 font-medium min-w-[160px] pl-4">{t('inventory.notes')}</th>
+                  {isCorrectionAdmin && <th className="pb-3 font-medium whitespace-nowrap px-4">{t('manualStockCorrection.actions')}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -656,8 +665,10 @@ export function StockLogPage() {
                         <ActorName actor={log.operator} id={log.staffId}/>{log.supplier?.name && <div className="text-xs text-gray-500 mt-1">{t('purchases.supplier')}: {log.supplier.name}</div>}
                       </td>
                       <td className="py-3 text-sm text-gray-500 pl-4 max-w-xs truncate" title={log.note || ''}>
+                        {log.manualCorrection && <span className="block text-xs text-amber-700" title={log.manualCorrection.reason}>{t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : 'manualStockCorrection.replacement')}</span>}
                         {log.note || '-'}
                       </td>
+                      {isCorrectionAdmin && <td className="py-3 px-4 text-sm whitespace-nowrap">{(log.manualCorrectionEligible || log.manualCorrection) ? <><button type="button" className="text-primary-hover underline py-2" onClick={() => setCorrectionLog(log.manualCorrection ? {...log,type:log.manualCorrection.type,id:log.manualCorrection.rootId} : log)}>{t(log.correctionStatus || log.manualCorrection ? 'manualStockCorrection.history' : 'manualStockCorrection.title')}</button>{log.correctionStatus && <span className="block text-xs text-gray-500">{t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected')}</span>}</> : '—'}</td>}
                     </tr>
                   )
                 })}
@@ -667,6 +678,7 @@ export function StockLogPage() {
         )}
       </div>
 
+      {correctionLog && <ManualStockCorrection log={correctionLog} items={inventoryItems} onClose={() => setCorrectionLog(null)} onSaved={() => { queryClient.invalidateQueries({queryKey:['inventory-logs-comprehensive']}); queryClient.invalidateQueries({queryKey:['inventory']}); queryClient.invalidateQueries({queryKey:['inventory-all-items']}); queryClient.invalidateQueries({queryKey:['products']}); queryClient.invalidateQueries({queryKey:['bom-products']}); }} />}
       {/* Modal: Quick Stock In */}
       {showStockInModal && (
         <AdminDialog title={t('inventory.quickStockIn')} onClose={() => setShowStockInModal(false)} className="max-w-md" busy={Boolean(stockInMutation.isPending)} trackChanges chrome>

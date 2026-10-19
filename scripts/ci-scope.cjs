@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ manualStockCorrection:{paths:/(?:ManualStockCorrection|manual-inventory-correction)/i,tests:/manual-inventory-correction/i},
  posRisk:{paths:/(?:POSRiskSummary|POSMonitorPage|POSActionLogService|posActionLog|drawerAudit|DrawerReasonDialog|pos-risk)/i,tests:/pos-risk|pos-cart|cleared-cart|receipt-monitor/i},
  teamCommunication:{paths:/(?:TeamCommunication|TeamOperations|TeamTasks|TeamAi|TeamAttachment|teamCopy|teamWorkCopy|teamOperationCopy|teamOutbox|team-communication|team-operations)/i,tests:/team-communication|team-operations/i},
  todayStockOut:{paths:/(?:TodayStockOutService|TodayStockOuts|inventory-today-stock-out)/i,tests:/inventory-today-stock-out/i},
@@ -63,6 +64,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ manualStockCorrection:{scripts:['tests/stoploss/manual-inventory-correction-page-check.cjs'],components:['admin']},
  posRisk:{scripts:['tests/stoploss/pos-risk-page-check.cjs','tests/stoploss/cleared-cart-page-check.cjs'],components:['admin']},
  shifts:{scripts:['tests/stoploss/pos-expense-page-check.cjs'],components:['pos']},
  todayStockOut:{scripts:['tests/stoploss/inventory-today-stock-out-page-check.cjs'],components:['staff']},
@@ -85,6 +87,7 @@ const browserChecks={
  training:{scripts:['tests/stoploss/training-management-page-check.cjs'],components:['admin','staff']},
 };
 const httpChecks={
+ manualStockCorrection:['tests/stoploss/manual-inventory-correction-http-check.cjs'],
  staffOffline:['tests/stoploss/employee-offline-attendance-http-check.cjs'],
  offline:['tests/stoploss/offline-operations-http-check.cjs'],
  attendanceReport:['tests/stoploss/employee-workspace-http-check.cjs'],

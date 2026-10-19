@@ -1,3 +1,4 @@
+import { getManualCorrection, correctManualStock } from '../services/ManualStockCorrectionService'
 import { todayStockOuts } from '../services/TodayStockOutService'
 import {refreshInventoryAlerts,handleInventoryAlert} from '../services/InventoryAlertCenterService'
 import {setBatchExpiry} from '../services/InventoryBatchService'
@@ -129,6 +130,19 @@ router.get('/logs', authenticate, async (req: AuthRequest, res) => {
     console.error('Get inventory logs error:', error)
     res.status(500).json({ code: 500, message: error.message || 'Failed to get inventory logs' })
   }
+})
+
+// Corrections are restricted to a real administrator, never an employee-app session.
+const correctionAdmin = (req: AuthRequest, res: any, next: any) => req.user?.role === 'admin' && !req.user.employeeApp ? next() : res.status(403).json({code:403,message:'MANUAL_CORRECTION_ADMIN_ONLY'})
+const correctionParams = z.object({type:z.enum(['stock_in','stock_out']),id:z.string().min(1).max(100)})
+const correctionBody = z.object({requestId:z.string().uuid(),expectedVersion:z.string().min(1).max(100),action:z.enum(['correct','cancel']),reason:z.string().trim().min(1).max(1000),legacyCostMode:z.enum(['recorded','current_average']).optional(),replacement:z.object({inventoryId:z.string().min(1),quantity:z.number().finite().positive(),totalAmount:z.number().int().min(0).max(2147483647),note:z.string().max(2000)}).optional()}).strict()
+router.get('/manual-logs/:type/:id/corrections',authenticate,correctionAdmin,async(req:AuthRequest,res)=>{
+ try {const params=correctionParams.parse(req.params);res.json({code:200,data:await getManualCorrection(getStoreId(req),params.type,params.id)})}
+ catch(error:any){res.status(error.statusCode||400).json({code:error.statusCode||400,message:error.message})}
+})
+router.post('/manual-logs/:type/:id/corrections',authenticate,correctionAdmin,validateBody(correctionBody),async(req:AuthRequest,res)=>{
+ try {const params=correctionParams.parse(req.params);res.json({code:200,data:await correctManualStock(getStoreId(req),params.type,params.id,req.user!.staffId||req.user!.id,req.user!.id,req.body)})}
+ catch(error:any){res.status(error.statusCode||409).json({code:error.statusCode||409,message:error.message})}
 })
 
 // POST /api/inventory/stock-in
@@ -306,7 +320,8 @@ router.delete('/:id', authenticate, resourceAccess, authorize('admin'), async (r
     })
   } catch (error: any) {
     console.error('Delete inventory error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to delete inventory' })
+    const status=error.message==='MANUAL_CORRECTION_HISTORY_RETAIN_MATERIAL'?409:500
+    res.status(status).json({ code: status, message: error.message || 'Failed to delete inventory' })
   }
 })
 
