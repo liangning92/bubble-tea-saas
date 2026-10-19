@@ -320,7 +320,8 @@ router.delete('/:id', authenticate, resourceAccess, authorize('admin'), async (r
     })
   } catch (error: any) {
     console.error('Delete inventory error:', error)
-    res.status(500).json({ code: 500, message: error.message || 'Failed to delete inventory' })
+    const status=error.message==='MANUAL_CORRECTION_HISTORY_RETAIN_MATERIAL'?409:500
+    res.status(status).json({ code: status, message: error.message || 'Failed to delete inventory' })
   }
 })
 

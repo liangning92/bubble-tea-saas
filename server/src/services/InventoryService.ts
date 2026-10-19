@@ -543,6 +543,10 @@ export async function updateInventory(
 export async function deleteInventory(inventoryId: string) {
   // Delete in a transaction to handle foreign key constraints
   return prisma.$transaction(async (tx) => {
+    // Serialize deletion against corrections; never erase their source or signed trail.
+    await tx.inventory.update({where:{id:inventoryId},data:{currentStock:{increment:0}}})
+    const historyWhere={inventoryId,operationId:{startsWith:'manual-correction:'}}
+    if(await tx.stockInLog.findFirst({where:historyWhere,select:{id:true}})||await tx.stockOutLog.findFirst({where:historyWhere,select:{id:true}}))throw new Error('MANUAL_CORRECTION_HISTORY_RETAIN_MATERIAL')
     // Delete related records first
     await tx.stockInLog.deleteMany({ where: { inventoryId } })
     await tx.stockOutLog.deleteMany({ where: { inventoryId } })
