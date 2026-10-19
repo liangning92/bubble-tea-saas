@@ -1,7 +1,7 @@
 // Exercise real nginx with an isolated mock upstream; never use operational APIs.
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const configuration=path.resolve('client-admin/docker/nginx.conf');
-test('media upload proxy forwards 4MiB pictures and keeps unrelated API limits',async()=>{
+test('upload proxy forwards media and 8MiB private attachments while keeping unrelated API limits',async()=>{
  if(!process.env.BT_TEST_RUN){
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   execFileSync('python3',[path.resolve('scripts/with-docker-test.py'),'--',process.execPath,'--test',__filename],{stdio:'inherit',env});
@@ -18,8 +18,9 @@ test('media upload proxy forwards 4MiB pictures and keeps unrelated API limits',
  try{
   const upstream=path.join(root,'upstream.conf');
   fs.writeFileSync(upstream,'server { listen 3000; client_max_body_size 501m; location / { return 200 "mock upstream"; } }\n');
-  const small=path.join(root,'small.png'),large=path.join(root,'large.png');
+  const small=path.join(root,'small.png'),large=path.join(root,'large.png'),privateMax=path.join(root,'private-max.png'),oversized=path.join(root,'oversized.png');
   fs.writeFileSync(small,Buffer.alloc(50*1024));fs.writeFileSync(large,Buffer.alloc(4*1024*1024));
+  fs.writeFileSync(privateMax,Buffer.alloc(8*1024*1024));fs.writeFileSync(oversized,Buffer.alloc(9*1024*1024));
   // The private builder owns base layers; only the labelled test image is
   // loaded locally. Removing the builder avoids leaving shared test cache.
   fs.writeFileSync(path.join(root,'Dockerfile'),`FROM ${baseImage}\nLABEL com.bubbletea.test-run="${prefix}"\n`);
@@ -39,6 +40,12 @@ test('media upload proxy forwards 4MiB pictures and keeps unrelated API limits',
   assert.equal(post('/api/media?scene=library',large),'200');
   assert.equal(post('/api/media/?scene=product',large),'200');
   assert.equal(post('/api/upload/dualScreen',large),'200');
+  assert.equal(post('/api/staff-work/my/files',small),'200');
+  assert.equal(post('/api/staff-work/my/files',large),'200');
+  assert.equal(post('/api/staff-work/my/files?purpose=team',privateMax),'200');
+  assert.equal(post('/api/staff-work/my/files/',privateMax),'200');
+  assert.equal(post('/api/staff-work/my/files',oversized),'413');
+  assert.equal(post('/api/staff-work/my/files/unrelated',large),'413');
   assert.equal(post('/api/unrelated-json-endpoint',large),'413');
  }finally{cleanup('buildx','rm','--force',prefix);cleanup('rm','-f',front,backend);cleanup('network','rm',network);fs.rmSync(root,{recursive:true,force:true})}
 });
