@@ -23,6 +23,8 @@ export interface OperationPlan {
 const fail = (code: string, status = 409): never => { throw new TeamError(status, code) }
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const planKey = (c: string, p: string) => `operationPlan.${c}.${p}`
+const visiblePlan = (p: OperationPlan, a: TeamActor, floor: number) => p.fromSeq >= floor && p.memberIds?.includes(a.staffId)
+const visibleTask = (t: TeamTask, a: TeamActor, floor: number) => t.fromSeq >= floor && t.audienceIds?.includes(a.staffId)
 async function rows(db: any, storeId: string, prefix: string, max = 1001): Promise<any[]> {
   return (await db.config.findMany({ where: { storeId, key: { startsWith: 'team.communication.' + prefix } }, orderBy: { key: 'asc' }, take: max }))
     .map((r: any) => JSON.parse(r.value))
@@ -36,7 +38,7 @@ async function admin(db: any, a: TeamActor, id: string) {
 async function get(db: any, a: TeamActor, id: string, pid: string, floor: number): Promise<OperationPlan> {
   uuid.parse(pid)
   const p = await readTeam<OperationPlan>(db, a.storeId, planKey(id, pid))
-  if (!p || p.fromSeq < floor || !p.memberIds.includes(a.staffId)) fail('TEAM_PLAN_NOT_FOUND', 404)
+  if (!p || !visiblePlan(p, a, floor)) fail('TEAM_PLAN_NOT_FOUND', 404)
   return p
 }
 async function tasksFor(db: any, a: TeamActor, p: OperationPlan): Promise<TeamTask[]> {
@@ -45,6 +47,13 @@ async function tasksFor(db: any, a: TeamActor, p: OperationPlan): Promise<TeamTa
   return tasks as TeamTask[]
 }
 const open = (t: TeamTask) => !['completed', 'cancelled'].includes(t.status)
+// Keep full history for write-side closure checks; project each public response separately.
+async function publicPlan(db: any, a: TeamActor, p: OperationPlan, floor: number, loaded?: TeamTask[]) {
+  const snapshotIds = new Set(p.taskIds)
+  const tasks = (loaded || await tasksFor(db, a, p)).filter(t => snapshotIds.has(t.id) && visibleTask(t, a, floor))
+  return { ...p, taskIds: tasks.map(t => t.id) }
+}
+const visibleEscalations = (records: any[], tasks: TeamTask[]) => records.filter(r => tasks.some(t => t.id === r.taskId && t.planRevision === r.revision))
 async function validateMembers(db: any, a: TeamActor, c: any, content: OperationPlan['content']) {
   const ids = [...new Set([content.reviewerId, ...content.items.map(i => i.ownerId)])]
   if (ids.some(id => !c.members.some((m: any) => m.staffId === id))) fail('TEAM_PLAN_MEMBER_REQUIRED', 403)
@@ -66,7 +75,8 @@ export function teamOperations(db: any = prisma) {
   return {
     async list(a: TeamActor, id: string) {
       const { fromSeq } = await admin(db, a, id)
-      return (await rows(db, a.storeId, `operationPlan.${id}.`, 51)).filter((p: OperationPlan) => p.fromSeq >= fromSeq && p.memberIds.includes(a.staffId))
+      const plans = (await rows(db, a.storeId, `operationPlan.${id}.`, 51)).filter((p: OperationPlan) => visiblePlan(p, a, fromSeq))
+      return Promise.all(plans.map(p => publicPlan(db, a, p, fromSeq)))
     },
     async import(a: TeamActor, id: string, input: unknown) {
       const v = z.object({ requestId: uuid, planId: uuid.optional(), expectedVersion: z.number().int().min(0), content: operationContent }).strict().parse(input)
@@ -76,7 +86,7 @@ export function teamOperations(db: any = prisma) {
         await lockTeam(tx, a.storeId, `operation-request.${a.staffId}.${v.requestId}`)
         if (c.archived) fail('TEAM_CHANNEL_CLOSED')
         const rk = `operationRequest.${a.staffId}.${v.requestId}`, digest = hash({ id, ...v }), repeated = await readTeam(tx, a.storeId, rk)
-        if (repeated) { if (repeated.hash !== digest) fail('TEAM_REQUEST_CONFLICT'); return get(tx, a, id, repeated.planId, fromSeq) }
+        if (repeated) { if (repeated.hash !== digest) fail('TEAM_REQUEST_CONFLICT'); return publicPlan(tx, a, await get(tx, a, id, repeated.planId, fromSeq), fromSeq) }
         const previous = v.planId ? await get(tx, a, id, v.planId, fromSeq) : null
         if ((previous?.version || 0) !== v.expectedVersion) fail('TEAM_VERSION_CONFLICT')
         if (previous?.status === 'published') fail('TEAM_PLAN_PAUSE_BEFORE_REVISION')
@@ -85,11 +95,11 @@ export function teamOperations(db: any = prisma) {
         await validateMembers(tx, a, c, v.content)
         const p: OperationPlan = { id: previous?.id || randomUUID(), channelId: id, version: (previous?.version || 0) + 1,
           revision: (previous?.revision || 0) + 1, status: 'draft', content: v.content, audienceHash: hash(c.members),
-          fromSeq: previous?.fromSeq ?? c.lastSeq + 1, taskIds: previous?.taskIds || [], createdBy: a.staffId,
+          fromSeq: c.lastSeq + 1, taskIds: previous?.taskIds || [], createdBy: a.staffId,
           updatedAt: new Date().toISOString(), automaticMessages: false, memberIds: c.members.map((m: any) => m.staffId) }
         await save(tx, a, p, 'operation_import')
         await writeTeam(tx, a.storeId, rk, { hash: digest, planId: p.id })
-        return p
+        return publicPlan(tx, a, p, fromSeq)
       })
     },
     async action(a: TeamActor, id: string, pid: string, input: unknown) {
@@ -100,7 +110,7 @@ export function teamOperations(db: any = prisma) {
         const { c, fromSeq } = await admin(tx, a, id), p = await get(tx, a, id, pid, fromSeq)
         await lockTeam(tx, a.storeId, `operation-request.${a.staffId}.${v.requestId}`)
         const rk = `operationRequest.${a.staffId}.${v.requestId}`, digest = hash({ id, pid, ...v }), repeated = await readTeam(tx, a.storeId, rk)
-        if (repeated) { if (repeated.hash !== digest) fail('TEAM_REQUEST_CONFLICT'); return p }
+        if (repeated) { if (repeated.hash !== digest) fail('TEAM_REQUEST_CONFLICT'); return publicPlan(tx, a, p, fromSeq) }
         if (c.archived) fail('TEAM_CHANNEL_CLOSED')
         if (p.version !== v.expectedVersion) fail('TEAM_VERSION_CONFLICT')
         if (v.action === 'pause') {
@@ -134,7 +144,7 @@ export function teamOperations(db: any = prisma) {
         await save(tx, a, p, 'operation_' + v.action)
         await auditTeam(tx, a, id, 'update', { action: 'operation_decision', planId: pid, note: v.note })
         await writeTeam(tx, a.storeId, rk, { hash: digest, planId: p.id })
-        return p
+        return publicPlan(tx, a, p, fromSeq)
       })
     },
     async scan(a: TeamActor, id: string, pid: string, input: unknown) {
@@ -144,7 +154,12 @@ export function teamOperations(db: any = prisma) {
         const { c, fromSeq } = await admin(tx, a, id), p = await get(tx, a, id, pid, fromSeq)
         await lockTeam(tx, a.storeId, `operation-request.${a.staffId}.${v.requestId}`)
         const rk = `operationRequest.${a.staffId}.${v.requestId}`, digest = hash({ id, pid, scan: v }), repeated = await readTeam(tx, a.storeId, rk)
-        if (repeated) { if (repeated.hash !== digest) fail('TEAM_REQUEST_CONFLICT'); return repeated.result }
+        if (repeated) {
+          if (repeated.hash !== digest) fail('TEAM_REQUEST_CONFLICT')
+          if (repeated.scope?.revision !== p.revision || repeated.scope?.fromSeq !== p.fromSeq || repeated.scope?.audienceHash !== p.audienceHash) fail('TEAM_PLAN_SCOPE_CHANGED')
+          const visible = (await tasksFor(tx, a, p)).filter(t => visibleTask(t, a, fromSeq))
+          return { ...repeated.result, records: visibleEscalations(repeated.result.records, visible) }
+        }
         if (p.version !== v.expectedVersion) fail('TEAM_VERSION_CONFLICT')
         if (p.status !== 'published' || c.archived) fail('TEAM_PLAN_PAUSED')
         const records = await rows(tx, a.storeId, `operationEscalation.${id}.${pid}.`), tasks = await tasksFor(tx, a, p)
@@ -173,10 +188,12 @@ export function teamOperations(db: any = prisma) {
           if (r.events.length >= 100) fail('TEAM_PLAN_ESCALATION_LIMIT')
           r.status = 'resolved'; r.resolvedAt = at; r.events.push({ status: 'resolved', at }); await writeTeam(tx, a.storeId, r.key, r)
         }
-        const result = { checkedAt: at, automaticMessages: false, records }
-        await writeTeam(tx, a.storeId, `operationScan.${id}.${pid}`, { checkedAt: at })
-        await writeTeam(tx, a.storeId, rk, { hash: digest, result })
-        await auditTeam(tx, a, id, 'update', { action: 'operation_scan', planId: pid, open: records.filter(r => r.status === 'open').length })
+        const visible = tasks.filter(t => visibleTask(t, a, fromSeq))
+        const result = { checkedAt: at, automaticMessages: false, records: visibleEscalations(records, visible) }
+        const scope = { revision: p.revision, fromSeq: p.fromSeq, audienceHash: p.audienceHash }
+        await writeTeam(tx, a.storeId, `operationScan.${id}.${pid}`, { checkedAt: at, ...scope, memberIds: p.memberIds })
+        await writeTeam(tx, a.storeId, rk, { hash: digest, result, scope })
+        await auditTeam(tx, a, id, 'update', { action: 'operation_scan', planId: pid, open: result.records.filter(r => r.status === 'open').length })
         return result
       })
     },
@@ -184,7 +201,8 @@ export function teamOperations(db: any = prisma) {
       // Snapshot the plan and task state under the same channel lock as mutations.
       return db.$transaction(async (tx: any) => {
         await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(id))
-        const { fromSeq } = await admin(tx, a, id), p = await get(tx, a, id, pid, fromSeq), tasks = await tasksFor(tx, a, p)
+        const { fromSeq } = await admin(tx, a, id), p = await get(tx, a, id, pid, fromSeq)
+        const allTasks = await tasksFor(tx, a, p), tasks = allTasks.filter(t => visibleTask(t, a, fromSeq))
         const people = await tx.staff.findMany({ where: { storeId: a.storeId, id: { in: [...new Set([p.content.reviewerId, ...tasks.map(t => t.ownerId)])] } }, select: { id: true, name: true } })
         const name = (id: string) => people.find((person: any) => person.id === id)?.name || id
         const labels: Record<string, string> = { assigned: '待接收', accepted: '执行中', submitted: '待验收', changes_requested: '待补充', completed: '主管已验收', cancelled: '已取消' }
@@ -198,17 +216,19 @@ export function teamOperations(db: any = prisma) {
           }
           details.push({ ...t, ownerName: name(t.ownerId), reviewerName: name(t.reviewerId || ''), employeeStatement: submitted?.note || '', evidence, humanReview: review || null })
         }
-        const escalations = await rows(tx, a.storeId, `operationEscalation.${id}.${pid}.`)
+        const escalations = visibleEscalations(await rows(tx, a.storeId, `operationEscalation.${id}.${pid}.`), tasks)
         const states = Object.fromEntries(Object.keys(labels).map(s => [s, tasks.filter(t => t.status === s).length]))
         const planStates = { draft: '草稿', published: '已发布', paused: '已暂停' }
-        const summaryZh = [`计划：${p.content.title}；内容版本：${p.revision}；状态：${planStates[p.status]}；统计覆盖本计划各版本任务`,
+        const summaryZh = [`计划：${p.content.title}；内容版本：${p.revision}；状态：${planStates[p.status]}；统计仅覆盖当前账号有权查看的任务`,
           ...Object.entries(states).map(([s, n]) => `${labels[s]}：${n}`),
           '员工口述与证据不等于主管验收；附件未发送给模型；升级记录以最近一次人工检查为准。',
           ...details.map(t => `${t.text}｜负责人 ${t.ownerName}｜${labels[t.status]}｜员工陈述：${t.employeeStatement || '无提交'}｜证据：${t.evidence.map(e => '#' + e.seq).join('、') || '无'}｜主管记录：${t.humanReview?.note || '尚无'}`)].join('\n')
-        const versions = await rows(tx, a.storeId, `operationVersion.${id}.${pid}.`, 101)
+        const snapshots = (await rows(tx, a.storeId, `operationVersion.${id}.${pid}.`, 101)).filter(v => visiblePlan(v, a, fromSeq))
+        const versions = await Promise.all(snapshots.map(v => publicPlan(tx, a, v, fromSeq, allTasks)))
         await auditTeam(tx, a, id, 'view', { action: 'operation_export', planId: pid, version: p.version })
         const lastScan = await readTeam(tx, a.storeId, `operationScan.${id}.${pid}`)
-        return { schema: 'team.operations.result.v1', generatedAt: new Date().toISOString(), lastEscalationCheckAt: lastScan?.checkedAt || null, plan: p, versions, states, tasks: details,
+        const checkedAt = lastScan?.revision === p.revision && visiblePlan(lastScan, a, fromSeq) ? lastScan.checkedAt : null
+        return { schema: 'team.operations.result.v1', generatedAt: new Date().toISOString(), lastEscalationCheckAt: checkedAt, plan: await publicPlan(tx, a, p, fromSeq, allTasks), versions, states, tasks: details, historyScope: 'current_membership_only',
           escalations, summaryZh, automaticMessages: false, returnMode: 'manual_admin_export' }
       })
     }

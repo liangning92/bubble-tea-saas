@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
-module.exports = async ({ prisma, good, request, create, send, test, dropResponse }) => {
+module.exports = async ({ prisma, good, request, create, send, test, dropResponse, registerActor }) => {
  const owner={id:'u-owner',storeId:'team-store-a',staffId:'s-owner',role:'admin'};
  const {teamAi}=require(path.resolve('server/dist/services/TeamAiService'));
  const planContent=()=>({schema:'team.operations.plan.v1',title:'Synthetic operations plan',objective:'Inspect an isolated test machine only',reviewerId:'s-owner',items:[{
@@ -18,6 +18,13 @@ module.exports = async ({ prisma, good, request, create, send, test, dropRespons
  const config=teamAi(prisma,async()=>{throw Error('No real provider calls permitted')});
  const configure=async(extra={})=>{const current=await config.settings(owner);return config.saveSettings(owner,{expectedVersion:current.version,provider:'minimax',model:'MiniMax-M3',enabled:true,monthlyBudgetUsd:null,inputPerMillionUsd:0.3,outputPerMillionUsd:1.2,...extra});};
  const clearRate=async()=>{const key=`team.communication.aiBudget.${new Date().toISOString().slice(0,7)}`;const row=await prisma.config.findUnique({where:{storeId_key:{storeId:owner.storeId,key}}});if(row)await prisma.config.update({where:{id:row.id},data:{value:JSON.stringify({...JSON.parse(row.value),calls:[]})}});};
+ const laterAdmin='opsadmin', laterStaff='s-opsadmin';
+ await prisma.user.create({data:{id:'u-'+laterAdmin,phone:'08000000008',role:'admin',storeId:owner.storeId,password:await require(path.resolve('server/node_modules/bcryptjs')).hash('synthetic-ops-admin-only',4),staff:{create:{id:laterStaff,storeId:owner.storeId,name:'Synthetic later administrator',employeeNumber:'TEAM-OPS-ADMIN'}}}});
+ await registerActor(laterAdmin);
+ const members=async(c,include)=>{const current=(await good('owner','GET','/team/channels')).find(v=>v.id===c.id);return good('owner','PUT',`/team/channels/${c.id}/members`,{expectedVersion:current.version,ownerId:'s-owner',members:['s-owner','s-bob',...(include?[laterStaff]:[])],archived:false});};
+ const decideAs=(who,c,p,action,extra={})=>good(who,'POST',base(c)+`/${p.id}/actions`,{requestId:randomUUID(),expectedVersion:p.version,action,approved:true,note:'Synthetic scoped decision',...extra});
+ const scanAs=(who,c,p,requestId=randomUUID())=>good(who,'POST',base(c)+`/${p.id}/scan`,{requestId,expectedVersion:p.version});
+ const privatePlan=marker=>{const p=planContent();return {...p,title:marker+' title',objective:marker+' objective',items:[{...p.items[0],text:marker+' task',evidenceRequired:marker+' evidence',acceptanceCriteria:marker+' criteria'}]};};
 
  await test('operations import is strict, private, member-scoped and creates no tasks or messages',async()=>{
   const c=await create('owner','group',['s-bob']);const payload={requestId:randomUUID(),expectedVersion:0,content:planContent()};
@@ -49,6 +56,44 @@ module.exports = async ({ prisma, good, request, create, send, test, dropRespons
   await good('owner','PUT',`/team/channels/${f.c.id}/members`,{expectedVersion:f.c.version,ownerId:'s-owner',members:['s-owner','s-bob','s-carol'],archived:false});
   assert.deepEqual(await good('carol','GET',`/team/channels/${f.c.id}/tasks`,undefined,true),[]);
   assert.equal((await request('bob','POST',`/team/channels/${f.c.id}/tasks/${f.t.id}/actions`,{requestId:randomUUID(),expectedVersion:f.t.version,action:'accept'},true)).status,409);
+ });
+ await test('revised plan export filters old tasks, snapshots, counts, escalations and task IDs even at the same message floor',async()=>{
+  const marker='PRIVATE_PRE_JOIN_REVISION',c=await create('owner','group',['s-bob']);let p=await importPlan(c,privatePlan(marker));p=await decision(c,p,'publish');
+  const oldTask=(await good('owner','GET',`/team/channels/${c.id}/tasks`))[0];await scanAs('owner',c,p);
+  await members(c,true);assert.deepEqual(await good(laterAdmin,'GET',base(c)),[]);assert.equal((await request(laterAdmin,'GET',base(c)+`/${p.id}/export`)).status,404);
+  p=await decision(c,p,'pause');await taskAction('owner',c,oldTask,'cancel',{note:marker+' cancellation'});
+  p=await importPlan(c,{...planContent(),title:'Visible revision',reviewerId:laterStaff},{planId:p.id,expectedVersion:p.version});
+  let result=await good(laterAdmin,'GET',base(c)+`/${p.id}/export`);
+  assert.equal(p.fromSeq,1);assert.deepEqual(result.tasks,[]);assert.deepEqual(result.plan.taskIds,[]);assert.deepEqual(result.escalations,[]);assert.equal(result.lastEscalationCheckAt,null);
+  assert(Object.values(result.states).every(v=>v===0));assert(result.versions.every(v=>v.revision===2));assert(!JSON.stringify(result).includes(marker));assert(!JSON.stringify(result).includes(oldTask.id));
+  p=await decideAs(laterAdmin,c,p,'publish');const current=(await good(laterAdmin,'GET',`/team/channels/${c.id}/tasks`))[0];assert.equal(p.taskIds.length,1);assert.equal(p.taskIds[0],current.id);
+  const requestId=randomUUID(),scanned=await scanAs(laterAdmin,c,p,requestId);assert(scanned.records.every(r=>r.taskId===current.id));assert.deepEqual(await scanAs(laterAdmin,c,p,requestId),scanned);
+  result=await good(laterAdmin,'GET',base(c)+`/${p.id}/export`);assert.equal(result.states.assigned,1);assert.equal(result.states.cancelled,0);assert(!JSON.stringify(result).includes(marker));assert(!JSON.stringify(result).includes(oldTask.id));
+  assert((await good(laterAdmin,'GET',base(c)))[0].taskIds.every(id=>id===current.id));
+  const original=await good('owner','GET',base(c)+`/${p.id}/export`);assert(JSON.stringify(original).includes(marker));assert.equal(original.states.cancelled,1);assert(original.tasks.some(t=>t.id===oldTask.id));
+ });
+ await test('a supervisor joining after old messages can manage the current revision and review its own-scope evidence',async()=>{
+  const marker='PRIVATE_OLD_RESULT',c=await create('owner','group',['s-bob']);let p=await importPlan(c,privatePlan(marker));p=await decision(c,p,'publish');let t=(await good('owner','GET',`/team/channels/${c.id}/tasks`))[0];
+  t=await taskAction('bob',c,t,'accept');const oldProof=await send('bob',c.id,marker+' message');t=await taskAction('bob',c,t,'submit',{note:marker+' statement',sourceSeq:[oldProof.seq]});await taskAction('owner',c,t,'complete',{note:marker+' review',criteriaConfirmed:true});
+  await members(c,true);assert.equal((await request(laterAdmin,'GET',base(c)+`/${p.id}/export`)).status,404);
+  p=await decision(c,p,'pause');p=await importPlan(c,{...planContent(),title:'Current reviewer scope',reviewerId:laterStaff},{planId:p.id,expectedVersion:p.version});p=await decision(c,p,'publish');assert.equal(p.fromSeq,oldProof.seq+1);
+  assert.equal((await good(laterAdmin,'GET',base(c))).length,1);assert.equal((await good(laterAdmin,'GET',base(c)))[0].id,p.id);await scanAs(laterAdmin,c,p);
+  p=await decideAs(laterAdmin,c,p,'pause');p=await decideAs(laterAdmin,c,p,'resume');
+  t=(await good(laterAdmin,'GET',`/team/channels/${c.id}/tasks`))[0];assert.equal(t.planRevision,2);t=await taskAction('bob',c,t,'accept');const proof=await send('bob',c.id,'Visible current inspection result');t=await taskAction('bob',c,t,'submit',{note:'Current result',sourceSeq:[proof.seq]});
+  assert.equal((await request('owner','POST',`/team/channels/${c.id}/tasks/${t.id}/actions`,{requestId:randomUUID(),expectedVersion:t.version,action:'complete',note:'Wrong designated reviewer',criteriaConfirmed:true})).status,403);
+  t=await taskAction(laterAdmin,c,t,'return',{note:'Please add current reading'});const extra=await send('bob',c.id,'Visible supplementary reading');t=await taskAction('bob',c,t,'submit',{note:'Supplementary evidence',sourceSeq:[proof.seq,extra.seq]});await taskAction(laterAdmin,c,t,'complete',{note:'Current criteria checked',criteriaConfirmed:true});
+  const result=await good(laterAdmin,'GET',base(c)+`/${p.id}/export`);assert.equal(result.states.completed,1);assert.equal(result.tasks.length,1);assert(result.tasks[0].evidence.every(e=>e.seq>=p.fromSeq));assert(result.versions.every(v=>v.revision===2));assert(!JSON.stringify(result).includes(marker));
+  assert.equal((await good('owner','GET',base(c)+`/${p.id}/export`)).states.completed,2);
+ });
+ await test('rejoining at a later floor cannot replay a stale scan or regain old snapshots through a new revision',async()=>{
+  const marker='PRIVATE_BEFORE_REJOIN',c=await create('owner','group',['s-bob',laterStaff]);let p=await importPlan(c,{...privatePlan(marker),reviewerId:laterStaff});p=await decision(c,p,'publish');const oldTask=(await good(laterAdmin,'GET',`/team/channels/${c.id}/tasks`))[0];
+  const scanPayload={requestId:randomUUID(),expectedVersion:p.version};await good(laterAdmin,'POST',base(c)+`/${p.id}/scan`,scanPayload);
+  const pausePayload={requestId:randomUUID(),expectedVersion:p.version,action:'pause',approved:true,note:marker+' pause'};p=await good(laterAdmin,'POST',base(c)+`/${p.id}/actions`,pausePayload);
+  await send('owner',c.id,marker+' advances floor');await members(c,false);await members(c,true);assert.equal((await request(laterAdmin,'GET',base(c)+`/${p.id}/export`)).status,404);
+  await taskAction('owner',c,oldTask,'cancel',{note:'Explicit retirement'});p=await importPlan(c,{...planContent(),reviewerId:laterStaff},{planId:p.id,expectedVersion:p.version});p=await decision(c,p,'publish');
+  const repeated=await request(laterAdmin,'POST',base(c)+`/${p.id}/scan`,scanPayload);assert.equal(repeated.status,409);assert.equal(repeated.body.message,'TEAM_PLAN_SCOPE_CHANGED');
+  const replayed=await good(laterAdmin,'POST',base(c)+`/${p.id}/actions`,pausePayload);assert.equal(replayed.status,'published');assert(!replayed.taskIds.includes(oldTask.id));
+  let result=await good(laterAdmin,'GET',base(c)+`/${p.id}/export`);assert.equal(result.lastEscalationCheckAt,null);assert(!JSON.stringify(result).includes(marker));assert(result.versions.every(v=>v.fromSeq>=p.fromSeq));await scanAs(laterAdmin,c,p);result=await good(laterAdmin,'GET',base(c)+`/${p.id}/export`);assert.equal(result.tasks.length,1);assert(result.escalations.every(r=>r.taskId===result.tasks[0].id));
  });
  await test('operations escalation reopens after an unavailable assignee recovers and becomes unavailable again',async()=>{
   const {c,p}=await fixture(), scan=()=>good('owner','POST',base(c)+`/${p.id}/scan`,{requestId:randomUUID(),expectedVersion:p.version});
@@ -128,4 +173,5 @@ module.exports = async ({ prisma, good, request, create, send, test, dropRespons
   const audits=await good('owner','GET','/team/admin/audits');assert(audits.some(a=>JSON.parse(a.newValue).action==='operation_export'));
   fs.mkdirSync('output/team-operations',{recursive:true});fs.writeFileSync('output/team-operations/synthetic-result.json',JSON.stringify(result,null,2));
  });
+ await prisma.staff.update({where:{id:laterStaff},data:{status:'inactive'}});
 };

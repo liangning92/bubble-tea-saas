@@ -265,7 +265,7 @@ async function main() {
       await prisma.config.createMany({ data: Array.from({ length: 505 }, (_, n) => ({ storeId: 'team-store-a', category: 'staff', key: `team.communication.minuteVersion.${c.id}.${first.id}.${String(n + 2).padStart(6, '0')}`, value: JSON.stringify({ ...first, version: n + 2 }) })) });
       assert.equal((await good('alice', 'GET', `/team/channels/${c.id}/minutes/${first.id}/versions`)).length, 506);
     });
-    await require('./team-operations-loop-check.cjs')({ prisma, good, request, create, send, test, dropResponse: () => { dropNextResponse = true; } });
+    await require('./team-operations-loop-check.cjs')({ prisma, good, request, create, send, test, registerActor: async who => { tokens[who] = await token(who); }, dropResponse: () => { dropNextResponse = true; } });
     await require('./team-communication-followup-check.cjs')({ prisma, good, request, create, send, test, dropResponse: () => { dropNextResponse = true; } });
     await test('rate and length limits apply transactionally, and invalid requests do not allocate sequence numbers', async () => {
       const c = await create('rate', 'group', ['s-bob']);
