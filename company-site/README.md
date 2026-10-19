@@ -9,6 +9,7 @@ This independent static website introduces PT LUMBA MERAH NIAGA INDONESIA and it
 - Origin: `http://127.0.0.1:8181`; container listens on 8080 as an unprivileged user.
 - No database, credentials, persistent volumes, or connection to the existing application network.
 - Access logging is disabled at the origin; Cloudflare still processes delivery and security data as described on the page.
+- The origin sends `Cache-Control: public, max-age=0, must-revalidate, no-transform` so automatic Cloudflare Web Analytics does not insert a beacon into this page. The website does not change zone-wide analytics or security settings.
 
 ## Release requirements
 

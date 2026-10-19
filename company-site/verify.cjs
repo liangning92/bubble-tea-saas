@@ -18,6 +18,7 @@ const publicCheck = process.env.LUMBA_PUBLIC_CHECK === '1';
   if (!publicCheck) assert.deepEqual(received, source, 'Origin must serve exact committed HTML');
   assert(response.headers.get('content-security-policy'), 'Origin CSP must be present');
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(response.headers.get('cache-control') || '', /\bno-transform\b/, 'CDN must preserve the static payload without injecting analytics');
   const browser = await chromium.launch({ headless: true });
   const checks = [];
   try {
