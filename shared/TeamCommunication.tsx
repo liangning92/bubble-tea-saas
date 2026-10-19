@@ -3,7 +3,7 @@ import { teamCopy } from './teamCopy'
 import { TeamPending, pendingMessages, removePending, savePending } from './teamOutbox'
 import { TeamTasks, TeamTask } from './TeamTasks'
 import { TeamAttachment } from './TeamAttachment'
-import { TeamAi, TeamAiSettings } from './TeamAi'
+import { TeamAi } from './TeamAi'
 import { teamWorkCopy } from './teamWorkCopy'
 
 export interface TeamClient {
@@ -173,7 +173,6 @@ export function TeamCommunication({ client, scope, staffId, language, administra
   return <main className="space-y-4 p-4 text-gray-900" data-testid="team-communication">
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-bold">{administration ? w.admin : w.title}</h1><p className="text-sm text-gray-500">{w.subtitle}</p></div><div className="flex gap-2"><button className={button} onClick={() => { void reload(); setRefreshKey(v => v + 1) }}>{w.refresh}</button><button className={primary} onClick={() => setCreating(v => !v)}>{w.newChat}</button></div></header>
     <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">{w.notice}</p>
-    {aiAdmin && <TeamAiSettings key={scope} client={client} language={language} />}
     {!online && <p role="status" className="rounded-lg bg-yellow-50 p-3">{w.offline}</p>}
     {error && <p role="alert" className="break-words rounded-lg bg-red-50 p-3 text-sm text-red-700">{error === 'TEAM_VERSION_CONFLICT' ? w.conflict : w.error} <span>{error}</span></p>}
     {saved && <p role="status">{saved}</p>}

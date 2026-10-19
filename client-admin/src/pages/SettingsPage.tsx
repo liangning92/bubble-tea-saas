@@ -23,9 +23,9 @@ const StaffPermissionsPage = lazy(() =>
     default: module.StaffPermissionsPage,
   })),
 );
-const AiPermissionsPage = lazy(() =>
-  import("./settings/AiPermissionsPage").then((module) => ({
-    default: module.AiPermissionsPage,
+const AiSettingsPage = lazy(() =>
+  import("./settings/AiSettingsPage").then((module) => ({
+    default: module.AiSettingsPage,
   })),
 );
 
@@ -171,7 +171,7 @@ export function SettingsPage() {
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "ai" ? "bg-primary text-white" : "text-gray-600 hover:bg-gray-100"}`}
           >
             <Shield size={18} />
-            {t("aiPermissions.title")}
+            {t("aiSettings.title")}
           </button>
         )}
       </div>
@@ -460,7 +460,7 @@ export function SettingsPage() {
             </div>
           }
         >
-          <AiPermissionsPage />
+          <AiSettingsPage />
         </Suspense>
       )}
 
