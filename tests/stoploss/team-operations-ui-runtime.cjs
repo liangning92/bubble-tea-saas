@@ -21,7 +21,13 @@ async function main(){
  await team.send(actor,c.id,{requestId:randomUUID(),text:'Synthetic fixture only. No production employees or business data.'});
  await teamAi(prisma).saveSettings(actor,{expectedVersion:0,provider:'minimax',model:'MiniMax-M3',enabled:true,monthlyBudgetUsd:null,inputPerMillionUsd:0.3,outputPerMillionUsd:1.2,apiKey:'synthetic-ui-key-only'});
  await teamOperations(prisma).import(actor,c.id,{requestId:randomUUID(),expectedVersion:0,content:{schema:'team.operations.plan.v1',title:'Synthetic inspection plan',objective:'Inspect an isolated machine; no business-data actions.',reviewerId:'s-owner',items:[{key:'machine',text:'Periksa mesin uji dan kirim hasil pemeriksaan.',ownerId:'s-bob',acceptByAt:new Date(Date.now()-7200000).toISOString(),deadlineAt:new Date(Date.now()-3600000).toISOString(),evidenceRequired:'Pesan hasil dari pelaksana.',acceptanceCriteria:'Atasan memeriksa hasil dan memberi keputusan.'}]}});
- const app=express();app.use(express.json({limit:'256kb'}));
+ const app=express();app.use(express.json({limit:'256kb'}));app.use(express.urlencoded({extended:false,limit:'4kb'}));
+ // Visible, test-only fault controls. These routes are never mounted by the production app.
+ let uploadPaused=false;
+ const controls=()=>'<html lang="zh"><meta charset="utf-8"><h1>隔离上传故障控制</h1><p role="status">上传故障：'+(uploadPaused?'已开启':'已恢复')+'</p><form method="post"><button name="mode" value="fail">暂停上传</button><button name="mode" value="restore">恢复上传</button></form></html>';
+ app.get('/fixture/control',(_req,res)=>res.type('html').send(controls()));
+ app.post('/fixture/control',(req,res)=>{if(!['fail','restore'].includes(req.body.mode))return res.status(400).send('Invalid fixture command');uploadPaused=req.body.mode==='fail';return res.type('html').send(controls());});
+ app.use('/api/staff-work/my/files',(req,res,next)=>{if(uploadPaused&&req.method==='POST')return res.status(503).json({code:503,message:'ISOLATED_UPLOAD_OUTAGE'});next();});
  for(const [base,moduleName,exportName] of [
   ['/api/auth','auth','authRouter'],['/api/team','teamCommunication','teamCommunicationRouter'],['/api/staff-work','employeeWorkspace','employeeWorkspaceRouter'],['/api/staff-permissions','staffPermissions','staffPermissionsRouter'],['/api/config','config','configRouter']]){
   const router=require(root+'/server/dist/routes/'+moduleName)[exportName];
