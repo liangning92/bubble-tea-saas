@@ -3,7 +3,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import { z } from 'zod'
 import prisma from '../config/database'
-import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam } from './TeamCommunicationService'
+import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam, assertOperationScope } from './TeamCommunicationService'
 
 const uuid = z.string().uuid()
 const denied = (code: string, status = 403): never => { throw new TeamError(status, code) }
@@ -52,7 +52,9 @@ async function minimax(key: string, model: string, system: string, input: string
     outputTokens: result.usage?.completion_tokens, providerRequestId: typeof result.id === 'string' ? result.id.slice(0, 160) : '' }
 }
 const generationSchema = z.object({ requestId: uuid, kind: z.enum(['translate', 'draft', 'report']), consent: z.literal(true),
-  sourceSeq: z.array(z.number().int().positive()).max(20), instruction: z.string().trim().max(1500).default('') }).strict()
+  sourceSeq: z.array(z.number().int().positive()).max(20), instruction: z.string().trim().max(1500).default(''),
+  operation: z.object({ planId: uuid, taskId: uuid, planVersion: z.number().int().positive(), taskVersion: z.number().int().positive(),
+    purpose: z.enum(['explain', 'followup', 'remind']) }).strict().optional() }).strict()
 const settingsSchema = z.object({ expectedVersion: z.number().int().nonnegative(), enabled: z.boolean(),
   provider: z.literal('minimax'), model: z.string().regex(/^MiniMax-[A-Za-z0-9.-]+$/).max(80),
   monthlyBudgetUsd: z.number().positive().max(100000).nullable(), inputPerMillionUsd: z.number().positive().max(1000),
@@ -101,12 +103,13 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
     draft: readDraft,
     async generate(a: TeamActor, id: string, input: unknown) {
       admin(a); const v = generationSchema.parse(input), source = [...new Set(v.sourceSeq)].sort((a, b) => a - b)
-      if (v.kind !== 'draft' && !source.length || v.kind === 'draft' && !v.instruction) denied('TEAM_AI_INPUT_REQUIRED', 400)
+      if (v.operation ? v.kind !== 'draft' || !!v.instruction || source.length > 0 : v.kind !== 'draft' && !source.length || v.kind === 'draft' && !v.instruction) denied('TEAM_AI_INPUT_REQUIRED', 400)
       const key = `aiDraft.${a.staffId}.${v.requestId}`, hash = createHash('sha256').update(JSON.stringify({ id, ...v, sourceSeq: source })).digest('hex')
       const prepared = await db.$transaction(async tx => {
         await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await accessTeamChannel(tx, a, id)
         if (c.archived) denied('TEAM_CHANNEL_CLOSED', 409)
+        const scoped = v.operation ? await assertOperationScope(tx, a, c, v.operation) : null
         const previous = await readTeam(tx, a.storeId, key)
         if (previous) {
           if (previous.inputHash !== hash) denied('TEAM_REQUEST_CONFLICT', 409)
@@ -121,7 +124,11 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
           if (!m) denied('TEAM_SOURCE_RANGE', 400)
           lines.push(`#${n}: ${m.text}`)
         }
-        const text = JSON.stringify({ instruction: v.instruction, selectedWorkMessages: lines })
+        const text = scoped ? JSON.stringify({ purpose: v.operation!.purpose,
+          approvedTask: { text: scoped.t.text, deadlineAt: scoped.t.deadlineAt, acceptByAt: scoped.t.acceptByAt,
+            evidenceRequired: scoped.t.evidenceRequired, acceptanceCriteria: scoped.t.acceptanceCriteria, status: scoped.t.status },
+          instruction: 'Only explain, ask for progress or remind about this approved task in Indonesian. Do not add tasks, alter deadlines, infer completion, approve evidence, contact other people or operate business data. Use the explicit timezone offset in the deadline. No employee messages or attachments are supplied.'
+        }) : JSON.stringify({ instruction: v.instruction, selectedWorkMessages: lines })
         if (text.length > 16000) denied('TEAM_AI_CONTEXT_LIMIT', 400)
         await lockTeam(tx, a.storeId, 'ai-budget')
         const config: Settings = (await readTeam(tx, a.storeId, 'ai.settings')) || defaults()
@@ -138,7 +145,7 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
         const draft = { id: v.requestId, channelId: id, ownerId: a.staffId, kind: v.kind, sourceSeq: source,
           sourceFloor: source[0] ?? c.lastSeq + 1, audienceHash: createHash('sha256').update(JSON.stringify(c.members)).digest('hex'),
           model: config.model, configVersion: config.version, status: 'pending',
-          text: '', createdAt: new Date().toISOString(), inputHash: hash }
+          text: '', createdAt: new Date().toISOString(), inputHash: hash, ...(v.operation ? { operation: v.operation } : {}) }
         await writeTeam(tx, a.storeId, key, draft)
         await auditTeam(tx, a, id, 'create', { action: 'ai_call', requestId: v.requestId, model: config.model, sourceSeq: source, kind: v.kind })
         return { config, text, month, reserve, draft }
@@ -158,14 +165,21 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
         throw new TeamError(502, e instanceof TeamError ? e.message : 'TEAM_AI_PROVIDER_UNAVAILABLE')
       }
       await db.$transaction(async tx => {
+        await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(id))
         await lockTeam(tx, a.storeId, 'ai-budget')
         const budget = await readTeam(tx, a.storeId, `aiBudget.${prepared.month}`)
         const cost = Math.ceil(outcome.inputTokens * prepared.config.inputPerMillionUsd + outcome.outputTokens * prepared.config.outputPerMillionUsd)
         budget.reservedMicros -= prepared.reserve; budget.spentMicros += cost
         await writeTeam(tx, a.storeId, `aiBudget.${prepared.month}`, budget)
         const current: Settings = await readTeam(tx, a.storeId, 'ai.settings')
-        await writeTeam(tx, a.storeId, key, { ...prepared.draft, status: current?.enabled && current.version === prepared.config.version ? 'ready' : 'blocked',
-          text: current?.enabled && current.version === prepared.config.version ? outcome.text.trim() : '',
+        let scopeValid = true
+        if (v.operation) {
+          try { const { c } = await accessTeamChannel(tx, a, id); await assertOperationScope(tx, a, c, v.operation) }
+          catch (e) { if (!(e instanceof TeamError)) throw e; scopeValid = false }
+        }
+        const ready = scopeValid && current?.enabled && current.version === prepared.config.version
+        await writeTeam(tx, a.storeId, key, { ...prepared.draft, status: ready ? 'ready' : 'blocked',
+          text: ready ? outcome.text.trim() : '',
           usage: { inputTokens: outcome.inputTokens, outputTokens: outcome.outputTokens, estimatedUsd: cost / 1000000 },
           providerRequestId: outcome.providerRequestId, completedAt: new Date().toISOString() })
       })
