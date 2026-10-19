@@ -1,3 +1,4 @@
+import { isSalesStockOut, stockLogCost } from '../../utils/inventorySalesCosts'
 import { ReferenceDetails } from '../../components/ReferenceDetails'
 import { formatNumber } from '../../utils/numberDisplay'
 import { notifyAdmin } from '../../components/AdminFeedback'
@@ -132,7 +133,7 @@ export function StockLogPage() {
       } else if (activeTab === 'in') {
         if (log.type !== 'stock_in') return false
       } else if (activeTab === 'sold') {
-        if (log.type !== 'stock_out' || log.reason !== 'sold') return false
+        if (!isSalesStockOut(log)) return false
       } else if (activeTab === 'waste') {
         if (log.type !== 'stock_out' || (log.reason !== 'loss' && log.reason !== 'expired')) return false
       } else if (activeTab === 'process') {
@@ -172,14 +173,11 @@ export function StockLogPage() {
     let totalWasteCost = 0
 
     rawLogs.forEach((log: any) => {
-      const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
       if (log.type === 'stock_in') {
-        const amt = Number(log.totalAmount || (log.quantity * (log.unitCost || avgCost)))
-        totalInboundCost += amt
+        totalInboundCost += stockLogCost(log)
       } else if (log.type === 'stock_out') {
-        const itemCost = log.totalAmount ?? Math.round(Number(log.quantity || 0) * avgCost)
-        if (log.reason==='sale_estimate'||log.reason==='sale_estimate_reversal') return <span className="badge badge-info">{t(log.reason==='sale_estimate'?'inventoryUnified.sales':'inventoryUnified.reversal')}</span>
-    if (log.reason === 'sold') {
+        const itemCost = stockLogCost(log)
+        if (isSalesStockOut(log)) {
           totalSalesCost += itemCost
         } else if (log.reason === 'loss' || log.reason === 'expired') {
           totalWasteCost += itemCost
@@ -320,9 +318,7 @@ export function StockLogPage() {
     const rows = filteredLogs.map((log: any) => {
       const isStockIn = log.type === 'stock_in'
       const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
-      const costValue = isStockIn
-        ? (log.totalAmount || Math.round(Number(log.quantity) * Number(log.unitCost || avgCost)))
-        : Math.round(Number(log.quantity) * avgCost)
+      const costValue = stockLogCost(log)
 
       let reasonText = ''
       if (isInventoryAdjustment(log)) reasonText = t('inventory.reasonAdjust')
@@ -335,7 +331,8 @@ export function StockLogPage() {
           reasonText = t('inventory.reasonPurchase')
         }
       } else {
-        if (log.reason === 'sold') reasonText = t('inventory.reasonSold')
+        if (log.reason === 'sale_estimate' || log.reason === 'sale_estimate_reversal') reasonText = t(log.reason === 'sale_estimate' ? 'inventoryUnified.sales' : 'inventoryUnified.reversal')
+        else if (log.reason === 'sold') reasonText = t('inventory.reasonSold')
         else if (log.reason === 'process') reasonText = t('inventory.reasonProcess')
         else if (log.reason === 'expired') reasonText = t('inventory.reasonExpired')
         else if (log.reason === 'loss') reasonText = t('inventory.reasonLoss')
@@ -626,9 +623,7 @@ export function StockLogPage() {
                   const unitCost = log.unitCost !== undefined && log.unitCost !== null && log.unitCost >= 0
                     ? Number(log.unitCost)
                     : avgCost
-                  const costValue = isStockIn
-                    ? (log.totalAmount || Math.round(Number(log.quantity) * unitCost))
-                    : Math.round(Number(log.quantity) * avgCost)
+                  const costValue = stockLogCost(log)
 
                   return (
                     <tr key={log.id} className="border-b last:border-0 hover:bg-gray-50 transition-colors">
