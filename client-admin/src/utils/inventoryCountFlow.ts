@@ -21,7 +21,7 @@ export function inventoryLogDisplay(log: any) {
     : data && typeof data === 'object' && (typeof data.kind === 'string' || (data.version === 1 && typeof data.ledgerUnit === 'string')) ? '' : log.note
   const quantity = typeof log.quantity === 'number' ? log.quantity
     : typeof log.quantity === 'string' && log.quantity.trim() ? Number(log.quantity) : NaN
-  return { ...log, note, operationKind:typeof data?.kind==='string'?data.kind:undefined, countId, countItemId,
+  return { ...log, note, operator: log.operator || (data?.manualCorrection ? {id:data.manualCorrection.actorId,name:data.manualCorrection.actorName,employeeNumber:''} : log.operator), manualCorrection:data?.manualCorrection, operationKind:typeof data?.kind==='string'?data.kind:undefined, countId, countItemId,
     staffId: isCount && typeof data?.actor === 'string' ? data.actor : log.staffId,
     stockDelta: Number.isFinite(quantity) ? (quantity === 0 ? 0 : log.type === 'stock_in' ? quantity : -quantity) : null,
     adjustmentValue: isCount && typeof data?.varianceAmountEstimate === 'number' && Number.isFinite(data.varianceAmountEstimate) ? data.varianceAmountEstimate : undefined
