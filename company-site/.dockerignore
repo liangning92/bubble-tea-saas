@@ -1,0 +1,5 @@
+node_modules
+package*.json
+verify.cjs
+README.md
+compose.yml
