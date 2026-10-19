@@ -5,13 +5,13 @@ import { AdminDialog } from './AdminDialog'
 import { formatCurrency, formatDateTime, formatItemName } from '../utils/helpers'
 
 export function ManualStockCorrection({ log, items, onClose, onSaved }: { log: any; items: any[]; onClose: () => void; onSaved: () => void }) {
-  const { t, i18n } = useTranslation(), [detail, setDetail] = useState<any>(null), [error, setError] = useState(''), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false)
-  const [action, setAction] = useState<'correct' | 'cancel'>('correct'), [inventoryId, setInventoryId] = useState(''), [quantity, setQuantity] = useState(''), [amount, setAmount] = useState(''), [note, setNote] = useState(''), [reason, setReason] = useState(''), [legacyMode, setLegacyMode] = useState('')
+  const { t, i18n } = useTranslation(), [detail, setDetail] = useState<any>(null), [error, setError] = useState(''), [errorCode, setErrorCode] = useState(''), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false)
+  const [action, setAction] = useState<'correct' | 'cancel'>('correct'), [inventoryId, setInventoryId] = useState(''), [quantity, setQuantity] = useState(''), [amount, setAmount] = useState(''), [note, setNote] = useState(''), [reason, setReason] = useState(''), [legacyMode, setLegacyMode] = useState(''), [activeCounts, setActiveCounts] = useState<any[]>([])
   const pending = useRef<{body:string;id:string} | null>(null), lock = useRef(false)
-  const showError = (e: any) => { const code = e.response?.data?.message; setError(t('manualStockCorrection.errors.' + code, { defaultValue: t('manualStockCorrection.failed') })) }
+  const showError = (e: any) => { const code = e.response?.data?.message; setErrorCode(code || ''); setError(t('manualStockCorrection.errors.' + code, { defaultValue: t('manualStockCorrection.failed') })) }
   const load = async () => {
     setLoading(true); setError('')
-    try { const response = await inventoryApi.correction(log.type, log.id), data = response.data.data; setDetail(data); const value = data.current || data.original; setInventoryId(value.inventoryId); setQuantity(String(value.quantity)); setAmount(String(value.totalAmount)); setNote(value.note || ''); setReason(''); setLegacyMode(''); pending.current = null }
+    try { const [response, counts] = await Promise.all([inventoryApi.correction(log.type, log.id), inventoryApi.getInventoryCounts().catch(() => null)]), data = response.data.data; setActiveCounts((counts?.data?.data?.list || []).filter((count: any) => ['in_progress', 'pending_review'].includes(count.status)));  setDetail(data); const value = data.current || data.original; setInventoryId(value.inventoryId); setQuantity(String(value.quantity)); setAmount(String(value.totalAmount)); setNote(value.note || ''); setReason(''); setLegacyMode(''); pending.current = null }
     catch (e) { showError(e) } finally { setLoading(false) }
   }
   useEffect(() => { void load() }, [log.id, log.type])
@@ -34,7 +34,7 @@ export function ManualStockCorrection({ log, items, onClose, onSaved }: { log: a
     <div className="space-y-5" data-testid="manual-stock-correction">
       <p className="text-sm text-gray-600">{t('manualStockCorrection.hint')}</p>
       {loading && <p role="status">{t('common.loading')}</p>}
-      {error && <div role="alert" className="rounded-lg bg-red-50 p-3 text-red-700 space-y-2"><p>{error}</p><button type="button" className="underline" disabled={busy} onClick={load}>{t('manualStockCorrection.reload')}</button></div>}
+      {error && <div role="alert" className="rounded-lg bg-red-50 p-3 text-red-700 space-y-2"><p>{error}</p><p>{t('manualStockCorrection.notSaved')}</p>{['MANUAL_CORRECTION_PENDING_COUNT', 'MANUAL_CORRECTION_COUNTED_USE_RECONCILIATION', 'MANUAL_CORRECTION_RECEIPT_CONSUMED'].includes(errorCode) && <a href="/inventory/count" target="_blank" rel="noopener noreferrer" className="btn-secondary inline-flex min-h-[44px] items-center">{t('manualStockCorrection.openCounts')}</a>}<button type="button" className="underline" disabled={busy} onClick={load}>{t('manualStockCorrection.reload')}</button></div>}
       {detail && <>
         <section className="rounded-xl border bg-gray-50 p-4 space-y-2 text-sm break-words">
           <h3 className="font-semibold">{t('manualStockCorrection.original')}</h3><p>{describe(detail.original)}</p>
@@ -43,6 +43,7 @@ export function ManualStockCorrection({ log, items, onClose, onSaved }: { log: a
           <h3 className="font-semibold pt-2">{t('manualStockCorrection.current')}</h3><p>{describe(current)}</p>
           {current?.stockEffect === 'internal_transfer' && <p className="text-amber-800">{t('manualStockCorrection.internal')}</p>}
         </section>
+        {current && activeCounts.length > 0 && current.stockEffect !== 'internal_transfer' && <div role="status" className="rounded-lg bg-amber-50 p-3 text-amber-900 space-y-2"><p>{t('manualStockCorrection.pendingWarning')}</p><a href="/inventory/count" target="_blank" rel="noopener noreferrer" className="btn-secondary inline-flex min-h-[44px] items-center">{t('manualStockCorrection.openCounts')}</a></div>}
         {current && <form className="space-y-4" onSubmit={event => { event.preventDefault(); void submit() }}>
           <fieldset disabled={busy} className="space-y-4">
             <label className="block text-sm font-medium">{t('manualStockCorrection.action')}<select aria-label={t('manualStockCorrection.action')} className="input w-full mt-1" value={action} onChange={e => setAction(e.target.value as any)}><option value="correct">{t('manualStockCorrection.correct')}</option><option value="cancel">{t('manualStockCorrection.cancel')}</option></select></label>
