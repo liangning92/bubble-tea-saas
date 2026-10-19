@@ -1,12 +1,22 @@
+import {hygieneAreaCreateBody,hygieneAreaUpdateBody,hygieneTemplateCreateBody,hygieneTemplateUpdateBody} from '../services/HygieneInput'
 import prisma from '../config/database'
 import { formatDate } from '../utils/dateUtils'
 import { Router } from 'express'
 import { z } from 'zod'
-import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
+import { authenticate, authorize, canAccessStore, AuthRequest } from '../middlewares/auth'
 import { validateBody, validateQuery } from '../utils/validation'
 import * as HygieneService from '../services/HygieneService'
 
 const router = Router()
+// Resource IDs carry their own store; never trust an omitted store selector.
+function hygieneStore(model:'hygieneArea'|'hygieneTemplate') {
+ return async(req:AuthRequest,res:any,next:any)=>{
+  const row=await (prisma[model] as any).findUnique({where:{id:req.params.id},select:{id:true,storeId:true}})
+  if(!row||!canAccessStore(req.user!,row.storeId))return res.status(404).json({code:404,message:'Hygiene resource not found'})
+  next()
+ }
+}
+
 
 // ============================================
 // 区域管理
@@ -24,7 +34,7 @@ router.get('/areas', authenticate, async (req: AuthRequest, res) => {
 })
 
 // POST /api/hygiene/areas
-router.post('/areas', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/areas', authenticate, authorize('admin', 'manager'), validateBody(hygieneAreaCreateBody), async (req: AuthRequest, res) => {
   try {
     const area = await HygieneService.createArea({
       ...req.body,
@@ -32,22 +42,22 @@ router.post('/areas', authenticate, authorize('admin', 'manager'), async (req: A
     })
     res.status(201).json({ code: 201, data: area })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
 // PUT /api/hygiene/areas/:id
-router.put('/areas/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/areas/:id', authenticate, authorize('admin', 'manager'), hygieneStore('hygieneArea'), validateBody(hygieneAreaUpdateBody), async (req: AuthRequest, res) => {
   try {
     const area = await HygieneService.updateArea(req.params.id, req.body)
     res.json({ code: 200, data: area })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
 // DELETE /api/hygiene/areas/:id
-router.delete('/areas/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.delete('/areas/:id', authenticate, authorize('admin','manager'), hygieneStore('hygieneArea'), async (req: AuthRequest, res) => {
   try {
     await HygieneService.deleteArea(req.params.id)
     res.json({ code: 200, message: 'Area deleted' })
@@ -98,7 +108,7 @@ router.get('/templates/:id', authenticate, async (req: AuthRequest, res) => {
 })
 
 // POST /api/hygiene/templates
-router.post('/templates', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/templates', authenticate, authorize('admin', 'manager'), validateBody(hygieneTemplateCreateBody), async (req: AuthRequest, res) => {
   try {
     const template = await HygieneService.createTemplate({
       ...req.body,
@@ -106,22 +116,22 @@ router.post('/templates', authenticate, authorize('admin', 'manager'), async (re
     })
     res.status(201).json({ code: 201, data: template })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
 // PUT /api/hygiene/templates/:id
-router.put('/templates/:id', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.put('/templates/:id', authenticate, authorize('admin', 'manager'), hygieneStore('hygieneTemplate'), validateBody(hygieneTemplateUpdateBody), async (req: AuthRequest, res) => {
   try {
     const template = await HygieneService.updateTemplate(req.params.id, req.body)
     res.json({ code: 200, data: template })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
 // DELETE /api/hygiene/templates/:id
-router.delete('/templates/:id', authenticate, authorize('admin'), async (req: AuthRequest, res) => {
+router.delete('/templates/:id', authenticate, authorize('admin','manager'), hygieneStore('hygieneTemplate'), async (req: AuthRequest, res) => {
   try {
     await HygieneService.deleteTemplate(req.params.id, req.user!.storeId)
     res.json({ code: 200, message: 'Template deleted' })
@@ -131,7 +141,7 @@ router.delete('/templates/:id', authenticate, authorize('admin'), async (req: Au
 })
 
 // POST /api/hygiene/templates/:id/duplicate
-router.post('/templates/:id/duplicate', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.post('/templates/:id/duplicate', authenticate, authorize('admin', 'manager'), hygieneStore('hygieneTemplate'), async (req: AuthRequest, res) => {
   try {
     const template = await HygieneService.duplicateTemplate(req.params.id, req.user!.storeId)
     res.status(201).json({ code: 201, data: template })
@@ -257,7 +267,7 @@ router.post('/tasks/temporary', authenticate, authorize('admin', 'manager'), asy
     })
     res.status(201).json({ code: 201, data: task })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
@@ -283,14 +293,14 @@ router.post('/tasks/generate', authenticate, authorize('admin', 'manager'), asyn
     const count = await HygieneService.generateDailyTasks(storeId, date)
     res.status(201).json({ code: 201, message: `Generated ${count} tasks`, data: { count } })
   } catch (error: any) {
-    res.status(500).json({ code: 500, message: error.message })
+    res.status(error.message==='HYGIENE_STAFF_STORE_MISMATCH'?403:500).json({ code: 500, message: error.message })
   }
 })
 
 // PUT /api/hygiene/tasks/:id/start - 开始执行任务
 router.put('/tasks/:id/start', authenticate, async (req: AuthRequest, res) => {
   try {
-    const task = await HygieneService.startTask(req.params.id, req.user!.staffId || '', req.user!.storeId)
+    const task = await HygieneService.startTask(req.params.id, req.user!.staffId || '', req.user!.storeId, req.user!)
     res.json({ code: 200, data: task })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
@@ -309,7 +319,7 @@ router.put('/tasks/:id/complete', authenticate, async (req: AuthRequest, res) =>
       note,
       selfRating,
       checklistResults,
-    })
+    }, req.user!)
     res.json({ code: 200, data: task })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
@@ -338,7 +348,7 @@ router.put('/tasks/:id/skip', authenticate, async (req: AuthRequest, res) => {
   try {
     const { reason } = req.body
     const staffName = req.user!.staffId ? await getStaffName(req.user!.staffId) : 'Unknown'
-    const task = await HygieneService.skipTask(req.params.id, req.user!.staffId || '', staffName, req.user!.storeId, reason)
+    const task = await HygieneService.skipTask(req.params.id, req.user!.staffId || '', staffName, req.user!.storeId, reason, req.user!)
     res.json({ code: 200, data: task })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })
@@ -353,7 +363,7 @@ router.put('/tasks/:id/issue', authenticate, async (req: AuthRequest, res) => {
     const task = await HygieneService.reportIssue(req.params.id, req.user!.staffId || '', staffName, req.user!.storeId, {
       description,
       photoUrl,
-    })
+    }, req.user!)
     res.json({ code: 200, data: task })
   } catch (error: any) {
     res.status(500).json({ code: 500, message: error.message })

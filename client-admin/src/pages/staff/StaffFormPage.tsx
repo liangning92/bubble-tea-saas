@@ -1,3 +1,4 @@
+import {staffAccessLabels} from '../../../../shared/staffAccessLabels'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -272,7 +273,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="staff-position" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.position')} *</label>
+              <label htmlFor="staff-position" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.position')} *</label><p className="text-xs text-gray-500 mb-1">{staffAccessLabels(i18n.language).jobTitleHint}</p>
               <select
                 id="staff-position" value={form.position}
                 onChange={(e) => setForm({ ...form, position: e.target.value })}

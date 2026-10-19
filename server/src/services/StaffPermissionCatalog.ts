@@ -7,6 +7,7 @@ export const STAFF_PERMISSION_CATALOG = [
   {key:'team.manage',group:'staff',roles:management},
   {key:'team.audit',group:'staff',roles:management},
   {key:'dashboard.read',group:'dashboard',roles:management},
+  {key:'products.manage',group:'products',roles:[]},
   {key:'products.read',group:'products',roles:all},
   {key:'products.write',group:'products',roles:management},
   {key:'prices.write',group:'products',roles:management},

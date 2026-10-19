@@ -1,3 +1,5 @@
+import {hasManagementAccess} from '../utils/managementAccess'
+import {userAccessV2,AccessV2Error} from '../services/StaffPermissionV2Service'
 import { prepareEmployeeOfflineAttendance, syncEmployeeOfflineAttendance, EmployeeOfflineAttendanceError } from '../services/EmployeeOfflineAttendanceService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
 import { Router } from 'express'
@@ -82,6 +84,7 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
       return { user, store, staff }
     }, { isolationLevel: 'Serializable' })
 
+    const managementAccess = true
     // Generate token - include staffId if user has a staff profile
     const token = jwt.sign(
       {
@@ -105,6 +108,7 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
           id: user.id,
           phone: user.phone,
           role: user.role as string,
+          managementAccess,
           storeId: store.id,
           staff: { id: staff.id, name: staff.name, employeeNumber: staff.employeeNumber, position: staff.position }
         }
@@ -150,13 +154,17 @@ router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) =
       })
     }
 
+    const employeeClient=req.headers['x-client-app']==='employee'
+    const access = employeeClient?null:await userAccessV2({role:user.role,storeId:user.staff?.storeId||user.storeId||'',staffId:user.staff?.id})
+    const managementAccess = !employeeClient&&hasManagementAccess(user.role, access)
+    if(req.headers['x-client-app']==='admin'&&!managementAccess)return res.status(403).json({code:403,message:'MANAGEMENT_ACCESS_REQUIRED'})
     // Generate token - include staffId if user has a staff profile
     const token = jwt.sign(
       {
         id: user.id,
         phone: user.phone,
         role: String(user.role),
-        storeId: user.storeId || '',
+        storeId: user.staff?.storeId || user.storeId || '',
         staffId: user.staff?.id || '',
         issuedAtMs: Date.now()
       },
@@ -173,6 +181,7 @@ router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) =
           id: user.id,
           phone: user.phone,
           role: user.role as string,
+          managementAccess,
           storeId: user.storeId,
           staff: user.staff ? {
             id: user.staff.id,
@@ -185,6 +194,7 @@ router.post('/login', authLimiter, validateBody(loginSchema), async (req, res) =
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if(error instanceof AccessV2Error)return res.status(error.status).json({code:error.status,message:error.message})
     console.error('Login error:', error)
     res.status(500).json({ code: 500, message: 'Login failed' })
   }
@@ -205,6 +215,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
     res.json({
       code: 200,
       data: {
+        managementAccess: !req.user!.employeeApp&&hasManagementAccess(req.user!.role,req.user!.accessRole),
         id: user.id,
         phone: user.phone,
         role: user.role as string,

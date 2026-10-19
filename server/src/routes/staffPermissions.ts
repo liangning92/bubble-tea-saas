@@ -1,3 +1,4 @@
+import {hasManagementAccess} from '../utils/managementAccess'
 import {Router} from 'express'
 import {authenticate,AuthRequest} from '../middlewares/auth'
 import {assignedStaffAccess,getStaffAccessSettings,saveStaffAccessSettings,StaffAccessError} from '../services/StaffPermissionService'
@@ -8,7 +9,7 @@ import {z} from 'zod'
 const router=Router()
 function failure(res:any,e:any){if(e?.message==='ADMIN_APPROVAL_REQUIRED')return res.status(403).json({code:403,message:e.message});const status=e instanceof StaffAccessError||e instanceof AccessV2Error?e.status:e instanceof z.ZodError?400:500;res.status(status).json({code:status,message:e instanceof StaffAccessError||e instanceof AccessV2Error?e.message:e instanceof z.ZodError?'STAFF_ACCESS_INPUT_INVALID':'STAFF_ACCESS_SAVE_FAILED'})}
 const handler=(fn:(req:AuthRequest)=>Promise<any>)=>async(req:AuthRequest,res:any)=>{try{res.json({code:200,data:await fn(req)})}catch(e){failure(res,e)}}
-router.get('/me',authenticate,handler(async req=>({role:await userAccessV2(req.user!)||await assignedStaffAccess(req.user!),systemRole:req.user!.role})))
+router.get('/me',authenticate,handler(async req=>({role:req.user!.accessRole||null,systemRole:req.user!.role,managementAccess:hasManagementAccess(req.user!.role,req.user!.accessRole)})))
 router.get('/stores',authenticate,handler(async req=>{if(req.user!.role!=='admin')throw new AccessV2Error('STAFF_ACCESS_ADMIN_REQUIRED',403);return prisma.store.findMany({select:{id:true,name:true},orderBy:{name:'asc'}})}))
 router.get('/',authenticate,handler(req=>req.query.version==='2'?settingsV2(req.user!,req.query.storeId):getStaffAccessSettings(req.user!)))
 router.put('/',authenticate,handler(req=>req.body.version===2?saveDraftV2(req.user!,req.query.storeId,req.body):saveStaffAccessSettings(req.user!,req.body)))

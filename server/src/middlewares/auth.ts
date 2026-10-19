@@ -1,3 +1,5 @@
+import {canUseManagementRoute} from '../services/ManagementRouteAccess'
+import {hasManagementAccess} from '../utils/managementAccess'
 import { employeeAppAccess } from '../services/EmployeeAppAccess'
 import { enforceAccessV2 } from './staffAccessV2'
 import { userAccessV2, AccessV2Error } from '../services/StaffPermissionV2Service'
@@ -36,8 +38,8 @@ export const PERMISSIONS = {
   'reports:export': ['admin'],
 
   // Products
-  'products:create': ['admin', 'manager'],
-  'products:update': ['admin', 'manager'],
+  'products:create': ['admin'],
+  'products:update': ['admin'],
   'products:delete': ['admin'],
   'products:view': ['admin', 'manager', 'cashier'],
 
@@ -174,14 +176,17 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       return res.status(401).json({ code: 401, message: 'Invalid or expired token' })
     }
 
+    const assignedAccess = currentUser.employeeApp ? null : await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
+    if (req.headers['x-client-app'] === 'admin' && !hasManagementAccess(currentUser.role, assignedAccess)) return res.status(403).json({code:403,message:'MANAGEMENT_ACCESS_REQUIRED'})
     if (currentUser.employeeApp) {
       currentUser.accessRole = employeeAppAccess(currentUser.role)
       // Employee endpoints always use self-service identity semantics, including
       // when a manager or owner opens the employee app with their own account.
       currentUser.role = 'staff'
     } else {
-      currentUser.accessRole = await userAccessV2(currentUser) || await assignedStaffAccess(currentUser)
+      currentUser.accessRole = assignedAccess
     }
+    if(!beforeRouting && req.accessDeclaration && !canUseManagementRoute(currentUser,req.accessDeclaration))return res.status(403).json({code:403,message:'MANAGEMENT_ACCESS_REQUIRED'})
     if(currentUser.accessRole?.version===2 && !beforeRouting){const denied=await enforceAccessV2(req,res,currentUser);if(denied)return denied}
     if (currentUser.accessRole && currentUser.accessRole.version!==2) {
       const permission = staffPermissionForRequest(req.method, req.originalUrl || req.url, currentUser)

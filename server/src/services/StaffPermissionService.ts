@@ -1,4 +1,6 @@
 import { readPolicyV2 } from './StaffPermissionV2Service'
+import { POLICY_V2_KEY } from './StaffPermissionV2Service'
+import { isPayrollEmployee, saveStaffIdentity } from './StaffIdentityService'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { STAFF_BASIC_PERMISSIONS, STAFF_PERMISSION_CATALOG, defaultStaffPermissions, StaffBaseRole } from './StaffPermissionCatalog'
@@ -80,16 +82,33 @@ export async function saveStaffAccessSettings(actor:{id:string;role:string;store
 // administrator change removes a custom binding in the same transaction.
 export async function updateStaffSystemRole(actor:{id:string;role:string;storeId:string},staffId:string,role:string) {
   if(actor.role!=='admin')throw new StaffAccessError('STAFF_ACCESS_ADMIN_REQUIRED',403)
+  if(!['admin','manager','cashier','staff'].includes(role))throw new StaffAccessError('STAFF_ACCESS_INVALID_ROLE')
   return prisma.$transaction(async tx=>{
-    const employee=await tx.staff.findUniqueOrThrow({where:{id:staffId},select:{storeId:true,userId:true}})
+    const employee=await tx.staff.findUniqueOrThrow({where:{id:staffId},select:{id:true,storeId:true,userId:true,status:true,user:{select:{role:true}}}})
     await tx.store.update({where:{id:employee.storeId},data:{updatedAt:new Date()}})
-    if((await readPolicyV2(employee.storeId,tx))?.active)throw new StaffAccessError('STAFF_ACCESS_USE_EMPLOYEE_EDITOR',409)
+    if(employee.user.role==='admin'&&role!=='admin'){
+      if(employee.userId===actor.id)throw new StaffAccessError('STAFF_ACCESS_SELF_DEMOTION_DENIED',409)
+      const remaining=await tx.user.count({where:{id:{not:employee.userId},role:'admin',OR:[{staff:null},{staff:{status:'active'}}]}})
+      if(!remaining)throw new StaffAccessError('STAFF_ACCESS_LAST_ADMIN_REQUIRED',409)
+    }
+    const payrollEmployee=await isPayrollEmployee(tx,employee)
+    const active=await readPolicyV2(employee.storeId,tx)
+    if(active?.active){
+      const roleId=role==='staff'?'basic':role
+      if(role!=='admin'&&!active.roles.some(r=>r.id===roleId))throw new StaffAccessError('STAFF_ACCESS_INVALID_ROLE')
+      const next={...active,revision:active.revision+1,assignments:[...active.assignments.filter(a=>a.staffId!==staffId),...(role==='admin'?[]:[{staffId,roleId,overrides:{}}])]}
+      await tx.config.update({where:{storeId_key:{storeId:employee.storeId,key:POLICY_V2_KEY}},data:{value:JSON.stringify(next)}})
+    }
     const policy=await readStaffAccess(employee.storeId,tx)
     if(policy.assignments.some(a=>a.staffId===staffId)){
       const updated={...policy,revision:policy.revision+1,assignments:policy.assignments.filter(a=>a.staffId!==staffId)}
       const record=await tx.config.update({where:{storeId_key:{storeId:employee.storeId,key:STAFF_ACCESS_KEY}},data:{value:JSON.stringify(updated)}})
       await tx.financeAuditLog.create({data:{storeId:employee.storeId,userId:actor.id,action:'update',entityType:'staff_permissions',entityId:record.id,description:'Replace custom role with explicit system role',oldValue:JSON.stringify(policy),newValue:record.value}})
     }
-    return tx.user.update({where:{id:employee.userId},data:{role}})
-  })
+    // Role edits must not change employment/payroll participation implicitly.
+    await saveStaffIdentity(tx,employee,payrollEmployee)
+    const result=await tx.user.update({where:{id:employee.userId},data:{role}})
+    await tx.financeAuditLog.create({data:{storeId:employee.storeId,userId:actor.id,action:'update',entityType:'staff_system_role',entityId:staffId,description:'Explicit employee role change',oldValue:JSON.stringify({userId:employee.userId,role:employee.user.role,policy:active}),newValue:JSON.stringify({userId:employee.userId,role,policyRevision:active?.active?active.revision+1:null,payrollEmployee})}})
+    return result
+  },{isolationLevel:'Serializable'})
 }

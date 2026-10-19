@@ -1,3 +1,4 @@
+import {staffAccessLabels} from '../../../shared/staffAccessLabels'
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -44,8 +45,9 @@ export function LoginPage() {
     setError('')
 
     try {
-      const res = await axios.post(`${getApiUrl()}/auth/login`, { phone, password })
+      const res = await axios.post(`${getApiUrl()}/auth/login`, { phone, password }, {headers:{'X-Client-App':'admin'}})
       const { token, user } = res.data.data
+      if(user.managementAccess===false || user.managementAccess!==true&&!['admin','manager'].includes(user.role)){setError(staffAccessLabels(i18n.language).managementLoginDenied);return}
       login(token, user)
 
       // Handle remember me - only store phone number, never password
@@ -65,7 +67,7 @@ export function LoginPage() {
 
       navigate('/dashboard')
     } catch (err: any) {
-      setError(err.response?.data?.message || t('auth.loginFailed'))
+      setError(err.response?.data?.message==='MANAGEMENT_ACCESS_REQUIRED'?staffAccessLabels(i18n.language).managementLoginDenied:err.response?.data?.message || t('auth.loginFailed'))
     } finally {
       setLoading(false)
     }
