@@ -32,13 +32,15 @@ async function seed() {
     ['carol', 'Test Carol', 'staff', 'team-store-a', '08000000004'],
     ['auditor', 'Test Auditor', 'manager', 'team-store-a', '08000000005'],
     ['outsider', 'Test Other Store', 'admin', 'team-store-b', '08000000006'],
-    ['rate', 'Test Rate', 'staff', 'team-store-a', '08000000007']]) {
+    ['rate', 'Test Rate', 'staff', 'team-store-a', '08000000007'],
+    ['manager-auditor', 'Test Assigned Manager Auditor', 'manager', 'team-store-a', '08009999008']]) {
     await prisma.user.create({ data: { id: 'u-' + id, phone, password, role, storeId,
       staff: { create: { id: 's-' + id, storeId, name, employeeNumber: 'TEAM-' + id } } } });
   }
   await prisma.config.create({ data: { storeId: 'team-store-a', key: 'staff.access.policy.v2', category: 'staff', value: JSON.stringify({ version: 2, active: true, revision: 1,
-    roles: [{ id: 'audit-only', name: 'Audit only', description: '', permissions: { 'team.audit': 'allow' } }],
-    assignments: [{ staffId: 's-auditor', roleId: 'audit-only', overrides: {} }] }) } });
+    roles: [{ id: 'audit-only', name: 'Audit only', description: '', permissions: { 'team.audit': 'allow' } },
+      { id: 'manager', name: 'Assigned manager with audit capability', description: '', permissions: { 'team.audit': 'allow' } }],
+    assignments: [{ staffId: 's-auditor', roleId: 'audit-only', overrides: {} }, { staffId: 's-manager-auditor', roleId: 'manager', overrides: {} }] }) } });
 }
 const token = async id => {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: 'u-' + id }, include: { staff: true } });
@@ -74,7 +76,7 @@ async function main() {
   app.get('*', (req, res) => res.sendFile(path.join(req.headers.host?.startsWith('localhost:') ? adminDist : staffDist, 'index.html')));
   const server = app.listen(0, '127.0.0.1'); await new Promise(resolve => server.once('listening', resolve));
   const base = 'http://127.0.0.1:' + server.address().port;
-  const tokens = Object.fromEntries(await Promise.all(['owner', 'alice', 'bob', 'carol', 'auditor', 'outsider', 'rate'].map(async id => [id, await token(id)])));
+  const tokens = Object.fromEntries(await Promise.all(['owner', 'alice', 'bob', 'carol', 'auditor', 'outsider', 'rate', 'manager-auditor'].map(async id => [id, await token(id)])));
   const request = async (who, method, url, data, employee = false) => {
     const response = await fetch(base + '/api' + url, { method, headers: { Authorization: 'Bearer ' + tokens[who], ...(employee ? { 'X-Client-App': 'employee' } : {}), ...(data ? { 'Content-Type': 'application/json' } : {}) }, ...(data ? { body: JSON.stringify(data) } : {}) });
     return { status: response.status, body: await response.json() };
@@ -85,7 +87,7 @@ async function main() {
   let direct, group, meeting, fileId;
   try {
     await test('identity, store-scoped directory, separate management and audit capabilities', async () => {
-      assert.equal((await good('alice', 'GET', '/team/directory', undefined, true)).length, 6);
+      assert.equal((await good('alice', 'GET', '/team/directory', undefined, true)).length, 7);
       assert.equal((await request('alice', 'GET', '/team/admin/channels')).status, 403);
       assert.deepEqual(await good('auditor', 'GET', '/team/capabilities'), { manage: false, audit: true });
       assert.equal((await request('auditor', 'GET', '/team/admin/channels', undefined, true)).status, 403);
@@ -138,7 +140,11 @@ async function main() {
       assert.equal((await request('carol', 'GET', `/team/channels/${direct.id}/messages`)).status, 403);
       assert.equal((await request('outsider', 'GET', `/team/channels/${direct.id}/messages?auditReason=business-review`)).status, 404);
       assert.equal((await request('owner', 'GET', `/team/channels/${direct.id}/messages`)).status, 403);
-      await good('auditor', 'GET', '/team/admin/channels');
+      // A custom audit grant preserves channel audit capability; it does not
+      // appoint a manager or admit the account to management endpoints.
+      assert.equal((await request('auditor', 'GET', '/team/admin/channels')).status, 403);
+      assert.deepEqual(await good('manager-auditor', 'GET', '/team/capabilities'), { manage: false, audit: true });
+      await good('manager-auditor', 'GET', '/team/admin/channels');
       const audited = await good('auditor', 'GET', `/team/channels/${direct.id}/messages?auditReason=business-review`);
       assert.equal(audited.audit, true);
       assert.equal((await request('auditor', 'PUT', `/team/channels/${direct.id}/members`, { expectedVersion: direct.version, ownerId: 's-alice', members: ['s-alice', 's-bob'], archived: false })).status, 403);
