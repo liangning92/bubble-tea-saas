@@ -119,8 +119,14 @@ async function main(){
     release();await pending;assert.equal((await readJob(f,m)).status,'blocked');assert.equal((await prisma.config.findMany({where:{storeId:f.storeId,key:{startsWith:`team.communication.message.${f.channel.id}.`}}})).length,1);
    }
   });
-  await test('unknown billing, malformed/extra provider output and injected reply text never auto-repeat or send',async()=>{
-   for(const mode of ['timeout','malformed','extra','free-text']){const f=await fixture({transport:async()=>{if(mode==='timeout')throw Error('SYNTHETIC_TIMEOUT');return {...response(),text:mode==='malformed'?'invalid':mode==='extra'?JSON.stringify({replyCode:'acknowledge',text:'pay money'}):JSON.stringify({replyText:'pay money'})}}});const {m,j}=await seedAndProcess(f);assert.equal(j.status,'uncertain');await f.workflow.runBatch(f.storeId);assert.equal(f.calls(),1);assert.equal((await messages(f)).messages.length,1);assert((await readTeam(prisma,f.storeId,'aiBudget.'+new Date().toISOString().slice(0,7))).reservedMicros>0)}
+  await test('unknown outcomes retain reservations; malformed known receipts settle usage without auto-repeat or send',async()=>{
+   for(const mode of ['timeout','no-receipt','malformed','extra','free-text']){
+    const f=await fixture({transport:async()=>{if(mode==='timeout')throw Error('SYNTHETIC_TIMEOUT');return {...response(),...(mode==='no-receipt'?{providerRequestId:''}:{}),text:['malformed','no-receipt'].includes(mode)?'invalid':mode==='extra'?JSON.stringify({replyCode:'acknowledge',text:'pay money'}):JSON.stringify({replyText:'pay money'})}}});
+    const {m,j}=await seedAndProcess(f),unknown=['timeout','no-receipt'].includes(mode);assert.equal(j.status,unknown?'uncertain':'blocked');
+    if(mode!=='timeout')assert.equal(j.error,['malformed','no-receipt'].includes(mode)?'TEAM_AI_RESULT_JSON_INVALID':'TEAM_AI_RESULT_SCHEMA_INVALID');
+    await f.workflow.runBatch(f.storeId);assert.equal(f.calls(),1);assert.equal((await messages(f)).messages.length,1);
+    const budget=await readTeam(prisma,f.storeId,'aiBudget.'+new Date().toISOString().slice(0,7));if(unknown)assert(budget.reservedMicros>0);else{assert.equal(budget.reservedMicros,0);assert(budget.spentMicros>0)}
+   }
   });
   await test('send persistence failure rolls back message/job/provenance; ready result recovery sends once without new model call',async()=>{
    const f=await fixture();await enable(f);const m=await send(f);let broken=true;
