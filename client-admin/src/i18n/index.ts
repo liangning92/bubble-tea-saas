@@ -346,8 +346,8 @@ const resources = {
 },
 
       handoverReceipt: {
-        "title": "Isi struk serah terima",
-        "hint": "Centang untuk tampil, hapus centang untuk sembunyi. Tersimpan otomatis; cetak tutup shift dan cetak ulang mengambil pengaturan terbaru.",
+        "title": "Isi konfirmasi dan struk serah terima",
+        "hint": "Centang untuk tampil, hapus centang untuk sembunyi. Konfirmasi shift, struk, dan cetak ulang memakai pengaturan yang sama. Pendapatan adalah pendapatan shift ini; tanda tangan dan waktu cetak hanya pada struk. Tersimpan otomatis.",
         "storeName": "Nama toko",
         "sessionId": "Referensi shift",
         "cashierName": "Kasir",
@@ -4779,8 +4779,8 @@ const resources = {
 },
 
       handoverReceipt: {
-        "title": "Handover receipt contents",
-        "hint": "Check to show, uncheck to hide. Saved automatically; closing and reprinting fetch the latest settings.",
+        "title": "Handover confirmation and receipt contents",
+        "hint": "Check to show, uncheck to hide. Shift confirmation, receipts and reprints share these settings. Revenue is for this shift; signatures and print time appear only on receipts. Saved automatically.",
         "storeName": "Store name",
         "sessionId": "Session reference",
         "cashierName": "Cashier",
@@ -9149,8 +9149,8 @@ const resources = {
 },
 
       handoverReceipt: {
-        "title": "交接班小票内容",
-        "hint": "勾选显示，取消勾选隐藏。自动保存，收银机交班打印和补打时自动读取最新设置。",
+        "title": "交接班确认与小票内容",
+        "hint": "勾选显示，取消勾选隐藏。交班确认页、小票与补打共用此设置；营收为本班营收，签字和打印时间等仅用于小票。自动保存。",
         "storeName": "门店名称",
         "sessionId": "班次凭据",
         "cashierName": "交班员工",
