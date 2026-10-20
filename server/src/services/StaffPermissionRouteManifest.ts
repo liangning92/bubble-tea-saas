@@ -15,6 +15,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
   "POST /api/team/channels/:id/operations/:planId/scan": {permission:null,ownerOnly:false,export:false,personal:false},
   "GET /api/team/channels/:id/operations/:planId/export": {permission:null,ownerOnly:false,export:false,personal:false},
   "PUT /api/team/ai/settings": {permission:null,ownerOnly:false,export:false,personal:false},
+  "POST /api/team/ai/connection-check": {permission:null,ownerOnly:false,export:false,personal:false},
   "POST /api/team/channels/:id/ai/drafts": {permission:null,ownerOnly:false,export:false,personal:false},
   "GET /api/team/channels/:id/ai/drafts/:draftId": {permission:null,ownerOnly:false,export:false,personal:false},
   "POST /api/team/channels/:id/ai/drafts/:draftId/publish": {permission:null,ownerOnly:false,export:false,personal:false},

@@ -4,7 +4,7 @@ test('team communication selects its isolated HTTP regression without unrelated 
  const f=fixture();try{
   f.write('server/src/services/TeamAiService.ts');
   const p=selectScope(['server/src/services/TeamAiService.ts'],f);
-  assert.equal(p.teamCommunication,true);assert.deepEqual(p.components,['api']);assert.deepEqual(p.domains,['teamCommunication']);assert.deepEqual(p.http,[]);
+  assert.equal(p.teamCommunication,true);assert.equal(p.aiSettings,true);assert.deepEqual(p.components,['api']);assert.deepEqual(p.domains,['aiSettings','teamCommunication']);assert.deepEqual(p.http,[]);
   const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');
   assert.match(runner,/if\(plan\.teamCommunication\).*with-docker-test\.py.*test-team-communication\.py/);
  }finally{f.close()}
@@ -170,3 +170,15 @@ test('native TV activities and updater names do not select Windows or marketing 
 test('TV public player assets select API image and TV browser checks',()=>{const f=fixture();try{const p=selectScope(['server/public/tv/player.css'],f);assert.deepEqual(p.components,['api']);assert.deepEqual(p.typecheck,['api']);assert.deepEqual(p.browser.map(b=>b.domain),['tv']);assert.ok(p.browser[0].scripts.includes('tests/stoploss/tv-signage-catalog-page-check.cjs'));assert.deepEqual(p.http,['tests/stoploss/tv-signage-integration.cjs']);assert.ok(!p.components.includes('pos'));}finally{f.close()}});
 
 test('refund approval authorization changes select permission HTTP regressions',()=>{const f=fixture();try{for(const name of ['server/src/services/StaffActionApprovalService.ts','server/src/utils/refundApprovalAccess.ts']){const p=selectScope([name],f);assert.ok(p.domains.includes('access'));assert.ok(p.http.includes('tests/stoploss/staff-access-v2-http-check.cjs'));assert.ok(p.http.includes('tests/stoploss/employee-workspace-http-check.cjs'));assert.deepEqual(p.components,['api']);assert.deepEqual(p.browser,[])}}finally{f.close()}});
+
+
+test('AI settings page and API changes select their mocked browser and disposable HTTP contract',()=>{
+ const {selectScope:scopeAi}=require('../../scripts/ci-scope.cjs');
+ const page=scopeAi(['client-admin/src/pages/settings/AiSettingsPage.tsx']);
+ assert.equal(page.aiSettings,true);assert.equal(page.needsServer,true);
+ assert(page.browser.some(item=>item.domain==='aiSettings'));
+ assert.deepEqual(page.components,['admin']);
+ const api=scopeAi(['server/src/services/TeamAiService.ts']);
+ assert.equal(api.aiSettings,true);assert.equal(api.teamCommunication,true);
+ assert.equal(scopeAi(['server/src/routes/salary.ts']).aiSettings,false);
+});
