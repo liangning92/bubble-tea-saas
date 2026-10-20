@@ -51,7 +51,7 @@ router.post('/channels/:id/management/actions/:actionId/actions',run(async(req,r
 }))
 router.get('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.policy(actor(req), req.params.id))))
 router.put('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.savePolicy(actor(req), req.params.id, req.body))))
-router.get('/channels/:id/workflow/jobs', run(async (req, res) => ok(res, await workflow.jobs(actor(req), req.params.id, workflowAfter(req)))))
+router.get('/channels/:id/workflow/jobs', run(async (req, res) => ok(res, await workflow.jobs(actor(req), req.params.id, workflowAfter(req), req.query.requestId === undefined ? undefined : z.string().uuid().parse(req.query.requestId)))))
 router.get('/channels/:id/workflow/events', run(async (req, res) => ok(res, await workflow.events(actor(req), req.params.id, workflowAfter(req)))))
 router.post('/channels/:id/workflow/jobs/:seq/actions', run(async (req, res) => {
   const result = await workflow.action(actor(req), req.params.id,

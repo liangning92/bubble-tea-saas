@@ -19,6 +19,7 @@ export interface WorkflowBillingAttempt {
   billingStatus: 'not_started' | 'possible' | 'usage_recorded'
   usage?: { inputTokens: number; outputTokens: number; estimatedUsd: number }; error?: string
 }
+export interface WorkflowOwnerDecision { text: string; byStaffId: string; at: string; requestId: string; contextLastSeq: number; attemptFloor?: number }
 export interface WorkflowJob {
   id: string; channelId: string; sourceSeq: number; sourceAuthorId: string; sourceHash: string; policyHash: string
   operatorUserId: string; operatorStaffId: string; sourceFloor: number; version: number; attempt: number
@@ -28,7 +29,8 @@ export interface WorkflowJob {
   managementIntake?: boolean; mergedInto?: string; mergedSourceSeq?: number[]
   managementUnavailable?: { reason: string; ownerStaffId: string; ownerUserId: string; defaultsVersion: number }
   management?: ManagementResult & { summary: string; originalText: string; factsFingerprint: string; contextLastSeq: number; waitingMessageId?: string }
-  ownerDecision?: { text: string; byStaffId: string; at: string; requestId: string; contextLastSeq: number }
+  ownerDecision?: WorkflowOwnerDecision
+  ownerDecisionHistory?: WorkflowOwnerDecision[]
   publicationRetries?: number
   managementActionId?: string; managementActionVersion?: number
   sentAt?: string; sendLatencyMs?: number; automaticReply?: boolean

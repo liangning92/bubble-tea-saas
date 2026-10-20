@@ -167,10 +167,10 @@ export function TeamCommunication({ client, scope, staffId, language, administra
         const ownMember = response.channel?.members?.find((member: { staffId: string; fromSeq: number }) => member.staffId === staffId)
         const handlingUpdates = new Map<string, { messageId: string; seq: number; aiHandling: import('./TeamChatMessages').TeamAiHandling | null }>((Array.isArray(response.aiHandlingUpdates) ? response.aiHandlingUpdates.slice(0, 100) : []).map((update: any) => [update.messageId, update]))
         setMessages(previous => [...new Map([...previous, ...response.messages].map((m: Message) => [m.seq, m])).values()]
-          .filter(m => !ownMember || m.seq >= ownMember.fromSeq)
+          .filter(m => auditReason || !ownMember || m.seq >= ownMember.fromSeq)
           .map(m => {
             const update = handlingUpdates.get(m.id)
-            if (!ownMember) { const { aiHandling: _stale, ...source } = m; return source }
+            if (!ownMember || m.seq < ownMember.fromSeq) { const { aiHandling: _stale, ...source } = m; return source }
             if (m.authorId !== staffId || m.channelId !== selectedId || m.ai || m.seq < ownMember.fromSeq || update?.seq !== m.seq) return m
             const { aiHandling: _old, ...source } = m
             return { ...source, ...(update.aiHandling ? { aiHandling: update.aiHandling } : {}) }

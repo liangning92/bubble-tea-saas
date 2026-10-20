@@ -30,6 +30,7 @@ const derivedId = (id: string, suffix: string) => {
   bytes[6] = (bytes[6] & 15) | 80; bytes[8] = (bytes[8] & 63) | 128
   const h = bytes.toString('hex'); return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }
+const roundAttempts = (j: WorkflowJob) => j.attempt - (j.ownerDecision?.attemptFloor ?? 0)
 const replyRequestId = (j: WorkflowJob) => derivedId(j.id, j.ownerDecision ? 'reply-owner-' + j.ownerDecision.requestId : 'reply')
 /** Project every attempt, including legacy jobs whose earlier IDs are derivable.
  * Never turn an unresolved earlier reservation into "not started" when a later
@@ -37,7 +38,7 @@ const replyRequestId = (j: WorkflowJob) => derivedId(j.id, j.ownerDecision ? 're
 async function refreshBilling(db: any, storeId: string, j: WorkflowJob) {
   const before = JSON.stringify([j.billingStatus, j.billingAttempts])
   const attempts: WorkflowBillingAttempt[] = []
-  for (let n = 1; n <= Math.min(j.attempt, 3); n++) {
+  for (let n = 1; n <= j.attempt; n++) {
     const requestId = n === j.attempt && j.aiRequestId ? j.aiRequestId : derivedId(j.id, 'model-' + n)
     const previous = j.billingAttempts?.find(a => a.requestId === requestId)
     const draft = await readTeam(db, storeId, `aiDraft.${j.operatorStaffId}.${requestId}`)
@@ -123,7 +124,8 @@ function parseResult(d: any, sourceSeq: number) {
   if (!d || d.status !== 'ready') fail('TEAM_AI_DRAFT_NOT_READY')
   if (d.kind === 'management') {
     const result = managementResultSchema.parse(JSON.parse(d.text))
-    if (!result.summaryZh.includes('#' + sourceSeq)) fail('TEAM_WORKFLOW_SOURCE_CITATION_REQUIRED')
+    // The job binds the authoritative source; model citation typography is data.
+    result.summaryZh = '#' + sourceSeq + ' ' + result.summaryZh
     return { replyText: result.replyText, summaryZh: result.summaryZh, suggestedTask: null, exceptions: [], management: result } as WorkflowJob['result']
   }
   if (d.kind === 'routine') {
@@ -183,14 +185,17 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         return p
       })
     },
-    async jobs(a: TeamActor, id: string, after = 0) {
+    async jobs(a: TeamActor, id: string, after = 0, requestId?: string) {
       const { fromSeq } = await admin(db, a, id)
       z.number().int().nonnegative().max(999999999999).parse(after)
       const page: WorkflowJob[] = await rows(db, a.storeId, `workflow.job.${id}.`, pad(Math.max(after, fromSeq - 1)), 101)
       const visible = page.slice(0, 100).filter(j => j.operatorUserId === a.id && j.operatorStaffId === a.staffId)
       await Promise.all(visible.map(j => refreshBilling(db, a.storeId, j)))
       const currentPolicy = await readTeam(db, a.storeId, `workflow.policy.${id}`)
-      return { jobs: visible, management: !!currentPolicy?.management, takeover: currentPolicy?.takeover || null, worker: await readTeam(db, a.storeId, 'workflow.worker'), cursor: page.slice(0, 100).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 100, automaticSend: !!(await readTeam(db, a.storeId, `workflow.policy.${id}`))?.automaticSend }
+      const receipt = requestId ? await readTeam(db, a.storeId, `workflow.request.${a.staffId}.${uuid.parse(requestId)}`) : null
+      const original = receipt?.receipt as WorkflowJob | undefined
+      const requestReceipt = original && original.channelId === id && original.sourceSeq >= fromSeq && original.operatorUserId === a.id && original.operatorStaffId === a.staffId ? { requestId, sourceSeq: original.sourceSeq } : undefined
+      return { ...(requestReceipt ? {requestReceipt} : {}), jobs: visible, management: !!currentPolicy?.management, takeover: currentPolicy?.takeover || null, worker: await readTeam(db, a.storeId, 'workflow.worker'), cursor: page.slice(0, 100).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 100, automaticSend: !!(await readTeam(db, a.storeId, `workflow.policy.${id}`))?.automaticSend }
     },
     async events(a: TeamActor, id: string, after = 0) {
       const { fromSeq } = await admin(db, a, id)
@@ -207,14 +212,19 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         await refreshBilling(tx, a.storeId, j)
         const key = `workflow.request.${a.staffId}.${v.requestId}`, requestHash = hash({ id, sourceSeq, ...v })
         const old = await readTeam(tx, a.storeId, key)
-        if (old) { if (old.hash !== requestHash) fail('TEAM_REQUEST_CONFLICT'); return j }
+        if (old) { if (old.hash !== requestHash) fail('TEAM_REQUEST_CONFLICT'); return old.receipt || j }
         if (v.expectedVersion !== j.version) fail('TEAM_VERSION_CONFLICT')
         if (v.action === 'owner_decision') {
           if (managementPrivateText(v.note)) fail('TEAM_MANAGEMENT_PRIVATE_REVIEW_REQUIRED', 400)
-          if (j.status !== 'awaiting_owner' || !j.management || j.ownerDecision || v.replyText || v.content) fail('TEAM_MANAGEMENT_OWNER_DECISION_REQUIRED', 400)
+          const expiredDecision = j.status === 'blocked' && j.error === 'TEAM_MANAGEMENT_SOURCE_EXPIRED' && !!j.ownerDecision
+          if (!(j.status === 'awaiting_owner' || expiredDecision) || !j.management || v.replyText || v.content) fail('TEAM_MANAGEMENT_OWNER_DECISION_REQUIRED', 400)
+          const priorDraft = j.aiRequestId ? await readTeam(tx, a.storeId, `aiDraft.${j.operatorStaffId}.${j.aiRequestId}`) : null
+          // A new business decision is not permission to repeat an unresolved transport.
+          if (j.billingStatus === 'possible' || j.billingAttempts?.some(a => ['pending', 'uncertain'].includes(a.status)) || priorDraft && ['pending', 'uncertain'].includes(priorDraft.status)) fail('TEAM_WORKFLOW_RECOVERY_REVIEW_REQUIRED')
           const { p, c } = await scope(tx, a.storeId, j, undefined, clock(), true)
           if (!p.management || p.management.ownerStaffId !== a.staffId) fail('TEAM_MANAGEMENT_OWNER_REQUIRED', 403)
-          j.ownerDecision = { text: v.note, byStaffId: a.staffId, at: new Date(clock()).toISOString(), requestId: v.requestId, contextLastSeq: c.lastSeq }
+          if (j.ownerDecision) j.ownerDecisionHistory = [...(j.ownerDecisionHistory || []), j.ownerDecision]
+          j.ownerDecision = { attemptFloor: j.attempt, text: v.note, byStaffId: a.staffId, at: new Date(clock()).toISOString(), requestId: v.requestId, contextLastSeq: c.lastSeq }
           j.management.waitingMessageId = j.replyMessageId
           delete j.replyMessageId; delete j.error; delete j.leaseToken; delete j.leaseUntil
           j.status = 'queued'; j.nextAttemptAt = 0; j.publicationRetries = 0
@@ -230,7 +240,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           delete j.error; delete j.leaseToken; delete j.leaseUntil
         } else if (v.action === 'retry') {
           if (!v.acknowledgePossibleCharge || !v.approved) fail('TEAM_WORKFLOW_RETRY_CONFIRM_REQUIRED', 400)
-          if (!['uncertain', 'blocked', 'retry_wait'].includes(j.status) || j.attempt >= 3) fail('TEAM_WORKFLOW_RETRY_LIMIT')
+          if (!['uncertain', 'blocked', 'retry_wait'].includes(j.status) || roundAttempts(j) >= 3) fail('TEAM_WORKFLOW_RETRY_LIMIT')
           await scope(tx, a.storeId, j)
           j.status = 'queued'; j.nextAttemptAt = 0; delete j.error
         } else {
@@ -257,7 +267,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         }
         await refreshBilling(tx, a.storeId, j)
         await save(tx, a.storeId, j, clock())
-        await writeTeam(tx, a.storeId, key, { hash: requestHash, jobId: j.id })
+        await writeTeam(tx, a.storeId, key, { hash: requestHash, jobId: j.id, ...(v.action === 'owner_decision' ? { receipt: j } : {}) })
         await auditTeam(tx, a, id, 'update', { action: 'workflow_' + v.action, jobId: j.id, note: v.note, requestId: v.requestId, approved: v.approved })
         return j
       })
@@ -303,7 +313,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           }
           // No stored draft proves transport never started; ready drafts are reused.
         } else {
-          if (j.attempt >= 3) { j.status = 'blocked'; j.error = 'TEAM_WORKFLOW_RETRY_LIMIT'; await save(tx, storeId, j, now); return null }
+          if (roundAttempts(j) >= 3) { j.status = 'blocked'; j.error = 'TEAM_WORKFLOW_RETRY_LIMIT'; await save(tx, storeId, j, now); return null }
           j.attempt++; j.aiRequestId = derivedId(j.id, 'model-' + j.attempt)
         }
         if (j.timing) j.timing.claimedAt = new Date(now).toISOString()
@@ -380,7 +390,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
             }
             j.replyMessageId = message.id; j.automaticReply = true; j.sentAt = new Date(clock()).toISOString()
             j.sendLatencyMs = Math.max(0, clock() - Date.parse(j.createdAt)); if (j.timing) j.timing.replyWrittenAt = j.sentAt
-            j.status = parsed.kind === 'owner_question' && !j.ownerDecision ? 'awaiting_owner' : parsed.kind === 'pending_action' || parsed.kind === 'owner_question' ? 'pending_action' : 'reviewed'
+            j.status = parsed.kind === 'owner_question' ? 'awaiting_owner' : parsed.kind === 'pending_action' ? 'pending_action' : 'reviewed'
             await auditTeam(tx, a, channelId, 'update', { action: 'workflow_management_sent', jobId: j.id, kind: parsed.kind, messageId: message.id, factsFingerprint: d.managementFactsFingerprint })
           } else if (p.automaticSend) {
             if (!result.routineCode || result.exceptions.length || result.suggestedTask) fail('TEAM_ROUTINE_REPLY_INVALID')
@@ -398,8 +408,8 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           j.error = error || 'TEAM_WORKFLOW_RESULT_REVIEW_REQUIRED'
           // Only failures with no provider reservation/draft can be retried safely.
           const safe = !d && ['TEAM_AI_RATE_LIMIT', 'TEAM_AI_BUDGET_LIMIT', 'TEAM_AI_NOT_CONFIGURED'].includes(j.error)
-          j.status = d && ['pending', 'uncertain'].includes(d.status) ? 'uncertain' : safe && j.attempt < 3 ? 'retry_wait' : 'blocked'
-          if (j.status === 'retry_wait') j.nextAttemptAt = clock() + 30000 * 2 ** (j.attempt - 1)
+          j.status = d && ['pending', 'uncertain'].includes(d.status) ? 'uncertain' : safe && roundAttempts(j) < 3 ? 'retry_wait' : 'blocked'
+          if (j.status === 'retry_wait') j.nextAttemptAt = clock() + 30000 * 2 ** (roundAttempts(j) - 1)
         }
         delete j.leaseToken; delete j.leaseUntil
         return save(tx, storeId, j, clock())
