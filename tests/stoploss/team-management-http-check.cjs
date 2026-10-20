@@ -59,6 +59,32 @@ const result=(p,kind='reply',patch={})=>({text:JSON.stringify({kind,replyText:ki
    const f=await fixture(async()=>{throw Error('SYNTHETIC_TRANSPORT_UNKNOWN')}),m=await send(f,'Saya perlu bantuan memeriksa kemasan di toko.');let j=await processJob(f,m);assert.equal(j.status,'uncertain');await f.workflow.runBatch(f.storeId);j=await job(f,m);assert.equal(j.status,'uncertain');assert.equal(f.inputs.length,1);assert.equal((await messages(f)).length,1);
   });
   const enableDefaults=async f=>{const body={requestId:randomUUID(),expectedVersion:0,enabled:true,consent:true,ownerStaffId:f.owner.staffId,expectedAiConfigVersion:7,expectedAiCheckRevision:3};const saved=await good(f.owner,'PUT','/workflow/defaults',body);assert.equal(saved.lastRequestId,body.requestId);assert.equal((await good(f.owner,'GET','/workflow/defaults')).version,1);assert.equal((await good(f.owner,'PUT','/workflow/defaults',body)).version,1);return saved};
+  await test('owner recovery: repeated questions preserve decisions and globally unique attempts beyond three',async()=>{
+   const f=await fixture((p,n)=>result(p,n<4?'owner_question':'reply')),m=await send(f,'Siapa yang akan melanjutkan pemeriksaan kemasan?');let j=await processJob(f,m);const target=`/channels/${f.channel.id}/workflow/jobs/${m.seq}/actions`,receipts=[];
+   for(let round=0;round<3;round++){
+    assert.equal(j.status,'awaiting_owner',JSON.stringify(j));const body={action:'owner_decision',requestId:randomUUID(),expectedVersion:j.version,note:`Lanjutkan pemeriksaan kemasan tahap ${round+1}.`};
+    const receipt=await good(f.owner,'POST',target,body);receipts.push({body,receipt});assert.equal(receipt.ownerDecision.attemptFloor,round+1);j=await processJob(f,m);
+   }
+   assert.equal(j.status,'reviewed');assert.equal(j.attempt,4);assert.equal(j.ownerDecisionHistory.length,2);assert.equal(j.billingAttempts.length,4);assert.equal(new Set(j.billingAttempts.map(x=>x.requestId)).size,4);assert(j.billingAttempts.every(x=>x.billingStatus==='usage_recorded'));assert.equal(f.inputs.length,4);
+   for(const r of receipts){assert.deepEqual(await good(f.owner,'POST',target,r.body),r.receipt);const check=await good(f.owner,'GET',`/channels/${f.channel.id}/workflow/jobs?after=${m.seq-1}&requestId=${r.body.requestId}`);assert.deepEqual(check.requestReceipt,{requestId:r.body.requestId,sourceSeq:m.seq});}
+   await f.workflow.runBatch(f.storeId);assert.equal(f.inputs.length,4);assert.equal((await messages(f)).length,5);
+   const earlier=j.billingAttempts[0],key=`aiDraft.${f.owner.staffId}.${earlier.requestId}`,saved=await readTeam(prisma,f.storeId,key);delete saved.usage;saved.status='uncertain';await writeTeam(prisma,f.storeId,key,saved);const projected=await good(f.owner,'GET',`/channels/${f.channel.id}/workflow/jobs?after=${m.seq-1}`);assert.equal(projected.jobs[0].billingAttempts.length,4);assert.equal(projected.jobs[0].billingAttempts[0].billingStatus,'possible');assert.equal(projected.jobs[0].billingStatus,'possible');
+  });
+  await test('owner recovery: expired persisted decision requires fresh HTTP confirmation before restart can continue',async()=>{
+   const f=await fixture(p=>result(p,p.ownerDecision?'reply':'owner_question')),m=await send(f,'Siapa yang melanjutkan pemeriksaan kemasan?');let j=await processJob(f,m);const target=`/channels/${f.channel.id}/workflow/jobs/${m.seq}/actions`;
+   j=await good(f.owner,'POST',target,{action:'owner_decision',requestId:randomUUID(),expectedVersion:j.version,note:'Lanjutkan pemeriksaan kemasan.'});j.ownerDecision.at=new Date(Date.now()-121000).toISOString();await writeTeam(prisma,f.storeId,workflowJobKey(f.channel.id,m.seq),j);
+   j=await processJob(f,m);assert.equal(j.status,'blocked');assert.equal(j.error,'TEAM_MANAGEMENT_SOURCE_EXPIRED');assert.equal(f.inputs.length,1);
+   const body={action:'owner_decision',requestId:randomUUID(),expectedVersion:j.version,note:'Saya sudah meninjau informasi saat ini, lanjutkan pemeriksaan kemasan.'};const receipt=await good(f.owner,'POST',target,body);assert.equal(receipt.ownerDecisionHistory.length,1);assert(Date.parse(receipt.ownerDecision.at)>Date.now()-10000);
+   // Construct a new consumer instance to exercise persisted-state recovery.
+   f.workflow=teamWorkflow(prisma,f.ai);j=await processJob(f,m);assert.equal(j.status,'reviewed',JSON.stringify(j));assert.equal(f.inputs.length,2);await good(f.owner,'POST',target,body);await f.workflow.runBatch(f.storeId);assert.equal(f.inputs.length,2);
+  });
+  await test('owner recovery: unresolved earlier provider reservation blocks reconfirmation and retains possible billing',async()=>{
+   const f=await fixture(p=>result(p,'owner_question')),m=await send(f,'Siapa yang melanjutkan pemeriksaan kemasan?');let j=await processJob(f,m);const target=`/channels/${f.channel.id}/workflow/jobs/${m.seq}/actions`;
+   j=await good(f.owner,'POST',target,{action:'owner_decision',requestId:randomUUID(),expectedVersion:j.version,note:'Lanjutkan pemeriksaan kemasan.'});j.ownerDecision.at=new Date(Date.now()-121000).toISOString();await writeTeam(prisma,f.storeId,workflowJobKey(f.channel.id,m.seq),j);j=await processJob(f,m);
+   const key=`aiDraft.${f.owner.staffId}.${j.aiRequestId}`,draft=await readTeam(prisma,f.storeId,key);delete draft.usage;draft.status='uncertain';await writeTeam(prisma,f.storeId,key,draft);
+   const denied=await request(f.owner,'POST',target,{action:'owner_decision',requestId:randomUUID(),expectedVersion:j.version,note:'Saya meninjau informasi saat ini, lanjutkan.'});assert.equal(denied.status,409);assert(JSON.stringify(denied).includes('TEAM_WORKFLOW_RECOVERY_REVIEW_REQUIRED'));
+   const projection=await good(f.owner,'GET',`/channels/${f.channel.id}/workflow/jobs?after=${m.seq-1}`);assert.equal(projection.jobs[0].billingStatus,'possible');assert.equal(projection.jobs[0].billingAttempts[0].billingStatus,'possible');await f.workflow.runBatch(f.storeId);assert.equal(f.inputs.length,1);assert.equal((await messages(f)).length,2);
+  });
   await test('owner context: natural responsible-member HTTP text queues and processes in store mode',async()=>{
    const f=await fixture(undefined,{skipPolicy:true});await enableDefaults(f);
    const m=await send(f,'Tolong lanjutkan pemeriksaan kemasan yang sudah ditugaskan dan kabari hasilnya.',f.owner);
