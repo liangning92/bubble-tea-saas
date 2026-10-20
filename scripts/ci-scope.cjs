@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ externalMcp:{paths:/(?:externalMcp|external-mcp)/i,tests:/external-mcp/i},
  externalAgentAccess:{paths:/(?:externalAccess|ExternalAgentSettings|externalAgentCopy|external-access)/i,tests:/external-access/i},
  staffProfiles:{paths:/(?:StaffProfileRole|staffProfileRole|Staff(?:List|Detail|Form)Page|staff-profile)/i,tests:/staff-profile-roles/i},
  aiSettings:{paths:/(?:AiSettings|AiPermissions|aiSettingsCopy|TeamAiService|team-ai-settings)/i,tests:/ai-settings/i},
