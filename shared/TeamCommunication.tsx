@@ -3,7 +3,7 @@ import { prepareTeamPhotos } from './teamPhoto'
 import type { AttachmentOptions } from './teamAttachmentResource'
 import { TeamChatMessages, type TeamScrollPositions } from './TeamChatMessages'
 import { teamChatCopy } from './teamChatCopy'
-import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { FormEvent, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { teamCopy } from './teamCopy'
 import { TeamPending, pendingMessages, removePending, savePending } from './teamOutbox'
 import { TeamTasks, TeamTask } from './TeamTasks'
@@ -34,9 +34,10 @@ const field = 'w-full rounded-lg border border-gray-300 bg-white p-2 text-sm'
 const numbers = (value: string) => value.split(',').filter(v => v.trim()).map(v => Number(v.trim()))
 const lines = (value: string) => value.split('\n').map(v => v.trim()).filter(Boolean)
 const errorCode = (e: any) => e?.response?.data?.message || e?.message || 'TEAM_OPERATION_FAILED'
-export function TeamCommunication({ client, scope, staffId, language, administration = false, aiAdmin = false, compact = false, navigation }: {
+export function TeamCommunication({ client, scope, staffId, language, administration = false, aiAdmin = false, compact = false, navigation, workflowPanel }: {
   client: TeamClient; scope: string; staffId: string; language: string; administration?: boolean; aiAdmin?: boolean; compact?: boolean
   navigation?: { channelId: string; select: (id: string) => void }
+  workflowPanel?: (context: { channelId: string; directory: { id: string; name: string }[]; tasks: TeamTask[]; onChanged: () => void }) => ReactNode
 }) {
   const w = teamCopy(language), work = teamWorkCopy(language), chat = teamChatCopy(language)
   const [search, setSearch] = useState(''), [panel, setPanel] = useState<'chat' | 'work'>('chat')
@@ -260,6 +261,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
               {!compact && <>{roundControls}{receiptDetails}</>}
             </section>
             <div className="team-work-panel" hidden={panel !== 'work'}>
+            {aiAdmin && currentChannel?.member && !auditReason && workflowPanel?.({ channelId: selectedId, directory, tasks, onChanged: () => setRefreshKey(v => v + 1) })}
             {aiAdmin && currentChannel?.member && !auditReason && !meta?.archived && <TeamAi key={'ai:' + scope + selectedId} client={client} language={language} channelId={selectedId} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} />}
             {aiAdmin && currentChannel?.member && !auditReason && !meta?.archived && <TeamOperations key={'operations:' + scope + selectedId} client={client} scope={scope} staffId={staffId} language={language} channelId={selectedId} directory={directory.filter(d => currentChannel.members.some(m => m.staffId === d.id))} tasks={tasks} onChanged={() => setRefreshKey(v => v + 1)} />}
             <TeamTasks key={'tasks:' + scope + selectedId + auditReason} tasks={tasks} client={client} channelId={selectedId} staffId={staffId} language={language} name={name} canManage={!!meta?.canEdit && !!currentChannel?.member && !auditReason} readOnly={!!auditReason || !!meta?.archived} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} />

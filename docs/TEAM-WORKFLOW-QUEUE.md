@@ -33,6 +33,8 @@
 
 action 支持 `approve_reply`、`approve_task`、`reconcile`、`retry`、`dismiss`。回复可带人工修订后的 replyText。任务批准需 content，沿用 `team.operations.plan.v1`，只允许一个原员工任务、reviewerId 必须为当前管理员。retry 额外需 acknowledgePossibleCharge=true。重复 requestId 相同内容返回现有结果，内容变化拒绝；旧版本拒绝。
 
+审批入口新增的 active 许可保护：PUT policy 在 enabled=true 且 paused=false 时还必须提交当前 GET AI settings 中 ready 回执对应的 expectedAiConfigVersion、expectedAiCheckRevision。服务端在频道事务和既有 ai-budget 锁内核对版本、地区、模型及 ready 状态，缺失或过期证明返回 TEAM_WORKFLOW_CONNECTION_REQUIRED；界面开启前重读，不能沿用上方保存新模型前的旧验证。暂停/禁用沿用旧请求参数，不要求模型连接就绪。没有修改消费者执行、外呼重试或原批准发送契约。
+
 父对话仍需一个经过平台授权的鉴权桥，负责把事件游标保存为消费进度、读取最新 jobs/export、展示人工批准请求并携带幂等 requestId 提交。当前 `events` 是拉取游标接口，尚无 SSE/WebSocket、Webhook 或向父对话投递回调；不能宣称已经自动回到聊天对话，也不能通过复制用户 token 充当接入。
 
 所有 AI 配置仍归“设置 → AI设置”，未新增一级导航；本批没有新增后台管理页面或调整既有页面。后续策略与审批页面应归该设置入口并复用团队沟通使用页。

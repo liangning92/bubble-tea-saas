@@ -1,4 +1,5 @@
-import {staffAccessLabels,staffRoleLabel} from '../../../../shared/staffAccessLabels'
+import {staffProfileRoleLabel} from '../../../../shared/staffProfileRole'
+import {staffProfileRoleText} from '../../../../shared/staffProfileRole'
 import { staffIdentityLabels } from '../../../../shared/staffIdentityLabels'
 import { probationLabels } from '../../../../shared/probationLabels'
 import { useState } from 'react'
@@ -50,16 +51,6 @@ export function StaffListPage() {
       case 'suspended': return 'badge-error'
       default: return 'badge-info'
     }
-  }
-
-  const getPositionLabel = (position: string) => {
-    const labels: Record<string, string> = {
-      manager: t('staff.manager'),
-      cashier: t('staff.cashier'),
-      barista: t('staff.barista'),
-      kitchen: t('staff.kitchen')
-    }
-    return labels[position] || position
   }
 
   const getEmploymentTypeLabel = (type: string) => {
@@ -162,7 +153,7 @@ export function StaffListPage() {
               onChange={(e) => setPositionFilter(e.target.value)}
               className="input"
             >
-              <option value="">{t('staff.allPositions')}</option>
+              <option value="">{staffProfileRoleText(i18n.language).historical}</option>
               <option value="manager">{t('staff.manager')}</option>
               <option value="cashier">{t('staff.cashier')}</option>
               <option value="barista">{t('staff.barista')}</option>
@@ -203,7 +194,7 @@ export function StaffListPage() {
                     <td className="py-3 font-mono text-sm" data-label={t('staff.employeeNumber')}>{s.employeeNumber || s.id.slice(-6).toUpperCase()}</td>
                     <td className="py-3 font-medium" data-label={t('staff.name')}>{s.name}{s.payrollEmployee===false&&<p className="text-xs text-gray-500">{staffIdentityLabels(i18n.language).accountOnly}</p>}</td>
                     <td className="py-3 text-gray-600" data-label={t('staff.phone')}>{s.phone}</td>
-                    <td className="py-3" data-label={t('staff.position')}>{s.accessRole?staffRoleLabel(s.accessRole.id,s.accessRole.name,staffAccessLabels(i18n.language)):s.role==='admin'?t('staff.roleAdmin'):getPositionLabel(s.position)}</td>
+                    <td className="py-3" data-label={t('staff.position')}>{staffProfileRoleLabel(s,i18n.language,t('staff.roleAdmin'))}</td>
                     <td className="py-3 text-sm text-gray-600" data-label={t('staff.employmentType')}>{getEmploymentTypeLabel(s.employmentType || 'full_time')}{s.probation?.enabled&&<span className="badge badge-info ml-2">{probationLabels(i18n.language)[s.probation.status==='probation'?'probation':s.probation.status==='not_started'?'not_started':'regular']}</span>}</td>
                     <td className="text-right tabular-nums py-3 font-medium" data-label={t('salary.baseSalary')}>{s.payrollEmployee===false ? '—' : s.baseSalary === null ? t('staff.salaryNotSet') : new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(s.baseSalary)}</td>
                     <td className="py-3" data-label={t('staff.status')}>

@@ -37,7 +37,7 @@ async function browserCheck(check){
    finally{if(!runtime.startsWith('/tmp/pos-idempotency-runtime-'))throw Error('Refuse unowned runtime cleanup');fs.rmSync(runtime,{recursive:true,force:true})}
   }break;
  case 'build':for(const service of plan.build.filter(s=>s!=='api'))run(npm,['run','build:'+service]);break;
- case 'browser':for(const check of plan.browser)await browserCheck(check);break;
+ case 'browser':for(const check of plan.browser)await browserCheck(check);if(plan.aiSettings)node('tests/stoploss/team-ai-settings-budget-browser.cjs');break;
  default:throw Error('Unknown scoped CI phase');
  }
 })().catch(error=>{console.error(error.message);process.exitCode=1});
