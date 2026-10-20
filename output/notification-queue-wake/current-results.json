@@ -1,5 +1,5 @@
 {
-  "batch": "bt-test-79c00f204050",
+  "batch": "bt-test-b9c00441e421",
   "passed": 7,
   "tests": [
     "API HTTP finish wakes committed source/outbox only; importing standalone services never starts production workers",
@@ -13,12 +13,12 @@
   "observations": [
     {
       "path": "api-http-finish",
-      "httpStartToMockMs": 134,
+      "httpStartToMockMs": 139,
       "independentSamples": 1
     },
     {
       "path": "independent-child-commit-poll",
-      "commitAcknowledgedToMockMs": 62,
+      "commitAcknowledgedToMockMs": 81,
       "pollMs": 500,
       "independentSamples": 1
     },
@@ -45,10 +45,5 @@
   "productionWorkerStarted": false,
   "latencyIsSingleSample": true,
   "p95Measured": false,
-  "deviceDeliveryTested": false,
-  "wrapperExitCode": 0,
-  "ownedPostgreSQLCleaned": true,
-  "wrapperCleaned": true,
-  "rootHttpGroupsPassed": 14,
-  "totalGroupsPassed": 21
+  "deviceDeliveryTested": false
 }

@@ -40,11 +40,11 @@
 - 两端培训以实际展示资料的source快照计算与服务端一致的canonical SHA256，显式匹配通知指纹，异步计算结束再次校验展示对象/身份/位置。旧正文不能确认新版提醒；未变资料跨总版本仍可读，见 `output/training-content-race`。
 - 投递领取租约后，在transport调用前重查read/个人marker以及当前订阅、active Staff、User会话时间；已提交阅读不补推。最终状态加提醒锁读取新值合并，与HTTP已读使用同一锁，不能写回旧read=false；已经开始的transport不能撤回，但并发阅读仍保留。相关14组HTTP还验证租约后HTTP注销/旧token订阅失效，不把注销当作阅读。
 
-新固定候选必须独立复核上述修复及500ms通路，并重新执行精确CI，不能用旧acaf绿灯放行。
+82fc独立增量已确认原三项闭环及500ms通路，但新增订阅续订竞态P2：旧snapshot失效写回会覆盖HTTP200续订。增量将lease前/后失效及404/410统一为Config.value精确CAS，只允许失效仍等于所观察（或实际发送）的订阅版本；续订/注销已提交的新字段完整保留，无需改接口、schema或引入新锁平台。原增量报告在 `output/notification-p2-review/independent-increment-82fc2f67.md`。新固定候选仍必须独立复核此项并重新执行精确CI，不能用旧SHA绿灯放行。
 
 ## 当前验证与限制
 
-- 当前服务源真实临时 PostgreSQL/HTTP：通知14组、独立Node进程/队列故障7组、聊天提醒5组、员工工作台SQLite/PostgreSQL各1组，共28组通过并自动清理，见 `output/notification-queue-wake/current-final-regression-summary.json`。先前源的培训11组、审批投影及团队沟通67组通过；最终固定源由精确CI重新验证，不能混称同一批次。
+- 订阅CAS增量真实临时PostgreSQL/HTTP：通知17组（新增租约前/后续订、注销、404/410交错3组）及独立Node进程/队列故障7组，共24组通过并自动清理；先用108e旧worker内存overlay复现续订被覆盖，再以当前编译服务通过，证据 `output/notification-awareness/subscription-cas-*`。此前82fc的聊天5组、员工工作台SQLite/PostgreSQL各1组等28组汇总仍保留；培训11组、审批投影及团队沟通67组的固定源以各证据为准。最终固定源由精确CI重新验证，不能混称同一批次。
 - 当前真实 React 页面的合成 API 浏览器检查：两端消息、超100条审批定位、两端培训；手机390、平板768、桌面1365/1280，保留原控件，未见横向溢出。截图及脚本在 `output/notification-awareness-ui-20261020`、`output/notification-approval-target-ui-20261020`、`output/training-update-notices` 和 `output/training-admin-notices`。
 - 团队原测试的未读断言改为按真实消息作者计算，保留13条完整消息、游标单调及并发序号检查。旧培训管理单元夹具显式使用空员工列表；发布提醒仍由真实数据库回归验证。旧员工工作区投递夹具改为先验证缺密钥站内保留，再用两个纯合成字符串验证既有密钥的 mock 投递，断言零密钥生成。
 - 旧acaf CI的工作流超时已用实际构建页面复现为inbox夹具返回[]造成的React错误边界，修复运行时响应校验并补明确接口夹具；原20组完整保留、超时不变，先保留旧异常夹具验证校验有效，再用正确夹具通过，见 `output/notification-workflow-ci-fix`。

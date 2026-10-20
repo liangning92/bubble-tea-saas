@@ -1,5 +1,5 @@
 {
-  "passed": 14,
+  "passed": 17,
   "tests": [
     "inbox opening preserves both conversation cursors; successful selected fetch plus ack clears only that conversation across sessions",
     "nonmembers and cross-store/forged identity cannot expose preview or use notification deep links/read IDs",
@@ -11,6 +11,9 @@
     "read committed after delivery lease suppresses transport and cannot be restored to unread",
     "read committed during an already-started mocked transport survives final delivery status merge",
     "logout or session revocation committed after the lease prevents transport without marking the notice read",
+    "HTTP renewal during pre-lease or final User lookup preserves the entire newer subscription and permits the next delivery",
+    "HTTP renewal followed by logout during either User lookup keeps the newer logged-out snapshot intact and never transports",
+    "404 or 410 from an old in-flight transport cannot disable or overwrite a newer HTTP subscription renewal or logout",
     "chat outbox persistence failure atomically rolls back message, reminder and workflow event",
     "no subscription preserves in-app item; mocked push uses generic existing-key deep link and deterministic concurrent dedup",
     "successful HTTP commit wakes only notification delivery; in-flight messages coalesce without loss and failed sends never wake",

@@ -1,3 +1,5 @@
+最新订阅CAS服务增量验证17 HTTP+7队列，共24组，见 `../notification-awareness/subscription-cas-after-fix.log`。本目录原28组summary保持其原时间/源码范围，不能当作CAS增量总数。
+
 # 通知队列最终隔离验证
 
 current-final-regression-summary.json为当前服务源码的汇总：14通知HTTP + 7跨独立Node进程/队列恢复 + 5聊天 + 2员工工作台provider，共28组通过。current-*保存本轮日志和结果。first-19-*与exact-signal-before-logout-*保留较早增量证据，不当作最终组数。

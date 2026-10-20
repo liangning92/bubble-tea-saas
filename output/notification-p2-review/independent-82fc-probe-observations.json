@@ -1,0 +1,62 @@
+{
+  "head": "82fc2f67939f63c5a3c9a259925309a4c1784d95",
+  "observations": [
+    {
+      "case": "employee_awareness_without_management",
+      "pendingVisible": true,
+      "executeHttp": 403,
+      "sourceStatus": "pending"
+    },
+    {
+      "case": "integrated_107_pending",
+      "pending": 107,
+      "readRetainsPending": true,
+      "spoofBodyHttp": 403,
+      "privateFieldsExcluded": true
+    },
+    {
+      "case": "baseline_and_personal_result",
+      "oldRead": true,
+      "oldQueued": false,
+      "freshUnread": true,
+      "otherCannotSee": true
+    },
+    {
+      "case": "staff_transfer",
+      "oldGetHttp": 401,
+      "oldReadHttp": 401,
+      "noReceiptWritten": true
+    },
+    {
+      "case": "read_during_delivery_claim",
+      "readCommittedBeforeTransport": true,
+      "mockSendsAfterRead": 0,
+      "finalRead": true,
+      "finalStatus": "in_app",
+      "sourceStatus": "approved"
+    },
+    {
+      "case": "terminal_delivery_failure",
+      "reminderStatus": "delivery_failed",
+      "mockAttempts": 1
+    },
+    {
+      "case": "read_during_transport_completion",
+      "read": true,
+      "status": "in_app"
+    },
+    {
+      "case": "subscription_renewed_during_final_lookup",
+      "httpRenewalSucceeded": true,
+      "beforeActive": true,
+      "afterActive": false,
+      "oldIssuedAt": 1792482986579,
+      "renewedIssuedAt": 1792482987679,
+      "afterIssuedAt": 1792482986579,
+      "mockSends": 0
+    }
+  ],
+  "productionAccess": false,
+  "realPushCalls": 0,
+  "realModelCalls": 0
+}
