@@ -73,7 +73,11 @@ async function good(token, method, body) { const r = await request(token, method
 async function close() { if (server) { await new Promise(resolve => server.close(resolve)); server = null; } }
 async function check(name, fn) {
   if (process.env.CASE_FILTER && !process.env.CASE_FILTER.split('|').some(part => name.includes(part))) return;
+  // Runtime and fault-injection cases replace this HTTP composition. Never let
+  // a prior case's dispatcher target or audit hook affect the next case.
+  service = createAgentTaskService(prisma, deps); faultAudit = false;
   try { await fn(); passed.push(name); console.log('PASS', name) } catch (error) { failures.push({ name, error: error.stack || error.message }); console.error('FAIL', name, error); }
+  finally { service = createAgentTaskService(prisma, deps); faultAudit = false; }
 }
 async function fixture() {
   const n = ++index, storeId = 'agent-task-store-' + n;
