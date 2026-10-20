@@ -129,6 +129,61 @@ class SourceBytesTests(unittest.TestCase):
         self.git('update-index','--skip-worktree','pkg/__init__.py')
         (self.source/'pkg/__init__.py').write_text('VALUE = "changed behind skip-worktree"\n')
         self.rejected_before_spawn()
+    def test_git_replace_cannot_substitute_matching_malicious_index_and_worktree(self):
+        original = self.sha
+        (self.source/'pkg/__init__.py').write_text('VALUE = "malicious replacement tree"\n')
+        self.git('add','pkg/__init__.py')
+        self.git('-c','user.name=Synthetic','-c','user.email=synthetic@example.invalid','-c','commit.gpgsign=false','commit','-qm','Synthetic replacement')
+        malicious = self.git('rev-parse','HEAD').strip()
+        self.git('update-ref','HEAD',original)
+        self.git('replace',original,malicious)
+        self.assertEqual(self.git('rev-parse','HEAD').strip(),original)
+        # Ordinary Git honors replace: both index and tree now agree with tampered bytes.
+        self.assertEqual(self.git('diff','HEAD','--name-only').strip(),'')
+        self.rejected_before_spawn()
+
+    def test_actual_a719_normal_checkout_keeps_trusted_crlf_and_fake_activation_passes(self):
+        source = Path(os.environ.get('HERMES_SOURCE','/Users/liangning/.hermes/hermes-agent'))
+        if not source.exists(): self.skipTest('explicit a719 source checkout not available')
+        clone = self.root/'actual-a719-clone'
+        args=['/usr/bin/git','--no-replace-objects','-c','core.fsmonitor=false','-c','core.hooksPath='+os.devnull,'-c','core.attributesFile='+os.devnull]
+        subprocess.check_call(args+['clone','--no-local','--no-checkout','--quiet',str(source),str(clone)],env=self.env,stderr=subprocess.DEVNULL,timeout=120)
+        subprocess.check_call(args+['-C',str(clone),'-c','core.autocrlf=false','checkout','--quiet',PINNED_HERMES],env=self.env,stderr=subprocess.DEVNULL,timeout=120)
+        powershell=(clone/'evals/update_streaming/watchdog.ps1').read_bytes()
+        self.assertEqual(powershell.count(b'\r\n'),44)
+        self.assertEqual(powershell.count(b'\n'),44)
+        self.spec['hermes_source']=str(clone)
+        # No verify_source injection and no revision patch: actual a719 object chain.
+        activate(self.spec,spawn=self.spawn,now=lambda:NOW,start_watchdog=False,stop=lambda:None)
+        self.assertEqual(len(self.spawned),1)
+    def test_actual_a719_git_replace_matching_worktree_rejected_before_profile_and_spawn(self):
+        source=Path(os.environ.get('HERMES_SOURCE','/Users/liangning/.hermes/hermes-agent'))
+        if not source.exists():self.skipTest('explicit a719 source checkout not available')
+        result={}
+        with tempfile.TemporaryDirectory(prefix='a719-replace-',dir=self.root) as owned:
+            clone=Path(owned)/'clone'
+            command=['/usr/bin/git','-c','core.fsmonitor=false','-c','core.hooksPath='+os.devnull,'-c','core.attributesFile='+os.devnull]
+            def git(*args):return subprocess.check_output(command+['-C',str(clone),*args],env=self.env,stderr=subprocess.DEVNULL,text=True)
+            subprocess.check_call(command+['clone','--depth=1','--single-branch','--no-tags','--no-local','--no-checkout','--quiet',str(source),str(clone)],env={**self.env,'GIT_NO_REPLACE_OBJECTS':'1'},stderr=subprocess.DEVNULL,timeout=120)
+            git('-c','core.autocrlf=false','checkout','--quiet',PINNED_HERMES)
+            target=clone/'hermes_cli/main.py'
+            with target.open('a') as stream:stream.write('\n# synthetic replace proof: this altered source is never executed\n')
+            git('add','hermes_cli/main.py')
+            git('-c','user.name=Synthetic','-c','user.email=synthetic@example.invalid','-c','commit.gpgsign=false','commit','-qm','Synthetic replacement probe only')
+            replacement=git('rev-parse','HEAD').strip()
+            git('update-ref','HEAD',PINNED_HERMES)
+            git('replace',PINNED_HERMES,replacement)
+            self.assertEqual(git('rev-parse','HEAD').strip(),PINNED_HERMES)
+            self.assertEqual(git('diff','HEAD','--name-only').strip(),'')
+            self.spec['hermes_source']=str(clone)
+            # No revision patch and no verify_source callback: production default validator.
+            with self.assertRaises(Blocked) as failure:
+                activate(self.spec,spawn=self.spawn,now=lambda:NOW,start_watchdog=False,stop=lambda:None)
+            self.assertEqual(self.spawned,[]);self.assertFalse(Path(self.spec['profile_home']).exists())
+            result={'head':PINNED_HERMES,'replacement':replacement,'normalGitTreeIndexWorktreeAgree':True,'rejectedCode':str(failure.exception),'profileCreated':False,'processSpawns':0,'hermesCalls':0,'modelCalls':0,'ownedDirectory':owned}
+        self.assertFalse(Path(owned).exists());result['cleanupComplete']=True
+        evidence=Path(__file__).parents[2]/'output/hermes-pdca-bridge/actual-a719-replace-delivery.json'
+        evidence.parent.mkdir(parents=True,exist_ok=True);evidence.write_text(json.dumps(result,indent=2)+'\n')
     def test_staged_python_shadow_outside_head_is_rejected(self):
         (self.source/'json.py').write_text('raise RuntimeError("staged shadow")\n');self.git('add','json.py');self.rejected_before_spawn()
     def test_untracked_python_shadow_is_rejected(self):

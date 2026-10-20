@@ -119,7 +119,11 @@ class RunningPilot:
 
 
 def verify_source_tree(source, *, expected_commit=None):
-    """Compare worktree bytes to HEAD blobs, independent of index stat/cache flags.
+    """Verify the fixed raw commit/tree object chain and exact trusted checkout bytes.
+
+    The one pinned root attribute rule expands the 13 pure-LF PowerShell blobs
+    to CRLF; actual worktree bytes are never normalized. Index stat flags do not
+    replace byte checks. No local attributes or replacement refs select expected code.
 
     Reject every untracked/ignored file (including import shadows and in-tree venvs).
     No hook, filter, global Git config, status refresh or worktree mutation is used.
@@ -129,10 +133,10 @@ def verify_source_tree(source, *, expected_commit=None):
         raise Blocked("HERMES_SOURCE_BOUNDARY_INVALID")
     expected_commit = expected_commit or PINNED_HERMES
     git_env = {"PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
-               "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0"}
+               "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0", "GIT_NO_REPLACE_OBJECTS": "1"}
     def git(*args):
         try:
-            return subprocess.check_output(["/usr/bin/git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull,
+            return subprocess.check_output(["/usr/bin/git", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "-c", "core.attributesFile=" + os.devnull,
                 "-C", str(source), *args], stderr=subprocess.DEVNULL, env=git_env)
         except (OSError, subprocess.CalledProcessError):
             raise Blocked("HERMES_SOURCE_UNVERIFIABLE") from None
@@ -142,14 +146,46 @@ def verify_source_tree(source, *, expected_commit=None):
         raise Blocked("HERMES_SOURCE_CHANGED")
     if git("ls-files", "--others", "--exclude-standard", "-z") or git("ls-files", "--others", "--ignored", "--exclude-standard", "-z"):
         raise Blocked("HERMES_SOURCE_EXTRA_FILES")
-    tree = git("ls-tree", "-r", "-z", "HEAD")
-    if not tree: raise Blocked("HERMES_SOURCE_EMPTY")
+    def object_bytes(kind, oid):
+        if len(oid) != 40 or any(c not in '0123456789abcdef' for c in oid): raise Blocked("HERMES_OBJECT_INVALID")
+        body = git("cat-file", kind, oid)  # Raw object only; NEVER --filters or check-attr.
+        digest = hashlib.sha1(kind.encode() + b" " + str(len(body)).encode() + b"\0" + body).hexdigest()
+        if digest != oid: raise Blocked("HERMES_OBJECT_HASH_CHANGED")
+        return body
+    commit = object_bytes("commit", expected_commit)
+    header = commit.split(b"\n", 1)[0]
+    if not header.startswith(b"tree "): raise Blocked("HERMES_COMMIT_INVALID")
+    root_tree = header[5:].decode('ascii')
     tracked = {}
-    for entry in tree.split(b"\0"):
-        if entry:
-            metadata, filename = entry.split(b"\t", 1)
-            mode, kind, blob = metadata.split(b" ")
-            tracked[filename] = (mode, blob)
+    def visit(oid, prefix=b"", depth=0):
+        if depth > 100: raise Blocked("HERMES_TREE_INVALID")
+        body = object_bytes("tree", oid); offset = 0; names = set()
+        while offset < len(body):
+            space = body.find(b" ", offset); nul = body.find(b"\0", space + 1)
+            if space < offset or nul <= space or nul + 21 > len(body): raise Blocked("HERMES_TREE_INVALID")
+            mode, name = body[offset:space], body[space + 1:nul]
+            child = body[nul + 1:nul + 21].hex(); offset = nul + 21
+            if not name or b"/" in name or name in (b".", b"..", b".git") or name in names: raise Blocked("HERMES_TREE_INVALID")
+            names.add(name); filename = prefix + name
+            if mode == b"40000": visit(child, filename + b"/", depth + 1)
+            elif mode in (b"100644", b"100755"): tracked[filename] = (mode, child.encode())
+            else: raise Blocked("HERMES_SOURCE_BOUNDARY_INVALID")
+    visit(root_tree)
+    if not tracked: raise Blocked("HERMES_SOURCE_EMPTY")
+    # The pinned revision has ONE verified root attributes blob, no custom filters,
+    # encodings or nested rules. Only its explicit *.ps1 eol=crlf rule changes bytes.
+    attributes = [name for name in tracked if name.rsplit(b"/", 1)[-1] == b".gitattributes"]
+    checkout_hashes = {}
+    if attributes:
+        if attributes != [b".gitattributes"] or tracked[b".gitattributes"][1] != b"80824c67581d7be781d3f457280f7f1dbbd22897":
+            raise Blocked("HERMES_ATTRIBUTES_UNSUPPORTED")
+        object_bytes("blob", tracked[b".gitattributes"][1].decode())
+        for filename, (_, blob) in tracked.items():
+            if filename.endswith(b".ps1"):
+                original = object_bytes("blob", blob.decode())
+                if b"\r" in original: raise Blocked("HERMES_CHECKOUT_CONVERSION_UNSUPPORTED")
+                checkout = original.replace(b"\n", b"\r\n")
+                checkout_hashes[filename] = hashlib.sha1(b"blob " + str(len(checkout)).encode() + b"\0" + checkout).hexdigest().encode()
     indexed = {}
     for entry in git("ls-files", "--stage", "-z").split(b"\0"):
         if entry:
@@ -158,12 +194,10 @@ def verify_source_tree(source, *, expected_commit=None):
             if stage != b"0" or filename in indexed: raise Blocked("HERMES_SOURCE_INDEX_CHANGED")
             indexed[filename] = (mode, blob)
     if indexed != tracked: raise Blocked("HERMES_SOURCE_INDEX_CHANGED")
-    for entry in tree.split(b"\0"):
-        if not entry: continue
-        metadata, filename = entry.split(b"\t", 1)
-        mode, kind, expected_hash = metadata.split(b" ")
+    for filename, (mode, blob) in tracked.items():
+        expected_hash = checkout_hashes.get(filename, blob)
         relative = Path(os.fsdecode(filename))
-        if relative.is_absolute() or any(p in ("..", ".git") for p in relative.parts) or kind != b"blob" or mode not in (b"100644", b"100755"):
+        if relative.is_absolute() or any(p in ("..", ".git") for p in relative.parts) or mode not in (b"100644", b"100755"):
             raise Blocked("HERMES_SOURCE_BOUNDARY_INVALID")
         # Git stores directory symlinks as blobs too; neither these nor substituted
         # intermediate directories may lead the importer outside the verified tree.

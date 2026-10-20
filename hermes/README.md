@@ -150,7 +150,7 @@ private_client_file, endpoints:{api_origin,issuer,resource}, pilot:{id,startedAt
 ```
 
 `profile_home` must end in `profiles/stock-ro-001` and must not exist. Files are
-0600 and directories private. `hermes_source` must be a clean source export at the
+0600 and directories private. `hermes_source` must be a clean independent Git checkout at the
 inspected commit, with no `.env`/`.op.env`: a719 explicitly tries to load
 `PROJECT_ROOT/.env`, even for a dedicated profile. The launcher refuses their
 existence without reading them. No inherited API keys/platform credentials are
@@ -186,3 +186,18 @@ mandatory, and process cleanup requires the operator's explicit supervisor.
 Launcher tests use a fake process and temporary profile only. Before the runtime
 module is delivered they substitute a comment for its copy to test launcher file
 composition; this does not validate SDK/broker implementation or gateway startup.
+
+
+### Source object and checkout verification
+
+Production startup verifies the raw fixed a719 commit SHA and recursively verifies
+its raw Git tree object hashes, with replacement objects disabled in every child
+command and no inherited Git environment/global configuration. Expected file bytes
+come from this verified object chain, independently of index stat flags. Staged,
+untracked and ignored shadows, changed modes and symlink substitutions are rejected.
+The only supported checkout conversion is the pinned root `.gitattributes` blob
+`80824c67581d7be781d3f457280f7f1dbbd22897`: its 13 pure-LF `*.ps1` blobs require
+exact CRLF checkout bytes. All other files retain exact raw blob bytes. Actual
+worktree contents are never normalized, and no local check-attr/custom filter is
+executed or trusted. Keep the interpreter/venv outside that clean checkout;
+`PYTHONDONTWRITEBYTECODE=1` prevents the child from adding bytecode shadows there.
