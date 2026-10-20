@@ -1,0 +1,23 @@
+{
+  "groups": 14,
+  "results": [
+    "iPhone browser tab requires Home Screen before any permission prompt",
+    "denied permission has actionable settings help and no repeated prompt",
+    "missing server keys are read-only and block enable",
+    "a fake session flag cannot claim connected with no browser subscription",
+    "fresh session discovers genuine existing binding without sessionStorage flag",
+    "inactive local subscription reconnects rather than showing enabled",
+    "mismatched existing application key never claims ready",
+    "permission is requested only on explicit enable; real axios saves selected device then offers test",
+    "provider acceptance stays distinct from local display and notification click reports",
+    "a fresh user denial immediately disables the enable button and offers settings recovery",
+    "a new explicit test replaces an older notification deep link in status checks",
+    "server check failure is unknown and has a retry instead of stale enabled",
+    "offline state gives an in-app route and no enabling operation",
+    "account switch during actual pending registration never saves the old account subscription"
+  ],
+  "realReact": true,
+  "realAxios": true,
+  "syntheticDeviceAdapters": true,
+  "realPhoneReceiptValidated": false
+}

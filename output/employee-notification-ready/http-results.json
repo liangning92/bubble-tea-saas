@@ -1,0 +1,20 @@
+{
+  "groups": 10,
+  "results": [
+    "read-only configuration never creates missing credentials or exposes existing private material",
+    "server check rejects foreign, inactive and stale bindings rather than trusting browser flags",
+    "test creation is idempotent, rate limited and ignores forged client identity fields",
+    "normal durable delivery targets only the explicitly selected device; provider acceptance is not device receipt or read",
+    "device display and click reports remain separate, owned, monotonic and do not mark a task or inbox read",
+    "cross-store guesses and obsolete tokens cannot inspect, create or acknowledge another device test",
+    "expired tests cancel without transport; push errors and 410 are never accepted or device-confirmed",
+    "failure after actual signal write rolls test, reminder, rate limit and signal back in the real transaction",
+    "HTTP disable cannot restore an old subscription snapshot over a concurrent renewal",
+    "management follow-up remains relevant only to the current bound assignee and unchanged channel audience/version"
+  ],
+  "forbiddenKeys": 0,
+  "forbiddenPush": 0,
+  "realDatabase": true,
+  "realAuthRoutes": true,
+  "batch": "bt-test-324632601ec2"
+}

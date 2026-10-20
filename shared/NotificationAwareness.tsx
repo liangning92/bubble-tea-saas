@@ -14,6 +14,7 @@ export interface AwarenessItem {
   domain?: string
   objectId?: string
   status?: string
+  delivery?: import('./NotificationDeliveryStatus').NotificationDelivery
 }
 export interface AwarenessInbox {
   items: AwarenessItem[]
