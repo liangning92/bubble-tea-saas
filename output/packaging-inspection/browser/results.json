@@ -1,0 +1,27 @@
+{
+  "syntheticOnly": true,
+  "realModelCalls": 0,
+  "checks": [
+    {
+      "width": 390,
+      "ownerSnapshot": true,
+      "assigneeLink": true,
+      "otherStaffCannotCreate": true,
+      "noOverflow": true
+    },
+    {
+      "width": 768,
+      "ownerSnapshot": true,
+      "assigneeLink": true,
+      "otherStaffCannotCreate": true,
+      "noOverflow": true
+    },
+    {
+      "width": 1365,
+      "ownerSnapshot": true,
+      "assigneeLink": true,
+      "otherStaffCannotCreate": true,
+      "noOverflow": true
+    }
+  ]
+}

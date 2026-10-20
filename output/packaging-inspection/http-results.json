@@ -1,0 +1,42 @@
+{
+  "tests": [
+    "default off; real DB admin, explicit scoped grants and consent; forged role/client/store denied",
+    "minimal pure read snapshot: packaging only, signed ledger units, valid last count, committed pending arrivals and uncertainty",
+    "store + business day + rule version dedup under concurrency; model drafts cause zero employee notifications",
+    "existing publication rechecks stock staleness and grants; immutable origin cannot be stripped by plan import",
+    "approved task + reminder outbox atomic and idempotent; only assignee can link/fill; only designated reviewer can approve",
+    "lost acknowledgement rolls back task + plan + reminder atomically if outbox persistence fails",
+    "timeout and worker interruption remain uncertain with no blind retry; changed result scope is blocked",
+    "task/count cancellation closes both directions atomically, frees active capacity, preserves history and lets a real backup admin clean invalid work",
+    "full plan capacity rejects before model admission; durable reservation prevents concurrent manual imports stealing the last slot",
+    "pending queue is independent of 400 terminal histories and history display is truly chronological",
+    "200 ordinary tasks block model admission; the 199th-task boundary reserves capacity against manual minutes and plan publication until approval",
+    "published work without a count can be atomically closed by a real backup admin only after invalidation, without private-channel access or stock changes",
+    "revoked session permission, removed membership and disabled policy invalidate approved reminder and legacy count mutation",
+    "no-UI worker and restart dedup drive the complete HTTP approval → inbox reminder → assignee count → designated human acceptance chain"
+  ],
+  "passed": 14,
+  "workerEndToEnd": {
+    "jobId": "12c84c7f-a2da-4a3b-874b-936c9fec3a75",
+    "aiRequestId": "b8abe489-98e7-4184-ac78-97feb08d1ecc",
+    "taskId": "4097ae3b-3555-4478-b7da-6b5778dbdc16",
+    "countId": "cmvga7r9j02gkrv6j6e38u4o4",
+    "reminderId": "324032563b8ba6630779d48ba1e79a63ff85cb2c0417c023342813218ee1124d",
+    "actualChildWorker": true,
+    "uiRequestsDuringGeneration": 0,
+    "gracefulRestart": true,
+    "dailyProviderAdmissions": 1,
+    "approvalViaHttp": true,
+    "employeeInboxViaHttp": true,
+    "employeeReminderRouteAndChannel": true,
+    "assigneeFillAndSubmitViaHttp": true,
+    "separateCountApprovalViaHttp": true,
+    "taskAcceptanceViaHttp": true,
+    "externalPushTested": false
+  },
+  "realModelCalls": 0,
+  "externalNotifications": 0,
+  "productionAccess": false,
+  "credentialsCreated": false,
+  "workerStopped": true
+}

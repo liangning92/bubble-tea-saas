@@ -1,0 +1,40 @@
+{
+  "originalReviewThread": "01a15494-65d0-70a4-a3c4-ac7e933bc0d6",
+  "originalFindings": {
+    "P1": 0,
+    "P2": 2
+  },
+  "additionalSolReviewFindings": {
+    "P1": 0,
+    "P2": 3
+  },
+  "fixes": [
+    "transactional bidirectional cancellation and audited backup-admin cleanup for invalid work",
+    "durable plan capacity reservation counted by manual imports before AI admission; completed history archives preserve original IDs",
+    "independent pending queue index; chronological last-400 history display",
+    "durable task slot reserved before model admission and retained through awaiting approval; ordinary minutes and plan publication count reservations",
+    "published invalid work without a count closes atomically through existing dismiss with real backup-admin audit and no private-channel access"
+  ],
+  "newRegressionGroups": [
+    "task/count cancellation closes both directions atomically, frees active capacity, preserves history and lets a real backup admin clean invalid work",
+    "full plan capacity rejects before model admission; durable reservation prevents concurrent manual imports stealing the last slot",
+    "pending queue is independent of 400 terminal histories and history display is truly chronological",
+    "200 ordinary tasks block paid admission and 199 tasks reserve the final slot against manual minutes and plan publication",
+    "invalid assigned/accepted published work without a count: valid/ordinary/stale actors denied, archive-failure rollback and actual backup identity audited"
+  ],
+  "productionChanged": false,
+  "realModelCalls": 0,
+  "externalNotifications": 0,
+  "followupOriginalReview": {
+    "head": "c3e4fb71c71042d10ab0e340b19ea28af0d9bc73",
+    "P1": 0,
+    "P2": 2,
+    "status": "fixed_in_source_pending_new_head_review"
+  },
+  "latestLocalIsolatedGroups": 14,
+  "postReviewRouteCorrection": {
+    "reason": "Reminder referenced unregistered employee path /team-communication; actual route is /team and existing wrapper consumes channel query",
+    "fix": "/team?channel=<channelId>",
+    "validation": "actual inbox HTTP payload and real route/wrapper contract; no production device click claimed"
+  }
+}

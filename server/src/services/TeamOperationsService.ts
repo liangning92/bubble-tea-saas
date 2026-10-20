@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { TeamActor, TeamTask, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam } from './TeamCommunicationService'
+import { inspectionPlanGuard, inspectionPublished, inspectionReminderState } from './PackagingInspectionGuard'
+import { operationPlanCapacity, operationTaskCapacity, releaseInspectionPlan } from './PackagingInspectionCapacity'
 
 const uuid = z.string().uuid(), staff = z.string().min(1).max(128)
 const instant = z.string().datetime({ offset: true }).refine(v => Number.isFinite(Date.parse(v)))
@@ -19,6 +21,8 @@ export interface OperationPlan {
   createdBy: string; updatedAt: string; approvedBy?: string; approvedAt?: string; approvedRevision?: number
   automaticMessages: false
   memberIds: string[]
+  inspectionId?: string
+  inspectionArchived?: boolean
 }
 const fail = (code: string, status = 409): never => { throw new TeamError(status, code) }
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
@@ -37,12 +41,12 @@ async function admin(db: any, a: TeamActor, id: string) {
 }
 async function get(db: any, a: TeamActor, id: string, pid: string, floor: number): Promise<OperationPlan> {
   uuid.parse(pid)
-  const p = await readTeam<OperationPlan>(db, a.storeId, planKey(id, pid))
+  const p = await readTeam<OperationPlan>(db, a.storeId, planKey(id, pid)) || await readTeam<OperationPlan>(db, a.storeId, `inspection.planArchive.${id}.${pid}`)
   if (!p || !visiblePlan(p, a, floor)) fail('TEAM_PLAN_NOT_FOUND', 404)
   return p
 }
 async function tasksFor(db: any, a: TeamActor, p: OperationPlan): Promise<TeamTask[]> {
-  const tasks = await Promise.all(p.taskIds.map(t => readTeam<TeamTask>(db, a.storeId, `task.${p.channelId}.${t}`)))
+  const tasks = await Promise.all(p.taskIds.map(async t => await readTeam<TeamTask>(db, a.storeId, `task.${p.channelId}.${t}`) || await readTeam<TeamTask>(db, a.storeId, `inspection.taskArchive.${p.channelId}.${t}`)))
   if (tasks.some(t => !t)) fail('TEAM_PLAN_TASK_MISSING')
   return tasks as TeamTask[]
 }
@@ -51,7 +55,8 @@ const open = (t: TeamTask) => !['completed', 'cancelled'].includes(t.status)
 async function publicPlan(db: any, a: TeamActor, p: OperationPlan, floor: number, loaded?: TeamTask[]) {
   const snapshotIds = new Set(p.taskIds)
   const tasks = (loaded || await tasksFor(db, a, p)).filter(t => snapshotIds.has(t.id) && visibleTask(t, a, floor))
-  return { ...p, taskIds: tasks.map(t => t.id) }
+  const inspection = p.inspectionId ? await readTeam(db, a.storeId, 'workflow.inspection.job.' + p.inspectionId) : null
+  return { ...p, taskIds: tasks.map(t => t.id), ...(inspection ? { inspectionSnapshot: inspection.snapshot } : {}) }
 }
 const visibleEscalations = (records: any[], tasks: TeamTask[]) => records.filter(r => tasks.some(t => t.id === r.taskId && t.planRevision === r.revision))
 async function validateMembers(db: any, a: TeamActor, c: any, content: OperationPlan['content']) {
@@ -76,9 +81,11 @@ export function teamOperations(db: any = prisma) {
     async list(a: TeamActor, id: string) {
       const { fromSeq } = await admin(db, a, id)
       const plans = (await rows(db, a.storeId, `operationPlan.${id}.`, 51)).filter((p: OperationPlan) => visiblePlan(p, a, fromSeq))
+      const archived = await db.config.findMany({ where: { storeId: a.storeId, key: { startsWith: `team.communication.inspection.planArchive.${id}.` } }, orderBy: { createdAt: 'desc' }, take: 20 })
+      plans.push(...archived.map((r: any) => JSON.parse(r.value)).filter((p: OperationPlan) => visiblePlan(p, a, fromSeq)))
       return Promise.all(plans.map(p => publicPlan(db, a, p, fromSeq)))
     },
-    async import(a: TeamActor, id: string, input: unknown) {
+    async import(a: TeamActor, id: string, input: unknown, inspectionReservationId?: string) {
       const v = z.object({ requestId: uuid, planId: uuid.optional(), expectedVersion: z.number().int().min(0), content: operationContent }).strict().parse(input)
       return db.$transaction(async (tx: any) => {
         await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(id))
@@ -88,16 +95,18 @@ export function teamOperations(db: any = prisma) {
         const rk = `operationRequest.${a.staffId}.${v.requestId}`, digest = hash({ id, ...v }), repeated = await readTeam(tx, a.storeId, rk)
         if (repeated) { if (repeated.hash !== digest) fail('TEAM_REQUEST_CONFLICT'); return publicPlan(tx, a, await get(tx, a, id, repeated.planId, fromSeq), fromSeq) }
         const previous = v.planId ? await get(tx, a, id, v.planId, fromSeq) : null
+        if (previous?.inspectionId) fail('INSPECTION_DRAFT_IMMUTABLE')
         if ((previous?.version || 0) !== v.expectedVersion) fail('TEAM_VERSION_CONFLICT')
         if (previous?.status === 'published') fail('TEAM_PLAN_PAUSE_BEFORE_REVISION')
         if (previous && (await tasksFor(tx, a, previous)).some(open)) fail('TEAM_PLAN_OPEN_TASKS')
-        if (!previous && (await rows(tx, a.storeId, `operationPlan.${id}.`, 51)).length >= 50) fail('TEAM_PLAN_LIMIT')
+        if (!previous) await operationPlanCapacity(tx, a, id, inspectionReservationId)
         await validateMembers(tx, a, c, v.content)
         const p: OperationPlan = { id: previous?.id || randomUUID(), channelId: id, version: (previous?.version || 0) + 1,
           revision: (previous?.revision || 0) + 1, status: 'draft', content: v.content, audienceHash: hash(c.members),
           fromSeq: c.lastSeq + 1, taskIds: previous?.taskIds || [], createdBy: a.staffId,
           updatedAt: new Date().toISOString(), automaticMessages: false, memberIds: c.members.map((m: any) => m.staffId) }
         await save(tx, a, p, 'operation_import')
+        if (!previous && inspectionReservationId) await releaseInspectionPlan(tx, a.storeId, id, inspectionReservationId)
         await writeTeam(tx, a.storeId, rk, { hash: digest, planId: p.id })
         return publicPlan(tx, a, p, fromSeq)
       })
@@ -113,6 +122,8 @@ export function teamOperations(db: any = prisma) {
         if (repeated) { if (repeated.hash !== digest) fail('TEAM_REQUEST_CONFLICT'); return publicPlan(tx, a, p, fromSeq) }
         if (c.archived) fail('TEAM_CHANNEL_CLOSED')
         if (p.version !== v.expectedVersion) fail('TEAM_VERSION_CONFLICT')
+        if (p.inspectionArchived) fail('INSPECTION_PLAN_ARCHIVED')
+        if (p.inspectionId) await inspectionPlanGuard(tx, a, p, v.action)
         if (v.action === 'pause') {
           if (p.status !== 'published') fail('TEAM_PLAN_TRANSITION')
           p.status = 'paused'
@@ -123,7 +134,7 @@ export function teamOperations(db: any = prisma) {
           await validateMembers(tx, a, c, p.content)
           if (v.action === 'publish') {
             if ((await tasksFor(tx, a, p)).some(open)) fail('TEAM_PLAN_OPEN_TASKS')
-            if ((await rows(tx, a.storeId, `task.${id}.`, 201)).length + p.content.items.length > 200) fail('TEAM_TASK_LIMIT')
+            await operationTaskCapacity(tx, a, id, p.content.items.length, p.inspectionId)
             const at = new Date().toISOString()
             for (const [i, item] of p.content.items.entries()) {
               const task: TeamTask = { id: randomUUID(), channelId: id, roundId: p.id, minuteVersion: p.revision, actionIndex: i,
@@ -142,6 +153,8 @@ export function teamOperations(db: any = prisma) {
         }
         p.version++; p.updatedAt = new Date().toISOString()
         await save(tx, a, p, 'operation_' + v.action)
+        if (p.inspectionId && v.action === 'publish') await inspectionPublished(tx, a, p)
+        if (p.inspectionId && v.action !== 'publish') await inspectionReminderState(tx, a.storeId, p, v.action === 'pause')
         await auditTeam(tx, a, id, 'update', { action: 'operation_decision', planId: pid, note: v.note })
         await writeTeam(tx, a.storeId, rk, { hash: digest, planId: p.id })
         return publicPlan(tx, a, p, fromSeq)

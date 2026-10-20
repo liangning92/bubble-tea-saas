@@ -1,5 +1,11 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
 export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null}> = {
+  "GET /api/team/packaging-inspection/policy": {permission:null,ownerOnly:false,export:false,personal:false},
+  "PUT /api/team/packaging-inspection/policy": {permission:null,ownerOnly:false,export:false,personal:false},
+  "GET /api/team/packaging-inspection/snapshot": {permission:null,ownerOnly:false,export:false,personal:false},
+  "GET /api/team/packaging-inspection/jobs": {permission:null,ownerOnly:false,export:false,personal:false},
+  "POST /api/team/packaging-inspection/jobs/:jobId/dismiss": {permission:null,ownerOnly:false,export:false,personal:false},
+  "POST /api/team/channels/:id/tasks/:taskId/inspection-count": {permission:"personal.messages",ownerOnly:false,export:false,personal:true},
   "GET /api/team/channels/:id/workflow/policy": {permission:null,ownerOnly:false,export:false,personal:false},
   "PUT /api/team/channels/:id/workflow/policy": {permission:null,ownerOnly:false,export:false,personal:false},
   "GET /api/team/channels/:id/workflow/jobs": {permission:null,ownerOnly:false,export:false,personal:false},

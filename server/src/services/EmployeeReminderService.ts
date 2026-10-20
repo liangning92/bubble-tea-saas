@@ -2,6 +2,7 @@ import { assignedStaffAccess } from "./StaffPermissionService";
 import webpush from "web-push";
 import { createHash } from "crypto";
 import prisma from "../config/database";
+import { inspectionReminderRelevant } from './PackagingInspectionGuard';
 import {
   readWork,
   writeWork,
@@ -258,6 +259,7 @@ export async function reminderStillRelevant(
 ) {
   if (r.expiresAt && new Date(r.expiresAt) <= now) return false;
   const [kind, id] = r.event.split(":");
+  if (kind === 'packaging-inspection') return inspectionReminderRelevant(prisma, storeId, r, now);
   if (kind.startsWith("hygiene-")) {
     const task = await prisma.hygieneTask.findFirst({ where: { id, storeId } });
     if (!task || (task.staffId && task.staffId !== r.staffId)) return false;
