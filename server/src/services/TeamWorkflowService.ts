@@ -170,14 +170,22 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         const definition = { ...(routine ? { automaticSend: true, routine } : {}), ...(management ? { automaticSend: true, management } : {}), employeeIds, operatorUserId: a.id, operatorStaffId: a.staffId, audienceHash: hash(c.members), aiConfigVersion: config?.version || 0 }
         const p: WorkflowPolicy = { ...definition, channelId: id, version: (old?.version || 0) + 1, epoch: (old?.epoch || 0) + 1,
           enabled: v.enabled, paused: v.paused, automaticSend: v.automaticSend, consent: true, hash: hash(definition) }
+        const inherited = old?.origin === 'store_default'
+        const resumeManagement = inherited && p.enabled && !p.paused && p.automaticSend && !!p.management
+        if (inherited) {
+          p.origin = old.origin
+          p.defaultsVersion = resumeManagement ? (await readTeam(tx, a.storeId, 'workflow.defaults'))?.version ?? old.defaultsVersion : old.defaultsVersion
+        }
         if (p.automaticSend && p.enabled && !p.paused) {
           if (p.management) await assertManagementAudience(tx, a, c, { ...p, management: p.management })
           else await assertRoutineAudience(tx, a, c, p)
           if (config.region !== 'cn') fail('TEAM_ROUTINE_CN_CONNECTION_REQUIRED')
         }
-        if (old?.origin === 'store_default') {
-          p.origin = old.origin; p.defaultsVersion = old.defaultsVersion
-          await writeTeam(tx,a.storeId,`workflow.exception.${id}`,{mode:v.paused?'paused':v.enabled&&!v.automaticSend?'manual':'disabled',byStaffId:a.staffId,at:new Date().toISOString()})
+        if (inherited) {
+          // A fresh, explicit automatic-management save resumes this channel.
+          // Retain inheritance for an immediate re-pause, with current defaults.
+          await writeTeam(tx, a.storeId, `workflow.exception.${id}`, resumeManagement ? null :
+            {mode:v.paused?'paused':v.enabled&&!v.automaticSend?'manual':'disabled',byStaffId:a.staffId,at:new Date().toISOString()})
         }
         await writeTeam(tx, a.storeId, `workflow.policy.${id}`, p)
         await workflowEvent(tx, a.storeId, id, { policyVersion: p.version, enabled: p.enabled, paused: p.paused }, ports)
