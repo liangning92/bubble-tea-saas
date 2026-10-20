@@ -1,3 +1,5 @@
+import { readWork, writeWork } from './EmployeeWorkspaceStore'
+import { employeeAppAccess } from './EmployeeAppAccess'
 import { validateDocumentReferences } from './TrainingDocumentStore'
 import { validateVideoReferences } from './TrainingVideoStore'
 import { createHash } from 'crypto'
@@ -49,6 +51,73 @@ async function revision(db: any, storeId: string, id: string) {
   if (!row) fail(404, 'TRAINING_REVISION_NOT_FOUND')
   if (Buffer.byteLength(row.value, 'utf8') > LIBRARY_LIMITS.bytes + 8192) fail(500, 'TRAINING_STORED_CONTENT_INVALID')
   return JSON.parse(row.value)
+}
+export type TrainingUpdate = {
+  kind: 'module' | 'checklist'; moduleKey: string; itemKey?: string
+  fingerprint: string; revision: string; generation: string
+}
+// Canonical keys prevent object property order from producing phantom updates.
+// reviewed and editor-only section/question IDs do not change what employees read.
+function contentValue(value: any): any {
+  if (Array.isArray(value)) return value.map(contentValue)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.keys(value).sort().filter(key => key !== 'reviewed' && key !== 'key').map(key => [key, contentValue(value[key])]))
+}
+export function trainingContentFingerprint(kind: 'module' | 'checklist', item: any): string {
+  return createHash('sha256').update(JSON.stringify([kind, item.key, contentValue(item)])).digest('hex')
+}
+export function trainingContentChanges(previous: any, next: any) {
+  const changes: {kind: 'module' | 'checklist'; key: string; fingerprint: string}[] = []
+  for (const [kind, field] of [['module', 'modules'], ['checklist', 'checklists']] as const) {
+    const old = new Map((previous[field] || []).map((item: any) => [item.key, trainingContentFingerprint(kind, item)]))
+    for (const item of next[field] || []) {
+      const fingerprint = trainingContentFingerprint(kind, item)
+      if (old.get(item.key) !== fingerprint) changes.push({kind, key: item.key, fingerprint})
+    }
+  }
+  return changes
+}
+function employeeCanReadTraining(employee: any) {
+  // authenticate uses employeeAppAccess for self-service, regardless of the admin role template.
+  return employee?.status === 'active' && employee.user && ['admin','manager','cashier','staff'].includes(employee.user.role)
+    && employeeAppAccess(employee.user.role).modes['personal.training'] === 'allow'
+}
+/** Recheck the current published item and real recipient before inbox display or push. */
+export async function trainingUpdateRelevant(db: any, storeId: string, reminder: any, staffId: string): Promise<boolean> {
+  const update = reminder?.trainingUpdate as TrainingUpdate | undefined
+  if (!update || reminder.staffId !== staffId || !['module','checklist'].includes(update.kind)) return false
+  const employee = await db.staff.findFirst({where: {id: staffId, storeId, status: 'active'}, include: {user: true}})
+  if (!employeeCanReadTraining(employee) || reminder.userId !== employee.userId) return false
+  const current = await head(db, storeId)
+  if (!current.value?.published) return false
+  const saved = await revision(db, storeId, current.value.published)
+  const field = update.kind === 'module' ? 'modules' : 'checklists'
+  const key = update.kind === 'module' ? update.moduleKey : update.itemKey
+  const item = saved.catalogue[field]?.find((item: any) => item.key === key)
+  return !!item && (update.kind !== 'module' || item.reviewed === true)
+    && trainingContentFingerprint(update.kind, item) === update.fingerprint
+    && reminder.event === 'training-content:' + update.fingerprint
+}
+async function publicationReminders(db: any, actor: Actor, previous: any, next: any, revisionId: string) {
+  const changes = trainingContentChanges(previous, next)
+  if (!changes.length) return
+  const employees = await db.staff.findMany({where: {storeId: actor.storeId, status: 'active'}, include: {user: true}})
+  for (const employee of employees.filter(employeeCanReadTraining)) for (const change of changes) {
+    const event = 'training-content:' + change.fingerprint
+    const id = createHash('sha256').update(`${employee.userId}:${employee.id}:${event}`).digest('hex')
+    const key = `reminder.${employee.id}.${id}`
+    // The publication CAS is the lock: all records share the existing transaction.
+    // Reintroducing identical content keeps the existing per-person read receipt.
+    if (await readWork(actor.storeId, key, db)) continue
+    const trainingUpdate: TrainingUpdate = {kind: change.kind, moduleKey: change.key,
+      ...(change.kind === 'checklist' ? {itemKey: change.key} : {}),
+      fingerprint: change.fingerprint, revision: revisionId, generation: revisionId}
+    const params = new URLSearchParams({tab: change.kind === 'module' ? 'courses' : 'checklists',
+      [change.kind === 'module' ? 'module' : 'item']: change.key, notice: id})
+    await writeWork(actor.storeId, key, {id, staffId: employee.id, userId: employee.userId, event,
+      title: 'Materi pelatihan diperbarui / 培训资料已更新', url: '/training?' + params,
+      trainingUpdate, createdAt: new Date().toISOString(), read: false, status: 'pending'}, db)
+  }
 }
 export async function readTrainingLibrary(actor: Actor) {
   scope(actor)
@@ -119,6 +188,10 @@ export async function writeTrainingLibrary(actor: Actor, kind: 'save' | 'restore
         if (changed.count !== 1) fail(409, 'TRAINING_VERSION_CONFLICT')
       } else {
         await tx.config.create({ data: { storeId: actor.storeId, key: headKey, value: JSON.stringify(next), category: 'training' } })
+      }
+      if (kind === 'publish') {
+        const previous = current.value?.published ? (await revision(tx, actor.storeId, current.value.published)).catalogue : getTrainingLibrary()
+        await publicationReminders(tx, actor, previous, value, data.requestId)
       }
       const metadata = { id: data.requestId, authorId: actor.id, author: actor.phone || actor.id, createdAt: new Date().toISOString(), kind, note: data.note, parent: current.value?.draft || null, restoredFrom: restoreId || null }
       await tx.config.create({ data: { storeId: actor.storeId, key: revisionKey(data.requestId), category: 'training', value: JSON.stringify({ ...metadata, fingerprint, catalogue: value }) } })
