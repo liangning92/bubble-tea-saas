@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ teamManagement:{paths:/(?:TeamManagement|team-management)/i,tests:/team-management/i},
  routineAuto:{paths:/(?:TeamRoutinePolicy|team-routine|staff-routine-auto)/i,tests:/team-routine/i},
 notificationAwareness:{paths:/(?:Notification(?:Inbox|Approval|Awareness)|notification-awareness|notification-queue|server\/src\/(?:services\/(?:EmployeeReminderService|TeamChatReminderService|TeamCommunicationService)|routes\/teamCommunication)\.ts|TrainingLibraryStore|training(?:-admin)?-update-notices|training-admin-notices|trainingNotices|TrainingPage|TrainingListPage|StaffApprovalInbox|StaffApprovalPage|LeaveListPage|LeavePage|OvertimeRequestListPage|OvertimeRequestPage|ShiftSwapListPage|ShiftSwapPage|AttendanceCorrectionListPage|AttendanceCorrectionPage|ReimbursementListPage|ReimbursementPage|EmployeePrivatePages|EmployeeWorkspacePage|HygienePage)/i,tests:/notification-awareness|approval-notices/i},
  chatNotification:{paths:/(?:TeamChatReminderService|team-chat-notification)/i,tests:/team-chat-notification/i},
@@ -70,6 +71,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ teamManagement:{scripts:['tests/stoploss/team-management-defaults-browser-check.cjs','tests/stoploss/team-management-owner-browser-check.cjs','tests/stoploss/team-management-actions-browser-check.cjs'],components:['admin','staff']},
  notificationAwareness:{scripts:['output/notification-awareness-ui-20261020/browser-check.cjs','output/notification-approval-target-ui-20261020/browser-check.cjs','output/notification-admin-approval-race-20261020/browser-check.cjs','tests/stoploss/training-update-notices-page-check.cjs','tests/stoploss/training-admin-notices-page-check.cjs','tests/stoploss/training-notice-content-race-page-check.cjs'],components:['admin','staff']},
  desktop:{scripts:['tests/stoploss/online-update-page-check.cjs'],components:['pos']},
  staffProfiles:{scripts:['tests/stoploss/staff-profile-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
@@ -112,6 +114,9 @@ const httpChecks={
 function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}){
  const all=sources(root),reverse=reverseDependencies(root,all,files),affected=impactedFiles(files,reverse);
  const selectedDomains=Object.entries(domains).filter(([name,rule])=>files.some(file=>rule.paths.test(file)&&(!file.startsWith('tv-android-app/')||name==='tv')&&(name==='ci'||!domains.ci.paths.test(file))&&!(name==='offline'&&(domains.tv.paths.test(file)||/^client-staff\/|staff-offline-login|employee-offline-attendance/.test(file))))).map(([name])=>name);
+ // These shared execution/permission consumers implement the management loop
+ // even when the changed file itself has no TeamManagement filename.
+ if(!selectedDomains.includes('teamManagement')&&['server/src/services/TeamManagementContext.ts','server/src/services/TeamManagementActions.ts','server/src/services/TeamManagementDefaults.ts','server/src/services/TeamWorkflowService.ts','server/src/services/TeamWorkflowQueue.ts','server/src/services/TeamAiService.ts','server/src/services/TeamCommunicationService.ts','server/src/workers/teamWorkflow.ts','server/src/routes/teamCommunication.ts','client-admin/src/pages/settings/TeamWorkflowSettings.tsx'].some(file=>affected.has(file)))selectedDomains.push('teamManagement');
  if(!selectedDomains.includes('routineAuto')&&['server/src/services/TeamRoutinePolicy.ts','tests/stoploss/team-routine-http-check.cjs'].some(file=>affected.has(file)))selectedDomains.push('routineAuto');
  if(!selectedDomains.includes('chatNotification')&&['server/src/services/TeamChatReminderService.ts','server/src/services/EmployeeReminderService.ts','server/src/routes/employeeWorkspace.ts'].some(file=>affected.has(file)))selectedDomains.push('chatNotification');
  const services=new Set(),typecheck=new Set(),i18n=new Set();
@@ -124,7 +129,7 @@ function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}
  const unitTests=all.filter(file=>/^tests\/stoploss\/.*\.test\.cjs$/.test(file)&& (affected.has(file)||selectedDomains.some(domain=>domains[domain].tests.test(path.basename(file)))));
  const auditTests=all.filter(file=>/^server\/audit-tests\/.*\.test\.ts$/.test(file)&& (affected.has(file)||selectedDomains.some(domain=>domains[domain].tests.test(path.basename(file)))));
  const browser=[];
- for(const domain of selectedDomains){const check=browserChecks[domain];if(check&&(check.components.some(component=>typecheck.has(component))||(domain==='tv'&&typecheck.has('api'))))browser.push({domain,...check})}
+ for(const domain of selectedDomains){const check=browserChecks[domain];if(check&&(check.components.some(component=>typecheck.has(component))||(domain==='tv'&&typecheck.has('api'))||(domain==='teamManagement'&&files.some(file=>check.scripts.includes(file)))))browser.push({domain,...check})}
  const http=[...new Set(selectedDomains.flatMap(domain=>httpChecks[domain]||[]))];
  const builds=new Set(typecheck);
  for(const check of browser)for(const component of check.components)builds.add(component);
@@ -134,8 +139,9 @@ function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}
  const electronTypes=files.some(file=>/^client-pos\/(?:electron\/|tsconfig\.electron\.json)/.test(file));
  if(full){for(const service of SERVICES){services.add(service);typecheck.add(service);builds.add(service);if(service!=='api')i18n.add(service)}}
  const order=list=>SERVICES.filter(s=>list.has(s));
+ const teamManagement=selectedDomains.includes('teamManagement');
  const teamCommunication=selectedDomains.includes('teamCommunication'),aiSettings=selectedDomains.includes('aiSettings'),routineAuto=selectedDomains.includes('routineAuto'),chatNotification=selectedDomains.includes('chatNotification'),notificationAwareness=selectedDomains.includes('notificationAwareness');
- return {mode:full?'full':'scoped',files,domains:selectedDomains.sort(),components:order(services),typecheck:order(typecheck),electronTypes,i18n:order(i18n),build:order(builds),unitTests:unitTests.sort(),auditTests:auditTests.sort(),media,inventoryFlow:files.some(file=>/OrderConsumption|EmployeeConsumption|InventoryAlert|InventoryForecast|inventoryFlowUpgrade|audit-flow-tests|check-employee-inventory-flow/.test(file)),http,python,browser,needsDependencies:routineAuto||chatNotification||notificationAwareness||aiSettings||teamCommunication||typecheck.size>0||unitTests.length>0||auditTests.length>0||media||http.length>0||python.length>0,needsServer:routineAuto||chatNotification||notificationAwareness||aiSettings||teamCommunication||typecheck.has('api')||auditTests.length>0||media||http.length>0,needsBrowser:browser.length>0,unmappedCode:files.filter(file=>/^(?:server\/src|client-(?:admin|pos|staff)\/src|shared)\//.test(file)&&!Object.values(domains).some(rule=>rule.paths.test(file))),teamCommunication,aiSettings,routineAuto,chatNotification,notificationAwareness,note:'Unmapped code still receives affected-component type checks. Review the listed tests before confirming a build; full regression is opt-in.'};
+ return {mode:full?'full':'scoped',files,domains:selectedDomains.sort(),components:order(services),typecheck:order(typecheck),electronTypes,i18n:order(i18n),build:order(builds),unitTests:unitTests.sort(),auditTests:auditTests.sort(),media,inventoryFlow:files.some(file=>/OrderConsumption|EmployeeConsumption|InventoryAlert|InventoryForecast|inventoryFlowUpgrade|audit-flow-tests|check-employee-inventory-flow/.test(file)),http,python,browser,needsDependencies:teamManagement||routineAuto||chatNotification||notificationAwareness||aiSettings||teamCommunication||typecheck.size>0||unitTests.length>0||auditTests.length>0||media||http.length>0||python.length>0,needsServer:teamManagement||routineAuto||chatNotification||notificationAwareness||aiSettings||teamCommunication||typecheck.has('api')||auditTests.length>0||media||http.length>0,needsBrowser:browser.length>0,unmappedCode:files.filter(file=>/^(?:server\/src|client-(?:admin|pos|staff)\/src|shared)\//.test(file)&&!Object.values(domains).some(rule=>rule.paths.test(file))),teamCommunication,teamManagement,aiSettings,routineAuto,chatNotification,notificationAwareness,note:'Unmapped code still receives affected-component type checks. Review the listed tests before confirming a build; full regression is opt-in.'};
 }
 function planRange(base,head,{root=process.cwd(),full=false,componentBaselines}={}){
  if(!/^[a-f0-9]{40}$/.test(head||''))throw Error('HEAD_SHA must be a full source SHA');

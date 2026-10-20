@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import prisma from '../config/database'
-import { TeamError, teamCommunication } from './TeamCommunicationService'
+import { TeamError, teamCommunication, readTeam, TEAM_PREFIX } from './TeamCommunicationService'
 import { readWork, writeWork, listWork, workLock } from './EmployeeWorkspaceStore'
 import { reminderStillRelevant } from './EmployeeReminderService'
 import { userAccessV2 } from './StaffPermissionV2Service'
@@ -27,6 +27,45 @@ export async function inboxIdentity(db: any, actor: InboxActor) {
       user.storeId && user.storeId !== actor.storeId || !user.staff && user.role !== 'admin' ||
       actor.staffId && actor.staffId !== user.staff?.id) throw new TeamError(403, 'INBOX_IDENTITY_REQUIRED')
   return { id: user.id, storeId: actor.storeId, staffId: user.staff?.id, role: user.role }
+}
+
+/** Source facts and employee text stay in the owner-only workflow projection. */
+export async function projectManagementOwnerTodos(db: any, a: InboxActor): Promise<InboxItem[]> {
+  if (a.role !== 'admin' || !a.staffId || a.employeeApp === true) return []
+  const owner = await db.user.findFirst({ where: { id: a.id, storeId: a.storeId, role: 'admin', staff: { id: a.staffId, storeId: a.storeId, status: 'active' } }, select: { id: true } })
+  if (!owner) return []
+  const rows = await db.config.findMany({ where: { storeId: a.storeId, key: { startsWith: TEAM_PREFIX + 'workflow.job.' },
+    OR: ['awaiting_owner', 'pending_action', 'blocked', 'uncertain'].map(status => ({ value: { contains: `"status":"${status}"` } })) }, select: { key: true, value: true } })
+  const result: InboxItem[] = []
+  for (const row of rows) {
+    const j = JSON.parse(row.value)
+    if (j.managementUnavailable && j.operatorUserId === a.id && j.operatorStaffId === a.staffId) {
+      const defaults=await readTeam(db,a.storeId,'workflow.defaults')
+      if (defaults?.enabled && defaults.ownerUserId===a.id && defaults.ownerStaffId===a.staffId && defaults.version===j.managementUnavailable.defaultsVersion) {
+        const event=`management-unassigned:${j.id}`,id=digest(`${a.id}:${event}`),marker=await readWork(a.storeId,readKey(a.id,id),db)
+        result.push({id,event,kind:'business_reminder',title:'工作会话缺少可访问负责人 / Penanggung jawab kanal diperlukan',url:'/staff/communication?channel='+encodeURIComponent(j.channelId),adminUrl:'/staff/communication?channel='+encodeURIComponent(j.channelId),read:!!marker,pending:true,createdAt:j.updatedAt,status:j.managementUnavailable.reason,domain:'team_management',objectId:j.id})
+      }
+      continue
+    }
+    if ((!j.management && !j.managementIntake) || !['awaiting_owner', 'pending_action','blocked','uncertain'].includes(j.status) || j.operatorUserId !== a.id || j.operatorStaffId !== a.staffId ||
+      typeof j.channelId !== 'string' || typeof j.id !== 'string' || !Number.isSafeInteger(j.sourceSeq)) continue
+    const [p, c] = await Promise.all([readTeam(db, a.storeId, `workflow.policy.${j.channelId}`), readTeam(db, a.storeId, `channel.${j.channelId}`)])
+    if (!p?.management || p.management.ownerStaffId !== a.staffId || p.operatorUserId !== a.id || p.operatorStaffId !== a.staffId ||
+      c?.archived || (c?.ownerId !== a.staffId && p.origin !== 'store_default') || !['direct','group','public','meeting'].includes(c?.kind) || !Array.isArray(c?.members) || c.members.length < 2 ||
+      p.audienceHash !== digest(JSON.stringify(c.members)) || !Array.isArray(p.employeeIds) || !Array.isArray(p.management.employees) ||
+      p.management.employees.length !== p.employeeIds.length || p.employeeIds.some((id: string) => !p.management.employees.some((e: any) => e.staffId === id)) ||
+      c.members.some((m: any) => m.staffId !== a.staffId && !p.employeeIds.includes(m.staffId)) ||
+      !c.members.some((m: any) => m.staffId === a.staffId) || !c.members.some((m: any) => m.staffId === j.sourceAuthorId) ||
+      (!p.employeeIds?.includes(j.sourceAuthorId) && j.sourceAuthorId!==a.staffId) || c.members.some((m: any) => m.fromSeq > j.sourceSeq) || j.sourceSeq < p.management.sourceFloor) continue
+    const employee = await db.staff.findFirst({ where: { id: j.sourceAuthorId, storeId: a.storeId, status: 'active', user: { storeId: a.storeId } }, select: { id: true } })
+    if (!employee) continue
+    const event = `management:${j.id}:${j.status}`, id = digest(`${a.id}:${event}`)
+    const marker = await readWork(a.storeId, readKey(a.id, id), db)
+    const url = `/staff/communication?channel=${encodeURIComponent(j.channelId)}&workflow=1`
+    result.push({ id, event, kind: 'business_reminder', title: ['blocked','uncertain'].includes(j.status) ? 'AI工作处理异常待复核 / Pemrosesan kerja perlu ditinjau' : j.status === 'awaiting_owner' ? 'AI工作协调待决定 / Keputusan kerja diperlukan' : 'AI工作协调待处理 / Tindak lanjut kerja',
+      url, adminUrl: url, read: !!marker, pending: true, createdAt: j.updatedAt, domain: 'team_management', objectId: j.id, status: j.status })
+  }
+  return result
 }
 
 export function notificationInbox(db: any = prisma, sources?: InboxSources) {
@@ -80,6 +119,7 @@ export function notificationInbox(db: any = prisma, sources?: InboxSources) {
         adminUrl: entry.adminUrl, read: !!marker || existing?.read === true || historical, pending: entry.pending === true,
         createdAt: entry.createdAt, domain: entry.domain, objectId: entry.objectId, status: entry.businessStatus || entry.status })
     }
+    for (const item of await projectManagementOwnerTodos(db, { ...a, employeeApp: actor.employeeApp })) items.set(item.id, item)
     const values = [...items.values()].sort((x, y) => y.createdAt.localeCompare(x.createdAt) || x.id.localeCompare(y.id))
     const chats = channels.map((c: any) => ({ id: c.id, title: c.title, unread: c.unread, preview: c.preview,
       url: `/team?channel=${encodeURIComponent(c.id)}`, adminUrl: `/staff/communication?channel=${encodeURIComponent(c.id)}` }))

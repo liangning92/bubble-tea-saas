@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
+import { assertManagementSend, ManagementAuthorization } from './TeamManagementPolicy'
 import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
@@ -44,7 +45,7 @@ export const createChannelSchema = z.object({
   kind: z.enum(['direct', 'group', 'public', 'meeting']), members: z.array(staffId).min(1).max(100)
 }).strict()
 export const messageSchema = z.object({
-  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional()
+  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional(), takeover: z.boolean().optional()
 }).strict().refine(v => v.text.length > 0 || v.files.length > 0, 'EMPTY_MESSAGE')
 export const minutesSchema = z.object({
   requestId: uuid, expectedVersion: z.number().int().positive(), title: z.string().trim().min(1).max(120),
@@ -205,7 +206,7 @@ export function teamCommunication(db: DB = prisma) {
       return { channel: c, messages, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
         canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), audit: auditReason !== undefined }
     },
-    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization) {
+    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization, managementAuthorization?: ManagementAuthorization) {
       const v = messageSchema.parse(input)
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
@@ -213,10 +214,18 @@ export function teamCommunication(db: DB = prisma) {
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
+        // Serialize the final automatic effect with store revocation, before
+        // acquiring ai-budget (defaults saves use defaults -> ai-budget).
+        if (routineAuthorization || managementAuthorization) {
+          await lock(tx, a.storeId, 'workflow-defaults')
+          const defaults = await read(tx, a.storeId, 'workflow.defaults')
+          if (defaults && !defaults.enabled) fail(409, 'TEAM_WORKFLOW_PAUSED')
+        }
         const policy = await read(tx, a.storeId, `workflow.policy.${id}`)
-        const humanTakeover = !routineAuthorization && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
+        const humanDraftRequiresFreshContext = !routineAuthorization && !managementAuthorization && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId
+        const humanTakeover = !routineAuthorization && !managementAuthorization && (policy?.origin !== 'store_default' || v.takeover === true) && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
         if (humanTakeover && !aiDraftId && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
-        let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; authorizedBy?: string } | undefined
+        let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; managementAuthorization?: ManagementAuthorization; authorizedBy?: string } | undefined
         if (aiDraftId) {
           uuid.parse(aiDraftId)
           if (a.role !== 'admin' || a.employeeApp || v.requestId !== aiDraftId || v.files.length) fail(403, 'TEAM_AI_ADMIN_REQUIRED')
@@ -224,15 +233,18 @@ export function teamCommunication(db: DB = prisma) {
           const draft = await read(tx, a.storeId, `aiDraft.${a.staffId}.${aiDraftId}`)
           const settings = await read(tx, a.storeId, 'ai.settings')
           if (!draft || draft.channelId !== id || draft.status !== 'ready' || draft.kind !== 'draft') fail(409, 'TEAM_AI_DRAFT_NOT_READY')
-          if (humanTakeover && draft.contextLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
+          if (humanDraftRequiresFreshContext && draft.contextLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
           if (!settings?.enabled || settings.version !== draft.configVersion) fail(409, 'TEAM_AI_CONFIG_CHANGED')
           if (c.members.some(member => member.fromSeq > draft.sourceFloor) || digest(c.members) !== draft.audienceHash) fail(403, 'TEAM_AI_AUDIENCE_CHANGED')
           if (draft.operation) await assertOperationScope(tx, a, c, draft.operation)
-          if (routineAuthorization) {
+          if (managementAuthorization) {
+            await assertManagementSend(tx, a, c, draft, managementAuthorization, v.text)
+            ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, managementAuthorization, authorizedBy: a.staffId }
+          } else if (routineAuthorization) {
             await assertRoutineSend(tx, a, c, draft, routineAuthorization, v.text)
             ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, routineAuthorization, authorizedBy: a.staffId }
           } else {
-            if (draft.routineAuthorization) fail(403, 'TEAM_ROUTINE_INTERNAL_SEND_REQUIRED')
+            if (draft.routineAuthorization || draft.managementAuthorization) fail(403, 'TEAM_ROUTINE_INTERNAL_SEND_REQUIRED')
             ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, approvedBy: a.staffId }
           }
         }
@@ -259,8 +271,8 @@ export function teamCommunication(db: DB = prisma) {
         await write(tx, a.storeId, rateKey, [...recent, now])
         if (ai) {
           const key = `aiDraft.${a.staffId}.${aiDraftId}`, draft = await read(tx, a.storeId, key)
-          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, ...(routineAuthorization ? { automaticallySentAt: new Date(now).toISOString() } : { approvedAt: new Date(now).toISOString() }) })
-          await audit(tx, a, id, 'update', { action: routineAuthorization ? 'routine_authorized_send' : 'ai_publish', draftId: aiDraftId, messageId: message.id, ...(routineAuthorization ? { authorization: routineAuthorization } : {}) })
+          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, ...(routineAuthorization || managementAuthorization ? { automaticallySentAt: new Date(now).toISOString() } : { approvedAt: new Date(now).toISOString() }) })
+          await audit(tx, a, id, 'update', { action: managementAuthorization ? 'management_authorized_send' : routineAuthorization ? 'routine_authorized_send' : 'ai_publish', draftId: aiDraftId, messageId: message.id, ...(managementAuthorization || routineAuthorization ? { authorization: managementAuthorization || routineAuthorization } : {}) })
         }
         if (humanTakeover) {
           const takeover = { byStaffId: a.staffId, at: new Date().toISOString(), sourceSeq: message.seq, reason: 'human_message' }

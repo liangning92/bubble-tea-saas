@@ -2,6 +2,10 @@
 export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null}> = {
   "GET /api/staff-work/my/inbox": {permission:"personal.messages",ownerOnly:false,export:false,personal:true},
   "POST /api/staff-work/my/inbox/:id/read": {permission:"personal.messages",ownerOnly:false,export:false,personal:true},
+  "GET /api/team/channels/:id/management/actions": {permission:"personal.messages",ownerOnly:false,export:false,personal:true},
+  "POST /api/team/channels/:id/management/actions/:actionId/actions": {permission:"personal.messages",ownerOnly:false,export:false,personal:true},
+  "GET /api/team/workflow/defaults": {permission:null,ownerOnly:true,export:false,personal:false},
+  "PUT /api/team/workflow/defaults": {permission:null,ownerOnly:true,export:false,personal:false},
   "GET /api/team/channels/:id/workflow/policy": {permission:null,ownerOnly:false,export:false,personal:false},
   "PUT /api/team/channels/:id/workflow/policy": {permission:null,ownerOnly:false,export:false,personal:false},
   "GET /api/team/channels/:id/workflow/jobs": {permission:null,ownerOnly:false,export:false,personal:false},

@@ -4,7 +4,7 @@ test('team communication selects its isolated HTTP regression without unrelated 
  const f=fixture();try{
   f.write('server/src/services/TeamAiService.ts');
   const p=selectScope(['server/src/services/TeamAiService.ts'],f);
-  assert.equal(p.teamCommunication,true);assert.equal(p.aiSettings,true);assert.deepEqual(p.components,['api']);assert.deepEqual(p.domains,['aiSettings','teamCommunication']);assert.deepEqual(p.http,[]);
+  assert.equal(p.teamCommunication,true);assert.equal(p.aiSettings,true);assert.deepEqual(p.components,['api']);assert.deepEqual(p.domains,['aiSettings','teamCommunication','teamManagement']);assert.deepEqual(p.http,[]);
   const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');
   assert.match(runner,/if\(plan\.teamCommunication\).*with-docker-test\.py.*test-team-communication\.py/);
  }finally{f.close()}
@@ -219,5 +219,29 @@ test('notification inbox, publish events and approval sources retain isolated co
   const ui=selectScope(['shared/NotificationAwareness.tsx'],f);
   assert.deepEqual(ui.components,['admin','staff']);assert(ui.browser.some(x=>x.domain==='notificationAwareness'));
   const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');assert.match(runner,/if\(plan\.notificationAwareness\)/);assert(runner.includes('scripts/test-notification-awareness.py'));assert(runner.includes('scripts/test-training-update-notices.py'));assert(runner.includes('scripts/test-approval-notices.py'));
+ }finally{f.close()}
+});
+
+test('management HTTP/action fixtures and context-only edits retain dependencies and isolated server execution',()=>{
+ const f=fixture();try{
+  for(const file of ['tests/stoploss/team-management-http-check.cjs','tests/stoploss/team-management-actions-pg.cjs','tests/stoploss/team-management-actions-pg.py','server/src/services/TeamManagementContext.ts','server/src/services/TeamManagementActions.ts']){
+   f.write(file);const p=selectScope([file],f);assert(p.teamManagement,file);assert(p.needsDependencies,file);assert(p.needsServer,file);assert.equal(p.mode,'scoped');assert(!p.components.includes('pos'));assert.equal(p.browser.length,0);
+   if(file.startsWith('tests/')){assert.deepEqual(p.components,[]);assert.deepEqual(p.typecheck,[]);assert.deepEqual(p.build,[])}
+  }
+  const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');assert.match(runner,/if\(plan\.teamManagement\).*with-docker-test\.py.*--management-loop.*with-docker-test\.py.*team-management-actions-pg\.py/);
+ }finally{f.close()}
+});
+test('management shared execution and permission consumers select its HTTP contract without POS',()=>{
+ const f=fixture();try{
+  for(const file of ['server/src/services/TeamWorkflowService.ts','server/src/services/TeamWorkflowQueue.ts','server/src/services/TeamAiService.ts','server/src/services/TeamCommunicationService.ts','server/src/workers/teamWorkflow.ts','server/src/routes/teamCommunication.ts']){
+   f.write(file);const p=selectScope([file],f);assert(p.teamManagement,file);assert(p.needsDependencies);assert(p.needsServer);assert(!p.components.includes('pos'));assert.equal(p.browser.length,0);
+  }
+ }finally{f.close()}
+});
+test('management browser-only fixture changes run the actual browser consumers without service images',()=>{
+ const f=fixture();try{
+  for(const file of ['tests/stoploss/team-management-defaults-browser-check.cjs','tests/stoploss/team-management-owner-browser-check.cjs','tests/stoploss/team-management-actions-browser-check.cjs']){
+   f.write(file);const p=selectScope([file],f);assert(p.teamManagement,file);assert(p.needsDependencies);assert(p.needsServer);assert(p.needsBrowser);assert(p.browser.some(c=>c.domain==='teamManagement'));assert.deepEqual(p.build,['admin','staff']);assert.deepEqual(p.components,[]);assert.equal(p.mode,'scoped');
+  }
  }finally{f.close()}
 });

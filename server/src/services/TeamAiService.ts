@@ -3,6 +3,8 @@ import fs from 'fs/promises'
 import path from 'path'
 import { z } from 'zod'
 import prisma from '../config/database'
+import { managementContext } from './TeamManagementContext'
+import { managementInstruction, managementResultSchema } from './TeamManagementPolicy'
 import { routineContext, routineReplySchema } from './TeamRoutinePolicy'
 import { readProviderDiagnostics, visibleProviderDiagnostics, ProviderDiagnostics } from './TeamAiDiagnostics'
 import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam, assertOperationScope } from './TeamCommunicationService'
@@ -75,7 +77,7 @@ async function minimax(key: string, model: string, system: string, input: string
   return { text: choice?.message?.content, inputTokens: result.usage?.prompt_tokens,
     outputTokens: result.usage?.completion_tokens, providerRequestId: typeof result.id === 'string' ? result.id.slice(0, 160) : '' }
 }
-const generationSchema = z.object({ requestId: uuid, kind: z.enum(['translate', 'draft', 'report', 'workflow', 'routine']), consent: z.literal(true),
+const generationSchema = z.object({ requestId: uuid, kind: z.enum(['translate', 'draft', 'report', 'workflow', 'routine', 'management']), consent: z.literal(true),
   sourceSeq: z.array(z.number().int().positive()).max(20), instruction: z.string().trim().max(1500).default(''),
   operation: z.object({ planId: uuid, taskId: uuid, planVersion: z.number().int().positive(), taskVersion: z.number().int().positive(),
     purpose: z.enum(['explain', 'followup', 'remind']) }).strict().optional() }).strict()
@@ -167,6 +169,7 @@ const instructions = {
   translate: 'Translate the selected Indonesian or English work messages into clear Chinese. Preserve numbers, dates, names, negation and message numbers. Flag ambiguities. Do not invent content.',
   draft: 'Draft one concise Indonesian work message following the Chinese instruction. Preserve quantities and deadlines. If important information is missing, ask for clarification. Do not claim the employee has agreed or completed anything.',
   report: 'Write a concise Chinese draft report with sections 员工陈述、已有证据、仍待核实、建议下一步. Distinguish statements from verified evidence. Cite the supplied #message numbers for each factual item. Never claim a photo was reviewed: no attachments are provided.',
+  management: managementInstruction,
   routine: 'Return only JSON {"replyCode":"acknowledge"|"progress"|"evidence"|"clarify"|"supervisor"}. Select one fixed reply for these canonical routine status codes. A reported completion is unverified. Use clarify to ask which task and obstacle when work is reported not done, supervisor for guidance requests, progress for ongoing work, evidence for reported completion, acknowledge for acknowledgements. No text, tools, tasks or business actions.',
   workflow: 'Return only a JSON object with replyText (concise Indonesian draft), summaryZh (Chinese unverified employee statement with supplied #message citation), suggestedTask (null or {category: communication|training|inspection, text, evidenceRequired, acceptanceCriteria}), exceptions (array of Chinese strings). All fields required. Suggest only clarification, training or inspection for the source employee. Do not assign dates or people. Never approve evidence or infer completion. No attachments were reviewed. Flag financial, refund, salary, discipline or unclear requests in exceptions and set suggestedTask to null. All replies and tasks require human approval; never claim an action was performed.'
 }
@@ -271,9 +274,9 @@ export function teamAi(db: any = prisma, transport: Transport = minimax, resolve
     },
     async generate(a: TeamActor, id: string, input: unknown, guard?: (tx: any) => Promise<void>) {
       admin(a); const v = generationSchema.parse(input), source = [...new Set(v.sourceSeq)].sort((a, b) => a - b)
-      if (['workflow', 'routine'].includes(v.kind) && !guard) denied('TEAM_WORKFLOW_GUARD_REQUIRED')
+      if (['workflow', 'routine', 'management'].includes(v.kind) && !guard) denied('TEAM_WORKFLOW_GUARD_REQUIRED')
       if (v.operation ? v.kind !== 'draft' || !!v.instruction || source.length > 0 : v.kind !== 'draft' && !source.length || v.kind === 'draft' && !v.instruction) denied('TEAM_AI_INPUT_REQUIRED', 400)
-      if (v.kind === 'routine' && (source.length !== 1 || v.instruction || v.operation)) denied('TEAM_ROUTINE_INPUT_REQUIRED', 400)
+      if (['routine', 'management'].includes(v.kind) && (source.length !== 1 || v.instruction || v.operation)) denied('TEAM_ROUTINE_INPUT_REQUIRED', 400)
       const key = `aiDraft.${a.staffId}.${v.requestId}`, hash = createHash('sha256').update(JSON.stringify({ id, ...v, sourceSeq: source })).digest('hex')
       const prepared = await db.$transaction(async tx => {
         await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(id))
@@ -289,13 +292,15 @@ export function teamAi(db: any = prisma, transport: Transport = minimax, resolve
           return denied(previous.status === 'pending' ? 'TEAM_AI_PENDING' : 'TEAM_AI_NEW_REQUEST_REQUIRED', 409)
         }
         const lines: string[] = []
-        for (const n of v.kind === 'routine' ? [] : source) {
+        for (const n of ['routine', 'management'].includes(v.kind) ? [] : source) {
           if (n < fromSeq) denied('TEAM_SOURCE_RANGE', 400)
           const m = await readTeam(tx, a.storeId, `message.${id}.${String(n).padStart(12, '0')}`)
           if (!m) denied('TEAM_SOURCE_RANGE', 400)
           lines.push(`#${n}: ${m.text}`)
         }
-        const text = v.kind === 'routine' ? await routineContext(tx, a, c, await readTeam(tx, a.storeId, `workflow.policy.${id}`), source[0]) : scoped ? JSON.stringify({ purpose: v.operation!.purpose,
+        const job = v.kind === 'management' ? await readTeam(tx, a.storeId, `workflow.job.${id}.${String(source[0]).padStart(12, '0')}`) : null
+        const management = v.kind === 'management' ? await managementContext(tx, a, c, await readTeam(tx, a.storeId, `workflow.policy.${id}`), source[0], job?.ownerDecision?.at, job?.ownerDecision?.contextLastSeq) : null
+        const text = management ? JSON.stringify({ schema: 'team.management.v1', sourceMessage: source[0], ...management.context, ...(job?.ownerDecision ? {ownerDecision: job.ownerDecision.text} : {}) }) : v.kind === 'routine' ? await routineContext(tx, a, c, await readTeam(tx, a.storeId, `workflow.policy.${id}`), source[0]) : scoped ? JSON.stringify({ purpose: v.operation!.purpose,
           approvedTask: { text: scoped.t.text, deadlineAt: scoped.t.deadlineAt, acceptByAt: scoped.t.acceptByAt,
             evidenceRequired: scoped.t.evidenceRequired, acceptanceCriteria: scoped.t.acceptanceCriteria, status: scoped.t.status },
           instruction: 'Only explain, ask for progress or remind about this approved task in Indonesian. Do not add tasks, alter deadlines, infer completion, approve evidence, contact other people or operate business data. Use the explicit timezone offset in the deadline. No employee messages or attachments are supplied.'
@@ -305,15 +310,15 @@ export function teamAi(db: any = prisma, transport: Transport = minimax, resolve
         const config: Settings = { ...defaults(), ...await readTeam(tx, a.storeId, 'ai.settings') }
         if (guard) await guard(tx)
         if (!config.enabled || !config.secret) denied('TEAM_AI_NOT_CONFIGURED', 409)
-        if (v.kind === 'routine' && config.region !== 'cn') denied('TEAM_ROUTINE_CN_REQUIRED', 409)
-        const reservation = await reserveUsage(tx, a.storeId, config, text, v.kind === 'routine' ? id : undefined)
+        if (['routine', 'management'].includes(v.kind) && config.region !== 'cn') denied('TEAM_ROUTINE_CN_REQUIRED', 409)
+        const reservation = await reserveUsage(tx, a.storeId, config, text, ['routine', 'management'].includes(v.kind) ? id : undefined)
         const draft = { id: v.requestId, channelId: id, contextLastSeq: c.lastSeq, ownerId: a.staffId, kind: v.kind, sourceSeq: source,
           sourceFloor: source[0] ?? c.lastSeq + 1, audienceHash: createHash('sha256').update(JSON.stringify(c.members)).digest('hex'),
           model: config.model, region: config.region, configVersion: config.version, status: 'pending',
-          text: '', createdAt: new Date().toISOString(), modelStartedAt: null as string | null, modelCompletedAt: null as string | null, inputHash: hash, ...(v.operation ? { operation: v.operation } : {}) }
+          ...(management ? { managementFactsFingerprint: management.factsFingerprint, managementKnownFacts:[...management.context.inventory.map((r:any)=>`系统库存快照 ${r.name}: ${r.systemStockSnapshot} ${r.unit}（不是已核实实盘）`),...management.context.receipts.map((r:any)=>`收货记录 ${r.orderId}: ${r.orderStatus}; 已收 ${r.receivedQuantity}`),...management.context.tasks.map((r:any)=>`已指派任务 ${r.id}: ${r.text}; 状态 ${r.status}`)].slice(0,20) } : {}), text: '', createdAt: new Date().toISOString(), modelStartedAt: null as string | null, modelCompletedAt: null as string | null, inputHash: hash, ...(v.operation ? { operation: v.operation } : {}) }
         await writeTeam(tx, a.storeId, key, draft)
         await auditTeam(tx, a, id, 'create', { action: 'ai_call', requestId: v.requestId, model: config.model, region: config.region, endpoint: endpoint(config.region), sourceSeq: source, kind: v.kind })
-        return { config, text, ...reservation, draft }
+        return { config, text, ...reservation, draft, allowedSourceSeq: management ? management.context.messages.map(m => m.seq) : source }
       })
       if (prepared.previous) return readDraft(a, id, v.requestId)
       let outcome: TeamAiResult
@@ -326,7 +331,8 @@ export function teamAi(db: any = prisma, transport: Transport = minimax, resolve
         prepared.draft.modelCompletedAt = new Date().toISOString()
         if (!validResult(outcome, prepared)) denied('TEAM_AI_INVALID_RESULT', 502)
         if (v.kind === 'routine') routineReplySchema.parse(JSON.parse(outcome.text))
-        for (const m of outcome.text.matchAll(/#(\d+)/g)) if (!source.includes(Number(m[1]))) denied('TEAM_AI_INVALID_SOURCE', 502)
+        if (v.kind === 'management') managementResultSchema.parse(JSON.parse(outcome.text))
+        for (const m of outcome.text.matchAll(/#(\d+)/g)) if (!prepared.allowedSourceSeq.includes(Number(m[1]))) denied('TEAM_AI_INVALID_SOURCE', 502)
       } catch (e) {
         // A timeout/rejected result may still be billed. Keep its reservation and never auto-retry.
         await writeTeam(db, a.storeId, key, { ...prepared.draft, status: 'uncertain', error: e instanceof TeamError ? e.message : 'TEAM_AI_PROVIDER_UNAVAILABLE',

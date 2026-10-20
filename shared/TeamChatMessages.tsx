@@ -3,7 +3,7 @@ import { TeamAttachment } from './TeamAttachment'
 import { teamWorkCopy } from './teamWorkCopy'
 import { teamChatCopy } from './teamChatCopy'
 import type { TeamClient } from './TeamCommunication'
-export interface TeamMessageAi { provider?: string; model: string; approvedBy?: string; authorizedBy?: string; routineAuthorization?: { jobId: string; sourceSeq: number; policyHash: string; policyVersion: number; epoch: number; replyCode: string } }
+export interface TeamMessageAi { provider?: string; model: string; approvedBy?: string; authorizedBy?: string; managementAuthorization?: { jobId: string; sourceSeq: number }; routineAuthorization?: { jobId: string; sourceSeq: number; policyHash: string; policyVersion: number; epoch: number; replyCode: string } }
 interface ChatMessage { id: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: TeamMessageAi }
 export type TeamScrollPositions = Map<string, { top: number; bottom: boolean }>
 export function TeamChatMessages({ messages, client, staffId, channelId, query, language, children, scrollPositions, historyReady = true, historyFailed = false }: {
@@ -65,7 +65,7 @@ export function TeamChatMessages({ messages, client, staffId, channelId, query, 
     <article id={`team-message-${message.seq}`} className={`team-bubble ${message.authorId === staffId ? 'team-bubble-own' : 'team-bubble-other'}`}>
      <p className="team-message-author">{message.authorName}</p>
      {message.text && <p className="team-message-text">{message.text}</p>}
-     {message.ai && <p className="team-ai-label">{message.ai.routineAuthorization ? work.aiRoutine : work.aiApproved} · {message.ai.model}</p>}
+     {message.ai && <p className="team-ai-label">{(message.ai.routineAuthorization || message.ai.managementAuthorization) ? work.aiRoutine : work.aiApproved} · {message.ai.model}</p>}
      {message.files.map(id => <TeamAttachment key={id} client={client} language={language} url={`/team/channels/${channelId}/files/${id}${query}`} />)}
      <div className="team-message-meta"><a href={`#team-message-${message.seq}`} aria-label={`#${message.seq}`}>#{message.seq}</a><time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}</time>{message.authorId === staffId && <span aria-label={copy.sent} title={copy.sent}>✓</span>}</div>
     </article>

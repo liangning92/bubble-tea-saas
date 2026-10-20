@@ -7,6 +7,7 @@ let failSave=false,checkMode='ok',writes=0,checks=0,legacyReads=0;const passed=[
 const app=express();app.use(express.json());
 app.all('/api/*',(req,res)=>{
  const ok=data=>res.json({code:200,data});
+ if(req.path==='/api/team/workflow/defaults'&&req.method==='GET')return ok({version:0,enabled:false,ownerStaffId:null});
  if(req.path==='/api/team/ai/settings'&&req.method==='GET')return ok(state);
  if(req.path==='/api/team/ai/settings'&&req.method==='PUT'){
   writes++;if(failSave){failSave=false;return res.status(503).json({code:503,message:'TEAM_OPERATION_FAILED'})}
@@ -78,17 +79,17 @@ let server,browser;async function pass(name,fn){await fn();passed.push(name);con
  await context.close();
  state={...state,model:'MiniMax-M3',keyConfigured:true,enabled:true,connection:null};fs.mkdirSync(out+'/screenshots/verified',{recursive:true});
  for(const language of ['zh','id','en'])for(const [label,viewport]of [['desktop',{width:1440,height:1000}],['phone',{width:390,height:844}],...(language==='zh'?[['tablet',{width:768,height:1024}]]:[])]){
-  await pass(language+' '+label+' actual built page: three actionable areas without static introductions or horizontal overflow',async()=>{
+  await pass(language+' '+label+' actual built page: four actionable areas without static introductions or horizontal overflow',async()=>{
    const {page,context}=await open(language,viewport),main=page.getByTestId('ai-settings-page'),area=page.getByTestId('team-ai-settings');
-   assert.equal(await main.locator('section').count(),3);assert.equal(await area.locator('section').count(),2);
+   assert.equal(await main.locator('section').count(),4);assert.equal(await area.locator('section').count(),2);
    assert.equal(await main.locator('#ai-capabilities, #ai-boundaries').count(),0);
    assert.equal(await main.getByText(({zh:'查看原有权限草稿',id:'Lihat draf izin tersimpan',en:'Previously saved permission draft'})[language],{exact:true}).count(),0);
    assert.equal(await main.locator('h4, dl').count(),0,'removed static capability cards and approval table must not be rendered');
    assert.equal(await area.locator('select').count(),1);assert.equal(await area.getByRole('checkbox').count(),2);
-   const headings=({zh:['模型连接','连接状态与费用','员工来信处理许可'],id:['Koneksi model','Status koneksi dan biaya','Izin pemrosesan pesan pegawai'],en:['Model connection','Connection status and costs','Incoming employee-message permissions']})[language];
+   const headings=({zh:['模型连接','连接状态与费用','员工来信处理许可','门店团队工作自动处理'],id:['Koneksi model','Status koneksi dan biaya','Izin pemrosesan pesan pegawai','Koordinasi kerja toko'],en:['Model connection','Connection status and costs','Incoming employee-message permissions','Store work coordination']})[language];
    assert.deepEqual(await main.locator('section > h3, section > div > h3').allTextContents(),headings);
    const box=await area.boundingBox();assert(box.width<=viewport.width);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
-   for(let index=0;index<3;index++){
+   for(let index=0;index<headings.length;index++){
     const heading=main.getByRole('heading',{name:headings[index],exact:true});await heading.evaluate(element=>element.scrollIntoView({block:'center',behavior:'instant'}));const visible=await heading.boundingBox();assert(visible.y>=0&&visible.y+visible.height<=viewport.height);
     await page.screenshot({path:out+'/screenshots/verified/'+language+'-'+label+'-'+(index+1)+'.png'});
    }
