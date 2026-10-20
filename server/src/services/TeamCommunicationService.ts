@@ -32,6 +32,8 @@ export interface TeamTask {
   events: { action: string; by: string; at: string; note: string; sourceSeq: number[]; criteriaConfirmed?: boolean }[]
   planId?: string; planRevision?: number; reviewerId?: string; acceptByAt?: string; deadlineAt?: string
   evidenceRequired?: string; acceptanceCriteria?: string; audienceIds?: string[]
+  /** Independent execution principal; mutations use the agent task service exclusively. */
+  agentTask?: import('./agentTasks/contract').AgentTaskState
 }
 export class TeamError extends Error {
   constructor(public status: number, message: string) { super(message) }
@@ -413,7 +415,7 @@ export function teamCommunication(db: DB = prisma) {
     async tasks(a: TeamActor, id: string, auditReason?: string) {
       const { c, fromSeq } = await channel(db, a, id, auditReason)
       const plans = new Map<string, any>()
-      const tasks = (await list(db, a.storeId, `task.${id}.`, 201)).filter((t: TeamTask) => t.fromSeq >= fromSeq && (!t.planId || auditReason !== undefined || t.audienceIds?.includes(a.staffId)))
+      const tasks = (await list(db, a.storeId, `task.${id}.`, 201)).filter((t: TeamTask) => !t.agentTask && t.fromSeq >= fromSeq && (!t.planId || auditReason !== undefined || t.audienceIds?.includes(a.staffId)))
       for (const t of tasks) if (t.planId && !plans.has(t.planId)) plans.set(t.planId, await read(db, a.storeId, `operationPlan.${id}.${t.planId}`))
       return tasks.map(t => ({ ...t, ...(t.planId ? { planPaused: plans.get(t.planId)?.status !== 'published' || plans.get(t.planId)?.revision !== t.planRevision || plans.get(t.planId)?.audienceHash !== digest(c.members) } : {}) }))
         .sort((a: TeamTask, b: TeamTask) => b.createdAt.localeCompare(a.createdAt))
@@ -466,6 +468,7 @@ export function teamCommunication(db: DB = prisma) {
         const { c, fromSeq } = await channel(tx, a, id)
         const key = `task.${id}.${taskId}`, task: TeamTask = await read(tx, a.storeId, key)
         if (!task || task.fromSeq < fromSeq || task.planId && !task.audienceIds?.includes(a.staffId)) fail(404, 'TEAM_TASK_NOT_FOUND')
+        if (task.agentTask) fail(403, 'TEAM_AGENT_TASK_PRINCIPAL_REQUIRED')
         const { criteriaConfirmed, ...legacyInput } = v
         const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, taskId, ...legacyInput, ...(criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
         const old = await read(tx, a.storeId, requestKey)

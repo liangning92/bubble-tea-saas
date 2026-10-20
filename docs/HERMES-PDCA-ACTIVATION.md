@@ -1,0 +1,79 @@
+# STOCK-RO-001 real connection preparation — no activation performed
+
+## Current checkpoint (supersedes the original preparation notes below)
+
+The user approved the bounded real-access operation package. Implementation still
+must pass its new review/CI gate before any real activation. Backend checkpoint
+`2ddee56f` now includes default-closed production bindings, endpoint mounting,
+existing-process recovery scheduling, an absolute T0+24h anchor and a restricted
+server-side model relay. See `AGENT-PILOT-HOST.md` for its synthetic verification
+and limits. The dedicated Hermes broker/launcher and complete gateway composition
+are subsequent work, not part of that backend checkpoint.
+
+The selected identity topology is one Keycloak container plus a dedicated
+identity-only PostgreSQL container/volume on the existing Mac, without business DB
+grants. Proposed limits are 1 CPU/1 GiB for Keycloak and 0.5 CPU/512 MiB for its DB;
+these consume additional host resources and capacity is not yet measured. Both Mac
+and Docker were read-only confirmed x86_64. The selected official Keycloak amd64
+image was already exercised in a temporary real synthetic compatibility proof;
+that proof also validated S256 PKCE, client credentials, the strict JWT profile and
+wrong-resource rejection at the token exchange. All proof resources were removed.
+It did not establish actual dot connection or production HTTPS.
+
+Only `api.aicube.online` is selected, with paths listed in `AGENT-PILOT-HOST.md`.
+Hermes stays loopback-only. The Docker-to-Mac host route was separately tested with
+a temporary synthetic HTTP service; no real gateway bearer was used. Platform
+OAuth redirect and Events callback/signing material must come from the actual
+private-plugin connection flow. No available tool in this thread creates that
+private plugin; no actual platform entry or callback has been verified yet.
+
+No real AS/profile/credentials/routes/subscription/model request has been created
+at this checkpoint. The following original notes retain their historical planning
+context; statements that a relay or isolated AS proof was not implemented/run are
+superseded by this checkpoint, not evidence of real activation.
+
+Recommendation: one protected private MCP resource on the existing API HTTPS origin, two independent principals, one dedicated local Hermes profile and one task-scoped Events subscription. Keep the Hermes run API loopback-only; no public Hermes port is proposed. API-container access through Docker Desktop's host route must first be tested in isolation; loopback reachability from another network namespace is not assumed. Reuse existing task/audit structures. Do not reuse employee sessions or the private/default Hermes profile.
+
+The proposed resource is `https://api.aicube.online/mcp/agent-tasks`; the proposed authorization prefix is `https://api.aicube.online/identity/`, with realm `store-agents`. Existing API HTTPS routing serves MCP; a higher-priority `/identity/` path rule would route to the new local authorization service. This changes the existing Tunnel configuration and requires operational authorization. No new public hostname is proposed. Start the first real task authorization and task-scoped event subscription with a **24-hour** expiry.
+
+The recommended image is the official `quay.io/keycloak/keycloak:26.8.1`. A read-only registry manifest check confirmed amd64 and arm64 images; no image was pulled or run. Propose one new Keycloak container on the existing Mac Docker host, initially bounded to one CPU/1 GiB RAM for isolated capacity validation, plus a dedicated database/least-privilege role in the existing PostgreSQL service. This does not grant Keycloak access to business tables. Persistent identity data and its backup remain separate from the inventory/task data. Capacity is proposed, not measured.
+
+## Confirmed gap and selected authentication path
+
+The current MCP code is a resource server with RS256 access-token verification and metadata. It has no authorization/token/refresh/client-registration service. The existing employee HMAC login token does not meet this external resource contract.
+
+Recommended authorization-server implementation for a compatibility proof is self-hosted Keycloak **26.8.1**, one dedicated realm and two explicitly preregistered clients: public authorization code + S256 PKCE for dot, confidential client credentials for the independent Hermes executor. Use exact redirect URIs and disable open/dynamic enrollment. This is a new identity service and persistent access, not an already authorized production component. First prove the complete authorization flow using synthetic users and an isolated resource before creating any real identities. This proof has not run yet.
+
+Read-only upstream source review confirms native client attributes `access.token.signed.response.alg=RS256` and `access.token.header.type.rfc9068=true` produce the required access-token header without accepting ID tokens. Configure the native subject and audience mappers, and a separate access-token-only `client_id` hardcoded claim for each registered client; native `azp` is not `client_id`. See [token header/signing implementation](https://github.com/keycloak/keycloak/blob/26.8.1/services/src/main/java/org/keycloak/jose/jws/DefaultTokenManager.java), [configuration constants](https://github.com/keycloak/keycloak/blob/26.8.1/server-spi-private/src/main/java/org/keycloak/protocol/oidc/OIDCConfigAttributes.java), and [claim mapper](https://github.com/keycloak/keycloak/blob/26.8.1/services/src/main/java/org/keycloak/protocol/oidc/mappers/HardcodedClaim.java). Header `typ=at+jwt`, payload `typ=Bearer`, and OAuth `token_type=Bearer` are distinct. Source feasibility is not successful AS/client interoperability.
+
+Do not assume automatic client discovery works: the [current Keycloak MCP guide](https://www.keycloak.org/securing-apps/mcp-authz-server) explicitly describes ChatGPT CIMD incompatibility and marks newer MCP resource-indicator support experimental. Use preregistration, test actual dot client behavior, and stop if it still requires unsupported metadata. Prove the actual access-token header/claims satisfy the existing strict `at+jwt`, RS256, exact audience, issuer, scope and client-binding verifier; do not weaken token verification to make a login token pass. No third-party account, experimental feature or production identity configuration has been created.
+
+The isolated AS proof must also validate RFC 8707 `resource` consistency in both authorization and token requests, wrong-resource rejection, wrong-PKCE rejection, role/scope separation and fresh backend grant revocation. This requires evaluating Keycloak's `resource-indicators` feature in isolation; static `aud` alone does not prove request resource binding. The verifier currently uses a configured public key rather than automatic JWKS rotation or live AS revocation checks; define key rotation explicitly and do not claim logout instantly invalidates every locally verified JWT.
+
+## Proposed one-time operational authorization package
+
+| Operation | Data and recipient | Purpose and revocation |
+| --- | --- | --- |
+| Add the authorization service, protected MCP path and HTTPS routing on the existing deployment | Authentication metadata; credentials stay server-side or in the designated client credential store | Permit authenticated tool access. Disable the route/realm or revoke clients to stop it. This adds a running component and requires explicit operational authorization. |
+| Provision dot manager binding | Current store, designated channel, STOCK-RO-001 only; `management.assign/read/review` | Plan, read immutable evidence/report and accept/rework. Revoke the binding or increment grant/client revision. |
+| Provision Hermes executor binding and dedicated profile | Same task/store/channel; `executor.claim/evidence/report`; task reads use claim scope | Perform D only. No employee messaging, inventory writes or manager review. Revoke binding/token and stop dedicated profile/run service. |
+| Configure local Hermes run-API bearer and backend transport | Non-secret task/run/event references in dispatch; task context only through authorized MCP tools | Backend admission. Bind target and authentication generation to the persisted request; unknown results cannot be replayed after rotation. Rotate/revoke bearer and stop the loopback listener. |
+| Install/connect one private dot plugin and create one finite-TTL task subscription | Report-ready/blocked/failed payloads contain only IDs and versions; HTTPS callback and signing secret come from subscribe | Wake the designated dot to reread authoritative results. Unsubscribe, revoke manager binding or let TTL expire. Callback 2xx is receipt, not task acceptance. |
+| Configure encrypted subscription storage key | No business payload in key; kept in server secret storage | Protect callback signing material at rest. Revoke subscriptions before retiring the key. No secret has been generated. |
+
+Only necessary inventory names, units, ledger quantities, source times, ledger boundaries and existing physical-count evidence enter this task. The raw report and evidence are readable only through the assigned manager/executor bindings. The model recipient is the existing authorized China MiniMax service through Hermes; dot receives the same task evidence for C/A. No wages, identity documents, health data, private chats or employee messages are included. The first real trial does not contact employees.
+
+Existing Docker/Postgres, HTTPS/tunnel infrastructure, task database and authorized MiniMax relationship can be reused as foundations. The reusable model configuration is the already verified server-side China MiniMax **V5 / MiniMax-M3.1-Flash** configuration. Its encrypted secret cannot simply be put in the dedicated Hermes profile under the current no-copy instruction. Recommend a restricted authenticated server-side model relay, retaining provider credentials in the existing backend, with the dedicated Hermes profile calling that relay. Such a relay has **not been implemented or tested** in this candidate. Its task authorization, provider compatibility, low reasoning setting and uncertain-request/retry handling are prerequisites for the real model trial, not completed wiring. Do not read/export the provider secret to solve this gap.
+
+No new paid service has been ordered. Keycloak would consume existing host resources; platform/model use may consume existing subscription allowances. The user's MiniMax subscription billing and actual Hermes compatibility are unverified, so no per-token rate, extra charge, free usage or output limit is asserted. No model output cap is introduced by this pilot.
+
+## Required evidence before real enablement
+
+1. Finish the transport fixes for real `started` responses and authentication-scoped idempotency; independently review the exact replacement commit.
+2. Complete the isolated MCP six-tool → business service → fake Hermes admission → durable Events → manager rework → second report → acceptance chain. Mark auth/transport/report fixtures as simulated.
+   Use `createAgentTaskRuntime` as the service composition: native transaction commit precedes dispatch/callback delivery. Do not mount the unwrapped native service and then claim automatic handoff. The recovery hook drains existing authorized outbox events; production scheduling/hosting must be wired explicitly during authorized activation.
+3. Prove the selected authorization server against the actual client protocol with synthetic identities, including grant revocation, audience/token separation and PKCE. No real stock or credentials for this step.
+4. Present the exact bounded operations above to root for a single real-access authorization decision, including the new identity component and credential wiring.
+5. After authorization, connect the actual clients and run STOCK-RO-001 once. Keep the real report/provider/run receipts, let root independently check it, write any rework back to the same task and accept only after the corrected report meets the criteria.
+
+The current Mac-mediated thread handoff is temporary coordination, not a direct root MCP connection or verified automatic dot wakeup. Production remains unchanged, Najwa stays paused, and no real trial has been dispatched.

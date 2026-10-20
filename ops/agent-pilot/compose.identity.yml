@@ -1,0 +1,54 @@
+# Template only. No command in provision.py starts these services.
+name: store-agent-identity
+services:
+  identity-db:
+    image: ${IDENTITY_POSTGRES_IMAGE:?Use an operator-reviewed postgres:17 digest}
+    env_file: ["${IDENTITY_CONFIG_DIR:?Private rendered directory}/postgres.env"]
+    command: [postgres, -c, log_statement=none, -c, log_min_error_statement=panic]
+    volumes: ["identity-db:/var/lib/postgresql/data"]
+    networks: [identity]
+    cpus: 0.5
+    mem_limit: 512m
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  identity:
+    image: quay.io/keycloak/keycloak:26.8.1@sha256:ed1cab21814c7d18ce8f0e11d5a1fa1c6923de12dd4c7625a18c5d34452a57a4
+    platform: linux/amd64
+    command: [start, --import-realm]
+    env_file: ["${IDENTITY_CONFIG_DIR:?Private rendered directory}/keycloak.env"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://identity-db:5432/store_agent_identity
+      KC_DB_USERNAME: store_agent_identity
+      KC_HOSTNAME: https://api.aicube.online
+      KC_HOSTNAME_STRICT: "true"
+      KC_HTTP_RELATIVE_PATH: /identity
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_FEATURES: resource-indicators
+      KC_HEALTH_ENABLED: "true"
+      KC_DB_POOL_INITIAL_SIZE: "1"
+      KC_DB_POOL_MIN_SIZE: "1"
+      KC_DB_POOL_MAX_SIZE: "5"
+    ports: ["127.0.0.1:9080:8080"]
+    volumes:
+      - type: bind
+        source: ${IDENTITY_CONFIG_DIR:?Private rendered directory}/store-agents-realm.json
+        target: /opt/keycloak/data/import/store-agents-realm.json
+        read_only: true
+    networks: [identity]
+    cpus: 1
+    mem_limit: 1g
+    restart: unless-stopped
+    depends_on:
+      identity-db:
+        condition: service_healthy
+networks:
+  identity:
+    internal: true
+volumes:
+  identity-db:

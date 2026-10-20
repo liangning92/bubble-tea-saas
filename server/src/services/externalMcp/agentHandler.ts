@@ -1,0 +1,84 @@
+import { PrismaClient } from '@prisma/client'
+import { randomUUID } from 'crypto'
+import { createMcpHandler, McpServer, requireBearerAuth, oauthMetadataResponse, getOAuthProtectedResourceMetadataUrl,
+  hostHeaderValidationResponse, originValidationResponse, OAuthMetadata } from '@modelcontextprotocol/server'
+import * as z from 'zod-mcp'
+import { AgentTaskService } from '../agentTasks/contract'
+import { jwtAccessVerifier, identity } from './auth'
+import { isolatedAgentBindings } from './agentBindings'
+import { createAgentTaskTools } from './agentTools'
+import { postgresEventRepository } from './eventsRepository'
+import { subscribeInput, unsubscribeInput } from './eventsContract'
+import { taskEvents } from './eventsService'
+import { WebhookPost } from './webhookDelivery'
+
+// Production dependencies are explicitly injected by the disabled-by-default host.
+// This factory never enrolls identities, creates credentials or starts a worker.
+export function agentMcpHandler(options: {
+  resource: URL; issuerMetadata: OAuthMetadata; verifier: ReturnType<typeof jwtAccessVerifier>;
+  mode?: 'disabled' | 'isolated-test' | 'production'; encryptionKey: Buffer;
+  createService: (db: any, bindings: ReturnType<typeof isolatedAgentBindings>) => AgentTaskService;
+  isolatedWebhookPost?: WebhookPost;
+  production?: { db: any; bindings: ReturnType<typeof isolatedAgentBindings>; post: WebhookPost }
+  now?: () => number
+}) {
+  if (options.resource.href !== options.verifier.resource || options.issuerMetadata.issuer !== options.verifier.issuer ||
+    options.resource.search || options.resource.hash || options.resource.username || options.resource.password) throw Error('MCP_TRUST_CONFIG_MISMATCH')
+  if (!['isolated-test', 'production'].includes(options.mode)) return { fetch: async (_r: Request) => Response.json({ error: 'MCP_PRODUCTION_DISABLED' }, { status: 503 }), close: async () => {}, deliver: async () => { throw Error('MCP_PRODUCTION_DISABLED') } }
+  const url = new URL(process.env.DATABASE_URL || 'http://invalid')
+  const production = options.mode === 'production'
+  if (!production && (process.env.NODE_ENV !== 'test' || !process.env.BT_TEST_RUN?.startsWith('bt-test-') || url.protocol !== 'postgresql:' ||
+    url.hostname !== '127.0.0.1' || url.pathname !== '/team_test' || options.resource.protocol !== 'http:' || options.resource.hostname !== '127.0.0.1')) throw Error('MCP_ISOLATED_RUNTIME_REQUIRED')
+  if (production && (options.resource.href !== 'https://api.aicube.online/mcp/agent-tasks' ||
+    options.issuerMetadata.issuer !== 'https://api.aicube.online/identity/realms/store-agents' || !options.production?.bindings || !options.production?.db || typeof options.production.post !== 'function')) throw Error('MCP_PRODUCTION_TRUST_REQUIRED')
+  if (!production && typeof options.isolatedWebhookPost !== 'function') throw Error('MCP_ISOLATED_CALLBACK_REQUIRED')
+  const db = production ? options.production!.db : new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL! } } })
+  const bindings = production ? options.production!.bindings : isolatedAgentBindings(db)
+  const service = options.createService(db, bindings)
+  const audit = async (event: { action: string; subscriptionId?: string; storeId?: string; status?: number }) => {
+    // Security sink has no token, callback, subject, signing key or report body fields.
+    // Unauthenticated transport audit has no resolved store and stays in isolated diagnostics.
+    const value = { ...event, at: new Date().toISOString() }
+    if (event.storeId) await db.config.create({ data: { storeId: event.storeId, key: 'externalAgent.events.audit.v1.' + randomUUID(), value: JSON.stringify(value), category: 'externalAgent' } })
+    security.push(value)
+    if (security.length > 200) security.shift()
+  }
+  const security: unknown[] = []
+  const events = taskEvents({ repository: postgresEventRepository(db, options.encryptionKey), post: production ? options.production!.post : options.isolatedWebhookPost,
+    authorize: async (owner, taskId) => { const p = await bindings.restoreEventOwner(owner); await service.get(p, { taskId, authVersion: p.grantVersion }) }, audit, now: options.now })
+  const gate = requireBearerAuth({ verifier: options.verifier, expectedResource: options.resource,
+    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(options.resource) })
+  const sdk = createMcpHandler(async ({ authInfo }) => {
+    const who = identity(authInfo!), p = await bindings.resolve(who, authInfo!.scopes)
+    const server = new McpServer({ name: 'store-agent-tasks', version: '0.1.0' })
+    createAgentTaskTools(server, service, scope => bindings.resolve(who, authInfo!.scopes, scope), p.role, p.scopes)
+    if (p.role === 'manager' && p.scopes.includes('management.read') && authInfo!.scopes.includes('management.read')) {
+      // Official SDK custom-method seam for the OpenAI-supported draft Events extension.
+      server.server.registerCapabilities({ events: {} } as any)
+      server.server.setRequestHandler('events/list', { params: z.object({ cursor: z.null().optional() }).strict() }, async () => {
+        await bindings.eventOwner(who, authInfo!.scopes); return { events: events.catalog() }
+      })
+      server.server.setRequestHandler('events/subscribe', { params: subscribeInput }, async input => events.subscribe(await bindings.eventOwner(who, authInfo!.scopes), input))
+      server.server.setRequestHandler('events/unsubscribe', { params: unsubscribeInput }, async input => events.unsubscribe(await bindings.eventOwner(who, authInfo!.scopes), input))
+    }
+    return server
+  }, { legacy: 'stateless', responseMode: 'json', maxRequestBodySize: 131072, onerror: () => { void audit({ action: 'protocol_rejected' }) } })
+  return {
+    async fetch(request: Request): Promise<Response> {
+      const origin = request.headers.get('origin')
+      if (new URL(request.url).origin !== options.resource.origin || origin && origin !== options.resource.origin) return new Response(null, { status: 403 })
+      const allowedHost = production ? 'api.aicube.online' : '127.0.0.1'
+      const invalid = hostHeaderValidationResponse(request, [allowedHost]) || originValidationResponse(request, [allowedHost]); if (invalid) return invalid
+      const metadata = oauthMetadataResponse(request, { oauthMetadata: options.issuerMetadata, resourceServerUrl: options.resource,
+        scopesSupported: ['management.assign', 'management.read', 'management.review', 'executor.claim', 'executor.evidence', 'executor.report'] }); if (metadata) return metadata
+      if (new URL(request.url).pathname !== options.resource.pathname) return new Response(null, { status: 404 })
+      const auth = await gate(request)
+      if (auth instanceof Response) { await audit({ action: 'auth_rejected', status: auth.status }); return auth }
+      try { await bindings.resolve(identity(auth), auth.scopes) } catch { await audit({ action: 'binding_rejected', status: 403 }); return new Response(null, { status: 403 }) }
+      const response = await sdk.fetch(request, { authInfo: auth }); response.headers.set('Cache-Control', 'private, no-store'); return response
+    },
+    deliver: events.deliver,
+    diagnostics: () => [...security],
+    close: async () => { await sdk.close(); if (!production) await db.$disconnect() }
+  }
+}

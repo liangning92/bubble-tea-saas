@@ -192,7 +192,7 @@ export async function managementContext(db: any, a: TeamActor, c: TeamChannel, p
   const planCache = new Map<string, any>()
   for (const row of taskRows) {
     const t: TeamTask = JSON.parse(row.value)
-    if (t.channelId !== c.id || !p.employeeIds.includes(t.ownerId) || t.fromSeq < taskFloor || t.status === 'cancelled' ||
+    if (t.agentTask || t.channelId !== c.id || !p.employeeIds.includes(t.ownerId) || t.fromSeq < taskFloor || t.status === 'cancelled' ||
       t.planId && c.members.some(member => !t.audienceIds?.includes(member.staffId))) continue
     if (t.planId) {
       if (!planCache.has(t.planId)) planCache.set(t.planId, await readTeam(db, a.storeId, `operationPlan.${c.id}.${t.planId}`))

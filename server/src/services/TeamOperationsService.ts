@@ -44,6 +44,7 @@ async function get(db: any, a: TeamActor, id: string, pid: string, floor: number
 async function tasksFor(db: any, a: TeamActor, p: OperationPlan): Promise<TeamTask[]> {
   const tasks = await Promise.all(p.taskIds.map(t => readTeam<TeamTask>(db, a.storeId, `task.${p.channelId}.${t}`)))
   if (tasks.some(t => !t)) fail('TEAM_PLAN_TASK_MISSING')
+  if (tasks.some(t => t?.agentTask)) fail('TEAM_AGENT_TASK_PRINCIPAL_REQUIRED', 403)
   return tasks as TeamTask[]
 }
 const open = (t: TeamTask) => !['completed', 'cancelled'].includes(t.status)

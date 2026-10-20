@@ -1,0 +1,5 @@
+"""Explicit dedicated plugin wrapper; nothing starts until Hermes calls register."""
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+from pdca_bridge import register

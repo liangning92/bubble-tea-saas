@@ -1,0 +1,5 @@
+name: pdca-bridge
+version: "0.1.0"
+description: "Dedicated STOCK-RO-001 executor; strict relay and receipt references only."
+hooks:
+  - pre_llm_call

@@ -10,6 +10,16 @@ test('team communication selects its isolated HTTP regression without unrelated 
  }finally{f.close()}
 });
 function fixture(){const root=fs.mkdtempSync(path.join(os.tmpdir(),'ci-scope-'));const write=(name,source='')=>{fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true});fs.writeFileSync(path.join(root,name),source)};return {root,write,close:()=>fs.rmSync(root,{recursive:true,force:true})}}
+test('dedicated Hermes bridge and runtime select the bounded task checks',()=>{
+ const f=fixture();try{
+  f.write('server/audit-tests/agent-tool-scopes.test.ts');
+  for(const file of ['hermes/pdca_bridge.py','hermes/pdca_runtime.py','hermes/pdca_launcher.py','hermes/tests/test_pdca_bridge.py']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.agentTasks,true,file);assert(p.auditTests.includes('server/audit-tests/agent-tool-scopes.test.ts'));assert.equal(p.electronTypes,false);assert.equal(p.browser.length,0);
+  }
+  const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');
+  assert.match(runner,/if\(plan\.agentTasks\)run\('python3',\['scripts\/test-hermes-pdca\.py'/);
+ }finally{f.close()}
+});
 test('workflow queue, service, worker and fixture changes retain the isolated communication regression',()=>{
  const f=fixture();try{
   for(const file of ['server/src/services/TeamWorkflowQueue.ts','server/src/services/TeamWorkflowService.ts','server/src/workers/teamWorkflow.ts','tests/stoploss/team-workflow-queue-check.cjs']){
@@ -243,5 +253,15 @@ test('management browser-only fixture changes run the actual browser consumers w
   for(const file of ['tests/stoploss/team-management-defaults-browser-check.cjs','tests/stoploss/team-management-owner-browser-check.cjs','tests/stoploss/team-management-actions-browser-check.cjs']){
    f.write(file);const p=selectScope([file],f);assert(p.teamManagement,file);assert(p.needsDependencies);assert(p.needsServer);assert(p.needsBrowser);assert(p.browser.some(c=>c.domain==='teamManagement'));assert.deepEqual(p.build,['admin','staff']);assert.deepEqual(p.components,[]);assert.equal(p.mode,'scoped');
   }
+ }finally{f.close()}
+});
+
+test('agent task and Hermes changes select isolated task checks without unrelated clients',()=>{
+ const f=fixture();try{
+  for(const file of ['server/audit-tests/agent-tasks.test.ts','server/audit-tests/agent-dispatch.test.ts','server/audit-tests/team-stock-readonly-source.test.ts'])f.write(file);
+  for(const file of ['server/src/services/agentTasks/service.ts','server/src/services/agentTasks/admissionBindings.ts','server/src/services/hermesTransport/client.ts','server/src/services/TeamStockReadOnlySource.ts']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.agentTasks,true);assert.deepEqual(p.components,['api']);assert.equal(p.electronTypes,false);assert.equal(p.auditTests.length,3);assert.deepEqual(p.browser,[]);assert.deepEqual(p.unmappedCode,[]);
+  }
+  const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');assert.match(runner,/if\(plan\.agentTasks\).*test-agent-tasks\.py/);assert.match(runner,/--import.*hermesTransport\.test\.ts/);
  }finally{f.close()}
 });

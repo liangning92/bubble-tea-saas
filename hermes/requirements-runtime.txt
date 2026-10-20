@@ -1,0 +1,5 @@
+# Dedicated Python >=3.11 runtime and synthetic official-SDK integration tests.
+mcp==1.27.0
+cryptography==50.0.2
+httpx==0.28.1
+uvicorn==0.54.0
