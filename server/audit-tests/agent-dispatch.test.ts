@@ -23,7 +23,7 @@ function fixture(){
  const event={id:eventId,sequence:1,type:'task.dispatch_ready',occurredAt:'2026-10-21T00:00:00Z',payload:{taskId,runId,round:1,taskVersion:1}}
  put('channel.'+channelId,{id:channelId,archived:false});put('task.'+channelId+'.'+taskId,task);put('agent.outbox.'+eventId,{event,channelId,managerId:principal.agentId,executorId:'synthetic-hermes',status:'pending'});put('agent.event.cursor',{sequence:1});put('agent.event.000000000001',event)
  const db:any={config:{findUnique:async(q:any)=>rows.get(q.where.storeId_key.storeId+':'+q.where.storeId_key.key)||null,upsert:async(q:any)=>{const k=q.where.storeId_key.storeId+':'+q.where.storeId_key.key;rows.set(k,{...(rows.get(k)||q.create),...(rows.has(k)?q.update:{})});return rows.get(k)}},financeAuditLog:{create:async(q:any)=>{if(state.auditFail)throw Error('SYNTHETIC_AUDIT_FAILURE');audits.push(q.data);return q.data}},$transaction:async(fn:any)=>{const prior=tail;let unlock!:()=>void;tail=new Promise<void>(r=>unlock=r);await prior;const saved=structuredClone([...rows]),n=audits.length;state.active=true;try{return await fn(db)}catch(e){rows.clear();for(const[k,v]of saved)rows.set(k,v);audits.splice(n);throw e}finally{state.active=false;unlock()}}}
- const deps={now:()=>state.now,authorize:async(_db:any,p:AgentPrincipal,scope:string,c:string)=>{if(state.revoked||p.storeId!==storeId||p.agentId!==principal.agentId||p.role!=='manager'||p.grantVersion!==1||p.clientRevision!==1||!p.scopes.includes(scope)||c!==channelId)throw Error('SYNTHETIC_AUTH_REVOKED');return p}}
+ const deps={executorFor:async()=>({agentId:task.agentTask.executorId,role:'executor' as const,storeId,grantVersion:1,clientRevision:1,scopes:['executor.claim'],...(principal.pilot?{pilot:principal.pilot}:{})}),now:()=>state.now,authorize:async(_db:any,p:AgentPrincipal,scope:string,c:string)=>{if(state.revoked||p.storeId!==storeId||p.agentId!==principal.agentId||p.role!=='manager'||p.grantVersion!==1||p.clientRevision!==1||!p.scopes.includes(scope)||c!==channelId)throw Error('SYNTHETIC_AUTH_REVOKED');return p}}
  const bindings=persistentAdmissionBindings(db,storeId)
  const client=new HermesRunsClient({origin:target.origin,profile:'synthetic-stock',admissionBindings:bindings,bearerToken:()=>state.token,fetch:async(url,request)=>{
    calls.push({url,method:request.method,body:request.body});expect(state.active).toBe(false)
@@ -126,5 +126,32 @@ describe('persisted Hermes admission and status never substitute for task execut
   const f=fixture();await expect(f.dispatcher.dispatch({...f.principal,role:'executor'},f.input)).rejects.toThrow();await expect(f.dispatcher.dispatch({...f.principal,storeId:'another-store'},f.input)).rejects.toThrow();expect(f.calls).toHaveLength(0)
   await f.dispatcher.dispatch(f.principal,f.input);f.state.revoked=true
   await expect(f.make().dispatch(f.principal,f.input)).rejects.toThrow();await expect(f.make().reconcile(f.principal,f.input)).rejects.toThrow();expect(f.calls.map(c=>c.method)).toEqual(['POST'])
+ })
+ test('absolute pilot cutoff rejects admission and status even when old authorization still resolves',async()=>{
+  const f=fixture(),end=f.state.now+1000
+  f.principal.pilot={id:randomUUID(),startedAt:new Date(end-86400000).toISOString(),expiresAt:new Date(end).toISOString()}
+  f.task.agentTask.pilot=f.principal.pilot;f.put('task.'+f.channelId+'.'+f.taskId,f.task)
+  await f.dispatcher.dispatch(f.principal,f.input);f.state.now=end
+  await expect(f.make().dispatch(f.principal,f.input)).rejects.toThrow('AGENT_PILOT_UNAVAILABLE_OR_EXPIRED')
+  await expect(f.make().reconcile(f.principal,f.input)).rejects.toThrow('AGENT_PILOT_UNAVAILABLE_OR_EXPIRED')
+  expect(f.calls.map(c=>c.method)).toEqual(['POST'])
+ })
+ test('pilot expiry after reservation records known not sent and never invokes transport',async()=>{
+  const f=fixture(),end=f.state.now+1000;let checks=0
+  f.principal.pilot={id:randomUUID(),startedAt:new Date(end-86400000).toISOString(),expiresAt:new Date(end).toISOString()}
+  f.task.agentTask.pilot=f.principal.pilot;f.put('task.'+f.channelId+'.'+f.taskId,f.task)
+  const deps={...f.deps,authorize:async(...args:any[])=>{const p=await (f.deps.authorize as any)(...args);if(++checks===2)f.state.now=end;return p}}
+  const dispatcher=createAgentTaskDispatcher(f.db,deps,'synthetic-stock',f.client,f.target)
+  await expect(dispatcher.dispatch(f.principal,f.input)).rejects.toThrow('AGENT_PILOT_UNAVAILABLE_OR_EXPIRED')
+  expect(f.calls).toHaveLength(0);expect(f.read('agent.dispatch.'+f.eventId).state).toBe('rejected')
+  expect(f.audits.some(a=>a.description==='agent_dispatch_preflight_denied_not_sent')).toBe(true)
+ })
+ test('Docker Desktop host HTTP requires explicit configured opt-in and cannot authorize a public HTTP target',()=>{
+  const f=fixture(),base={profile:'synthetic-stock',admissionBindings:f.bindings,bearerToken:()=>f.state.token,fetch:async()=>({status:202,text:async()=>''})}
+  expect(()=>new HermesRunsClient({...base,origin:'http://host.docker.internal:19777'})).toThrow()
+  expect(()=>new HermesRunsClient({...base,origin:'http://host.docker.internal:19777',dockerDesktopHost:true})).not.toThrow()
+  expect(()=>new HermesRunsClient({...base,origin:'http://public.example.com',dockerDesktopHost:true})).toThrow()
+  expect(()=>f.make({...f.target,origin:'http://host.docker.internal:19777'})).toThrow()
+  expect(()=>createAgentTaskDispatcher(f.db,f.deps,'synthetic-stock',f.client,{...f.target,origin:'http://host.docker.internal:19777',dockerDesktopHost:true})).not.toThrow()
  })
 })

@@ -4,11 +4,12 @@ import { TeamError, TeamTask, readTeam, writeTeam, lockTeam } from '../TeamCommu
 import { prepareDispatchEvent } from '../hermesTransport/client'
 import type { AdmissionResult, PreparedDispatch, RunMapping, StatusResult } from '../hermesTransport/types'
 import type { AgentPrincipal, AgentTaskDependencies, AgentTaskEvent } from './contract'
+import { assertAgentPilotStamp } from './pilot'
 
 const inputSchema = z.object({ eventId: z.string().uuid(), authVersion: z.number().int().positive() }).strict()
 export interface DispatchRecord {
   eventId: string; taskId: string; runId: string; preparedAt: string; prepared: PreparedDispatch
-  target: { origin: string; identityId: string; credentialGeneration: number }
+  target: { origin: string; identityId: string; credentialGeneration: number; dockerDesktopHost?: boolean }
   requestedBy: { agentId: string; grantVersion: number; clientRevision: number }
   state: 'in_flight' | 'admitted' | 'admission_unknown' | 'rejected'
   mapping?: RunMapping; admission?: AdmissionResult; lastStatus?: StatusResult; updatedAt: string
@@ -22,13 +23,13 @@ const fail = (code: string, status = 409): never => { throw new TeamError(status
 /** Explicit composition only: no startup, timer, credentials, or network on import.
  * A persisted in_flight reservation is uncertain after restart, never permission to POST again.
  */
-export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskDependencies, 'authorize' | 'now'>,
+export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskDependencies, 'authorize' | 'now'> & Partial<Pick<AgentTaskDependencies, 'executorFor'>>,
   profile: string, transport: DispatchTransport, target: DispatchRecord['target']) {
   if (!dependencies?.authorize || !transport?.dispatch || !transport?.status) throw Error('AGENT_DISPATCH_DEPENDENCIES_REQUIRED')
-  const binding = z.object({ origin: z.string().url(), identityId: z.string().min(1).max(128), credentialGeneration: z.number().int().positive() }).strict().parse(target)
+  const binding = z.object({ origin: z.string().url(), identityId: z.string().min(1).max(128), credentialGeneration: z.number().int().positive(), dockerDesktopHost: z.boolean().optional() }).strict().parse(target)
   const origin = new URL(binding.origin)
   if (origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash ||
-    !(origin.protocol === 'https:' || origin.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname))) throw Error('AGENT_DISPATCH_TARGET_INVALID')
+    !(origin.protocol === 'https:' || origin.protocol === 'http:' && (['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname) || binding.dockerDesktopHost === true && origin.hostname === 'host.docker.internal'))) throw Error('AGENT_DISPATCH_TARGET_INVALID')
   const fixedTarget = { origin: origin.origin, identityId: binding.identityId, credentialGeneration: binding.credentialGeneration }
   const assertTarget = (r: DispatchRecord) => {
     if (!r.target || r.target.origin !== fixedTarget.origin || r.target.identityId !== fixedTarget.identityId ||
@@ -41,12 +42,21 @@ export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskD
     const outbox = await readTeam(tx, principal.storeId, `agent.outbox.${eventId}`)
     if (!outbox || outbox.event?.id !== eventId || outbox.event.type !== 'task.dispatch_ready') fail('AGENT_DISPATCH_EVENT_NOT_FOUND', 404)
     const p = await dependencies.authorize(tx, principal, 'management.assign', outbox.channelId)
+    assertAgentPilotStamp(p, now())
     if (!p || p.agentId !== principal.agentId || p.storeId !== principal.storeId || p.role !== 'manager' ||
       p.grantVersion !== authVersion || p.clientRevision !== principal.clientRevision || !p.scopes.includes('management.assign') ||
       outbox.managerId !== p.agentId) fail('AGENT_DISPATCH_AUTH_CHANGED', 403)
     const task = await readTeam<TeamTask>(tx, p.storeId, `task.${outbox.channelId}.${outbox.event.payload.taskId}`)
     const channel = await readTeam(tx, p.storeId, `channel.${outbox.channelId}`)
     if (!task?.agentTask || !channel || channel.archived || task.agentTask.managerId !== p.agentId) fail('AGENT_DISPATCH_SCOPE_CHANGED', 403)
+    if ((p.pilot || task.agentTask.pilot) && JSON.stringify(p.pilot) !== JSON.stringify(task.agentTask.pilot)) fail('AGENT_DISPATCH_PILOT_CHANGED', 403)
+    if (p.pilot) {
+      if (!dependencies.executorFor) fail('AGENT_DISPATCH_EXECUTOR_CHANGED', 403)
+      const executor = await dependencies.executorFor(tx, p, outbox.channelId)
+      if (executor.role !== 'executor' || executor.agentId !== task.agentTask.executorId || executor.storeId !== p.storeId ||
+        !executor.scopes.includes('executor.claim') || JSON.stringify(executor.pilot) !== JSON.stringify(p.pilot)) fail('AGENT_DISPATCH_EXECUTOR_CHANGED', 403)
+      assertAgentPilotStamp(executor, now(), true)
+    }
     return { p, task, outbox }
   }
   async function audit(tx: any, p: AgentPrincipal, record: DispatchRecord, action: string) {
@@ -97,6 +107,20 @@ export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskD
       })
       if (reservation.previous) return reservation.previous
       const record = reservation.record!
+      // Authorization can expire while reservation/credential setup is awaiting.
+      // A denied preflight is known not sent; never turn it into a retry opportunity.
+      try { await db.$transaction(async (tx: any) => { await scope(tx, principal, v.eventId, v.authVersion) }) }
+      catch (error) {
+        await db.$transaction(async (tx: any) => {
+          await lockTeam(tx, principal.storeId, 'agent.tasks')
+          const current = await readTeam<DispatchRecord>(tx, principal.storeId, key(v.eventId))
+          if (current?.state === 'in_flight' && current.prepared.bodySha256 === record.prepared.bodySha256) {
+            current.state = 'rejected'; current.admission = { kind: 'rejected', reason: 'request', httpStatus: 403, dispatch: current.prepared }
+            await saved(tx, principal, current, 'agent_dispatch_preflight_denied_not_sent')
+          }
+        })
+        throw error
+      }
       let result: AdmissionResult
       try { result = await transport.dispatch(record.prepared) }
       catch { result = { kind: 'admission_unknown', reason: 'network_or_timeout', dispatch: record.prepared } }

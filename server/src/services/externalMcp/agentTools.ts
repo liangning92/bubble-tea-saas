@@ -6,7 +6,7 @@ import { AgentPrincipal, AgentTaskService, assignTaskSchema, readTaskSchema, cla
 
 // Schemas come from the backend-owned contract; refinements are checked again before any business call.
 export function createAgentTaskTools(server: McpServer, service: AgentTaskService,
-  resolvePrincipal: (scope: AgentTaskScope) => Promise<AgentPrincipal>, role: AgentPrincipal['role']) {
+  resolvePrincipal: (scope: AgentTaskScope) => Promise<AgentPrincipal>, role: AgentPrincipal['role'], scopes: readonly string[]) {
   const definitions = [
     { name: 'assign', scope: 'management.assign', role: 'manager', schema: assignTaskSchema, method: 'assign' },
     { name: 'get', scope: role === 'manager' ? 'management.read' : 'executor.claim', role, schema: readTaskSchema, method: 'get' },
@@ -15,7 +15,7 @@ export function createAgentTaskTools(server: McpServer, service: AgentTaskServic
     { name: 'read_stock_evidence', scope: 'executor.evidence', role: 'executor', schema: leaseSchema, method: 'readStockEvidence' },
     { name: 'report', scope: 'executor.report', role: 'executor', schema: reportTaskSchema, method: 'report' }
   ] as const
-  for (const definition of definitions.filter(d => d.role === role)) {
+  for (const definition of definitions.filter(d => d.role === role && scopes.includes(d.scope))) {
     let base: any = definition.schema
     while (base instanceof z.ZodEffects) base = base.innerType()
     const publicSchema = base.omit({ authVersion: true }).strict()

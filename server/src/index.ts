@@ -18,6 +18,8 @@ import {batchImportRouter} from './routes/batchImport'
 import {queueRouter} from './routes/queue'
 import {serviceHealth} from './services/HealthService'
 import prisma from './config/database'
+import { createAgentPilotHost } from './services/agentTasks/host'
+import { mountAgentPilot } from './routes/agentPilot'
 import { upgradeLocalSqlite } from './utils/sqliteUpgrade'
 import { aiPermissionsRouter } from './routes/aiPermissions'
 // Global BigInt JSON serialization support
@@ -185,6 +187,9 @@ app.use(cors({
 app.use(morgan('dev', {
   skip: (_req, res) => process.env.LOCAL_POS_EMBEDDED === '1' && res.statusCode < 400
 }))
+const agentPilotHost = createAgentPilotHost(prisma)
+mountAgentPilot(app, agentPilotHost)
+httpServer.once('close', () => { void agentPilotHost.close().catch(() => console.error('[AgentPilot] AGENT_PILOT_CLOSE_FAILED')) })
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
@@ -351,6 +356,7 @@ if (process.env.NODE_ENV !== 'test') {
 
   // 启动卫生任务调度器
   console.log('[Server] Starting hygiene scheduler...')
+  void agentPilotHost.start().catch(() => console.error('[AgentPilot] AGENT_PILOT_START_FAILED'))
   startEmployeeWorker()
   startHygieneScheduler()
   console.log('[Server] Hygiene scheduler started')

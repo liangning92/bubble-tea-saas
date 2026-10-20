@@ -73,6 +73,8 @@ export interface HttpRequest {
 export type HttpFetch = (url: string, request: HttpRequest) => Promise<HttpResponse>;
 
 export interface HermesTransportOptions {
+  /** Explicit Docker Desktop bridge to a Mac loopback listener; never caller input. */
+  dockerDesktopHost?: boolean;
   /** Configured origin only, never taken from task/event input. */
   origin: string;
   /** Dedicated non-default profile; requests use /p/<profile>/v1/runs. */

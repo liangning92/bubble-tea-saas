@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { AgentPilotStamp } from './pilot'
 
 /** Trusted adapter output; never parsed from a tool's JSON arguments. */
 export interface AgentPrincipal {
@@ -8,6 +9,7 @@ export interface AgentPrincipal {
   grantVersion: number
   clientRevision: number
   scopes: readonly string[]
+  pilot?: AgentPilotStamp
 }
 export const AGENT_TASK_CAPABILITY = 'stock_readonly_v1' as const
 const uuid = z.string().uuid()
@@ -59,6 +61,7 @@ export interface AgentTaskReport {
   runtimeReceipt?: { hermesRunId: string; sessionId?: string }
 }
 export interface AgentTaskState {
+  pilot?: AgentPilotStamp
   taskCode: 'STOCK-RO-001'; capability: typeof AGENT_TASK_CAPABILITY
   managerId: string; executorId: string; plan: AgentPlan
   round: number; runId: string; eventId: string; leaseVersion: number

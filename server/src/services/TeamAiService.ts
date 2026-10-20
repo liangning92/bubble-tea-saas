@@ -391,3 +391,41 @@ export function teamAi(db: any = prisma, transport: Transport = minimax, resolve
     }
   }
 }
+
+/** Server-only restricted agent transport. Credentials never leave this module.
+ * Kept separate from legacy text-only generation so tool calls are not discarded. */
+export interface TeamAgentModelProviderRequest {
+  model: 'MiniMax-M3.1-Flash'; stream: false; reasoning_effort: 'low'; reasoning_split: true
+  messages: any[]; tools: any[]; tool_choice: 'auto'
+}
+export type TeamAgentModelTransport = (storeId: string, configVersion: number, request: TeamAgentModelProviderRequest,
+  beforeSend: () => Promise<void>, deadlineAt?: number) => Promise<any>
+export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: boolean; fetch?: typeof fetch } = {}): TeamAgentModelTransport {
+  return async (storeId, configVersion, request, beforeSend, deadlineAt) => {
+    if (options.enabled !== true) denied('AGENT_MODEL_RELAY_DISABLED')
+    if (Object.keys(request).some(k => !['model', 'stream', 'reasoning_effort', 'reasoning_split', 'messages', 'tools', 'tool_choice'].includes(k)) ||
+      !request.tools.every(t => t?.type === 'function' && ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report'].includes(t.function?.name)) ||
+      request.model !== 'MiniMax-M3.1-Flash' || request.stream !== false || request.reasoning_effort !== 'low' || request.reasoning_split !== true ||
+      'max_tokens' in request || 'max_completion_tokens' in request) denied('AGENT_MODEL_REQUEST_INVALID', 400)
+    const config = await readTeam(db, storeId, 'ai.settings')
+    const connection = config && await readAiConnection(db, storeId, config)
+    if (!config?.enabled || config.provider !== 'minimax' || config.region !== 'cn' || config.model !== request.model ||
+      config.version !== configVersion || !config.secret || connection?.status !== 'ready' || !Number.isSafeInteger(connection.checkRevision) || connection.checkRevision! <= 0)
+      denied('AGENT_MODEL_CN_VERIFIED_CONFIG_REQUIRED', 409)
+    // decrypt() calls masterKey() in read-only mode; no new key/secret/config is created.
+    const key = await decrypt(storeId, config.secret, 'cn')
+    await beforeSend()
+    const remaining = deadlineAt === undefined ? 25000 : deadlineAt - Date.now()
+    if (!Number.isFinite(remaining) || remaining <= 0) denied('AGENT_MODEL_DEADLINE_BEFORE_SEND', 409)
+    const timeoutMs = Math.max(1, Math.min(25000, Math.floor(remaining)))
+    let response: Response
+    try { response = await (options.fetch || fetch)(endpoint('cn'), { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
+      headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify(request) }) }
+    catch { return denied('AGENT_MODEL_PROVIDER_OUTCOME_UNKNOWN', 502) }
+    // Do not forward error bodies, headers or diagnostics that could contain secrets.
+    if (!response.ok) return denied('AGENT_MODEL_PROVIDER_REJECTED_OR_UNKNOWN', 502)
+    let raw: string
+    try { raw = await response.text() } catch { return denied('AGENT_MODEL_PROVIDER_OUTCOME_UNKNOWN', 502) }
+    try { return JSON.parse(raw) } catch { return denied('AGENT_MODEL_PROVIDER_INVALID_JSON', 502) }
+  }
+}

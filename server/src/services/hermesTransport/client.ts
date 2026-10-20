@@ -54,7 +54,7 @@ export class HermesRunsClient {
 
   constructor(options: HermesTransportOptions) {
     const url = new URL(options.origin);
-    const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname);
+    const loopback = ['127.0.0.1', '[::1]', 'localhost'].includes(url.hostname) || options.dockerDesktopHost === true && url.hostname === 'host.docker.internal';
     if (url.username || url.password || url.pathname !== '/' || url.search || url.hash
       || !(url.protocol === 'https:' || (url.protocol === 'http:' && loopback))) {
       throw new Error('Hermes origin must be HTTPS or loopback HTTP, with no path or credentials');
