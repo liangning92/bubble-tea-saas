@@ -26,7 +26,10 @@ module.exports=async function diagnostics({prisma,request,settings,save,check,cl
    const before=modelCalls.length,funds=await budget();assert.equal((await settings()).connection.providerDiagnostics,undefined);assert.equal((await check(s.version,id)).providerDiagnostics,undefined);assert.equal(modelCalls.length,before);assert.deepEqual(await budget(),funds);
   });
   await test('no chosen output limit is omitted and valid usage above previous 32/4096 is accepted',async()=>{
-   const s=await configure();setResponseFactory(()=>success(8192));const result=await check(s.version);assert.equal(result.status,'ready');assert(!Object.hasOwn(modelCalls.at(-1).body,'max_completion_tokens'));assert(!Object.hasOwn(modelCalls.at(-1).body,'max_tokens'));assert.equal((await settings()).maxOutputTokens,null);
+   const s=await configure();setResponseFactory(()=>success(8192));const result=await check(s.version);assert.equal(result.status,'ready');assert(!Object.hasOwn(modelCalls.at(-1).body,'max_completion_tokens'));assert(!Object.hasOwn(modelCalls.at(-1).body,'max_tokens'));assert.equal((await settings()).maxOutputTokens,null);assert.equal(modelCalls.at(-1).body.service_tier,'standard');assert.deepEqual(modelCalls.at(-1).body.thinking,{type:'disabled'});
+  });
+  await test('Flash connection uses saved model without M3-only parameters or an unchosen output cap',async()=>{
+   const s=await configure({model:'MiniMax-M3.1-Flash',region:'cn'});setResponseFactory(()=>success());const result=await check(s.version);assert.equal(result.status,'ready');assert.equal(result.model,'MiniMax-M3.1-Flash');const call=modelCalls.at(-1);assert.equal(call.url,'https://api.minimax.cn/v1/chat/completions');assert.equal(call.body.model,'MiniMax-M3.1-Flash');for(const field of ['service_tier','thinking','max_completion_tokens','max_tokens'])assert(!Object.hasOwn(call.body,field),field+' must be omitted');assert.equal(call.body.reasoning_split,true);assert.equal((await settings()).maxOutputTokens,null);
   });
   await test('explicit user output limit survives an older-client save; null clears it without migrating old constants',async()=>{
    let s=await configure({maxOutputTokens:128});setResponseFactory(()=>success());await check(s.version);assert.equal(modelCalls.at(-1).body.max_completion_tokens,128);

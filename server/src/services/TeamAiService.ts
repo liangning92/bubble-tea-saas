@@ -61,8 +61,8 @@ async function minimax(key: string, model: string, system: string, input: string
   const response = await fetch(endpoint(region), { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(25000),
     headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, messages: [{ role: 'system', content: system }, { role: 'user', content: input }],
-      stream: false, reasoning_split: true, ...(outputLimit !== null && outputLimit !== undefined ? { max_completion_tokens: outputLimit } : {}), temperature: 0.3, service_tier: 'standard',
-      ...(model === 'MiniMax-M3' ? { thinking: { type: 'disabled' } } : {}) }) })
+      stream: false, reasoning_split: true, ...(outputLimit !== null && outputLimit !== undefined ? { max_completion_tokens: outputLimit } : {}), temperature: 0.3,
+      ...(model === 'MiniMax-M3' ? { service_tier: 'standard', thinking: { type: 'disabled' } } : {}) }) })
   if (!response.ok) throw new ProviderResponseError(response.status, await readProviderDiagnostics(response, [key, model, system, input]))
   const raw = await response.text()
   if (raw.length > 524288) denied('TEAM_AI_INVALID_RESULT', 502)
