@@ -12,8 +12,13 @@ module.exports = async ({prisma, good, request, create, send, test, dropResponse
   const settings = teamAi(prisma, async () => {throw Error('SETTINGS_MUST_NOT_TRANSMIT')});
   const configure = async(extra={}) => {
     const old=await settings.settings(owner);
-    return settings.saveSettings(owner,{expectedVersion:old.version, provider:'minimax',model:'MiniMax-M3',enabled:true,monthlyBudgetUsd:null,
+    const config=await settings.saveSettings(owner,{expectedVersion:old.version, provider:'minimax',model:'MiniMax-M3',enabled:true,monthlyBudgetUsd:null,
       inputPerMillionUsd:.3,outputPerMillionUsd:1.2, ...extra});
+    // A synthetic verification receipt, not a real connection probe.
+    await writeTeam(prisma,owner.storeId,'ai.check.revision',{revision:1});
+    await writeTeam(prisma,owner.storeId,'ai.connection',{requestId:randomUUID(),ownerStaffId:owner.staffId,configVersion:config.version,
+      region:config.region,model:config.model,status:'ready',checkRevision:1,checkedAt:new Date().toISOString()});
+    return config;
   };
   const resetRate = async () => {
     for (const person of ['owner','alice','bob']) await prisma.config.deleteMany({where:{storeId:owner.storeId,key:'team.communication.rate.s-'+person}});
@@ -22,7 +27,9 @@ module.exports = async ({prisma, good, request, create, send, test, dropResponse
   };
   const policy = async(c, extra={}) => {
     const old=await good('owner','GET',`/team/channels/${c.id}/workflow/policy`);
-    return good('owner','PUT',`/team/channels/${c.id}/workflow/policy`,{expectedVersion:old.version, enabled:true,paused:false,automaticSend:false,consent:true,employeeIds:['s-alice'],...extra});
+    const config=await settings.settings(owner);
+    return good('owner','PUT',`/team/channels/${c.id}/workflow/policy`,{expectedVersion:old.version, enabled:true,paused:false,automaticSend:false,consent:true,
+      expectedAiConfigVersion:config.version,expectedAiCheckRevision:config.connection?.checkRevision||1,employeeIds:['s-alice'],...extra});
   };
   const fixture = async() => {
     await resetRate();
@@ -62,6 +69,24 @@ module.exports = async ({prisma, good, request, create, send, test, dropResponse
     assert.equal(a.id,b.id);await send('bob',c.id,'NOT ALLOWLISTED');await send('owner',c.id,'PRIVATE ADMIN CONTEXT');
     const jobs=(await good('owner','GET',`/team/channels/${c.id}/workflow/jobs`)).jobs;
     assert.equal(jobs.length,1);assert.equal(jobs[0].id,a.id);assert.equal(calls,0); main={c,m:a};
+  });
+  await test('active policy binds current verified config and check revision; stale proof fails while pause and disable remain available',async()=>{
+    const c=await create('owner','group',['s-alice','s-bob']),config=await settings.settings(owner),saved=await readTeam(prisma,owner.storeId,'ai.connection');
+    const input={expectedVersion:0,enabled:true,paused:false,automaticSend:false,consent:true,employeeIds:['s-alice']};
+    const put=body=>request('owner','PUT',`/team/channels/${c.id}/workflow/policy`,body);
+    const proof={expectedAiConfigVersion:config.version,expectedAiCheckRevision:saved.checkRevision};
+    for(const bad of [{},{...proof,expectedAiConfigVersion:config.version+1},{...proof,expectedAiCheckRevision:saved.checkRevision+1}]){
+      const response=await put({...input,...bad});assert.equal(response.status,409);assert.equal(response.body.message,'TEAM_WORKFLOW_CONNECTION_REQUIRED');
+    }
+    for(const status of ['checking','failed','uncertain']){
+      await writeTeam(prisma,owner.storeId,'ai.connection',{...saved,status});assert.equal((await put({...input,...proof})).status,409);
+    }
+    assert.equal((await good('owner','GET',`/team/channels/${c.id}/workflow/policy`)).version,0);
+    await writeTeam(prisma,owner.storeId,'ai.connection',saved);let value=await good('owner','PUT',`/team/channels/${c.id}/workflow/policy`,{...input,...proof});
+    await writeTeam(prisma,owner.storeId,'ai.connection',{...saved,status:'uncertain'});
+    value=await good('owner','PUT',`/team/channels/${c.id}/workflow/policy`,{...input,expectedVersion:value.version,paused:true});assert.equal(value.paused,true);
+    value=await good('owner','PUT',`/team/channels/${c.id}/workflow/policy`,{...input,expectedVersion:value.version,enabled:false,paused:true});assert.equal(value.enabled,false);
+    await writeTeam(prisma,owner.storeId,'ai.connection',saved);
   });
   const injectTx = patches => ({$transaction:fn=>prisma.$transaction(tx=>{
     const db={config:tx.config,staff:tx.staff,user:tx.user,financeAuditLog:tx.financeAuditLog,...patches(tx)};return fn(db);

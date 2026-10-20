@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam, teamCommunication, TEAM_PREFIX } from './TeamCommunicationService'
-import { teamAi } from './TeamAiService'
+import { teamAi, readAiConnection } from './TeamAiService'
 import { operationContent, teamOperations } from './TeamOperationsService'
 import { WorkflowPolicy, WorkflowJob, WorkflowBillingAttempt, workflowHash as hash, workflowPad as pad, workflowJobKey, workflowEvent } from './TeamWorkflowQueue'
 
@@ -14,6 +14,7 @@ const resultSchema = z.object({ replyText: z.string().trim().min(1).max(1800), s
     evidenceRequired: z.string().trim().min(1).max(400), acceptanceCriteria: z.string().trim().min(1).max(600) }).strict().nullable(),
   exceptions: z.array(z.string().trim().min(1).max(200)).max(8) }).strict()
 const policySchema = z.object({ expectedVersion: z.number().int().nonnegative(), enabled: z.boolean(), paused: z.boolean(),
+  expectedAiConfigVersion: z.number().int().positive().optional(), expectedAiCheckRevision: z.number().int().positive().optional(),
   automaticSend: z.literal(false), consent: z.literal(true), employeeIds: z.array(z.string().min(1).max(128)).min(1).max(20) }).strict()
 const actionSchema = z.object({ requestId: uuid, expectedVersion: z.number().int().positive(),
   action: z.enum(['approve_reply', 'approve_task', 'dismiss', 'retry', 'reconcile']), approved: z.boolean().default(false),
@@ -115,8 +116,16 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         if (v.enabled && !v.paused && employeeIds.some(s => !c.members.some(m => m.staffId === s))) fail('TEAM_MEMBER_UNAVAILABLE', 403)
         const people = await tx.staff.findMany({ where: { id: { in: employeeIds }, storeId: a.storeId, status: 'active' }, select: { id: true, user: { select: { role: true } } } })
         if (v.enabled && !v.paused && (people.length !== employeeIds.length || people.some((s: any) => !s.user || s.user.role === 'admin'))) fail('TEAM_WORKFLOW_EMPLOYEE_REQUIRED', 403)
+        // Same lock order as AI publication; connection/config cannot change
+        // between consent verification and committing an active policy.
+        if (v.enabled && !v.paused) await lockTeam(tx, a.storeId, 'ai-budget')
         const config = await readTeam(tx, a.storeId, 'ai.settings')
         if (v.enabled && !v.paused && (c.archived || !config?.enabled || !config.secret)) fail('TEAM_AI_NOT_CONFIGURED')
+        if (v.enabled && !v.paused) {
+          const connection = await readAiConnection(tx, a.storeId, config)
+          if (v.expectedAiConfigVersion !== config.version || !v.expectedAiCheckRevision || connection?.status !== 'ready' ||
+            connection.checkRevision !== v.expectedAiCheckRevision) fail('TEAM_WORKFLOW_CONNECTION_REQUIRED')
+        }
         const definition = { employeeIds, operatorUserId: a.id, operatorStaffId: a.staffId, audienceHash: hash(c.members), aiConfigVersion: config?.version || 0 }
         const p: WorkflowPolicy = { ...definition, channelId: id, version: (old?.version || 0) + 1, epoch: (old?.epoch || 0) + 1,
           enabled: v.enabled, paused: v.paused, automaticSend: false, consent: true, hash: hash(definition) }

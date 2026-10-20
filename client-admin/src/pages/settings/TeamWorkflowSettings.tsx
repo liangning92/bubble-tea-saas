@@ -8,11 +8,19 @@ const zh = { title:'员工来信处理许可',channel:'许可频道',choose:'选
 const en: typeof zh = {title:'Incoming employee-message permissions',channel:'Authorized channel',choose:'Choose a channel you joined',people:'Employees whose new text may be processed',save:'Save and allow private drafts',pause:'Pause this channel',disable:'Disable this channel',refresh:'Reload permissions',confirm:'I allow new work text from the selected employees in this channel to reach the current model; replies and tasks still require human approval',off:'Disabled',paused:'Paused',enabled:'Private drafts allowed',version:'Policy version',owner:'Responsible administrator',failure:'Could not load permissions. Try again.',saved:'Permissions saved',unknown:'Save outcome unresolved. The form is locked; reload the saved policy before continuing.',journal:'Could not safely record the save request. Submission stopped.',verified:'Verify the saved model connection above before enabling processing.',members:'Channel membership, administrator or model changes block old jobs and require renewed permission.',consumer:'This permission only allows private drafts. Processing requires a separately authorized single-store consumer.',discard:'Discard local form and read saved state',dirty:'Unsaved permission changes',auto:'Every reply and task requires human approval',none:'You have not joined any channels',self:'Current administrator',conflict:'Permissions changed. Your form is retained; reload the current version.'}
 const id: typeof zh = {title:'Izin pemrosesan pesan pegawai',channel:'Kanal diizinkan',choose:'Pilih kanal yang Anda ikuti',people:'Pegawai yang teks barunya boleh diproses',save:'Simpan dan izinkan draf pribadi',pause:'Jeda kanal ini',disable:'Nonaktifkan kanal ini',refresh:'Muat ulang izin',confirm:'Saya mengizinkan teks kerja baru pegawai terpilih di kanal ini dikirim ke model saat ini; balasan dan tugas tetap disetujui manusia',off:'Nonaktif',paused:'Dijeda',enabled:'Draf pribadi diizinkan',version:'Versi izin',owner:'Administrator penanggung jawab',failure:'Gagal memuat izin. Coba lagi.',saved:'Izin tersimpan',unknown:'Hasil penyimpanan belum pasti. Formulir dikunci; muat izin tersimpan sebelum melanjutkan.',journal:'Permintaan tidak dapat dicatat dengan aman. Pengiriman dihentikan.',verified:'Verifikasi koneksi model tersimpan di atas sebelum mengaktifkan pemrosesan.',members:'Perubahan anggota, administrator atau model memblokir tugas lama dan memerlukan izin baru.',consumer:'Izin ini hanya untuk draf pribadi. Pemrosesan memerlukan konsumen satu toko yang diizinkan terpisah.',discard:'Buang formulir lokal dan baca izin tersimpan',dirty:'Perubahan izin belum disimpan',auto:'Setiap balasan dan tugas disetujui manusia',none:'Belum ada kanal yang Anda ikuti',self:'Administrator saat ini',conflict:'Izin berubah. Formulir dipertahankan; muat versi terkini.'}
 const button = 'rounded-lg border bg-white px-3 py-2 text-sm disabled:opacity-50'
+function verifiedProof(settings: any): { expectedAiConfigVersion: number; expectedAiCheckRevision: number } | null {
+  const connection = settings?.connection
+  return settings?.enabled && settings.keyConfigured && connection?.status === 'ready' && connection.configVersion === settings.version &&
+    connection.region === settings.region && connection.model === settings.model && Number.isSafeInteger(connection.checkRevision) &&
+    connection.checkRevision > 0 && connection.checkRevision === settings.checkRevision
+    ? { expectedAiConfigVersion: settings.version, expectedAiCheckRevision: connection.checkRevision } : null
+}
 export function TeamWorkflowSettings({ client, scope, staffId, language }: { client: Pick<TeamClient, 'request' | 'current'>; scope: string; staffId: string; language: string }) {
   const c = language.startsWith('zh') ? zh : language.startsWith('en') ? en : id
   const [channels,setChannels] = useState<Channel[]>([]), [people,setPeople] = useState<{ id: string; name: string }[]>([]), [selected,setSelected] = useState('')
   const [policy,setPolicy] = useState<Policy|null>(null), [employees,setEmployees] = useState<string[]>([]), [consent,setConsent] = useState(false)
   const [busy,setBusy] = useState(false), [error,setError] = useState(''), [notice,setNotice] = useState(''), [uncertain,setUncertain] = useState(false), [ready,setReady] = useState(false)
+  const [proof,setProof] = useState<ReturnType<typeof verifiedProof>>(null)
   const alive = useRef(true), epoch = useRef(0), sending = useRef(false), channel = channels.find(item => item.id === selected)
   const key = `team-workflow-policy:${scope}:${selected}`
   const name = (value: string) => people.find(person => person.id === value)?.name || value
@@ -35,7 +43,7 @@ export function TeamWorkflowSettings({ client, scope, staffId, language }: { cli
       const value=permission.value,settings=model.status==='fulfilled'?model.value:null
       if(discard) sessionStorage.removeItem(key)
       setPolicy(value);setEmployees(value.employeeIds||[])
-      setReady(!!settings?.enabled&&!!settings?.keyConfigured&&settings.connection?.status==='ready'&&settings.connection.configVersion===settings.version&&settings.connection.region===settings.region&&settings.connection.model===settings.model)
+      const verified=verifiedProof(settings);setProof(verified);setReady(!!verified)
       const raw=sessionStorage.getItem(key)
       setUncertain(!!raw)
       if(raw) setError(c.unknown)
@@ -45,8 +53,19 @@ export function TeamWorkflowSettings({ client, scope, staffId, language }: { cli
   async function save(enabled: boolean, paused: boolean, ids: string[]) {
     if(!policy||!selected||sending.current||uncertain||!client.current())return
     if(enabled&&!paused&&(!consent||!ready||!ids.length))return
-    const body={expectedVersion:policy.version,enabled,paused,employeeIds:ids,automaticSend:false,consent:true}
     sending.current=true;setBusy(true);setError('');setNotice('');const token=epoch.current
+    let verified: ReturnType<typeof verifiedProof> = null
+    if(enabled&&!paused){
+      try {
+        const latest=await client.request('get','/team/ai/settings')
+        if(!current(token)){sending.current=false;return}
+        verified=verifiedProof(latest)
+        if(!verified||JSON.stringify(verified)!==JSON.stringify(proof)){
+          setReady(false);setProof(null);setConsent(false);setError(c.verified);setBusy(false);sending.current=false;return
+        }
+      }catch{if(current(token)){setError(c.failure);setBusy(false)}sending.current=false;return}
+    }
+    const body={expectedVersion:policy.version,enabled,paused,employeeIds:ids,automaticSend:false,consent:true,...(verified||{})}
     try { sessionStorage.setItem(key,JSON.stringify(body)) }catch{setError(c.journal);setBusy(false);sending.current=false;return}
     try {
       const value=await client.request('put',workflowBase(selected)+'/policy',body)
@@ -56,7 +75,9 @@ export function TeamWorkflowSettings({ client, scope, staffId, language }: { cli
       if(!current(token))return
       if(e?.response?.status>=400&&e.response.status<500&&![408,429].includes(e.response.status)){
         try{sessionStorage.removeItem(key)}catch{setUncertain(true)}
-        setError(e?.response?.data?.message==='TEAM_VERSION_CONFLICT'?c.conflict:workflowError(language,e))
+        const code=e?.response?.data?.message
+        if(code==='TEAM_WORKFLOW_CONNECTION_REQUIRED'){setReady(false);setProof(null);setConsent(false)}
+        setError(code==='TEAM_VERSION_CONFLICT'?c.conflict:code==='TEAM_WORKFLOW_CONNECTION_REQUIRED'?c.verified:workflowError(language,e))
       }else{setUncertain(true);setError(c.unknown)}
     }finally{sending.current=false;if(current(token))setBusy(false)}
   }
