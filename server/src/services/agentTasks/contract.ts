@@ -74,7 +74,7 @@ export interface AgentTaskView {
   runId: string; round: number; executorId: string; managerId: string; leaseVersion: number
   state: AgentTaskState['state']; plan: AgentPlan; reportDueAt?: string
   error?: string
-  report?: AgentTaskReport; dispatch: DispatchEnvelope
+  report?: Pick<AgentTaskReport, 'id' | 'version' | 'runId' | 'round' | 'outcome' | 'createdAt'> & Partial<AgentTaskReport>; dispatch: DispatchEnvelope
   evidence?: { evidenceId: string; inputSnapshotHash: string; evidence: unknown }
 }
 export type AgentTaskScope = 'management.assign' | 'management.read' | 'management.review' | 'executor.claim' | 'executor.evidence' | 'executor.report'

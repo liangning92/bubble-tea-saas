@@ -2,7 +2,9 @@
 # Future profile name: stock-ro-isolated (never default; never --clone).
 model:
   provider: minimax-cn
-  default: MiniMax-M2.7
+  default: MiniMax-M3.1-Flash
+  # Match the existing authorized model. Provider wiring/subscription compatibility
+  # must be verified before activation; this template does not copy any credentials.
 # Empty until names/permissions and effective API tool visibility are accepted.
 toolsets: []
 platform_toolsets:

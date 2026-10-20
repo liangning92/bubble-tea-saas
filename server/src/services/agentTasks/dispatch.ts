@@ -8,6 +8,8 @@ import type { AgentPrincipal, AgentTaskDependencies, AgentTaskEvent } from './co
 const inputSchema = z.object({ eventId: z.string().uuid(), authVersion: z.number().int().positive() }).strict()
 export interface DispatchRecord {
   eventId: string; taskId: string; runId: string; preparedAt: string; prepared: PreparedDispatch
+  target: { origin: string; identityId: string; credentialGeneration: number }
+  requestedBy: { agentId: string; grantVersion: number; clientRevision: number }
   state: 'in_flight' | 'admitted' | 'admission_unknown' | 'rejected'
   mapping?: RunMapping; admission?: AdmissionResult; lastStatus?: StatusResult; updatedAt: string
 }
@@ -21,8 +23,17 @@ const fail = (code: string, status = 409): never => { throw new TeamError(status
  * A persisted in_flight reservation is uncertain after restart, never permission to POST again.
  */
 export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskDependencies, 'authorize' | 'now'>,
-  profile: string, transport: DispatchTransport) {
+  profile: string, transport: DispatchTransport, target: DispatchRecord['target']) {
   if (!dependencies?.authorize || !transport?.dispatch || !transport?.status) throw Error('AGENT_DISPATCH_DEPENDENCIES_REQUIRED')
+  const binding = z.object({ origin: z.string().url(), identityId: z.string().min(1).max(128), credentialGeneration: z.number().int().positive() }).strict().parse(target)
+  const origin = new URL(binding.origin)
+  if (origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash ||
+    !(origin.protocol === 'https:' || origin.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname))) throw Error('AGENT_DISPATCH_TARGET_INVALID')
+  const fixedTarget = { origin: origin.origin, identityId: binding.identityId, credentialGeneration: binding.credentialGeneration }
+  const assertTarget = (r: DispatchRecord) => {
+    if (!r.target || r.target.origin !== fixedTarget.origin || r.target.identityId !== fixedTarget.identityId ||
+      r.target.credentialGeneration !== fixedTarget.credentialGeneration || r.prepared.profile !== profile) fail('AGENT_DISPATCH_TARGET_CHANGED')
+  }
   const now = dependencies.now || Date.now
   const at = () => new Date(now()).toISOString()
   const key = (eventId: string) => `agent.dispatch.${eventId}`
@@ -71,7 +82,7 @@ export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskD
         await lockTeam(tx, principal.storeId, 'agent.tasks')
         const { p, task, outbox } = await scope(tx, principal, v.eventId, v.authVersion)
         const previous = await readTeam<DispatchRecord>(tx, p.storeId, key(v.eventId))
-        if (previous) return { previous }
+        if (previous) { assertTarget(previous); return { previous } }
         const x = task.agentTask!, e: AgentTaskEvent = outbox.event
         if (x.state !== 'assigned' || task.status !== 'assigned' || x.runId !== e.payload.runId ||
           x.eventId !== e.id || x.round !== e.payload.round || task.version !== e.payload.taskVersion ||
@@ -79,7 +90,8 @@ export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskD
         const prepared = prepareDispatchEvent(profile, e, { taskId: task.id, runId: x.runId, eventId: x.eventId,
           round: x.round, taskVersion: task.version, executorId: x.executorId, leaseVersion: x.leaseVersion })
         const record: DispatchRecord = { eventId: e.id, taskId: task.id, runId: x.runId,
-          preparedAt: at(), updatedAt: at(), prepared, state: 'in_flight' }
+          preparedAt: at(), updatedAt: at(), prepared, state: 'in_flight', target: fixedTarget,
+          requestedBy: { agentId: p.agentId, grantVersion: p.grantVersion, clientRevision: p.clientRevision } }
         await saved(tx, p, record, 'agent_dispatch_reserved')
         return { record }
       })
@@ -110,6 +122,7 @@ export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskD
         await lockTeam(tx, principal.storeId, 'agent.tasks'); await scope(tx, principal, v.eventId, v.authVersion)
         const r = await readTeam<DispatchRecord>(tx, principal.storeId, key(v.eventId))
         if (!r) fail('AGENT_DISPATCH_RECEIPT_NOT_FOUND', 404)
+        assertTarget(r)
         return r
       })
       if (!record.mapping) {

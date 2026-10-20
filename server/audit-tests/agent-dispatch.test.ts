@@ -7,13 +7,15 @@ jest.mock('../src/services/TeamCommunicationService',()=>({
   writeTeam:async(db:any,storeId:string,key:string,value:any)=>{await db.config.upsert({where:{storeId_key:{storeId,key:'team.communication.'+key}},create:{storeId,key:'team.communication.'+key,value:JSON.stringify(value)},update:{value:JSON.stringify(value)}});return value},
   lockTeam:async()=>{}
 }))
+import { persistentAdmissionBindings } from '../src/services/agentTasks/admissionBindings'
 import { createAgentTaskDispatcher } from '../src/services/agentTasks/dispatch'
 import { prepareDispatchEvent, HermesRunsClient } from '../src/services/hermesTransport/client'
 
 function fixture(){
  const storeId='synthetic-store',channelId=randomUUID(),taskId=randomUUID(),runId=randomUUID(),eventId=randomUUID(),rows=new Map<string,any>(),audits:any[]=[],calls:{url:string;method:string;body?:string}[]=[]
  const principal:AgentPrincipal={agentId:'synthetic-dot',role:'manager',storeId,grantVersion:1,clientRevision:1,scopes:['management.assign']}
- const state={now:Date.parse('2026-10-21T00:00:00Z'),revoked:false,auditFail:false,status:'queued',admission:'accepted' as 'accepted'|'unknown'|'rejected'|'throw',active:false,gate:undefined as undefined|Promise<void>}
+ const target={origin:'http://127.0.0.1:19777',identityId:'synthetic-transport-identity',credentialGeneration:1}
+ const state={token:'synthetic-transport-token',now:Date.parse('2026-10-21T00:00:00Z'),revoked:false,auditFail:false,status:'queued',admission:'accepted' as 'accepted'|'unknown'|'rejected'|'throw',active:false,gate:undefined as undefined|Promise<void>}
  let tail:Promise<unknown>=Promise.resolve()
  const put=(key:string,v:any)=>rows.set(storeId+':team.communication.'+key,{storeId,key:'team.communication.'+key,value:JSON.stringify(v)})
  const read=(key:string)=>{const r=rows.get(storeId+':team.communication.'+key);return r?JSON.parse(r.value):null}
@@ -22,7 +24,8 @@ function fixture(){
  put('channel.'+channelId,{id:channelId,archived:false});put('task.'+channelId+'.'+taskId,task);put('agent.outbox.'+eventId,{event,channelId,managerId:principal.agentId,executorId:'synthetic-hermes',status:'pending'});put('agent.event.cursor',{sequence:1});put('agent.event.000000000001',event)
  const db:any={config:{findUnique:async(q:any)=>rows.get(q.where.storeId_key.storeId+':'+q.where.storeId_key.key)||null,upsert:async(q:any)=>{const k=q.where.storeId_key.storeId+':'+q.where.storeId_key.key;rows.set(k,{...(rows.get(k)||q.create),...(rows.has(k)?q.update:{})});return rows.get(k)}},financeAuditLog:{create:async(q:any)=>{if(state.auditFail)throw Error('SYNTHETIC_AUDIT_FAILURE');audits.push(q.data);return q.data}},$transaction:async(fn:any)=>{const prior=tail;let unlock!:()=>void;tail=new Promise<void>(r=>unlock=r);await prior;const saved=structuredClone([...rows]),n=audits.length;state.active=true;try{return await fn(db)}catch(e){rows.clear();for(const[k,v]of saved)rows.set(k,v);audits.splice(n);throw e}finally{state.active=false;unlock()}}}
  const deps={now:()=>state.now,authorize:async(_db:any,p:AgentPrincipal,scope:string,c:string)=>{if(state.revoked||p.storeId!==storeId||p.agentId!==principal.agentId||p.role!=='manager'||p.grantVersion!==1||p.clientRevision!==1||!p.scopes.includes(scope)||c!==channelId)throw Error('SYNTHETIC_AUTH_REVOKED');return p}}
- const client=new HermesRunsClient({origin:'http://127.0.0.1:19777',profile:'synthetic-stock',bearerToken:()=> 'synthetic-transport-token',fetch:async(url,request)=>{
+ const bindings=persistentAdmissionBindings(db,storeId)
+ const client=new HermesRunsClient({origin:target.origin,profile:'synthetic-stock',admissionBindings:bindings,bearerToken:()=>state.token,fetch:async(url,request)=>{
    calls.push({url,method:request.method,body:request.body});expect(state.active).toBe(false)
    if(request.method==='POST'){
      const reserved=read('agent.dispatch.'+eventId);expect(reserved.state).toBe('in_flight');expect(audits.some(a=>a.description==='agent_dispatch_reserved')).toBe(true)
@@ -34,8 +37,8 @@ function fixture(){
    }
    return{status:200,text:async()=>JSON.stringify({run_id:'run_synthetic',session_id:read('agent.dispatch.'+eventId).prepared.sessionId,status:state.status,output:'Untrusted runtime output must not become task acceptance'})}
  }})
- const make=()=>createAgentTaskDispatcher(db,deps,'synthetic-stock',client),dispatcher=make(),input={eventId,authVersion:1}
- return{db,deps,dispatcher,make,input,principal,state,calls,rows,audits,put,read,task,taskId,channelId,eventId}
+ const make=(nextTarget=target)=>createAgentTaskDispatcher(db,deps,'synthetic-stock',client,nextTarget),dispatcher=make(),input={eventId,authVersion:1}
+ return{db,deps,dispatcher,make,target,bindings,client,storeId,input,principal,state,calls,rows,audits,put,read,task,taskId,channelId,eventId}
 }
 
 describe('persisted Hermes admission and status never substitute for task execution or acceptance',()=>{
@@ -68,7 +71,7 @@ describe('persisted Hermes admission and status never substitute for task execut
  })
  test('lost in-flight reservation after 120 seconds becomes visible unknown once without HTTP; a late known receipt cannot overwrite a newer business run',async()=>{
   const f=fixture(),outbox=f.read('agent.outbox.'+f.eventId),prepared=prepareDispatchEvent('synthetic-stock',outbox.event,{taskId:f.taskId,runId:f.task.agentTask.runId,eventId:f.eventId,round:1,taskVersion:1,executorId:f.task.agentTask.executorId,leaseVersion:0})
-  f.put('agent.dispatch.'+f.eventId,{eventId:f.eventId,taskId:f.taskId,runId:f.task.agentTask.runId,preparedAt:new Date(f.state.now).toISOString(),updatedAt:new Date(f.state.now).toISOString(),prepared,state:'in_flight'})
+  f.put('agent.dispatch.'+f.eventId,{eventId:f.eventId,taskId:f.taskId,runId:f.task.agentTask.runId,preparedAt:new Date(f.state.now).toISOString(),updatedAt:new Date(f.state.now).toISOString(),prepared,state:'in_flight',target:f.target,requestedBy:{agentId:f.principal.agentId,grantVersion:1,clientRevision:1}})
   f.state.now+=120001
   expect((await f.make().reconcile(f.principal,f.input)).state).toBe('admission_unknown')
   expect(f.read('task.'+f.channelId+'.'+f.taskId).agentTask.error).toBe('AGENT_TRANSPORT_ADMISSION_UNKNOWN')
@@ -85,6 +88,36 @@ describe('persisted Hermes admission and status never substitute for task execut
   expect((await pending).state).toBe('admitted')
   expect(g.read('task.'+g.channelId+'.'+g.taskId)).toEqual(next)
   expect(g.calls.map(c=>c.method)).toEqual(['POST'])
+ })
+ test('origin, transport identity and credential generation rotation cannot replay or query an existing reservation',async()=>{
+  const f=fixture();await f.dispatcher.dispatch(f.principal,f.input)
+  for(const change of [{origin:'https://other-synthetic.invalid'},{identityId:'another-identity'},{credentialGeneration:2}]){
+    const rotated=f.make({...f.target,...change})
+    await expect(rotated.dispatch(f.principal,f.input)).rejects.toThrow('AGENT_DISPATCH_TARGET_CHANGED')
+    await expect(rotated.reconcile(f.principal,f.input)).rejects.toThrow('AGENT_DISPATCH_TARGET_CHANGED')
+  }
+  expect(f.calls.map(c=>c.method)).toEqual(['POST'])
+  f.state.token='synthetic-rotated-token'
+  const status=await f.make().reconcile(f.principal,f.input)
+  expect(status.lastStatus?.kind).toBe('status_unknown');expect((status.lastStatus as any).reason).toBe('auth_scope_changed')
+  expect(f.calls.map(c=>c.method)).toEqual(['POST'])
+ })
+ test('permanent admission binding requires a committed reservation and binds a backend run once across concurrent candidates',async()=>{
+  const f=fixture(),e=f.read('agent.outbox.'+f.eventId).event,dispatch=prepareDispatchEvent('synthetic-stock',e,{taskId:f.taskId,runId:f.task.agentTask.runId,eventId:f.eventId,round:1,taskVersion:1,executorId:f.task.agentTask.executorId,leaseVersion:0})
+  const a={dispatch,origin:f.target.origin,authScopeHash:'a'.repeat(64)},b={...a,authScopeHash:'b'.repeat(64)}
+  await expect(f.bindings.bindOnce(dispatch.references.backendRunId,a)).rejects.toThrow('AGENT_ADMISSION_RESERVATION_REQUIRED')
+  expect(await f.bindings.load(dispatch.references.backendRunId)).toBeUndefined()
+  f.put('agent.dispatch.'+f.eventId,{eventId:f.eventId,taskId:f.taskId,runId:dispatch.references.backendRunId,prepared:dispatch,state:'in_flight',target:f.target,requestedBy:{agentId:f.principal.agentId,grantVersion:1,clientRevision:1}})
+  const results=await Promise.all([f.bindings.bindOnce(dispatch.references.backendRunId,a),f.bindings.bindOnce(dispatch.references.backendRunId,b)])
+  expect(results[0]).toEqual(results[1]);expect(await persistentAdmissionBindings(f.db,f.storeId).load(dispatch.references.backendRunId)).toEqual(results[0])
+  expect(f.audits.filter(a=>a.description==='agent_admission_bound')).toHaveLength(1);expect(f.calls).toHaveLength(0)
+ })
+ test('binding audit failure rolls back the binding and performs zero network calls',async()=>{
+  const f=fixture(),e=f.read('agent.outbox.'+f.eventId).event,dispatch=prepareDispatchEvent('synthetic-stock',e,{taskId:f.taskId,runId:f.task.agentTask.runId,eventId:f.eventId,round:1,taskVersion:1,executorId:f.task.agentTask.executorId,leaseVersion:0})
+  f.put('agent.dispatch.'+f.eventId,{eventId:f.eventId,taskId:f.taskId,runId:dispatch.references.backendRunId,prepared:dispatch,state:'in_flight',target:f.target,requestedBy:{agentId:f.principal.agentId,grantVersion:1,clientRevision:1}})
+  f.state.auditFail=true
+  await expect(f.bindings.bindOnce(dispatch.references.backendRunId,{dispatch,origin:f.target.origin,authScopeHash:'a'.repeat(64)})).rejects.toThrow('SYNTHETIC_AUDIT_FAILURE')
+  expect(await f.bindings.load(dispatch.references.backendRunId)).toBeUndefined();expect(f.calls).toHaveLength(0)
  })
  test('reservation audit failure rolls back and performs zero transport calls',async()=>{
   const f=fixture();f.state.auditFail=true;await expect(f.dispatcher.dispatch(f.principal,f.input)).rejects.toThrow('SYNTHETIC_AUDIT_FAILURE');expect(f.calls).toHaveLength(0);expect(f.read('agent.dispatch.'+f.eventId)).toBeNull()

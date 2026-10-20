@@ -40,16 +40,17 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
   function version(t:RecordTask,v:number){if(t.version!==v)fail('AGENT_TASK_VERSION_CONFLICT')}
   function run(t:RecordTask,input:{runId?:string;round?:number}){if(t.agentTask.runId!==input.runId||t.agentTask.round!==input.round)fail('AGENT_TASK_RUN_CHANGED')}
   async function reportFor(tx:any,p:AgentPrincipal,t:RecordTask):Promise<AgentTaskReport|undefined>{return t.agentTask.reportId?await readTeam(tx,p.storeId,`agent.report.${t.agentTask.reportId}`)||undefined:undefined}
-  async function view(tx:any,p:AgentPrincipal,t:RecordTask):Promise<AgentTaskView>{
+  const reportReceipt=(r:AgentTaskReport)=>({id:r.id,version:r.version,runId:r.runId,round:r.round,outcome:r.outcome,createdAt:r.createdAt})
+  async function view(tx:any,p:AgentPrincipal,t:RecordTask,full=false):Promise<AgentTaskView>{
     const x=t.agentTask,report=await reportFor(tx,p,t);let evidence:AgentTaskView['evidence']
-    if(x.evidenceId){
+    if(full&&x.evidenceId){
       const row=await readTeam<Evidence>(tx,p.storeId,`agent.evidence.${x.evidenceId}`)
       if(!row||row.id!==x.evidenceId||row.taskId!==t.id||row.runId!==x.runId||row.round!==x.round||row.executorId!==x.executorId||row.snapshotHash!==x.inputSnapshotHash)fail('AGENT_TASK_EVIDENCE_CHANGED')
       const snapshot=stockReadOnlySnapshotSchema.parse(row.snapshot),{fingerprint,...facts}=snapshot
       if(snapshot.storeId!==p.storeId||fingerprint!==row.snapshotHash||digest(facts)!==fingerprint)fail('AGENT_TASK_EVIDENCE_CHANGED')
       evidence={evidenceId:row.id,inputSnapshotHash:row.snapshotHash,evidence:snapshot}
     }
-    return{taskId:t.id,taskCode:x.taskCode,taskVersion:t.version,channelId:t.channelId,runId:x.runId,round:x.round,executorId:x.executorId,managerId:x.managerId,leaseVersion:x.leaseVersion,state:x.state,plan:x.plan,...(x.reportDueAt?{reportDueAt:x.reportDueAt}:{}),...(x.error?{error:x.error}:{}),...(report?{report}:{}),...(evidence?{evidence}:{}),dispatch:{taskId:t.id,runId:x.runId,eventId:x.eventId,round:x.round,taskVersion:t.version,executorId:x.executorId,leaseVersion:x.leaseVersion}}
+    return{taskId:t.id,taskCode:x.taskCode,taskVersion:t.version,channelId:t.channelId,runId:x.runId,round:x.round,executorId:x.executorId,managerId:x.managerId,leaseVersion:x.leaseVersion,state:x.state,plan:x.plan,...(x.reportDueAt?{reportDueAt:x.reportDueAt}:{}),...(x.error?{error:x.error}:{}),...(report?{report:full?report:reportReceipt(report)}:{}),...(evidence?{evidence}:{}),dispatch:{taskId:t.id,runId:x.runId,eventId:x.eventId,round:x.round,taskVersion:t.version,executorId:x.executorId,leaseVersion:x.leaseVersion}}
   }
   async function audit(tx:any,p:AgentPrincipal,t:RecordTask,action:string,detail:unknown={}) {
     await tx.financeAuditLog.create({data:{storeId:p.storeId,userId:actorRef(p),action:'update',entityType:'agent_task',entityId:t.id,description:action,newValue:JSON.stringify({actorType:'agent',agentId:p.agentId,role:p.role,grantVersion:p.grantVersion,clientRevision:p.clientRevision,taskId:t.id,runId:t.agentTask.runId,round:t.agentTask.round,taskVersion:t.version,action,detail})}})
@@ -64,7 +65,13 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
     return e
   }
   const receiptKey=(p:AgentPrincipal,id:string)=>`agent.request.${p.agentId}.${id}`
-  async function repeated(tx:any,p:AgentPrincipal,input:any,operation:string) {const r=await readTeam(tx,p.storeId,receiptKey(p,input.requestId));if(!r)return null;if(r.hash!==digest({operation,input}))fail('AGENT_TASK_REQUEST_CONFLICT');return r.result}
+  async function repeated(tx:any,p:AgentPrincipal,input:any,operation:string) {
+    const r=await readTeam(tx,p.storeId,receiptKey(p,input.requestId));if(!r)return null;if(r.hash!==digest({operation,input}))fail('AGENT_TASK_REQUEST_CONFLICT')
+    if(operation==='evidence')return r.result // This operation already rechecked executor.evidence.
+    // Older saved mutation receipts may contain a full pre-projection view.
+    const {evidence: _privateEvidence,...result}=r.result
+    return {...result,...(result.report?{report:reportReceipt(result.report)}:{})}
+  }
   async function receipt(tx:any,p:AgentPrincipal,input:any,operation:string,result:any){await writeTeam(tx,p.storeId,receiptKey(p,input.requestId),{hash:digest({operation,input}),result});return result}
   async function expire(tx:any,p:AgentPrincipal,t:RecordTask) {
     t.agentTask.state='unknown';t.agentTask.error='AGENT_TASK_LEASE_EXPIRED_OUTCOME_UNKNOWN';delete t.agentTask.lease;t.version++
@@ -92,7 +99,7 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
       const e=await event(tx,p,t,'task.dispatch_ready');x.eventId=e.id;await writeTeam(tx,p.storeId,taskKey(t.channelId,t.id),t)
       return receipt(tx,p,v,'assign',await view(tx,p,t))
     })},
-    async get(principal,input){const v=readTaskSchema.parse(input);return db.$transaction(async(tx:any)=>{await storeLock(tx,principal.storeId);const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,scopeForRead(principal),t.channelId,v.authVersion);bound(p,t);return view(tx,p,t)})},
+    async get(principal,input){const v=readTaskSchema.parse(input);return db.$transaction(async(tx:any)=>{await storeLock(tx,principal.storeId);const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,scopeForRead(principal),t.channelId,v.authVersion);bound(p,t);return view(tx,p,t,p.role==='manager')})},
     async claim(principal,input){const v=claimTaskSchema.parse(input);const result=await db.$transaction(async(tx:any)=>{
       await storeLock(tx,principal.storeId);const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,'executor.claim',t.channelId,v.authVersion);bound(p,t,'executor');const old=await repeated(tx,p,v,'claim');if(old)return old
       version(t,v.expectedVersion);run(t,v);if(t.agentTask.state==='running'&&t.agentTask.lease&&(t.agentTask.lease.until<=now()))return expire(tx,p,t)

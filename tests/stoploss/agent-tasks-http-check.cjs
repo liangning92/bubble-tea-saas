@@ -9,6 +9,9 @@ const { prisma } = require(root + '/server/dist/config/database');
 const { createAgentTaskService } = require(root + '/server/dist/services/agentTasks/service');
 const { teamCommunication } = require(root + '/server/dist/services/TeamCommunicationService');
 const express = require(root + '/server/node_modules/express');
+const { persistentAdmissionBindings } = require(root + '/server/dist/services/agentTasks/admissionBindings');
+const { createAgentTaskDispatcher } = require(root + '/server/dist/services/agentTasks/dispatch');
+const { HermesRunsClient } = require(root + '/server/dist/services/hermesTransport/client');
 const nativeFetch = global.fetch;
 global.fetch = (url, options) => { assert.equal(new URL(String(url)).hostname, '127.0.0.1'); return nativeFetch(url, options) };
 const grantKey = id => 'test.agent.grant.' + id;
@@ -68,7 +71,7 @@ async function request(token, method, body) {
 async function good(token, method, body) { const r = await request(token, method, body); assert.equal(r.status, 200, JSON.stringify(r)); return r.body.data; }
 async function close() { if (server) { await new Promise(resolve => server.close(resolve)); server = null; } }
 async function check(name, fn) {
-  if (process.env.CASE_FILTER && !name.includes(process.env.CASE_FILTER)) return;
+  if (process.env.CASE_FILTER && !process.env.CASE_FILTER.split('|').some(part => name.includes(part))) return;
   try { await fn(); passed.push(name); console.log('PASS', name) } catch (error) { failures.push({ name, error: error.stack || error.message }); console.error('FAIL', name, error); }
 }
 async function fixture() {
@@ -114,6 +117,81 @@ const reviewBody = (view, evidenceId, decision) => ({ requestId: randomUUID(), a
 (async () => {
   try {
     tenant = await prisma.tenant.create({ data: { name: 'Synthetic agent tasks HTTP acceptance' } }); await open();
+    await check('admission bindings: durable concurrent first binding rollback restart and auth-scope replay protection', async () => {
+      const origin = 'http://127.0.0.1:43111', profile = 'synthetic-stock-readonly';
+      const target = { origin, identityId: 'synthetic', credentialGeneration: 1 };
+      async function reserved() {
+        const f = await fixture(), task = await good(f.managerToken, 'assign', f.assignment);
+        const transport = { dispatch: async prepared => ({ kind: 'admission_unknown', reason: 'network_or_timeout', dispatch: prepared }),
+          status: async () => { throw Error('Unexpected fake status call') } };
+        const dispatcher = createAgentTaskDispatcher(prisma, deps, profile, transport, target);
+        const record = await dispatcher.dispatch(f.manager, { eventId: task.dispatch.eventId, authVersion: 1 });
+        assert.equal(record.state, 'admission_unknown'); return { f, task, record };
+      }
+      // Real persistent dispatcher reservation exists before binding; no metadata fixture shortcut.
+      const first = await reserved(), bindings = persistentAdmissionBindings(prisma, first.f.storeId);
+      const a = { dispatch: first.record.prepared, origin, authScopeHash: 'a'.repeat(64) };
+      const b = { ...a, authScopeHash: 'b'.repeat(64) };
+      const race = await Promise.all([bindings.bindOnce(first.task.runId, a), bindings.bindOnce(first.task.runId, b)]);
+      assert.deepEqual(race[0], race[1]); assert(['a'.repeat(64), 'b'.repeat(64)].includes(race[0].authScopeHash));
+      assert.deepEqual(await bindings.load(first.task.runId), race[0]);
+      const bindingRows = await prisma.config.findMany({ where: { storeId: first.f.storeId, key: 'team.communication.agent.transport.binding.' + first.task.runId } });
+      assert.equal(bindingRows.length, 1);
+      const childCode = `const fs=require('node:fs');const {prisma}=require(${JSON.stringify(root + '/server/dist/config/database')});const {persistentAdmissionBindings}=require(${JSON.stringify(root + '/server/dist/services/agentTasks/admissionBindings')});(async()=>{try{const p=JSON.parse(fs.readFileSync(0,'utf8'));process.stdout.write(JSON.stringify(await persistentAdmissionBindings(prisma,p.storeId).load(p.runId)));}finally{await prisma.$disconnect()}})().catch(e=>{process.stderr.write(e.stack);process.exitCode=1});`;
+      const child = spawnSync(process.execPath, ['-e', childCode], { cwd: root, env: process.env, input: JSON.stringify({ storeId: first.f.storeId, runId: first.task.runId }), encoding: 'utf8', timeout: 30000 });
+      assert.equal(child.status, 0, child.stderr || child.error?.message); assert.deepEqual(JSON.parse(child.stdout), race[0]);
+      const second = await reserved(), candidate = { dispatch: second.record.prepared, origin, authScopeHash: 'c'.repeat(64) };
+      const before = await prisma.config.findMany({ where: { storeId: second.f.storeId }, orderBy: { key: 'asc' } });
+      faultAudit = true;
+      await assert.rejects(() => persistentAdmissionBindings(faultDb, second.f.storeId).bindOnce(second.task.runId, candidate), /SYNTHETIC_AUDIT_FAILURE/);
+      assert.deepEqual(await prisma.config.findMany({ where: { storeId: second.f.storeId }, orderBy: { key: 'asc' } }), before);
+      assert.equal(await persistentAdmissionBindings(prisma, second.f.storeId).load(second.task.runId), undefined);
+      // Actual client + persistent bindings; fetch is fake and never sends network traffic.
+      const lost = await fixture(), lostTask = await good(lost.managerToken, 'assign', lost.assignment); let callsA = 0, callsB = 0;
+      const originalClient = new HermesRunsClient({ origin, profile, bearerToken: () => 'synthetic-a', admissionBindings: persistentAdmissionBindings(prisma, lost.storeId),
+        fetch: async (url, init) => { callsA++; assert.equal(new URL(url).origin, origin); assert.equal(init.method, 'POST'); throw Error('SYNTHETIC_RESPONSE_LOST') } });
+      const dispatch = createAgentTaskDispatcher(prisma, deps, profile, originalClient, target);
+      const unknown = await dispatch.dispatch(lost.manager, { eventId: lostTask.dispatch.eventId, authVersion: 1 });
+      assert.equal(unknown.state, 'admission_unknown'); assert.equal(callsA, 1);
+      const persisted = await persistentAdmissionBindings(prisma, lost.storeId).load(lostTask.runId);
+      const rotated = new HermesRunsClient({ origin, profile, bearerToken: () => 'synthetic-b', admissionBindings: persistentAdmissionBindings(prisma, lost.storeId),
+        fetch: async () => { callsB++; throw Error('ROTATED_AUTH_MUST_NOT_SEND_HTTP') } });
+      const denied = await rotated.dispatch(unknown.prepared);
+      assert.equal(denied.kind, 'admission_unknown'); assert.equal(denied.reason, 'auth_scope_changed'); assert.equal(callsB, 0);
+      assert.deepEqual(await persistentAdmissionBindings(prisma, lost.storeId).load(lostTask.runId), persisted);
+      const started = await fixture(), startedTask = await good(started.managerToken, 'assign', started.assignment); let startedCalls = 0;
+      const startedClient = new HermesRunsClient({ origin, profile, bearerToken: () => 'synthetic-started', admissionBindings: persistentAdmissionBindings(prisma, started.storeId),
+        fetch: async () => { startedCalls++; return { status: 202, text: async () => JSON.stringify({ run_id: 'run_synthetic_started', status: 'started', replayed: false }) } } });
+      const admitted = await createAgentTaskDispatcher(prisma, deps, profile, startedClient, target).dispatch(started.manager, { eventId: startedTask.dispatch.eventId, authVersion: 1 });
+      assert.equal(startedCalls, 1); assert.equal(admitted.state, 'admitted'); assert.equal(admitted.mapping.hermesRunId, 'run_synthetic_started');
+      assert.equal((await good(started.managerToken, 'get', { taskId: startedTask.taskId, authVersion: 1 })).state, 'assigned');
+    });
+    await check('projection scope: executor claim-only metadata and legacy receipt never expose review evidence', async () => {
+      const f = await fixture(), assigned = await good(f.managerToken, 'assign', f.assignment), claim = await good(f.executorToken, 'claim', claimBody(assigned));
+      const evidence = await good(f.executorToken, 'readStockEvidence', leasedBody(claim, claim));
+      const body = { ...reportBody(evidence, claim, evidence), rawReport: '  SYNTHETIC_PRIVATE_REPORT_MARKER\n  ' };
+      const result = await good(f.executorToken, 'report', body);
+      const full = await good(f.managerToken, 'get', { taskId: assigned.taskId, authVersion: 1 });
+      assert.equal(full.report.rawReport, body.rawReport); assert.deepEqual(full.evidence.evidence, evidence.evidence);
+      function metadata(view) {
+        assert(!Object.hasOwn(view, 'evidence')); assert.deepEqual(Object.keys(view.report).sort(), ['createdAt', 'id', 'outcome', 'round', 'runId', 'version']);
+        assert(!JSON.stringify(view).includes('SYNTHETIC_PRIVATE_REPORT_MARKER')); assert(!JSON.stringify(view).includes(evidence.inputSnapshotHash));
+        assert(!Object.hasOwn(view.report, 'sourceRefs')); assert(!Object.hasOwn(view.report, 'runtimeReceipt'));
+      }
+      metadata(result);
+      // Explicit legacy-receipt fixture: the old implementation persisted a full view.
+      const receiptKey = 'team.communication.agent.request.' + f.executor.agentId + '.' + body.requestId;
+      const saved = await prisma.config.findUnique({ where: { storeId_key: { storeId: f.storeId, key: receiptKey } } });
+      const legacyReceipt = JSON.parse(saved.value); legacyReceipt.result = { ...legacyReceipt.result, evidence: full.evidence, report: full.report };
+      await prisma.config.update({ where: { storeId_key: { storeId: f.storeId, key: receiptKey } }, data: { value: JSON.stringify(legacyReceipt) } });
+      await put(f.storeId, grantKey(f.executor.agentId), { enabled: true, channelId: f.channel.id, principal: { ...f.executor, scopes: ['executor.claim'] } });
+      metadata(await good(f.executorToken, 'get', { taskId: assigned.taskId, authVersion: 1 }));
+      assert.equal((await request(f.executorToken, 'report', body)).status, 403);
+      await put(f.storeId, grantKey(f.executor.agentId), { enabled: true, channelId: f.channel.id, principal: { ...f.executor, scopes: ['executor.claim', 'executor.report'] } });
+      metadata(await good(f.executorToken, 'report', body));
+      const stillFull = await good(f.managerToken, 'get', { taskId: assigned.taskId, authVersion: 1 });
+      assert.equal(stillFull.report.rawReport, body.rawReport); assert.deepEqual(stillFull.evidence, full.evidence);
+    });
     await check('synthetic HTTP auth denies missing identity and injected body principal', async () => {
       const f = await fixture(); assert.equal((await request('missing', 'assign', f.assignment)).status, 401);
       assert.notEqual((await request(f.executorToken, 'assign', { ...f.assignment, principal: f.manager })).status, 200);
@@ -143,7 +221,7 @@ const reviewBody = (view, evidenceId, decision) => ({ requestId: randomUUID(), a
       const rawReport = '  \nSynthetic original raw executor report only; not Hermes/model.\n  ';
       const reported = await good(f.executorToken, 'report', { ...reportBody(evidence, claim, evidence), rawReport });
       const seen = await good(f.managerToken, 'get', { taskId: assigned.taskId, authVersion: 1 });
-      assert.equal(reported.report.rawReport, rawReport); assert.equal(seen.report.rawReport, rawReport);
+      assert(!Object.hasOwn(reported.report, 'rawReport')); assert.equal(seen.report.rawReport, rawReport);
       assert(seen.evidence, 'Manager GET must include immutable evidence for review');
       assert.equal(seen.evidence.evidenceId, evidence.evidenceId);
       assert.equal(seen.evidence.inputSnapshotHash, evidence.inputSnapshotHash);

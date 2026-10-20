@@ -100,7 +100,15 @@ async function serviceFixture() {
   const begin=async()=>{const assigned=await service.assign(manager,assignInput());const claimed=await service.claim(executor,claimInput(assigned));const evidence=await service.readStockEvidence(executor,leaseInput(claimed,claimed.leaseToken));return{assigned,claimed,evidence}}
   const reportInput=(v:any,token:string,outcome:'completed'|'unknown'='completed')=>({...leaseInput(v,token),evidenceId:v.evidenceId,inputSnapshotHash:v.inputSnapshotHash,outcome,rawReport:' \nNative book stock is -12 pcs; no certified physical count is available. This is not proof of physical shortage.\n ',sourceRefs:['inventory:synthetic-cup:1:3'],runtimeReceipt:{hermesRunId:'synthetic-hermes-run'}})
   const reviewInput=(v:any,evidenceId:string,decision:'accept'|'rework'='accept')=>({requestId:randomUUID(),authVersion:1,taskId:v.taskId,runId:v.runId,round:v.round,expectedVersion:v.taskVersion,reportId:v.report.id,reportVersion:v.report.version,decision,check:{summary:'Independently checked native immutable evidence',checkedEvidenceIds:[evidenceId],criteria:[{id:'stock-proof',result:(decision==='rework'?'not_met':'met') as 'not_met'|'met',note:decision==='rework'?'The report needs clearer explanation of the unverified physical count':'Recorded stock and unknown physical count are distinguished'}]},...(decision==='rework'?{nextPlan:{...plan(),objective:'Recheck the same immutable evidence and explicitly label the unknown physical count'}}:{})})
-  return{service,db,manager,executor,grants,rows,audits,stock,channelId,storeId,forbiddenWrite,assignInput,claimInput,leaseInput,begin,reportInput,reviewInput,advance:(ms:number)=>{now+=ms},read:(key:string)=>{const row=rows.get(storeId+':team.communication.'+key);return row?JSON.parse(row.value):null}}
+  return{service,db,manager,executor,grants,put,rows,audits,stock,channelId,storeId,forbiddenWrite,assignInput,claimInput,leaseInput,begin,reportInput,reviewInput,advance:(ms:number)=>{now+=ms},read:(key:string)=>{const row=rows.get(storeId+':team.communication.'+key);return row?JSON.parse(row.value):null}}
+}
+
+function expectMetadataOnly(value:any){
+  expect(value.evidence).toBeUndefined()
+  if(value.report){
+    expect(Object.keys(value.report).sort()).toEqual(['id','version','runId','round','outcome','createdAt'].sort())
+    for(const field of ['rawReport','sourceRefs','runtimeReceipt','evidenceId','inputSnapshotHash'])expect(value.report[field]).toBeUndefined()
+  }
 }
 
 describe('Hermes task business service with real immutable stock evidence',()=>{
@@ -108,13 +116,20 @@ describe('Hermes task business service with real immutable stock evidence',()=>{
     const f=await serviceFixture(),{claimed,evidence}=await f.begin()
     expect(claimed.state).toBe('running');expect((evidence.evidence as any).items[0].stock).toBe(-12)
     const reported=await f.service.report(f.executor,f.reportInput(evidence,claimed.leaseToken))
-    expect(reported.state).toBe('awaiting_review');expect(reported.report?.outcome).toBe('completed');expect(reported.report?.rawReport).toBe(f.reportInput(evidence,claimed.leaseToken).rawReport)
+    expect(reported.state).toBe('awaiting_review');expect(reported.report?.outcome).toBe('completed');expectMetadataOnly(claimed);expectMetadataOnly(reported)
+    const managerView=await f.service.get(f.manager,{taskId:reported.taskId,authVersion:1})
+    expect(managerView.report?.rawReport).toBe(f.reportInput(evidence,claimed.leaseToken).rawReport)
+    expect(managerView.report?.sourceRefs).toEqual(['inventory:synthetic-cup:1:3']);expect(managerView.evidence?.evidence).toEqual(evidence.evidence)
+    const claimOnly={...f.executor,scopes:['executor.claim']};f.grants.set(f.executor.agentId,claimOnly)
+    expectMetadataOnly(await f.service.get(claimOnly,{taskId:reported.taskId,authVersion:1}))
+    await expect(f.service.readStockEvidence(claimOnly,f.leaseInput(evidence,claimed.leaseToken))).rejects.toThrow()
+    f.grants.set(f.executor.agentId,f.executor)
     const reworked=await f.service.review(f.manager,f.reviewInput(reported,evidence.evidenceId,'rework'))
-    expect(reworked.round).toBe(reported.round+1);expect(reworked.runId).not.toBe(reported.runId);expect(reworked.state).toBe('assigned')
+    expectMetadataOnly(reworked);expect(reworked.round).toBe(reported.round+1);expect(reworked.runId).not.toBe(reported.runId);expect(reworked.state).toBe('assigned')
     const claimed2=await f.service.claim(f.executor,f.claimInput(reworked)),evidence2=await f.service.readStockEvidence(f.executor,f.leaseInput(claimed2,claimed2.leaseToken))
     const reported2=await f.service.report(f.executor,f.reportInput(evidence2,claimed2.leaseToken))
     const accepted=await f.service.review(f.manager,f.reviewInput(reported2,evidence2.evidenceId))
-    expect(accepted.state).toBe('accepted');expect(f.forbiddenWrite).not.toHaveBeenCalled()
+    expect(accepted.state).toBe('accepted');expectMetadataOnly(accepted);expect(f.forbiddenWrite).not.toHaveBeenCalled()
     const saved=f.read('task.'+f.channelId+'.'+accepted.taskId);expect(saved.status).toBe('completed');expect(saved.agentTask.checks).toHaveLength(2)
   })
   test('same mutation request has an exact receipt and never repeats dispatch/report/review',async()=>{
@@ -127,6 +142,9 @@ describe('Hermes task business service with real immutable stock evidence',()=>{
     expect(await f.service.readStockEvidence(f.executor,einput)).toEqual(e)
     const rinput=f.reportInput(e,claimed.leaseToken),reported=await f.service.report(f.executor,rinput)
     expect(await f.service.report(f.executor,rinput)).toEqual(reported)
+    const full=await f.service.get(f.manager,{taskId:reported.taskId,authVersion:1}),receiptKey='agent.request.'+f.executor.agentId+'.'+rinput.requestId,legacy=f.read(receiptKey)
+    f.put(receiptKey,{...legacy,result:{...legacy.result,evidence:full.evidence,report:full.report}})
+    const legacyReplay=await f.service.report(f.executor,rinput);expectMetadataOnly(legacyReplay);expect(legacyReplay).toEqual(reported)
     await expect(f.service.report(f.executor,{...rinput,rawReport:rinput.rawReport+' '})).rejects.toThrow()
     const review=f.reviewInput(reported,e.evidenceId),accepted=await f.service.review(f.manager,review)
     expect(await f.service.review(f.manager,review)).toEqual(accepted)
@@ -145,6 +163,7 @@ describe('Hermes task business service with real immutable stock evidence',()=>{
   test('captured evidence is immutable despite stock drift; invented source, wrong evidence/hash and unmet acceptance are rejected',async()=>{
     const f=await serviceFixture(),{claimed,evidence}=await f.begin(),before=structuredClone(evidence.evidence)
     const visible=await f.service.get(f.manager,{taskId:evidence.taskId,authVersion:1})
+    expectMetadataOnly(await f.service.get(f.executor,{taskId:evidence.taskId,authVersion:1}))
     expect(visible.evidence).toEqual({evidenceId:evidence.evidenceId,inputSnapshotHash:evidence.inputSnapshotHash,evidence:before})
     const key=f.storeId+':team.communication.agent.evidence.'+evidence.evidenceId,original=structuredClone(f.rows.get(key)),record=JSON.parse(original.value)
     for(const corrupt of [{...record,runId:randomUUID()},{...record,snapshotHash:'c'.repeat(64)},{...record,snapshot:{...record.snapshot,items:[{...record.snapshot.items[0],stock:111}]}}]){

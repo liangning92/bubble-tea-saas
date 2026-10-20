@@ -245,3 +245,13 @@ test('management browser-only fixture changes run the actual browser consumers w
   }
  }finally{f.close()}
 });
+
+test('agent task and Hermes changes select isolated task checks without unrelated clients',()=>{
+ const f=fixture();try{
+  for(const file of ['server/audit-tests/agent-tasks.test.ts','server/audit-tests/agent-dispatch.test.ts','server/audit-tests/team-stock-readonly-source.test.ts'])f.write(file);
+  for(const file of ['server/src/services/agentTasks/service.ts','server/src/services/agentTasks/admissionBindings.ts','server/src/services/hermesTransport/client.ts','server/src/services/TeamStockReadOnlySource.ts']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.agentTasks,true);assert.deepEqual(p.components,['api']);assert.equal(p.electronTypes,false);assert.equal(p.auditTests.length,3);assert.deepEqual(p.browser,[]);assert.deepEqual(p.unmappedCode,[]);
+  }
+  const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');assert.match(runner,/if\(plan\.agentTasks\).*test-agent-tasks\.py/);assert.match(runner,/--import.*hermesTransport\.test\.ts/);
+ }finally{f.close()}
+});
