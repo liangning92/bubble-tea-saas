@@ -8,7 +8,11 @@ import subprocess
 import tempfile
 import signal
 import json
+import argparse
 
+parser = argparse.ArgumentParser()
+parser.add_argument('--supervision', nargs='?', const='both', choices=['both','unknown','known'], help='Only the new unknown/known-not-sent supervision cases; no old five')
+args = parser.parse_args()
 root = pathlib.Path(__file__).resolve().parents[1]
 run = os.environ.get('BT_TEST_RUN', '')
 assert run.startswith('bt-test-'), 'Run through scripts/with-docker-test.py'
@@ -42,7 +46,10 @@ try:
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
     env['AGENT_PILOT_TEST_DIR'] = str(base / 'host-files')
     (base / 'host-files').mkdir(mode=0o700)
-    command(['node', 'tests/stoploss/agent-pilot-host-http-check.cjs'], env=env, timeout=180)
+    if not args.supervision:
+        command(['node', 'tests/stoploss/agent-pilot-host-http-check.cjs'], env=env, timeout=180)
+    for mode in (('unknown', 'known') if not args.supervision or args.supervision == 'both' else (args.supervision,)):
+        command(['node', 'tests/stoploss/agent-pilot-host-http-check.cjs', '--supervision=' + mode], env=env, timeout=180)
 finally:
     for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         signal.signal(signum, signal.SIG_IGN)

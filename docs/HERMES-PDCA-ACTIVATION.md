@@ -1,5 +1,37 @@
 # STOCK-RO-001 real connection preparation — no activation performed
 
+## Current checkpoint (supersedes the original preparation notes below)
+
+The user approved the bounded real-access operation package. Implementation still
+must pass its new review/CI gate before any real activation. Backend checkpoint
+`2ddee56f` now includes default-closed production bindings, endpoint mounting,
+existing-process recovery scheduling, an absolute T0+24h anchor and a restricted
+server-side model relay. See `AGENT-PILOT-HOST.md` for its synthetic verification
+and limits. The dedicated Hermes broker/launcher and complete gateway composition
+are subsequent work, not part of that backend checkpoint.
+
+The selected identity topology is one Keycloak container plus a dedicated
+identity-only PostgreSQL container/volume on the existing Mac, without business DB
+grants. Proposed limits are 1 CPU/1 GiB for Keycloak and 0.5 CPU/512 MiB for its DB;
+these consume additional host resources and capacity is not yet measured. Both Mac
+and Docker were read-only confirmed x86_64. The selected official Keycloak amd64
+image was already exercised in a temporary real synthetic compatibility proof;
+that proof also validated S256 PKCE, client credentials, the strict JWT profile and
+wrong-resource rejection at the token exchange. All proof resources were removed.
+It did not establish actual dot connection or production HTTPS.
+
+Only `api.aicube.online` is selected, with paths listed in `AGENT-PILOT-HOST.md`.
+Hermes stays loopback-only. The Docker-to-Mac host route was separately tested with
+a temporary synthetic HTTP service; no real gateway bearer was used. Platform
+OAuth redirect and Events callback/signing material must come from the actual
+private-plugin connection flow. No available tool in this thread creates that
+private plugin; no actual platform entry or callback has been verified yet.
+
+No real AS/profile/credentials/routes/subscription/model request has been created
+at this checkpoint. The following original notes retain their historical planning
+context; statements that a relay or isolated AS proof was not implemented/run are
+superseded by this checkpoint, not evidence of real activation.
+
 Recommendation: one protected private MCP resource on the existing API HTTPS origin, two independent principals, one dedicated local Hermes profile and one task-scoped Events subscription. Keep the Hermes run API loopback-only; no public Hermes port is proposed. API-container access through Docker Desktop's host route must first be tested in isolation; loopback reachability from another network namespace is not assumed. Reuse existing task/audit structures. Do not reuse employee sessions or the private/default Hermes profile.
 
 The proposed resource is `https://api.aicube.online/mcp/agent-tasks`; the proposed authorization prefix is `https://api.aicube.online/identity/`, with realm `store-agents`. Existing API HTTPS routing serves MCP; a higher-priority `/identity/` path rule would route to the new local authorization service. This changes the existing Tunnel configuration and requires operational authorization. No new public hostname is proposed. Start the first real task authorization and task-scoped event subscription with a **24-hour** expiry.

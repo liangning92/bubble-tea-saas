@@ -36,6 +36,17 @@ does not accept a task. Provider credentials remain in the existing backend;
 low reasoning is explicit and no output cap or fee rate is added. Existing
 MiniMax subscription compatibility with the full Hermes chain remains unverified.
 
+Checkpoint `79177f86` adds program supervision to the same recovery tick and the
+single persisted STOCK-RO-001 task. Failures produce a program failure receipt,
+audit and durable `task.blocked` event, not a fabricated raw model report. Unknown
+outcomes cannot be redispatched. Only positively known-not-sent failures may be
+reworked with the exact failure/version and current task version. Acceptance still
+requires an actual completed report and checked evidence. Two focused real PG/HTTP
+probes verified signed callback, restart dedupe, unknown rejection, known-not-sent
+rework, revocation and audit rollback. Their separate batch evidence is
+`output/agent-pilot-host-http/supervision-delivery.json`; the original five groups
+were not rerun or counted as new.
+
 Verification for this increment includes 61 targeted audit assertions, 16 scope
 and dispatch assertions, API type checking and five real temporary PostgreSQL /
 HTTP composition groups. Those groups use synthetic JWTs, fake Hermes/provider and
@@ -46,6 +57,11 @@ real dot wakeup. Exact source/dist hashes and cleanup are recorded in
 The user approved a real 24-hour connection package, but that is a separate
 operational step after review and precise CI. At this checkpoint no real identity,
 secret, HTTPS route, profile, subscription or model request has been created.
-The dedicated Hermes credential broker, plugin packaging, runtime launcher and
-actual platform OAuth / Events connection must be verified before activation.
+Checkpoint `7670a81f` implements the dedicated Hermes broker, plugin packaging and
+launcher. Its 36 isolated checks passed, including official SDK 1.27 calls. A
+separate complete actual Hermes gateway composition passed against synthetic TLS
+AS/MCP/model services (see `output/hermes-full-loop/result.json`): one fake model
+call and one unverified report, with stock unchanged. This used a test-only launcher;
+production activation, actual platform OAuth / Events and real MiniMax subscription
+compatibility remain unverified.
 Najwa remains paused; the trial does not send employee messages or write stock.

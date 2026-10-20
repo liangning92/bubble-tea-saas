@@ -1,0 +1,6 @@
+# Offline rendered material must live outside the checkout; defense in depth.
+*.env
+*.secret
+store-agents-realm.json
+initialize-identity-db.sql
+__pycache__/

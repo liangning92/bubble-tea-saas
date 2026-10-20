@@ -10,6 +10,16 @@ test('team communication selects its isolated HTTP regression without unrelated 
  }finally{f.close()}
 });
 function fixture(){const root=fs.mkdtempSync(path.join(os.tmpdir(),'ci-scope-'));const write=(name,source='')=>{fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true});fs.writeFileSync(path.join(root,name),source)};return {root,write,close:()=>fs.rmSync(root,{recursive:true,force:true})}}
+test('dedicated Hermes bridge and runtime select the bounded task checks',()=>{
+ const f=fixture();try{
+  f.write('server/audit-tests/agent-tool-scopes.test.ts');
+  for(const file of ['hermes/pdca_bridge.py','hermes/pdca_runtime.py','hermes/pdca_launcher.py','hermes/tests/test_pdca_bridge.py']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.agentTasks,true,file);assert(p.auditTests.includes('server/audit-tests/agent-tool-scopes.test.ts'));assert.equal(p.electronTypes,false);assert.equal(p.browser.length,0);
+  }
+  const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');
+  assert.match(runner,/if\(plan\.agentTasks\)run\('python3',\['scripts\/test-hermes-pdca\.py'/);
+ }finally{f.close()}
+});
 test('workflow queue, service, worker and fixture changes retain the isolated communication regression',()=>{
  const f=fixture();try{
   for(const file of ['server/src/services/TeamWorkflowQueue.ts','server/src/services/TeamWorkflowService.ts','server/src/workers/teamWorkflow.ts','tests/stoploss/team-workflow-queue-check.cjs']){

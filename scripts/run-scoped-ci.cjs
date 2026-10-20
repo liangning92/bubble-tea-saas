@@ -21,6 +21,7 @@ async function browserCheck(check){
  case 'types':for(const service of plan.typecheck)run(npm,['run','typecheck:'+ (service==='api'?'server':service)]);if(plan.electronTypes)run(npm,['exec','--','tsc','--noEmit','-p','client-pos/tsconfig.electron.json']);break;
  case 'i18n':for(const service of plan.i18n)run(npm,['run','i18n:check:'+service]);break;
  case 'unit':
+  if(plan.agentTasks)run('python3',['scripts/test-hermes-pdca.py'],{PYTHONDONTWRITEBYTECODE:'1'});
   if(plan.agentTasks)run(process.execPath,['--import',path.resolve('server/node_modules/tsx/dist/loader.mjs'),'--test','server/src/__tests__/hermesTransport.test.ts']);
   if(plan.inventoryFlow)node('scripts/check-employee-inventory-flow.cjs');
   if(plan.unitTests.length)run(process.execPath,['--test',...plan.unitTests]);
@@ -29,7 +30,7 @@ async function browserCheck(check){
   break;
  case 'media':if(plan.media)node('scripts/test-media-insights.cjs');break;
  case 'http':
-  if(plan.agentTasks){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-agent-tasks.py'])}
+  if(plan.agentTasks){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-agent-tasks.py']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-agent-pilot-host.py'])}
   if(plan.teamManagement){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--management-loop']);run('python3',['scripts/with-docker-test.py','--','python3','tests/stoploss/team-management-actions-pg.py'])}
   if(plan.routineAuto){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--routine-auto'])}
   if(plan.notificationAwareness){run(npm,['run','build:server']);for(const script of ['scripts/test-notification-awareness.py','scripts/test-training-update-notices.py','scripts/test-approval-notices.py'])run('python3',['scripts/with-docker-test.py','--','python3',script])}
