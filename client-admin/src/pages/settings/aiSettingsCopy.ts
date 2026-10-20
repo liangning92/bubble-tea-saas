@@ -1,6 +1,6 @@
 const en = {
  title:'AI settings', introduction:'Connect a model and review what it can do in this store.',
- connection:'1. Connect a model', capabilities:'2. Business capabilities', boundaries:'3. Approval boundaries', running:'4. Status and costs',
+ connection:'Model connection', capabilities:'2. Business capabilities', boundaries:'3. Approval boundaries', running:'Connection status and costs',
  provider:'Provider', region:'Service region', global:'Global', cn:'China', model:'Model', key:'API key',
  keyKeep:'Leave blank to keep the saved key', keyNew:'Enter a key for this region', keyStored:'Key saved', keyMissing:'No saved key',
  enabled:'Enable communication AI', destination:'I allow selected work text to be sent to MiniMax at',
@@ -37,7 +37,7 @@ const en = {
 type Copy = typeof en
 const zh: Copy = {
  title:'AI 设置', introduction:'连接模型，并核对 AI 在本店能做什么。',
- connection:'1. 连接模型', capabilities:'2. 业务能力', boundaries:'3. 审批边界', running:'4. 运行状态与费用',
+ connection:'模型连接', capabilities:'2. 业务能力', boundaries:'3. 审批边界', running:'连接状态与费用',
  provider:'供应商', region:'服务地区', global:'国际区', cn:'中国区', model:'模型', key:'API key',
  keyKeep:'留空保留已保存密钥', keyNew:'输入所选地区的密钥', keyStored:'已保存密钥', keyMissing:'尚未保存密钥',
  enabled:'启用沟通 AI', destination:'允许将选定的工作文字发送到 MiniMax：',
@@ -73,7 +73,7 @@ const zh: Copy = {
 }
 const id: Copy = {
  title:'Pengaturan AI', introduction:'Hubungkan model dan periksa kemampuan AI di toko ini.',
- connection:'1. Hubungkan model', capabilities:'2. Kemampuan bisnis', boundaries:'3. Batas persetujuan', running:'4. Status dan biaya',
+ connection:'Koneksi model', capabilities:'2. Kemampuan bisnis', boundaries:'3. Batas persetujuan', running:'Status koneksi dan biaya',
  provider:'Penyedia', region:'Wilayah layanan', global:'Global', cn:'Tiongkok', model:'Model', key:'API key',
  keyKeep:'Kosongkan untuk mempertahankan kunci tersimpan', keyNew:'Masukkan kunci wilayah ini', keyStored:'Kunci tersimpan', keyMissing:'Belum ada kunci tersimpan',
  enabled:'Aktifkan AI komunikasi', destination:'Saya mengizinkan teks kerja terpilih dikirim ke MiniMax di',

@@ -81,8 +81,8 @@ export function TeamWorkflowSettings({ client, scope, staffId, language }: { cli
       }else{setUncertain(true);setError(c.unknown)}
     }finally{sending.current=false;if(current(token))setBusy(false)}
   }
-  return <details id="ai-workflow-permissions" className="min-w-0 space-y-3 rounded-xl border bg-white p-4 sm:p-6" data-testid="workflow-settings">
-    <summary className="cursor-pointer font-semibold">{c.title}</summary>
+  return <section id="ai-workflow-permissions" aria-labelledby="ai-workflow-permissions-title" className="min-w-0 space-y-3 rounded-xl border bg-white p-4 sm:p-6" data-testid="workflow-settings">
+    <h3 id="ai-workflow-permissions-title" className="font-semibold">{c.title}</h3>
     <p className="text-sm text-gray-600">{c.auto}</p>
     <label className="block text-sm">{c.channel}<select disabled={busy} className="mt-1 w-full min-w-0 rounded-lg border bg-white p-2.5" value={selected} onChange={event=>setSelected(event.target.value)}><option value="">{channels.length?c.choose:c.none}</option>{channels.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
     {error&&<p role="alert" className="break-words text-sm text-red-700">{error}</p>}{notice&&<p role="status" className="text-sm text-green-800">{notice}</p>}
@@ -94,5 +94,5 @@ export function TeamWorkflowSettings({ client, scope, staffId, language }: { cli
       </fieldset><div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={busy||uncertain||!policy.enabled||policy.paused} onClick={()=>void save(policy.enabled,true,policy.employeeIds||[])}>{c.pause}</button><button type="button" className={button} disabled={busy||uncertain||!policy.enabled} onClick={()=>void save(false,true,policy.employeeIds||[])}>{c.disable}</button><button type="button" className={button} disabled={busy} onClick={()=>void load(true)}>{uncertain?c.discard:c.refresh}</button></div>
       <p className="text-xs text-gray-600">{c.members}</p><p className="text-xs text-gray-600">{c.consumer}</p>
     </>}
-  </details>
+  </section>
 }
