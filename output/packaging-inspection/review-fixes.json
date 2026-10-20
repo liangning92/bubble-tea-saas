@@ -31,5 +31,10 @@
     "P2": 2,
     "status": "fixed_in_source_pending_new_head_review"
   },
-  "latestLocalIsolatedGroups": 14
+  "latestLocalIsolatedGroups": 14,
+  "postReviewRouteCorrection": {
+    "reason": "Reminder referenced unregistered employee path /team-communication; actual route is /team and existing wrapper consumes channel query",
+    "fix": "/team?channel=<channelId>",
+    "validation": "actual inbox HTTP payload and real route/wrapper contract; no production device click claimed"
+  }
 }

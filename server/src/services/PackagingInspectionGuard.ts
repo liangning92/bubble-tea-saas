@@ -87,7 +87,7 @@ export async function inspectionPublished(db: any, a: TeamActor, plan: any) {
   const r = reminderKey(job)
   if (!await readWork(a.storeId, r.key, db)) await writeWork(a.storeId, r.key, {
     id: r.id, staffId: job.policy.assigneeId, event: r.event, title: 'Pemeriksaan persediaan kemasan menunggu konfirmasi',
-    url: '/team-communication', createdAt: new Date().toISOString(), expiresAt: task.deadlineAt, read: false, status: 'pending'
+    url: `/team?channel=${encodeURIComponent(task.channelId)}`, createdAt: new Date().toISOString(), expiresAt: task.deadlineAt, read: false, status: 'pending'
   }, db)
   await inspectionEvent(db, a.storeId, job, 'published')
   await auditTeam(db, a, plan.channelId, 'update', { action: 'inspection_approved', jobId: job.id,

@@ -325,6 +325,9 @@ async function main() {
       f.job=first[0];await approve(f);
       const inbox=await good(f.alice,'GET','/staff-work/my/dashboard');
       const reminder=inbox.reminders.find(r=>r.event==='packaging-inspection:'+f.job.id);assert(reminder,'Approved reminder is visible through the real employee inbox HTTP endpoint');
+      const destination=new URL(reminder.url,'https://synthetic.invalid');assert.equal(destination.pathname,'/team');assert.equal(destination.searchParams.get('channel'),f.channel.id);
+      assert.match(fs.readFileSync(root+'/client-staff/src/App.tsx','utf8'),/<Route path="\/team"/,'Reminder targets the registered employee route');
+      assert.match(fs.readFileSync(root+'/client-staff/src/components/StaffTeamConversation.tsx','utf8'),/params\.get\('channel'\)/,'Existing employee wrapper consumes the channel deep link');
       assert.equal((await good(f.bob,'GET','/staff-work/my/dashboard')).reminders.some(r=>r.id===reminder.id),false);
       await act(f,f.alice,'accept');const accepted=await task(f);
       const linked=await good(f.alice,'POST',`/team/channels/${f.channel.id}/tasks/${accepted.id}/inspection-count`,{requestId:randomUUID(),expectedVersion:accepted.version});
@@ -339,7 +342,7 @@ async function main() {
       assert.equal((await good(f.alice,'GET','/staff-work/my/dashboard')).reminders.some(r=>r.id===reminder.id),false);
       workerEndToEnd={jobId:f.job.id,aiRequestId:first[0].aiRequestId,taskId:accepted.id,countId:linked.countId,reminderId:reminder.id,
         actualChildWorker:true,uiRequestsDuringGeneration:0,gracefulRestart:true,dailyProviderAdmissions:1,approvalViaHttp:true,
-        employeeInboxViaHttp:true,assigneeFillAndSubmitViaHttp:true,separateCountApprovalViaHttp:true,taskAcceptanceViaHttp:true,externalPushTested:false};
+        employeeInboxViaHttp:true,employeeReminderRouteAndChannel:true,assigneeFillAndSubmitViaHttp:true,separateCountApprovalViaHttp:true,taskAcceptanceViaHttp:true,externalPushTested:false};
     });
     assert.equal(await prisma.config.count({where:{key:'employee.workspace.push-keys'}}),0);
     assert.equal(fs.existsSync(path.join(process.env.UPLOADS_PATH,'.employee-private','.team-ai-master.key')),false);
