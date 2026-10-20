@@ -37,12 +37,16 @@ export const reportTaskSchema = leaseSchema.extend({ evidenceId: uuid.optional()
   runtimeReceipt: z.object({ hermesRunId: text.max(256), sessionId: text.max(256).optional() }).strict().optional()
 }).strict().refine(v => v.outcome !== 'completed' || !!v.evidenceId && !!v.inputSnapshotHash, 'COMPLETED_EVIDENCE_REQUIRED')
 export const reviewTaskSchema = z.object({ ...mutation, taskId: uuid, runId: uuid, round: version,
-  expectedVersion: version, reportId: uuid, reportVersion: version,
+  expectedVersion: version, reportId: uuid.optional(), reportVersion: version.optional(),
+  programFailureId: uuid.optional(), programFailureVersion: version.optional(),
   decision: z.enum(['accept', 'rework']),
   check: z.object({ summary: text.max(4000), checkedEvidenceIds: z.array(uuid),
     criteria: z.array(z.object({ id: text.max(64), result: z.enum(['met', 'not_met', 'unknown']), note: text.max(2000) }).strict()).min(1)
   }).strict(), nextPlan: agentPlanSchema.optional()
-}).strict()
+}).strict().refine(v => {
+  const report = !!v.reportId && !!v.reportVersion, program = !!v.programFailureId && !!v.programFailureVersion
+  return report !== program && (report ? !v.programFailureId && !v.programFailureVersion : !v.reportId && !v.reportVersion && v.decision === 'rework')
+}, 'EXACT_REVIEW_SOURCE_REQUIRED')
 export const eventCursorSchema = z.object({ authVersion: version, after: z.number().int().nonnegative(), limit: z.number().int().min(1).max(100).default(50) }).strict()
 
 export interface DispatchEnvelope {
@@ -60,7 +64,9 @@ export interface AgentTaskReport {
   outcome: 'completed' | 'blocked' | 'failed' | 'unknown'; createdAt: string
   runtimeReceipt?: { hermesRunId: string; sessionId?: string }
 }
+export interface AgentProgramFailure { id: string; version: number; code: string; knownNotSent: boolean; source: 'program' }
 export interface AgentTaskState {
+  programFailure?: AgentProgramFailure
   pilot?: AgentPilotStamp
   taskCode: 'STOCK-RO-001'; capability: typeof AGENT_TASK_CAPABILITY
   managerId: string; executorId: string; plan: AgentPlan
@@ -69,7 +75,7 @@ export interface AgentTaskState {
   lease?: { token: string; until: number; grantVersion: number; clientRevision: number }
   reportDueAt?: string; evidenceId?: string; inputSnapshotHash?: string
   reportId?: string; reportVersion?: number; error?: string
-  checks: { round: number; runId: string; reportId: string; by: string; at: string;
+  checks: { round: number; runId: string; reportId?: string; programFailureId?: string; programFailure?: AgentProgramFailure; by: string; at: string;
     decision: 'accept' | 'rework'; check: z.infer<typeof reviewTaskSchema>['check']; nextPlan?: AgentPlan }[]
 }
 export interface AgentTaskView {
@@ -77,6 +83,7 @@ export interface AgentTaskView {
   runId: string; round: number; executorId: string; managerId: string; leaseVersion: number
   state: AgentTaskState['state']; plan: AgentPlan; reportDueAt?: string
   error?: string
+  programFailure?: AgentProgramFailure
   report?: Pick<AgentTaskReport, 'id' | 'version' | 'runId' | 'round' | 'outcome' | 'createdAt'> & Partial<AgentTaskReport>; dispatch: DispatchEnvelope
   evidence?: { evidenceId: string; inputSnapshotHash: string; evidence: unknown }
 }

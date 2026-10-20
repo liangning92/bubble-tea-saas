@@ -11,7 +11,7 @@ import { HermesRunsClient } from '../hermesTransport/client'
 import type { HttpFetch, PreparedDispatch, RunMapping } from '../hermesTransport/types'
 import { createTeamAgentMiniMaxTransport, type TeamAgentModelTransport } from '../TeamAiService'
 import { readAgentPilot } from './pilot'
-import { TeamError } from '../TeamCommunicationService'
+import { TeamError, readTeam } from '../TeamCommunicationService'
 import { createAgentTaskService } from './service'
 import { createAgentTaskDispatcher } from './dispatch'
 import { persistentAdmissionBindings } from './admissionBindings'
@@ -145,6 +145,13 @@ export function createAgentPilotHost(db: any, env: NodeJS.ProcessEnv = process.e
       let pilotId: string | undefined
       try {
         const { pilot, manager } = await fresh(); pilotId = pilot.stamp.id
+        // Only the one explicit pilot task; no task scan or new scheduler/model retry.
+        const singleton = await readTeam(db, config.storeId, 'agent.task.code.STOCK-RO-001')
+        if (singleton?.taskId) {
+          const task = await service.get(manager, { taskId: singleton.taskId, authVersion: manager.grantVersion })
+          try { await service.supervise(manager, { taskId: task.taskId, runId: task.runId, round: task.round, expectedVersion: task.taskVersion, authVersion: manager.grantVersion }) }
+          catch (error) { if (!(error instanceof TeamError) || !['AGENT_TASK_VERSION_CONFLICT', 'AGENT_TASK_RUN_CHANGED'].includes(error.message)) throw error }
+        }
         const key = 'externalAgent.host.cursor.v1.' + pilotId, row = await db.config.findUnique({ where: { storeId_key: { storeId: config.storeId, key } } })
         const saved = row ? JSON.parse(row.value) : { pilotId, after: 0 }
         if (saved.pilotId !== pilotId || !Number.isSafeInteger(saved.after) || saved.after < 0) throw Error('AGENT_PILOT_CURSOR_INVALID')

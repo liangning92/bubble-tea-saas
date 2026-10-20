@@ -15,7 +15,8 @@ const LEASE_MS=600000
 const scopeForRead=(p:AgentPrincipal):AgentTaskScope=>p.role==='manager'?'management.read':'executor.claim'
 
 /** Existing TeamTask persistence, first-class agent metadata, no staff impersonation or executor side effects. */
-export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentTaskService {
+interface SupervisionInput { taskId: string; runId: string; round: number; expectedVersion: number; authVersion: number }
+export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentTaskService & { supervise(principal:AgentPrincipal,input:SupervisionInput):Promise<AgentTaskView> } {
   if(typeof deps?.authorize!=='function'||typeof deps?.executorFor!=='function')throw Error('AGENT_TASK_AUTH_DEPENDENCIES_REQUIRED')
   const now=deps.now||Date.now,at=()=>new Date(now()).toISOString()
   async function auth(tx:any,p:AgentPrincipal,scope:AgentTaskScope,channelId:string,authVersion:number) {
@@ -54,7 +55,7 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
       if(snapshot.storeId!==p.storeId||fingerprint!==row.snapshotHash||digest(facts)!==fingerprint)fail('AGENT_TASK_EVIDENCE_CHANGED')
       evidence={evidenceId:row.id,inputSnapshotHash:row.snapshotHash,evidence:snapshot}
     }
-    return{taskId:t.id,taskCode:x.taskCode,taskVersion:t.version,channelId:t.channelId,runId:x.runId,round:x.round,executorId:x.executorId,managerId:x.managerId,leaseVersion:x.leaseVersion,state:x.state,plan:x.plan,...(x.reportDueAt?{reportDueAt:x.reportDueAt}:{}),...(x.error?{error:x.error}:{}),...(report?{report:full?report:reportReceipt(report)}:{}),...(evidence?{evidence}:{}),dispatch:{taskId:t.id,runId:x.runId,eventId:x.eventId,round:x.round,taskVersion:t.version,executorId:x.executorId,leaseVersion:x.leaseVersion}}
+    return{taskId:t.id,taskCode:x.taskCode,taskVersion:t.version,channelId:t.channelId,runId:x.runId,round:x.round,executorId:x.executorId,managerId:x.managerId,leaseVersion:x.leaseVersion,state:x.state,plan:x.plan,...(x.reportDueAt?{reportDueAt:x.reportDueAt}:{}),...(x.error?{error:x.error}:{}),...(full&&x.programFailure?{programFailure:x.programFailure}:{}),...(report?{report:full?report:reportReceipt(report)}:{}),...(evidence?{evidence}:{}),dispatch:{taskId:t.id,runId:x.runId,eventId:x.eventId,round:x.round,taskVersion:t.version,executorId:x.executorId,leaseVersion:x.leaseVersion}}
   }
   async function audit(tx:any,p:AgentPrincipal,t:RecordTask,action:string,detail:unknown={}) {
     await tx.financeAuditLog.create({data:{storeId:p.storeId,userId:actorRef(p),action:'update',entityType:'agent_task',entityId:t.id,description:action,newValue:JSON.stringify({actorType:'agent',agentId:p.agentId,role:p.role,grantVersion:p.grantVersion,clientRevision:p.clientRevision,taskId:t.id,runId:t.agentTask.runId,round:t.agentTask.round,taskVersion:t.version,action,detail})}})
@@ -105,6 +106,29 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
       return receipt(tx,p,v,'assign',await view(tx,p,t))
     })},
     async get(principal,input){const v=readTaskSchema.parse(input);return db.$transaction(async(tx:any)=>{await storeLock(tx,principal.storeId);const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,scopeForRead(principal),t.channelId,v.authVersion);bound(p,t);return view(tx,p,t,p.role==='manager')})},
+    async supervise(principal,input){return db.$transaction(async(tx:any)=>{
+      await storeLock(tx,principal.storeId);const t=await load(tx,principal,input.taskId),p=await auth(tx,principal,'management.read',t.channelId,input.authVersion);bound(p,t,'manager');version(t,input.expectedVersion);run(t,input)
+      const x=t.agentTask
+      if(x.state!=='running'||x.reportId)return view(tx,p,t,true)
+      let code:string|undefined,knownNotSent=false
+      const pointer=await readTeam(tx,p.storeId,`agent.model.run.${x.runId}`)
+      const model=pointer?.requestId&&await readTeam(tx,p.storeId,`agent.model.request.${x.executorId}.${pointer.requestId}`)
+      if(model&&model.taskId===t.id&&model.runId===x.runId&&model.taskVersion===t.version){
+        if(model.state==='blocked'){knownNotSent=model.billingStatus==='not_started'&&model.error==='AGENT_MODEL_NOT_SENT'&&!model.startedAt&&!model.providerReceipt&&!model.usage;code=knownNotSent?'AGENT_TASK_PROGRAM_MODEL_NOT_SENT':'AGENT_TASK_PROGRAM_MODEL_RESULT_BLOCKED'}
+        else if(model.state==='unknown')code='AGENT_TASK_PROGRAM_MODEL_OUTCOME_UNKNOWN'
+        else if(model.state==='withheld')code='AGENT_TASK_PROGRAM_MODEL_RESULT_WITHHELD'
+        else if(['reserved','calling'].includes(model.state)&&Number.isFinite(model.deadlineAt)&&model.deadlineAt<=now()){knownNotSent=model.state==='reserved'&&model.billingStatus==='not_started'&&!model.startedAt&&!model.providerReceipt&&!model.usage;code=knownNotSent?'AGENT_TASK_PROGRAM_MODEL_NOT_SENT':'AGENT_TASK_PROGRAM_MODEL_OUTCOME_UNKNOWN'}
+      }
+      if(!code&&(!x.lease||x.lease.until<=now()||Date.parse(x.plan.deadlineAt)<=now()||!!x.reportDueAt&&Date.parse(x.reportDueAt)<=now()))code='AGENT_TASK_PROGRAM_REPORT_DEADLINE_UNKNOWN'
+      if(!code)return view(tx,p,t,true)
+      x.state=knownNotSent?'blocked':'unknown';x.error=code
+      x.programFailure={id:randomUUID(),version:1,code,knownNotSent,source:'program'}
+      delete x.lease;t.version++
+      t.events.push({action:'agent_program_blocked',by:'program:agent-task-supervisor',at:at(),note:code,sourceSeq:[]})
+      await persist(tx,p,t,'agent_task_program_blocked',{source:'program',code,knownNotSent,programFailureId:x.programFailure.id})
+      await event(tx,p,t,'task.blocked')
+      return view(tx,p,t,true)
+    })},
     async claim(principal,input){const v=claimTaskSchema.parse(input);const result=await db.$transaction(async(tx:any)=>{
       await storeLock(tx,principal.storeId);const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,'executor.claim',t.channelId,v.authVersion);bound(p,t,'executor');const old=await repeated(tx,p,v,'claim');if(old)return old
       version(t,v.expectedVersion);run(t,v);if(t.agentTask.state==='running'&&t.agentTask.lease&&(t.agentTask.lease.until<=now()))return expire(tx,p,t)
@@ -137,17 +161,20 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
     });return finish(result)},
     async review(principal,input){const v=reviewTaskSchema.parse(input);return db.$transaction(async(tx:any)=>{
       await storeLock(tx,principal.storeId);const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,'management.review',t.channelId,v.authVersion);bound(p,t,'manager');const old=await repeated(tx,p,v,'review');if(old)return old;version(t,v.expectedVersion);run(t,v)
-      const r=await reportFor(tx,p,t);if(!r||r.id!==v.reportId||r.version!==v.reportVersion||r.runId!==v.runId||r.round!==v.round||t.agentTask.reportVersion!==v.reportVersion)fail('AGENT_TASK_REPORT_CHANGED')
-      if(t.agentTask.state==='unknown'||r.outcome==='unknown'||!['awaiting_review','blocked'].includes(t.agentTask.state))fail('AGENT_TASK_REVIEW_OUTCOME_UNKNOWN')
+      const r=await reportFor(tx,p,t),program=v.programFailureId?t.agentTask.programFailure:undefined
+      if(v.programFailureId){
+        if(!program||program.id!==v.programFailureId||program.version!==v.programFailureVersion||!program.knownNotSent||t.agentTask.state!=='blocked'||r||v.decision!=='rework')fail('AGENT_TASK_PROGRAM_RECOVERY_FORBIDDEN')
+      }else if(!r||r.id!==v.reportId||r.version!==v.reportVersion||r.runId!==v.runId||r.round!==v.round||t.agentTask.reportVersion!==v.reportVersion)fail('AGENT_TASK_REPORT_CHANGED')
+      if(t.agentTask.state==='unknown'||r?.outcome==='unknown'||!['awaiting_review','blocked'].includes(t.agentTask.state))fail('AGENT_TASK_REVIEW_OUTCOME_UNKNOWN')
       const expected=t.agentTask.plan.criteria.map(c=>c.id),given=v.check.criteria.map(c=>c.id)
       if(given.length!==expected.length||new Set(given).size!==given.length||expected.some(id=>!given.includes(id)))fail('AGENT_TASK_REVIEW_CRITERIA_REQUIRED')
-      if(new Set(v.check.checkedEvidenceIds).size!==v.check.checkedEvidenceIds.length||v.check.checkedEvidenceIds.some(id=>id!==r.evidenceId))fail('AGENT_TASK_REVIEW_EVIDENCE_CHANGED')
-      if(v.decision==='accept'&&(r.outcome!=='completed'||t.agentTask.state!=='awaiting_review'||!r.evidenceId||!v.check.checkedEvidenceIds.includes(r.evidenceId)||v.check.criteria.some(c=>c.result!=='met')||v.nextPlan))fail('AGENT_TASK_ACCEPTANCE_REQUIRED')
-      t.agentTask.checks.push({round:v.round,runId:v.runId,reportId:r.id,by:p.agentId,at:at(),decision:v.decision,check:v.check,...(v.nextPlan?{nextPlan:v.nextPlan}:{})})
+      if(new Set(v.check.checkedEvidenceIds).size!==v.check.checkedEvidenceIds.length||v.check.checkedEvidenceIds.some(id=>id!==r?.evidenceId))fail('AGENT_TASK_REVIEW_EVIDENCE_CHANGED')
+      if(v.decision==='accept'&&(!r||r.outcome!=='completed'||t.agentTask.state!=='awaiting_review'||!r.evidenceId||!v.check.checkedEvidenceIds.includes(r.evidenceId)||v.check.criteria.some(c=>c.result!=='met')||v.nextPlan))fail('AGENT_TASK_ACCEPTANCE_REQUIRED')
+      t.agentTask.checks.push({round:v.round,runId:v.runId,...(program?{programFailureId:program.id,programFailure:{...program}}:{reportId:r!.id}),by:p.agentId,at:at(),decision:v.decision,check:v.check,...(v.nextPlan?{nextPlan:v.nextPlan}:{})})
       if(v.decision==='accept'){t.agentTask.state='accepted';t.status='completed'}else{
         if(!v.nextPlan)fail('AGENT_TASK_REWORK_PLAN_REQUIRED');if(!v.check.criteria.some(c=>c.result==='not_met'))fail('AGENT_TASK_REWORK_FINDING_REQUIRED');deadline(v.nextPlan,p)
         // The immutable prior report/evidence and check retain the old run. Unknown is never redispatched.
-        t.agentTask.plan=v.nextPlan;t.agentTask.round++;t.agentTask.runId=randomUUID();t.agentTask.eventId=randomUUID();t.agentTask.state='assigned';delete t.agentTask.lease;delete t.agentTask.reportId;delete t.agentTask.reportVersion;delete t.agentTask.evidenceId;delete t.agentTask.inputSnapshotHash;delete t.agentTask.reportDueAt;delete t.agentTask.error;t.status='assigned';t.roundId=t.agentTask.runId;t.minuteVersion=t.agentTask.round;t.text=v.nextPlan.objective;t.dueDate=v.nextPlan.deadlineAt.slice(0,10);t.deadlineAt=v.nextPlan.deadlineAt;t.evidenceRequired=v.nextPlan.evidenceRequired;t.acceptanceCriteria=v.nextPlan.criteria.map(c=>c.id+': '+c.standard).join('\n')
+        t.agentTask.plan=v.nextPlan;t.agentTask.round++;t.agentTask.runId=randomUUID();t.agentTask.eventId=randomUUID();t.agentTask.state='assigned';delete t.agentTask.lease;delete t.agentTask.reportId;delete t.agentTask.reportVersion;delete t.agentTask.evidenceId;delete t.agentTask.inputSnapshotHash;delete t.agentTask.reportDueAt;delete t.agentTask.error;delete t.agentTask.programFailure;t.status='assigned';t.roundId=t.agentTask.runId;t.minuteVersion=t.agentTask.round;t.text=v.nextPlan.objective;t.dueDate=v.nextPlan.deadlineAt.slice(0,10);t.deadlineAt=v.nextPlan.deadlineAt;t.evidenceRequired=v.nextPlan.evidenceRequired;t.acceptanceCriteria=v.nextPlan.criteria.map(c=>c.id+': '+c.standard).join('\n')
       }
       t.version++;t.events.push({action:'agent_'+v.decision,by:actorRef(p),at:at(),note:v.check.summary,sourceSeq:[],...(v.decision==='accept'?{criteriaConfirmed:true}:{})});await persist(tx,p,t,'agent_task_'+v.decision)
       if(v.decision==='rework'){const e=await event(tx,p,t,'task.dispatch_ready');t.agentTask.eventId=e.id;await writeTeam(tx,p.storeId,taskKey(t.channelId,t.id),t)}
