@@ -46,6 +46,19 @@ export function externalAccess(repository: Repository) {
         state.audits.push(audit(actor, r, 'revoke')); await tx.save(state); return r
       })
     },
+    async remove(actor: AdminActor, registrationId: string, expectedVersion: number) {
+      return repository.transaction(actor.storeId, async tx => {
+        await tx.requireAdmin(actor)
+        const state = await tx.load(), r = state.registrations.find(r => r.id === registrationId)
+        if (!r) deny('EXTERNAL_NOT_FOUND', 404)
+        if (r.version !== expectedVersion) deny('EXTERNAL_VERSION_CONFLICT', 409)
+        // Registration IDs are server generated and never reused; audit survives removal.
+        r.version++; r.authVersion++; r.enabled = false
+        state.registrations = state.registrations.filter(item => item.id !== r.id)
+        state.audits.push(audit(actor, r, 'remove')); await tx.save(state)
+        return { removed: true }
+      })
+    },
     async validate(actor: AdminActor, registrationId: string, expectedVersion: number) {
       return repository.transaction(actor.storeId, async tx => {
         await tx.requireAdmin(actor)

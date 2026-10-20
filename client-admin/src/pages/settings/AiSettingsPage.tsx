@@ -1,3 +1,4 @@
+import { ExternalAgentSettings } from './ExternalAgentSettings'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TeamClient } from '../../../../shared/TeamCommunication'
@@ -14,7 +15,7 @@ export function AiSettingsPage() {
     const current = () => { const state = useAuthStore.getState(); return state.isAuthenticated && state.user?.id === expected && state.user?.storeId === store && state.user?.role === 'admin' }
     return { current, request: async (method, url, data) => {
       if (!current()) throw Error('TEAM_AI_ADMIN_REQUIRED')
-      return (await api.request({ method, url, data })).data.data
+      return (await api.request({ method, url, data, ...(url.startsWith('/external-access') ? { timeout: 15000 } : {}) })).data.data
     } }
   }, [user?.id, user?.storeId, user?.role])
   if (user?.role !== 'admin' || !user.storeId) return <div className="card max-w-4xl" role="alert">{c.denied}</div>
@@ -22,5 +23,6 @@ export function AiSettingsPage() {
     <header><h2 className="text-xl font-semibold">{c.title}</h2></header>
     <TeamAiSettings key={`${user.id}:${user.storeId}`} client={client} identity={{userId:user.id,storeId:user.storeId}} language={i18n.language} />
     <TeamWorkflowSettings key={`workflow:${user.id}:${user.storeId}`} client={client} scope={`${user.id}:${user.storeId}`} staffId={user.staff?.id || ''} language={i18n.language} />
+    <ExternalAgentSettings key={`external:${user.id}:${user.storeId}`} client={client} storeId={user.storeId} language={i18n.language} />
   </div>
 }

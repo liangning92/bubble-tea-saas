@@ -1,3 +1,7 @@
+import { externalAccessRouter } from './routes/externalAccess'
+import { externalAccess } from './services/externalAccess/service'
+import { postgresExternalRepository } from './services/externalAccess/postgresRepository'
+import { authenticate } from './middlewares/auth'
 import { teamCommunicationRouter } from './routes/teamCommunication'
 import {upgradeTvSchema} from './utils/tvSchemaUpgrade'
 import { mediaRouter } from './routes/media'
@@ -306,6 +310,7 @@ app.use('/api/points-rules', declareAccessRoutes('/api/points-rules', pointsRule
 app.use('/api/rewards', declareAccessRoutes('/api/rewards', rewardCatalogRouter))
 app.use('/api/revenue', declareAccessRoutes('/api/revenue', revenueRouter))
 app.use('/api/payments', declareAccessRoutes('/api/payments', paymentRouter))
+app.use('/api/external-access', declareAccessRoutes('/api/external-access', externalAccessRouter(externalAccess(postgresExternalRepository(prisma)), authenticate)))
 app.use('/api/team', declareAccessRoutes('/api/team', teamCommunicationRouter))
 app.use('/api/ai', declareAccessRoutes('/api/ai', aiPermissionsRouter))
 app.use('/api/staff-work', declareAccessRoutes('/api/staff-work', employeeWorkspaceRouter))

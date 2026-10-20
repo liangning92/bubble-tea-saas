@@ -47,11 +47,21 @@ describe('external access control plane (isolated memory repository)', () => {
     expect((await s.service.audits(actor)).map(a => a.action)).toEqual(['save', 'validate', 'save', 'revoke'])
     expect(JSON.stringify(s.state().audits)).not.toContain('isolated client')
   })
+  test('removal requires current version and owner, retains audit and never reuses registration ID', async () => {
+    const s = setup(), r = await s.service.save(actor, input())
+    await expect(s.service.remove(actor, r.id, 99)).rejects.toMatchObject({ status: 409 })
+    await expect(s.service.remove({ ...actor, employeeApp: true }, r.id, 1)).rejects.toMatchObject({ status: 403 })
+    await expect(s.service.remove(actor, r.id, 1)).resolves.toEqual({ removed: true })
+    expect(await s.service.list(actor)).toEqual([])
+    expect((await s.service.audits(actor)).map(a => a.action)).toEqual(['save', 'remove'])
+    const next = await s.service.save(actor, input()); expect(next.id).not.toBe(r.id)
+    await expect(s.service.save(actor, { ...input(), expectedVersion: 1 }, r.id)).rejects.toMatchObject({ status: 404 })
+  })
   test('adapter-required does not pretend compatibility', async () => {
     const s = setup(), r = await s.service.save(actor, { ...input(), clientType: 'adapter_required' })
     await expect(s.service.validate(actor, r.id, 1)).rejects.toMatchObject({ message: 'EXTERNAL_ADAPTER_REQUIRED' })
   })
-  test('unmounted route handlers validate identity, strict input and versions without opening sockets', async () => {
+  test('management route handlers validate identity, strict input and versions without opening sockets', async () => {
     const s = setup(), router = externalAccessRouter(s.service, (_req, _res, next) => next())
     async function call(method: string, path: string, body = {}, params = {}, user: any = actor) {
       const handler = (router as any).stack.find((l: any) => l.route?.path === path && l.route.methods[method]).route.stack[0].handle

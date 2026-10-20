@@ -3,8 +3,7 @@ import { z } from 'zod'
 import { AccessError } from '../services/externalAccess/contract'
 import { externalAccess } from '../services/externalAccess/service'
 
-// Unmounted API contract. Production registration additionally needs access-manifest declaration
-// and UI review. authenticate must be the normal management session middleware, never MCP tokens.
+// Management configuration only; no MCP invocation or credential endpoint. authenticate must be the normal management session middleware, never MCP tokens.
 export function externalAccessRouter(service: ReturnType<typeof externalAccess>, authenticate: RequestHandler) {
   const router = Router()
   router.use(authenticate)
@@ -24,6 +23,7 @@ export function externalAccessRouter(service: ReturnType<typeof externalAccess>,
   router.get('/audits', route(req => service.audits(req.user)))
   router.post('/', route(req => service.save(req.user, req.body)))
   router.put('/:id', route(req => service.save(req.user, req.body, registrationId(req))))
+  router.post('/:id/remove', route(req => service.remove(req.user, registrationId(req), version(req))))
   router.post('/:id/revoke', route(req => service.revoke(req.user, registrationId(req), version(req))))
   router.post('/:id/validate', route(req => service.validate(req.user, registrationId(req), version(req))))
   return router

@@ -23,7 +23,7 @@ export interface Registration extends Omit<SettingsInput, 'expectedVersion'> {
   authState: 'unconfigured' | 'revoked'; executionState: 'frozen'
   connectionState: 'not_tested' | 'configuration_validated'; updatedBy: string
 }
-export interface Audit { at: string; actorId: string; registrationId: string; version: number; action: 'save' | 'revoke' | 'validate' }
+export interface Audit { at: string; actorId: string; registrationId: string; version: number; action: 'save' | 'revoke' | 'validate' | 'remove' }
 export interface State { registrations: Registration[]; audits: Audit[] }
 export interface AdminActor { id: string; storeId: string; employeeApp?: boolean }
 export interface Transaction {
@@ -49,5 +49,5 @@ const registrationSchema = settingsInput.omit({ expectedVersion: true }).extend(
 }).strict()
 export const stateSchema = z.object({ registrations: z.array(registrationSchema).max(50), audits: z.array(z.object({
   at: z.string().datetime(), actorId: z.string().min(1), registrationId: id, version: z.number().int().positive(),
-  action: z.enum(['save', 'revoke', 'validate'])
+  action: z.enum(['save', 'revoke', 'validate', 'remove'])
 }).strict()) }).strict()
