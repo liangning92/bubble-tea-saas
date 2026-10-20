@@ -2451,11 +2451,6 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
       {/* ========== RECEIPT TAB ========== */}
       {activeSubTab === 'receipt' && (
         <div className="space-y-6">
-          <HandoverReceiptSettings settings={shiftSettings} disabled={saveConfigMutation.isPending || isLoading} onChange={receiptItems => {
-            const updated = { ...shiftSettings, receiptItems }
-            setShiftSettings(updated)
-            handleSave('shiftSettings', updated)
-          }} />
           {/* Sub-tab Switcher: Basic Settings vs Template Editor */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b pb-4">
             <div className="flex gap-2">
