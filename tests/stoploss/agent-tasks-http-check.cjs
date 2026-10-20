@@ -12,6 +12,7 @@ const express = require(root + '/server/node_modules/express');
 const { persistentAdmissionBindings } = require(root + '/server/dist/services/agentTasks/admissionBindings');
 const { createAgentTaskDispatcher } = require(root + '/server/dist/services/agentTasks/dispatch');
 const { HermesRunsClient } = require(root + '/server/dist/services/hermesTransport/client');
+const { createAgentTaskRuntime } = require(root + '/server/dist/services/agentTasks/runtime');
 const nativeFetch = global.fetch;
 global.fetch = (url, options) => { assert.equal(new URL(String(url)).hostname, '127.0.0.1'); return nativeFetch(url, options) };
 const grantKey = id => 'test.agent.grant.' + id;
@@ -117,6 +118,62 @@ const reviewBody = (view, evidenceId, decision) => ({ requestId: randomUUID(), a
 (async () => {
   try {
     tenant = await prisma.tenant.create({ data: { name: 'Synthetic agent tasks HTTP acceptance' } }); await open();
+    async function runtimeFixture(publish) {
+      const f = await fixture(), native = createAgentTaskService(prisma, deps), profile = 'synthetic-runtime', origin = 'http://127.0.0.1:43112';
+      let sessionId, posts = 0; const hermesRunId = 'run_synthetic_' + randomUUID();
+      const client = new HermesRunsClient({ origin, profile, bearerToken: () => 'synthetic-runtime-key', admissionBindings: persistentAdmissionBindings(prisma, f.storeId),
+        fetch: async (_url, init) => { if (init.method === 'POST') { posts++; sessionId = JSON.parse(init.body).session_id; return { status: 202, text: async () => JSON.stringify({ run_id: hermesRunId, status: 'started', replayed: false }) } }
+          return { status: 200, text: async () => JSON.stringify({ run_id: hermesRunId, session_id: sessionId, status: 'running' }) } } });
+      const dispatcher = createAgentTaskDispatcher(prisma, deps, profile, client, { origin, identityId: 'synthetic-runtime', credentialGeneration: 1 });
+      const runtime = createAgentTaskRuntime(prisma, native, dispatcher, publish); service = runtime.service;
+      return { f, native, dispatcher, runtime, posts: () => posts };
+    }
+    await check('runtime recovery cursor: limit-one pagination retries original event after publisher restart using returned cursor', async () => {
+      let publisherCalls = 0, mode = 'failed'; const eventIds = [];
+      const x = await runtimeFixture(async (_store, event) => { publisherCalls++; eventIds.push(event.id); if (mode === 'failed') throw Error('SYNTHETIC_PUBLISH_FAILURE'); return [] });
+      const { f } = x, assigned = await good(f.managerToken, 'assign', f.assignment), claim = await good(f.executorToken, 'claim', claimBody(assigned));
+      const evidence = await good(f.executorToken, 'readStockEvidence', leasedBody(claim, claim)), body = reportBody(evidence, claim, evidence);
+      await good(f.executorToken, 'report', body); assert.equal(publisherCalls, 1);
+      let page = await x.runtime.recoverOutbox(f.manager, { authVersion: 1, after: 0, limit: 1 });
+      assert(page.nextCursor > 0); const dispatchCursor = page.nextCursor; assert.equal(publisherCalls, 1);
+      mode = 'no_subscription'; page = await x.runtime.recoverOutbox(f.manager, { authVersion: 1, after: dispatchCursor, limit: 1 });
+      assert.equal(page.nextCursor, dispatchCursor); assert.equal(page.pendingEventId, eventIds[0]); assert.equal(page.hasMore, true); assert.equal(publisherCalls, 2);
+      const durable = await prisma.config.findUnique({ where: { storeId_key: { storeId: f.storeId, key: 'team.communication.agent.outbox.' + eventIds[0] } } });
+      assert.equal(JSON.parse(durable.value).delivery.state, 'awaiting_subscription');
+      // Rebuild the service-host composition with a fresh publisher; no cursor rewind.
+      const restarted = createAgentTaskRuntime(prisma, createAgentTaskService(prisma, deps), x.dispatcher, async (_store, event) => { publisherCalls++; eventIds.push(event.id); return [{ state: 'accepted' }] });
+      service = restarted.service;
+      const recovered = await restarted.recoverOutbox(f.manager, { authVersion: 1, after: page.nextCursor, limit: 1 });
+      assert(recovered.nextCursor > page.nextCursor); assert.equal(publisherCalls, 3); assert.equal(new Set(eventIds).size, 1);
+      await restarted.recoverOutbox(f.manager, { authVersion: 1, after: recovered.nextCursor, limit: 1 }); assert.equal(publisherCalls, 3); assert.equal(x.posts(), 1);
+    });
+    await check('runtime recovery CAS: concurrent lease gate and late failure cannot downgrade accepted delivery or republish report', async () => {
+      let started, release, callsA = 0, callsB = 0;
+      const begun = new Promise(resolve => { started = resolve }), gate = new Promise((_resolve, reject) => { release = reject });
+      const x = await runtimeFixture(async () => { callsA++; started(); await gate; return [] });
+      const { f } = x, assigned = await good(f.managerToken, 'assign', f.assignment), claim = await good(f.executorToken, 'claim', claimBody(assigned));
+      const evidence = await good(f.executorToken, 'readStockEvidence', leasedBody(claim, claim)), body = reportBody(evidence, claim, evidence);
+      const pendingA = request(f.executorToken, 'report', body);
+      const safety = setTimeout(() => release(Error('SYNTHETIC_GATE_SAFETY_TIMEOUT')), 15000); await begun;
+      const runtimeB = createAgentTaskRuntime(prisma, createAgentTaskService(prisma, deps), x.dispatcher, async () => { callsB++; return [{ state: 'accepted' }] });
+      const beforeExpiry = await runtimeB.recoverOutbox(f.manager, { authVersion: 1, after: 0, limit: 100 });
+      assert.equal(callsA, 1); assert.equal(callsB, 0); assert(beforeExpiry.pendingEventId); assert(beforeExpiry.nextCursor > 0);
+      const key = 'team.communication.agent.outbox.' + beforeExpiry.pendingEventId;
+      const leased = await prisma.config.findUnique({ where: { storeId_key: { storeId: f.storeId, key } } });
+      const leaseRow = JSON.parse(leased.value); assert.equal(leaseRow.delivery.state, 'sending'); assert(leaseRow.delivery.until > Date.now());
+      // Explicit clock-fault fixture: expire only A's persistent delivery lease.
+      leaseRow.delivery.until = Date.now() - 1;
+      await prisma.config.update({ where: { storeId_key: { storeId: f.storeId, key } }, data: { value: JSON.stringify(leaseRow) } });
+      const accepted = await runtimeB.recoverOutbox(f.manager, { authVersion: 1, after: beforeExpiry.nextCursor, limit: 100 }); assert.equal(callsB, 1);
+      const committed = await prisma.config.findUnique({ where: { storeId_key: { storeId: f.storeId, key } } }); assert.equal(JSON.parse(committed.value).delivery.state, 'service_accepted');
+      release(Error('SYNTHETIC_LATE_A_FAILURE')); clearTimeout(safety); assert.equal((await pendingA).status, 200);
+      const settled = await prisma.config.findUnique({ where: { storeId_key: { storeId: f.storeId, key } } }); assert.deepEqual(JSON.parse(settled.value), JSON.parse(committed.value));
+      service = runtimeB.service;
+      await runtimeB.recoverOutbox(f.manager, { authVersion: 1, after: accepted.nextCursor, limit: 100 });
+      await runtimeB.recoverOutbox(f.manager, { authVersion: 1, after: beforeExpiry.nextCursor, limit: 100 });
+      await good(f.executorToken, 'report', body);
+      assert.equal(callsA, 1); assert.equal(callsB, 1); assert.equal(x.posts(), 1);
+    });
     await check('admission bindings: durable concurrent first binding rollback restart and auth-scope replay protection', async () => {
       const origin = 'http://127.0.0.1:43111', profile = 'synthetic-stock-readonly';
       const target = { origin, identityId: 'synthetic', credentialGeneration: 1 };

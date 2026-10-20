@@ -70,7 +70,7 @@ async function serviceFixture() {
 
 
 async function runtimeFixture(){
- const f=await serviceFixture(),state={depth:0,auditFail:false,admissionUnknown:false,publishFail:false,noSubscription:false},requests:{method:string;url:string}[]=[],callbacks:any[]=[],sessions=new Map<string,string>()
+ const f=await serviceFixture(),state={depth:0,auditFail:false,admissionUnknown:false,publishFail:false,noSubscription:false,publishHook:undefined as undefined|((event:any)=>Promise<any[]>)},requests:{method:string;url:string}[]=[],callbacks:any[]=[],sessions=new Map<string,string>()
  const tx=f.db.$transaction,audit=f.db.financeAuditLog.create
  f.db.$transaction=async(fn:any,options?:unknown)=>tx(async(inner:any)=>{state.depth++;try{return await fn(inner)}finally{state.depth--}},options)
  f.db.financeAuditLog.create=async(q:any)=>{if(state.auditFail)throw Error('SYNTHETIC_AUDIT_FAIL');return audit(q)}
@@ -91,9 +91,9 @@ async function runtimeFixture(){
  const dispatcher=createAgentTaskDispatcher(f.db,{authorize:async(_db:any,p:AgentPrincipal,scope:any,channelId:string)=>{
    const live=f.grants.get(p.agentId);if(!live||live.storeId!==p.storeId||live.grantVersion!==p.grantVersion||live.clientRevision!==p.clientRevision||!live.scopes.includes(scope)||channelId!==f.channelId)throw Error('SYNTHETIC_AUTH_REVOKED');return live
  },now:()=>Date.parse('2026-10-21T00:00:00Z')},'synthetic-runtime',client,target)
- const publish=async(storeId:string,event:any)=>{expect(state.depth).toBe(0);expect(storeId).toBe(f.storeId);expect(f.read('agent.outbox.'+event.id).event).toEqual(event);callbacks.push(structuredClone(event));if(state.publishFail)throw Error('SYNTHETIC_CALLBACK_FAIL');return state.noSubscription?[]:[{state:'accepted'}]}
+ const publish=async(storeId:string,event:any)=>{expect(state.depth).toBe(0);expect(storeId).toBe(f.storeId);expect(f.read('agent.outbox.'+event.id).event).toEqual(event);callbacks.push(structuredClone(event));if(state.publishHook)return state.publishHook(event);if(state.publishFail)throw Error('SYNTHETIC_CALLBACK_FAIL');return state.noSubscription?[]:[{state:'accepted'}]}
  const runtime=createAgentTaskRuntime(f.db,f.service,dispatcher,publish)
- const runToReport=async()=>{const assigned=await runtime.service.assign(f.manager,f.assignInput()),claimed=await runtime.service.claim(f.executor,f.claimInput(assigned)),evidence=await runtime.service.readStockEvidence(f.executor,f.leaseInput(claimed,claimed.leaseToken)),report=await runtime.service.report(f.executor,f.reportInput(evidence,claimed.leaseToken));return{assigned,claimed,evidence,report}}
+ const runToReport=async()=>{const assigned=await runtime.service.assign(f.manager,f.assignInput()),claimed=await runtime.service.claim(f.executor,f.claimInput(assigned)),evidence=await runtime.service.readStockEvidence(f.executor,f.leaseInput(claimed,claimed.leaseToken)),reportInput=f.reportInput(evidence,claimed.leaseToken),report=await runtime.service.report(f.executor,reportInput);return{assigned,claimed,evidence,report,reportInput}}
  return{...f,state,requests,callbacks,runtime,publish,dispatcher,runToReport}
 }
 
@@ -133,5 +133,58 @@ describe('post-commit native agent runtime composition',()=>{
   expect(f.read('agent.outbox.'+event.id).delivery.state).toBe('service_accepted');expect(f.callbacks.every(e=>e.id===event.id)).toBe(true)
   expect(f.requests.filter(r=>r.method==='POST')).toHaveLength(1)
   const current=await f.service.get(f.manager,{taskId:first.report.taskId,authVersion:1});expect(current.runId).toBe(first.report.runId);expect(current.report!.id).toBe(first.report.report!.id);expect(current.state).toBe('awaiting_review')
+ })
+
+ test('recovery cursor cannot skip failed or unsubscribed events across pages and a runtime restart',async()=>{
+  const f=await runtimeFixture();f.state.publishFail=true;await f.runToReport();const event=f.callbacks[0]
+  const first=await f.runtime.recoverOutbox(f.manager,{authVersion:1,after:0,limit:1})
+  expect(first.nextCursor).toBe(event.sequence-1);expect(first.hasMore).toBe(true)
+  const failed=await f.runtime.recoverOutbox(f.manager,{authVersion:1,after:first.nextCursor,limit:1})
+  expect(failed.nextCursor).toBe(first.nextCursor);expect(failed.hasMore).toBe(true);expect((failed as any).pendingEventId).toBe(event.id)
+  const restarted=createAgentTaskRuntime(f.db,f.service,f.dispatcher,f.publish)
+  f.state.publishFail=false;f.state.noSubscription=true
+  const waiting=await restarted.recoverOutbox(f.manager,{authVersion:1,after:failed.nextCursor,limit:1})
+  expect(waiting.nextCursor).toBe(first.nextCursor);expect(waiting.hasMore).toBe(true);expect(f.read('agent.outbox.'+event.id).delivery.state).toBe('awaiting_subscription')
+  f.state.noSubscription=false
+  const accepted=await restarted.recoverOutbox(f.manager,{authVersion:1,after:waiting.nextCursor,limit:1})
+  expect(accepted.nextCursor).toBe(event.sequence);expect(accepted.hasMore).toBe(false)
+  const calls=f.callbacks.length
+  const end=await restarted.recoverOutbox(f.manager,{authVersion:1,after:accepted.nextCursor,limit:1})
+  expect(end.events).toHaveLength(0);expect(f.callbacks).toHaveLength(calls);expect(f.callbacks.every(e=>e.id===event.id)).toBe(true)
+ })
+ test('durable sending claim excludes concurrent publish; expired claim CAS rejects a late failure and accepted receipt is monotonic',async()=>{
+  const f=await runtimeFixture();let rejectFirst!:(error:Error)=>void
+  f.state.publishHook=()=>new Promise<any[]>((_resolve,reject)=>{rejectFirst=reject})
+  const original=f.runToReport()
+  for(let i=0;i<100&&!f.callbacks.length;i++)await new Promise<void>(r=>setImmediate(r))
+  expect(f.callbacks).toHaveLength(1);const event=f.callbacks[0],key='agent.outbox.'+event.id,claimed=f.read(key)
+  expect(claimed.delivery.state).toBe('sending');expect(claimed.delivery.attempt).toBe(1)
+  const held=await f.runtime.recoverOutbox(f.manager,{authVersion:1,after:event.sequence-1,limit:1})
+  expect(held.nextCursor).toBe(event.sequence-1);expect(held.hasMore).toBe(true);expect(f.callbacks).toHaveLength(1)
+  f.put(key,{...claimed,delivery:{...claimed.delivery,until:Date.now()-1}})
+  f.state.publishHook=async()=>[{state:'accepted'}]
+  const takeover=await f.runtime.recoverOutbox(f.manager,{authVersion:1,after:event.sequence-1,limit:1})
+  expect(takeover.nextCursor).toBe(event.sequence);expect(f.callbacks).toHaveLength(2)
+  const receipt=f.read(key).delivery;expect(receipt.state).toBe('service_accepted');expect(receipt.attempt).toBe(2)
+  rejectFirst(Error('SYNTHETIC_LATE_OLD_FAILURE'));const completed=await original
+  expect(f.read(key).delivery).toEqual(receipt)
+  await f.runtime.service.report(f.executor,completed.reportInput)
+  await f.runtime.recoverOutbox(f.manager,{authVersion:1,after:event.sequence-1,limit:1})
+  expect(f.callbacks).toHaveLength(2);expect(f.read(key).delivery).toEqual(receipt)
+  expect(f.requests.filter(r=>r.method==='POST')).toHaveLength(1)
+  const g=await runtimeFixture();let rejectSuperseded!:(error:Error)=>void
+  g.state.publishHook=()=>new Promise<any[]>((_resolve,reject)=>{rejectSuperseded=reject})
+  const oldAttempt=g.runToReport()
+  for(let i=0;i<100&&!g.callbacks.length;i++)await new Promise<void>(r=>setImmediate(r))
+  const secondEvent=g.callbacks[0],secondKey='agent.outbox.'+secondEvent.id,oldClaim=g.read(secondKey)
+  g.put(secondKey,{...oldClaim,delivery:{...oldClaim.delivery,until:Date.now()-1}})
+  g.state.publishHook=async()=>[{state:'retryable_failure',retryAt:Date.now()+60000}]
+  const pending=await g.runtime.recoverOutbox(g.manager,{authVersion:1,after:secondEvent.sequence-1,limit:1})
+  expect(pending.nextCursor).toBe(secondEvent.sequence-1);expect(pending.hasMore).toBe(true)
+  const pendingReceipt=g.read(secondKey).delivery;expect(pendingReceipt.state).toBe('pending');expect(pendingReceipt.attempt).toBe(2)
+  rejectSuperseded(Error('SYNTHETIC_SUPERSEDED_FAILURE'));await oldAttempt
+  expect(g.read(secondKey).delivery).toEqual(pendingReceipt)
+  const retryHeld=await g.runtime.recoverOutbox(g.manager,{authVersion:1,after:secondEvent.sequence-1,limit:1})
+  expect(retryHeld.nextCursor).toBe(secondEvent.sequence-1);expect(retryHeld.hasMore).toBe(true);expect(g.callbacks).toHaveLength(2)
  })
 })
