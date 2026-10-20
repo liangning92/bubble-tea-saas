@@ -1,0 +1,32 @@
+[
+  {
+    "path": "tests/stoploss/training-notice-content-race-page-check.cjs",
+    "notificationBlob": "5e954ad12731900c823bb538402ce1a0f436f07c",
+    "combinationBlob": "5e954ad12731900c823bb538402ce1a0f436f07c",
+    "same": true
+  },
+  {
+    "path": "shared/hooks/useTrainingCatalogue.ts",
+    "notificationBlob": "bf369b65bff1fa669077ba925fee1bb5024aebae",
+    "combinationBlob": "bf369b65bff1fa669077ba925fee1bb5024aebae",
+    "same": true
+  },
+  {
+    "path": "client-admin/src/pages/staff/TrainingListPage.tsx",
+    "notificationBlob": "33304f089b27bc69e55729ae06133746b6c97ab3",
+    "combinationBlob": "33304f089b27bc69e55729ae06133746b6c97ab3",
+    "same": true
+  },
+  {
+    "path": "client-admin/src/utils/trainingNotices.ts",
+    "notificationBlob": "61015671bfa6f1effc56c4b0af5330d9514ec78e",
+    "combinationBlob": "61015671bfa6f1effc56c4b0af5330d9514ec78e",
+    "same": true
+  },
+  {
+    "path": "client-admin/src/services/api.ts",
+    "notificationBlob": "efc6e2c0ae6d1e8e0daab9266987ca29af4ba5e3",
+    "combinationBlob": "efc6e2c0ae6d1e8e0daab9266987ca29af4ba5e3",
+    "same": true
+  }
+]

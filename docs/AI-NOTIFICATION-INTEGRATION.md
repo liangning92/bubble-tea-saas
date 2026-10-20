@@ -27,3 +27,5 @@
 订阅失效仅在保存值仍等于被检查/实际发送的旧快照时CAS更新；HTTP续订或注销先提交的新状态不得被旧worker覆盖。404/410以真正送出的live snapshot为CAS前提。最终源新SHA须通过组合精确CI与独立复审，本文件不继承旧SHA失败CI或旧scope review为最终通过。
 
 员工个人通知GET/read POST使用员工端既有http、API_BASE及即时会话token，明确employee通道；审批兼容client的pos通道保持不变。Admin通知继续admin通道。真实双端浏览器断言检查两个方法的header，不放宽原staff-basic通道断言；保留15秒超时、离线拒绝及仅当前会话401注销处理。
+
+组合2c355的培训竞态CI失败已用受控真实Axios响应门复现：旧测试sync只等请求起点，返回时inFlight仍为1，第二focus被真实hook正确去重，计数保持9；显式释放响应并等完成后focus立即达到10。相关培训源码与通知1bab blob一致。只修改竞态夹具：统计真实inbox get Promise，在sync前后等待完成及浏览器微任务；挂起的catalogue/hash仍保持独立。完整双端16组原断言通过，无业务源码变化、无sleep、无超时提高。
