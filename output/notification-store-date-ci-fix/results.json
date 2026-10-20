@@ -1,0 +1,16 @@
+{
+  "recordedAt": "2026-10-20T08:04:07.234708+00:00",
+  "failedCi": 39389217963,
+  "failedHead": "82fc2f67939f63c5a3c9a259925309a4c1784d95",
+  "actualError": "React is not defined",
+  "rootCause": "configFile:false fixture used classic JSX for shared TSX; automatic JSX config omitted",
+  "runtimeSourceChanged": false,
+  "timeoutChanged": false,
+  "assertionsRemoved": false,
+  "storeDateOriginalAssertionsPassed": true,
+  "payrollFinanceOriginalReadOnlyAssertionsPassed": true,
+  "realBusinessWrites": 0,
+  "realModelCalls": 0,
+  "newCredentials": false,
+  "newExactCiRequired": true
+}
