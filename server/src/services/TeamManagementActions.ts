@@ -168,7 +168,7 @@ export async function ensureAction(tx: any, a: TeamActor, snapshot: TeamChannel,
   const audienceFloor = Math.max(fromSeq, ...c.members.map(x => x.fromSeq))
   if (proposal.existingTaskId) {
     task = await readTeam(tx, a.storeId, `task.${c.id}.${proposal.existingTaskId}`)
-    if (!task || task.ownerId !== assignedStaffId || task.fromSeq < audienceFloor || task.planId && !task.audienceIds?.includes(assignedStaffId) || ['cancelled','completed'].includes(task.status)) fail('TEAM_MANAGEMENT_ACTION_TASK_REQUIRED')
+    if (!task || task.agentTask || task.ownerId !== assignedStaffId || task.fromSeq < audienceFloor || task.planId && !task.audienceIds?.includes(assignedStaffId) || ['cancelled','completed'].includes(task.status)) fail('TEAM_MANAGEMENT_ACTION_TASK_REQUIRED')
   }
   if (assignedStaffId !== job.sourceAuthorId && !task && !(old && (ownerDecision || m.authorId === a.staffId))) {
     const nativeDirective = m.authorId === a.staffId && await explicitAssignment(tx, a, c, assignedStaffId, m.text || '')
