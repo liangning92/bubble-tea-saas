@@ -24,7 +24,8 @@ try:
     env = dict(os.environ, NODE_ENV='production', DATABASE_URL='postgresql://team_test@127.0.0.1:' + str(port) + '/team_test',
                JWT_SECRET='synthetic-team-tests-only-key-32-bytes', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
-    script = ('tests/stoploss/team-ai-settings-http-check.cjs' if '--ai-settings' in sys.argv else
+    script = ('tests/stoploss/team-routine-http-check.cjs' if '--routine-auto' in sys.argv else
+              'tests/stoploss/team-ai-settings-http-check.cjs' if '--ai-settings' in sys.argv else
               'tests/stoploss/team-operations-ui-runtime.cjs' if '--operations-ui' in sys.argv else 'tests/stoploss/team-communication-http-check.cjs')
     command(['node', script], env=env)
 finally:

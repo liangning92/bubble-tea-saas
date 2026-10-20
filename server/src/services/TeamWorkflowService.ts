@@ -3,6 +3,7 @@ import { z } from 'zod'
 import prisma from '../config/database'
 import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam, teamCommunication, TEAM_PREFIX } from './TeamCommunicationService'
 import { teamAi, readAiConnection } from './TeamAiService'
+import { routineConsentSchema, assertRoutineAudience, routineContext, routineReplySchema, ROUTINE_REPLIES, RoutineAuthorization } from './TeamRoutinePolicy'
 import { operationContent, teamOperations } from './TeamOperationsService'
 import { WorkflowPolicy, WorkflowJob, WorkflowBillingAttempt, workflowHash as hash, workflowPad as pad, workflowJobKey, workflowEvent } from './TeamWorkflowQueue'
 
@@ -15,7 +16,7 @@ const resultSchema = z.object({ replyText: z.string().trim().min(1).max(1800), s
   exceptions: z.array(z.string().trim().min(1).max(200)).max(8) }).strict()
 const policySchema = z.object({ expectedVersion: z.number().int().nonnegative(), enabled: z.boolean(), paused: z.boolean(),
   expectedAiConfigVersion: z.number().int().positive().optional(), expectedAiCheckRevision: z.number().int().positive().optional(),
-  automaticSend: z.literal(false), consent: z.literal(true), employeeIds: z.array(z.string().min(1).max(128)).min(1).max(20) }).strict()
+  automaticSend: z.boolean(), routine: routineConsentSchema.optional(), consent: z.literal(true), employeeIds: z.array(z.string().min(1).max(128)).min(1).max(20) }).strict()
 const actionSchema = z.object({ requestId: uuid, expectedVersion: z.number().int().positive(),
   action: z.enum(['approve_reply', 'approve_task', 'dismiss', 'retry', 'reconcile']), approved: z.boolean().default(false),
   acknowledgePossibleCharge: z.boolean().default(false), note: z.string().trim().min(1).max(500),
@@ -75,12 +76,18 @@ async function scope(db: any, storeId: string, j: WorkflowJob, epoch?: number) {
   if (p.hash !== j.policyHash || p.operatorUserId !== a.id || p.operatorStaffId !== a.staffId || hash(c.members) !== p.audienceHash ||
     c.archived || !p.employeeIds.includes(j.sourceAuthorId) || j.sourceSeq < fromSeq || c.members.some(m => m.fromSeq > j.sourceSeq)) fail('TEAM_WORKFLOW_SCOPE_CHANGED')
   const person = await db.staff.findFirst({ where: { id: j.sourceAuthorId, storeId, status: 'active' }, select: { user: { select: { role: true } } } })
-  if (!person?.user || person.user.role === 'admin') fail('TEAM_WORKFLOW_EMPLOYEE_UNAVAILABLE')
+  if (!person?.user || person.user.role === 'admin' && !p.automaticSend || j.sourceAuthorId === p.operatorStaffId) fail('TEAM_WORKFLOW_EMPLOYEE_UNAVAILABLE')
   const config = await readTeam(db, storeId, 'ai.settings')
   if (!config?.enabled || !config.secret || config.version !== p.aiConfigVersion) fail('TEAM_AI_CONFIG_CHANGED')
   const message = await readTeam(db, storeId, `message.${j.channelId}.${pad(j.sourceSeq)}`)
   if (!message || message.id !== j.id || message.authorId !== j.sourceAuthorId || message.ai || !message.text ||
     hash({ text: message.text, files: message.files }) !== j.sourceHash) fail('TEAM_WORKFLOW_SOURCE_CHANGED')
+  if (p.automaticSend) {
+    await assertRoutineAudience(db, a, c, p)
+    const connection = await readAiConnection(db, storeId, config)
+    if (config.region !== 'cn' || connection?.status !== 'ready' || connection.checkRevision !== p.routine.aiCheckRevision) fail('TEAM_ROUTINE_CN_CONNECTION_REQUIRED')
+    await routineContext(db, a, c, p, j.sourceSeq)
+  }
   return { a, p, c, message }
 }
 // Existing message/plan services open transactions. Here their whole operation joins
@@ -94,6 +101,10 @@ function atomicServices(tx: any) {
 }
 function parseResult(d: any, sourceSeq: number) {
   if (!d || d.status !== 'ready') fail('TEAM_AI_DRAFT_NOT_READY')
+  if (d.kind === 'routine') {
+    const { replyCode } = routineReplySchema.parse(JSON.parse(d.text))
+    return { replyText: ROUTINE_REPLIES[replyCode], routineCode: replyCode, summaryZh: '#' + sourceSeq + ' 员工报告例行状态，未经主管核实。', suggestedTask: null, exceptions: [] } as WorkflowJob['result']
+  }
   const result = resultSchema.parse(JSON.parse(d.text))
   if (!result.summaryZh.includes('#' + sourceSeq)) fail('TEAM_WORKFLOW_SOURCE_CITATION_REQUIRED')
   return result as WorkflowJob['result']
@@ -108,6 +119,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
     },
     async savePolicy(a: TeamActor, id: string, input: unknown) {
       const v = policySchema.parse(input)
+      if (v.automaticSend ? !v.routine || v.employeeIds.length !== 1 : !!v.routine) fail('TEAM_ROUTINE_CONSENT_REQUIRED', 400)
       return db.$transaction(async (tx: any) => {
         await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c } = await admin(tx, a, id), old = await readTeam<WorkflowPolicy>(tx, a.storeId, `workflow.policy.${id}`)
@@ -115,7 +127,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         const employeeIds = [...new Set(v.employeeIds)].sort()
         if (v.enabled && !v.paused && employeeIds.some(s => !c.members.some(m => m.staffId === s))) fail('TEAM_MEMBER_UNAVAILABLE', 403)
         const people = await tx.staff.findMany({ where: { id: { in: employeeIds }, storeId: a.storeId, status: 'active' }, select: { id: true, user: { select: { role: true } } } })
-        if (v.enabled && !v.paused && (people.length !== employeeIds.length || people.some((s: any) => !s.user || s.user.role === 'admin'))) fail('TEAM_WORKFLOW_EMPLOYEE_REQUIRED', 403)
+        if (v.enabled && !v.paused && (people.length !== employeeIds.length || people.some((s: any) => !s.user || s.user.role === 'admin' && !v.automaticSend))) fail('TEAM_WORKFLOW_EMPLOYEE_REQUIRED', 403)
         // Same lock order as AI publication; connection/config cannot change
         // between consent verification and committing an active policy.
         if (v.enabled && !v.paused) await lockTeam(tx, a.storeId, 'ai-budget')
@@ -126,12 +138,17 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           if (v.expectedAiConfigVersion !== config.version || !v.expectedAiCheckRevision || connection?.status !== 'ready' ||
             connection.checkRevision !== v.expectedAiCheckRevision) fail('TEAM_WORKFLOW_CONNECTION_REQUIRED')
         }
-        const definition = { employeeIds, operatorUserId: a.id, operatorStaffId: a.staffId, audienceHash: hash(c.members), aiConfigVersion: config?.version || 0 }
+        const routine = v.automaticSend ? { ...v.routine!, sourceFloor: c.lastSeq + 1, aiCheckRevision: v.expectedAiCheckRevision || old?.routine?.aiCheckRevision || 0 } : undefined
+        const definition = { ...(routine ? { automaticSend: true, routine } : {}), employeeIds, operatorUserId: a.id, operatorStaffId: a.staffId, audienceHash: hash(c.members), aiConfigVersion: config?.version || 0 }
         const p: WorkflowPolicy = { ...definition, channelId: id, version: (old?.version || 0) + 1, epoch: (old?.epoch || 0) + 1,
-          enabled: v.enabled, paused: v.paused, automaticSend: false, consent: true, hash: hash(definition) }
+          enabled: v.enabled, paused: v.paused, automaticSend: v.automaticSend, consent: true, hash: hash(definition) }
+        if (p.automaticSend && p.enabled && !p.paused) {
+          await assertRoutineAudience(tx, a, c, p)
+          if (config.region !== 'cn') fail('TEAM_ROUTINE_CN_CONNECTION_REQUIRED')
+        }
         await writeTeam(tx, a.storeId, `workflow.policy.${id}`, p)
         await workflowEvent(tx, a.storeId, id, { policyVersion: p.version, enabled: p.enabled, paused: p.paused }, ports)
-        await auditTeam(tx, a, id, 'update', { action: 'workflow_policy', version: p.version, enabled: p.enabled, paused: p.paused, employeeIds, automaticSend: false })
+        await auditTeam(tx, a, id, 'update', { action: 'workflow_policy', version: p.version, enabled: p.enabled, paused: p.paused, employeeIds, automaticSend: p.automaticSend, ...(routine ? { routine } : {}) })
         return p
       })
     },
@@ -141,14 +158,14 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
       const page: WorkflowJob[] = await rows(db, a.storeId, `workflow.job.${id}.`, pad(Math.max(after, fromSeq - 1)), 101)
       const visible = page.slice(0, 100).filter(j => j.operatorUserId === a.id && j.operatorStaffId === a.staffId)
       await Promise.all(visible.map(j => refreshBilling(db, a.storeId, j)))
-      return { jobs: visible, cursor: page.slice(0, 100).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 100, automaticSend: false }
+      return { jobs: visible, worker: await readTeam(db, a.storeId, 'workflow.worker'), cursor: page.slice(0, 100).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 100, automaticSend: !!(await readTeam(db, a.storeId, `workflow.policy.${id}`))?.automaticSend }
     },
     async events(a: TeamActor, id: string, after = 0) {
       const { fromSeq } = await admin(db, a, id)
       z.number().int().nonnegative().max(999999999999).parse(after)
       const page = await rows(db, a.storeId, `workflow.event.${id}.`, pad(after), 101)
       return { events: page.slice(0, 100).filter(e => !e.detail.sourceSeq || e.detail.sourceSeq >= fromSeq),
-        cursor: page.slice(0, 100).at(-1)?.cursor || after, hasMore: page.length > 100, delivery: 'authenticated_cursor_pull', automaticSend: false }
+        cursor: page.slice(0, 100).at(-1)?.cursor || after, hasMore: page.length > 100, delivery: 'authenticated_cursor_pull', automaticSend: !!(await readTeam(db, a.storeId, `workflow.policy.${id}`))?.automaticSend }
     },
     async action(a: TeamActor, id: string, sourceSeq: number, input: unknown) {
       const v = actionSchema.parse(input)
@@ -245,8 +262,9 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
       if (!prepared) return null
       let result: WorkflowJob['result'], error: string | undefined
       try {
+        const policy = await readTeam<WorkflowPolicy>(db, storeId, `workflow.policy.${channelId}`)
         const d = await ai.generate(operator(storeId, prepared), channelId,
-          { requestId: prepared.aiRequestId, kind: 'workflow', consent: true, sourceSeq: [prepared.sourceSeq] }, async (tx: any) => {
+          { requestId: prepared.aiRequestId, kind: policy?.automaticSend ? 'routine' : 'workflow', consent: true, sourceSeq: [prepared.sourceSeq] }, async (tx: any) => {
             const current = await readTeam<WorkflowJob>(tx, storeId, workflowJobKey(channelId, sourceSeq))
             if (current?.status !== 'processing' || current.leaseToken !== prepared.leaseToken || current.leaseUntil! <= clock()) fail('TEAM_WORKFLOW_LEASE_CHANGED')
             await scope(tx, storeId, prepared, prepared.claimEpoch)
@@ -262,12 +280,28 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           if (billingChanged) await save(tx, storeId, j, clock())
           return j
         }
-        try { await scope(tx, storeId, j, prepared.claimEpoch) } catch (e) {
+        try {
+          const current = await scope(tx, storeId, j, prepared.claimEpoch)
+          if (current.p.automaticSend && j.leaseUntil! <= clock()) fail('TEAM_WORKFLOW_LEASE_CHANGED')
+        } catch (e) {
           if (!(e instanceof TeamError)) throw e
           error = e.message; result = undefined
         }
         const d = await readTeam(tx, storeId, `aiDraft.${j.operatorStaffId}.${j.aiRequestId}`)
-        if (result && !error) { j.status = 'awaiting_approval'; j.result = result; delete j.error }
+        if (result && !error) {
+          j.result = result; delete j.error
+          const { a, p } = await scope(tx, storeId, j, prepared.claimEpoch)
+          if (p.automaticSend) {
+            if (!result.routineCode || result.exceptions.length || result.suggestedTask) fail('TEAM_ROUTINE_REPLY_INVALID')
+            const draftId = derivedId(j.id, 'reply'), original = await readTeam(tx, storeId, `aiDraft.${a.staffId}.${j.aiRequestId}`)
+            const authorization: RoutineAuthorization = { jobId: j.id, sourceSeq: j.sourceSeq, policyHash: p.hash, policyVersion: p.version, epoch: p.epoch, replyCode: result.routineCode }
+            await writeTeam(tx, storeId, `aiDraft.${a.staffId}.${draftId}`, { ...original, id: draftId, kind: 'draft', text: result.replyText, workflowJobId: j.id, routineAuthorization: authorization })
+            const message = await atomicServices(tx).messages.send(a, channelId, { requestId: draftId, text: result.replyText, files: [] }, draftId, authorization)
+            j.replyMessageId = message.id; j.automaticReply = true; j.sentAt = new Date(clock()).toISOString()
+            j.sendLatencyMs = Math.max(0, clock() - Date.parse(j.createdAt)); j.status = 'reviewed'
+            await auditTeam(tx, a, channelId, 'update', { action: 'workflow_routine_sent', authorization, messageId: message.id, sendLatencyMs: j.sendLatencyMs })
+          } else j.status = 'awaiting_approval'
+        }
         else {
           j.error = error || 'TEAM_WORKFLOW_RESULT_REVIEW_REQUIRED'
           // Only failures with no provider reservation/draft can be retried safely.
@@ -291,6 +325,35 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         if (processed) output.push({ id: processed.id, status: processed.status })
         if (output.length >= limit) break
       }
+      const currentRows = await db.config.findMany({ where: { storeId, key: { startsWith: TEAM_PREFIX + 'workflow.job.' },
+        OR: ['queued', 'retry_wait', 'processing', 'awaiting_approval', 'blocked', 'uncertain'].map(status => ({ value: { contains: `\"status\":\"${status}\"` } })) } })
+      const terminalRows = await db.config.findMany({ where: { storeId, key: { startsWith: TEAM_PREFIX + 'workflow.job.' },
+        OR: ['reviewed', 'dismissed'].map(status => ({ value: { contains: `\"status\":\"${status}\"` } })) }, orderBy: { updatedAt: 'desc' }, take: 100 })
+      const observed: WorkflowJob[] = [...currentRows, ...terminalRows].map((r: any) => JSON.parse(r.value))
+      const recentSends = await db.config.findMany({ where: { storeId, key: { startsWith: TEAM_PREFIX + 'workflow.job.' }, value: { contains: '"automaticReply":true' } }, orderBy: { updatedAt: 'desc' }, take: 20 })
+      const states: Record<string, number> = {}, now = clock()
+      for (const j of observed) states[j.status] = (states[j.status] || 0) + 1
+      const ages = observed.filter(j => ['queued', 'retry_wait', 'processing'].includes(j.status)).map(j => Math.max(0, now - Date.parse(j.createdAt)))
+      const recent: WorkflowJob[] = recentSends.map((r: any) => JSON.parse(r.value)).filter(j => typeof j.sendLatencyMs === 'number')
+      const heartbeat = { running: true, checkedAt: new Date(now).toISOString(), states, stateScope: 'all_unresolved_and_latest_100_terminal', terminalWindow: 100, latencyWindow: 20,
+        totalJobs: await db.config.count({ where: { storeId, key: { startsWith: TEAM_PREFIX + 'workflow.job.' } } }), oldestPendingAgeMs: ages.length ? Math.max(...ages) : 0,
+        recentAutomaticSendLatencyMs: recent.map(j => j.sendLatencyMs), processed: output.length, error: null }
+      await writeTeam(db, storeId, 'workflow.worker', heartbeat)
+      // Durable, deduplicated alert transitions reuse the channel event feed. No new employee messages or notifications.
+      const previousAlerts = await db.config.findMany({ where: { storeId, key: { startsWith: TEAM_PREFIX + 'workflow.worker.alert.' } }, select: { key: true } })
+      for (const channelId of [...new Set<string>([...observed.map(j => j.channelId), ...previousAlerts.map((r: any) => r.key.slice((TEAM_PREFIX + 'workflow.worker.alert.').length))])]) await db.$transaction(async (tx: any) => {
+        await lockTeam(tx, storeId, 'channel.' + channelId)
+        const p = await readTeam(tx, storeId, `workflow.policy.${channelId}`)
+        const enabled = p?.enabled && !p.paused
+        const delayed = enabled && observed.some(j => j.channelId === channelId && ['queued', 'retry_wait', 'processing'].includes(j.status) && now - Date.parse(j.createdAt) > 60000)
+        const reviewRequired = observed.some(j => j.channelId === channelId && ['uncertain', 'blocked'].includes(j.status))
+        const state = { delayed: !!delayed, reviewRequired }, key = `workflow.worker.alert.${channelId}`
+        const previous = await readTeam(tx, storeId, key)
+        if (JSON.stringify(previous) !== JSON.stringify(state)) {
+          await writeTeam(tx, storeId, key, state)
+          await workflowEvent(tx, storeId, channelId, { workerAlert: state }, ports)
+        }
+      })
       return output
     },
     async export(a: TeamActor, id: string, after = 0) {
@@ -303,14 +366,14 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         await Promise.all(jobs.map(j => refreshBilling(tx, a.storeId, j)))
         const details = []
         for (const j of jobs) details.push({ sourceSeq: j.sourceSeq, status: j.status, error: j.error, attempt: j.attempt,
-          aiDraftUnverified: j.result?.summaryZh || null, exceptions: j.result?.exceptions || [], replyApproved: !!j.replyMessageId,
+          aiDraftUnverified: j.result?.summaryZh || null, exceptions: j.result?.exceptions || [], replyApproved: !!j.replyMessageId && !j.automaticReply, automaticReply: !!j.automaticReply, sentAt: j.sentAt, sendLatencyMs: j.sendLatencyMs,
           billingStatus: j.billingStatus, billingAttempts: j.billingAttempts, task: j.planId ? await atomicServices(tx).operations.export(a, id, j.planId) : null })
         const labels: Record<string, string> = { queued: '排队中', processing: '处理中', retry_wait: '等待安全重试', awaiting_approval: '待人工处理', reviewed: '草稿已人工处理（任务验收另计）', uncertain: '结果不明，可能已计费', blocked: '已阻断，待复核', dismissed: '已人工关闭' }
         const billingLabels = { not_started: '尚未调用', possible: '存在未决费用风险，待核对', usage_recorded: '已有用量记录（以供应商账单为准）' }
-        return { channelId: id, generatedAt: new Date(clock()).toISOString(), automaticSend: false,
+        return { channelId: id, generatedAt: new Date(clock()).toISOString(), automaticSend: !!(await readTeam(tx, a.storeId, `workflow.policy.${id}`))?.automaticSend,
           cursor: page.slice(0, 50).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 50,
           title: '员工沟通处理纪要', source: 'manual_admin_export', details,
-          textZh: details.map(d => `消息 #${d.sourceSeq}：${labels[d.status]}；费用：${billingLabels[d.billingStatus]}；未决尝试：${d.billingAttempts.filter(a => a.billingStatus === 'possible').map(a => a.attempt).join('、') || '无'}；AI 草稿（员工陈述，未核实）：${d.aiDraftUnverified || '尚无'}；回复${d.replyApproved ? '已人工批准发送' : '未发送'}；异常：${d.error || d.exceptions.join('；') || '无'}${d.task ? '\n' + d.task.summaryZh : ''}`).join('\n\n') }
+          textZh: details.map(d => `消息 #${d.sourceSeq}：${labels[d.status]}；费用：${billingLabels[d.billingStatus]}；未决尝试：${d.billingAttempts.filter(a => a.billingStatus === 'possible').map(a => a.attempt).join('、') || '无'}；AI 草稿（员工陈述，未核实）：${d.aiDraftUnverified || '尚无'}；回复${d.automaticReply ? '已依持续授权自动发送' : d.replyApproved ? '已人工批准发送' : '未发送'}；异常：${d.error || d.exceptions.join('；') || '无'}${d.task ? '\n' + d.task.summaryZh : ''}`).join('\n\n') }
       })
     }
   }

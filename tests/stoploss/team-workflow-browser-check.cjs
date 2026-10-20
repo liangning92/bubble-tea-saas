@@ -106,6 +106,14 @@ async function reviewReply(page){await page.getByRole('button',{name:'审阅回�
  await pass('permission failure is visible and is never reported as an empty successful result',async()=>{
   failRead=true;await work(page,true);await page.getByTestId('team-workflow').getByRole('alert').filter({hasText:'当前身份'}).waitFor();failRead=false;
  });
+ await pass('saved routine mode is accurately shown and pause/disable retain consent; switching to manual is explicit',async()=>{
+  policy={version:20,enabled:true,paused:false,employeeIds:['s-alice'],automaticSend:true,operatorStaffId:'s-admin',routine:{version:1,employeeName:'Najwa',region:'cn',scope:'routine_codes_v1',dataConsent:true,sourceFloor:2,aiCheckRevision:1}};
+  await page.goto(origin+'/settings/ai');const area=page.getByTestId('workflow-settings');await area.getByRole('combobox').selectOption(channelId);await area.getByRole('status').filter({hasText:'受控例行自动回复'}).waitFor();assert((await area.textContent()).includes('已保存持续授权'));
+  await area.getByRole('button',{name:'暂停此频道',exact:true}).click();await area.getByRole('status').filter({hasText:'已暂停'}).waitFor();assert.equal(policy.automaticSend,true);assert.equal(policy.routine.employeeName,'Najwa');assert.equal(policy.routine.sourceFloor,undefined);
+  await area.getByRole('checkbox').last().check();await area.getByRole('button',{name:'切换为人工草稿模式',exact:true}).click();await area.getByText('许可已保存',{exact:true}).waitFor();assert.equal(policy.automaticSend,false);assert.equal(policy.routine,undefined);
+  policy={...policy,automaticSend:true,routine:{version:1,employeeName:'Najwa',region:'cn',scope:'routine_codes_v1',dataConsent:true}};await area.getByRole('button',{name:'重新读取许可',exact:true}).click();await area.getByRole('button',{name:'禁用此频道',exact:true}).click();await area.getByRole('status').filter({hasText:'未启用'}).waitFor();assert.equal(policy.automaticSend,true);assert.equal(policy.routine.scope,'routine_codes_v1');await page.screenshot({path:out+'/routine-mode-disabled.png'});
+  policy={...policy,automaticSend:false,routine:undefined};
+ });
  await context.close();
  for(const language of ['zh','id','en'])for(const width of [390,768,1440])await pass(language+' '+width+' responsive review and policy controls',async()=>{
   job=initialJob();const {page,context}=await open(language,width);await page.goto(origin+'/settings/ai');const permission=page.getByTestId('workflow-settings');await permission.getByRole('combobox').selectOption(channelId);await permission.locator('fieldset').waitFor();await permission.scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:out+'/'+language+'-'+width+'-policy.png'});

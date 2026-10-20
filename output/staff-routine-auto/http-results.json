@@ -1,0 +1,36 @@
+{
+  "passed": 13,
+  "tests": [
+    "default off; exact six-name identity, real administrator, one employee direct channel and verified CN connection required",
+    "conservative complete-phrase grammar blocks sensitive, financial, private, ambiguous and injected text before provider admission",
+    "HTTP employee event produces one automatic routine reply atomically with explicit sustained-consent provenance and no loop",
+    "explicitly allowlisted recipient may already be an administrator; existing role is preserved and operator/AI still cannot loop",
+    "default credential resolver with a missing master key fails without creating a key or calling provider",
+    "bounded canonical context is same-person same-channel after consent floor; unknown/private text is never forwarded",
+    "attachments are local-only and mixed routine-plus-attachment messages go to human before model",
+    "pause, employee disablement, CN receipt/config change and audience change stop in-flight automatic publication",
+    "unknown billing, malformed/extra provider output and injected reply text never auto-repeat or send",
+    "send persistence failure rolls back message/job/provenance; ready result recovery sends once without new model call",
+    "existing store-wide three-per-minute rate and budget ceilings remain enforced without releasing uncertain reserves",
+    "durable heartbeat and deduplicated alert transitions expose backlog, blocked work and automatic send latency without message text",
+    "real isolated child worker runs without pages, survives SIGTERM/restart and never duplicates admitted model or reply"
+  ],
+  "workerEvidence": {
+    "actualChild": true,
+    "sourceMessageId": "8cefa7ce-6304-492d-b2e2-251f527b8473",
+    "jobId": "8cefa7ce-6304-492d-b2e2-251f527b8473",
+    "replyMessageId": "1a36b8df-0b2f-44a3-9107-697bd6ec6a20",
+    "providerAdmissions": 1,
+    "replyCount": 1,
+    "pageRequests": 0,
+    "gracefulStop": true,
+    "restartDedup": true,
+    "sendLatencyMs": 471
+  },
+  "realModelCalls": 0,
+  "realMessages": 0,
+  "productionAccess": false,
+  "credentialsCreated": false,
+  "webPushMockTested": false,
+  "deviceDeliveryTested": false
+}

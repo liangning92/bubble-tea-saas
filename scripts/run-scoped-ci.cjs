@@ -28,6 +28,7 @@ async function browserCheck(check){
   break;
  case 'media':if(plan.media)node('scripts/test-media-insights.cjs');break;
  case 'http':
+  if(plan.routineAuto){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--routine-auto'])}
   if(plan.teamCommunication){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py'])}
   if(plan.aiSettings){if(!plan.teamCommunication)run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--ai-settings'])}
   if(plan.http.length){

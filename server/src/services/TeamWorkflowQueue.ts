@@ -1,11 +1,12 @@
 import { createHash } from 'crypto'
+import type { RoutineConsent, RoutineReplyCode } from './TeamRoutinePolicy'
 import type { TeamActor, TeamChannel } from './TeamCommunicationService'
 
 export const workflowHash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 export const workflowPad = (n: number) => String(n).padStart(12, '0')
 export interface WorkflowPolicy {
   channelId: string; version: number; epoch: number; enabled: boolean; paused: boolean
-  automaticSend: false; consent: true; employeeIds: string[]; operatorUserId: string; operatorStaffId: string
+  automaticSend: boolean; routine?: RoutineConsent; consent: true; employeeIds: string[]; operatorUserId: string; operatorStaffId: string
   audienceHash: string; aiConfigVersion: number; hash: string
 }
 export interface WorkflowBillingAttempt {
@@ -19,9 +20,10 @@ export interface WorkflowJob {
   status: 'queued' | 'processing' | 'retry_wait' | 'awaiting_approval' | 'reviewed' | 'uncertain' | 'blocked' | 'dismissed'
   createdAt: string; updatedAt: string; leaseToken?: string; leaseUntil?: number; claimEpoch?: number
   nextAttemptAt?: number; error?: string; aiRequestId?: string; replyMessageId?: string; planId?: string
+  sentAt?: string; sendLatencyMs?: number; automaticReply?: boolean
   billingStatus?: 'not_started' | 'possible' | 'usage_recorded'
   billingAttempts?: WorkflowBillingAttempt[]
-  result?: { replyText: string; summaryZh: string; suggestedTask: null | {
+  result?: { routineCode?: RoutineReplyCode; replyText: string; summaryZh: string; suggestedTask: null | {
     category: 'communication' | 'training' | 'inspection'; text: string; evidenceRequired: string; acceptanceCriteria: string
   }; exceptions: string[] }
 }
@@ -31,7 +33,7 @@ export const workflowJobKey = (c: string, seq: number) => `workflow.job.${c}.${w
 /** Called under the message's channel transaction lock. No provider, timer or credentials. */
 export async function enqueueTeamWorkflow(db: any, a: TeamActor, c: TeamChannel, message: any, ports: Ports) {
   const p: WorkflowPolicy = await ports.read(db, a.storeId, `workflow.policy.${c.id}`)
-  if (!p?.enabled || !p.employeeIds.includes(a.staffId) || a.role === 'admin' || message.ai) return
+  if (!p?.enabled || !p.employeeIds.includes(a.staffId) || a.staffId === p.operatorStaffId || a.role === 'admin' && !p.automaticSend || message.ai) return
   const key = workflowJobKey(c.id, message.seq)
   if (await ports.read(db, a.storeId, key)) return
   const job: WorkflowJob = { id: message.id, channelId: c.id, sourceSeq: message.seq, sourceAuthorId: a.staffId,

@@ -1,0 +1,32 @@
+{
+  "passed": [
+    "permissions stay in AI settings; unverified connection and missing consent block activation",
+    "saving a new unverified model above invalidates old ready consent before any activation PUT",
+    "uncertain policy save stays locked across reload until the saved state is explicitly read",
+    "review requires edited content, note and explicit approval; lost response replays only the original ID after reload",
+    "task approval fixes source employee and reviewer and collects dates and criteria; existing follow-up remains present",
+    "Chinese report paginates and keeps AI statements separate from human acceptance",
+    "unknown model billing stays visible and new attempt needs both explicit confirmations",
+    "concurrent version change retains form and prevents stale approval",
+    "browser receipt failure stops before API mutation",
+    "permission failure is visible and is never reported as an empty successful result",
+    "saved routine mode is accurately shown and pause/disable retain consent; switching to manual is explicit",
+    "zh 390 responsive review and policy controls",
+    "zh 768 responsive review and policy controls",
+    "zh 1440 responsive review and policy controls",
+    "id 390 responsive review and policy controls",
+    "id 768 responsive review and policy controls",
+    "id 1440 responsive review and policy controls",
+    "en 390 responsive review and policy controls",
+    "en 768 responsive review and policy controls",
+    "en 1440 responsive review and policy controls",
+    "manager does not receive AI review controls or workflow reads"
+  ],
+  "pageErrors": [],
+  "externalRequests": [],
+  "allApiRequestsMocked": true,
+  "realModelCalls": 0,
+  "productionWrites": 0,
+  "replyCount": 1,
+  "taskCount": 1
+}

@@ -189,3 +189,14 @@ test('AI settings page and API changes select their mocked browser and disposabl
  assert.equal(api.aiSettings,true);assert.equal(api.teamCommunication,true);
  assert.equal(scopeAi(['server/src/routes/salary.ts']).aiSettings,false);
 });
+
+
+test('routine communication follows actual service consumers and retains its disposable regression',()=>{
+ const f=fixture();try{
+  f.write('server/src/services/TeamAiService.ts');f.write('server/src/services/TeamCommunicationService.ts');
+  f.write('server/src/services/TeamRoutinePolicy.ts',"import './TeamAiService'; import './TeamCommunicationService'");
+  for(const file of ['server/src/services/TeamRoutinePolicy.ts','server/src/services/TeamAiService.ts','server/src/services/TeamCommunicationService.ts','tests/stoploss/team-routine-http-check.cjs']){
+   if(file.endsWith('.cjs'))f.write(file);const p=selectScope([file],f);assert(p.routineAuto,file);assert(p.needsDependencies);assert(p.needsServer);assert(!p.components.includes('pos'));
+  }
+ }finally{f.close()}
+});

@@ -22,7 +22,7 @@ interface Channel {
   members: { staffId: string; fromSeq: number }[]; member: boolean; canEdit: boolean; canAudit: boolean; unread: number
   round: { id: string; title: string } | null
 }
-interface Message { id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: { provider: string; model: string; approvedBy: string } }
+interface Message { id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: import('./TeamChatMessages').TeamMessageAi }
 interface Minute {
   id: string; title: string; participants: string[]; fromSeq: number; toSeq: number; startedAt: string; endedAt: string
   version: number; status: 'draft' | 'confirmed'; decisions: string[]; pending: string[]; sourceSeq: number[]

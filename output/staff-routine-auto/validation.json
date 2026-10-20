@@ -1,0 +1,27 @@
+{
+  "base": "91305bf9d140538770effbce4f506071f8f8747a",
+  "originMasterBase": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "routinePGGroups": 13,
+  "existingTeamRegression": {
+    "passed": 67,
+    "failed": 0
+  },
+  "scopeAndComponentUnits": 28,
+  "mockBrowserCases": 21,
+  "serverBuild": true,
+  "adminBuild": true,
+  "staffBuild": true,
+  "testBatches": [
+    "bt-test-1ae2b116d3ae",
+    "bt-test-202a5f5df198",
+    "bt-test-ae6df6568232"
+  ],
+  "allTestResourcesCleaned": true,
+  "realModelCalls": 0,
+  "productionAccess": false,
+  "realMessages": 0,
+  "newCredentialsCreated": false,
+  "proactiveSchedulingImplemented": false,
+  "arbitraryNaturalLanguageImplemented": false,
+  "deviceDeliveryTested": false
+}

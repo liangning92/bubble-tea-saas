@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
+import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow } from './TeamWorkflowQueue'
 
 export const TEAM_PREFIX = 'team.communication.'
@@ -195,7 +196,7 @@ export function teamCommunication(db: DB = prisma) {
       return { channel: c, messages, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
         canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), audit: auditReason !== undefined }
     },
-    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string) {
+    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization) {
       const v = messageSchema.parse(input)
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
@@ -203,7 +204,7 @@ export function teamCommunication(db: DB = prisma) {
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
-        let ai: { provider: string; model: string; draftId: string; approvedBy: string } | undefined
+        let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; authorizedBy?: string } | undefined
         if (aiDraftId) {
           uuid.parse(aiDraftId)
           if (a.role !== 'admin' || a.employeeApp || v.requestId !== aiDraftId || v.files.length) fail(403, 'TEAM_AI_ADMIN_REQUIRED')
@@ -214,7 +215,13 @@ export function teamCommunication(db: DB = prisma) {
           if (!settings?.enabled || settings.version !== draft.configVersion) fail(409, 'TEAM_AI_CONFIG_CHANGED')
           if (c.members.some(member => member.fromSeq > draft.sourceFloor) || digest(c.members) !== draft.audienceHash) fail(403, 'TEAM_AI_AUDIENCE_CHANGED')
           if (draft.operation) await assertOperationScope(tx, a, c, draft.operation)
-          ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, approvedBy: a.staffId }
+          if (routineAuthorization) {
+            await assertRoutineSend(tx, a, c, draft, routineAuthorization, v.text)
+            ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, routineAuthorization, authorizedBy: a.staffId }
+          } else {
+            if (draft.routineAuthorization) fail(403, 'TEAM_ROUTINE_INTERNAL_SEND_REQUIRED')
+            ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, approvedBy: a.staffId }
+          }
         }
         if (c.archived || c.kind === 'meeting' && !c.round) fail(409, 'TEAM_CHANNEL_CLOSED')
         await lock(tx, a.storeId, 'rate.' + a.staffId)
@@ -238,8 +245,8 @@ export function teamCommunication(db: DB = prisma) {
         await write(tx, a.storeId, rateKey, [...recent, now])
         if (ai) {
           const key = `aiDraft.${a.staffId}.${aiDraftId}`, draft = await read(tx, a.storeId, key)
-          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, approvedAt: new Date(now).toISOString() })
-          await audit(tx, a, id, 'update', { action: 'ai_publish', draftId: aiDraftId, messageId: message.id })
+          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, ...(routineAuthorization ? { automaticallySentAt: new Date(now).toISOString() } : { approvedAt: new Date(now).toISOString() }) })
+          await audit(tx, a, id, 'update', { action: routineAuthorization ? 'routine_authorized_send' : 'ai_publish', draftId: aiDraftId, messageId: message.id, ...(routineAuthorization ? { authorization: routineAuthorization } : {}) })
         }
         await enqueueTeamWorkflow(tx, a, c, message, { read, write })
         return message
