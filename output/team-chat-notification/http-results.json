@@ -1,0 +1,16 @@
+{
+  "passed": 5,
+  "tests": [
+    "chat reminder is atomic with message/queue, excludes sender, is deterministic and carries no message body",
+    "chat inbox and delivery recheck member/fromSeq/archive/active identity/read receipt; backend denied permissions preserve APP chat",
+    "unread/read cursors are per conversation and shared across sessions; notification deep links do not grant private channel access",
+    "chat delivery reuses existing keys/subscriptions, deduplicates concurrency, and no subscription/key becomes in-app without generating credentials",
+    "disabled/logout-stale subscriptions and terminal 404/410 endpoints stop pushes; send records are not device delivery proof"
+  ],
+  "productionAccess": false,
+  "realModelCalls": 0,
+  "realPushCalls": 0,
+  "credentialsCreated": false,
+  "webPushMockTested": true,
+  "deviceDeliveryTested": false
+}

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
+import { enqueueChatReminders } from './TeamChatReminderService'
 import { enqueueTeamWorkflow } from './TeamWorkflowQueue'
 
 export const TEAM_PREFIX = 'team.communication.'
@@ -242,6 +243,7 @@ export function teamCommunication(db: DB = prisma) {
           await audit(tx, a, id, 'update', { action: 'ai_publish', draftId: aiDraftId, messageId: message.id })
         }
         await enqueueTeamWorkflow(tx, a, c, message, { read, write })
+        await enqueueChatReminders(tx, a.storeId, c, message)
         return message
       })
     },

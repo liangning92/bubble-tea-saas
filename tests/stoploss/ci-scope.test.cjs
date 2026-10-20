@@ -189,3 +189,11 @@ test('AI settings page and API changes select their mocked browser and disposabl
  assert.equal(api.aiSettings,true);assert.equal(api.teamCommunication,true);
  assert.equal(scopeAi(['server/src/routes/salary.ts']).aiSettings,false);
 });
+
+test('chat notification checks follow actual message, reminder delivery and inbox consumers',()=>{
+ const f=fixture();try{
+  for(const file of ['server/src/services/TeamCommunicationService.ts','server/src/services/EmployeeReminderService.ts','server/src/routes/employeeWorkspace.ts'])f.write(file);
+  f.write('server/src/services/TeamChatReminderService.ts',"import './TeamCommunicationService'");
+  for(const file of ['server/src/services/TeamChatReminderService.ts','server/src/services/TeamCommunicationService.ts','server/src/services/EmployeeReminderService.ts','server/src/routes/employeeWorkspace.ts','tests/stoploss/team-chat-notification-http-check.cjs']){if(file.endsWith('.cjs'))f.write(file);const p=selectScope([file],f);assert(p.chatNotification,file);assert(p.needsServer);assert(!p.components.includes('pos'))}
+ }finally{f.close()}
+});

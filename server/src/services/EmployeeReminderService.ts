@@ -1,3 +1,4 @@
+import { chatReminderRelevant } from './TeamChatReminderService';
 import { assignedStaffAccess } from "./StaffPermissionService";
 import webpush from "web-push";
 import { createHash } from "crypto";
@@ -255,18 +256,20 @@ export async function reminderStillRelevant(
   storeId: string,
   r: any,
   now = new Date(),
+  db: any = prisma,
 ) {
   if (r.expiresAt && new Date(r.expiresAt) <= now) return false;
+  if (r.event?.startsWith('team-chat:')) return chatReminderRelevant(db, storeId, r);
   const [kind, id] = r.event.split(":");
   if (kind.startsWith("hygiene-")) {
-    const task = await prisma.hygieneTask.findFirst({ where: { id, storeId } });
+    const task = await db.hygieneTask.findFirst({ where: { id, storeId } });
     if (!task || (task.staffId && task.staffId !== r.staffId)) return false;
     if (kind === "hygiene-review")
       return ["approved", "rejected"].includes(task.status);
     if (!["pending", "in_progress", "overdue"].includes(task.status))
       return false;
     if (!task.staffId) {
-      const active = await prisma.attendance.findFirst({
+      const active = await db.attendance.findFirst({
         where: {
           staffId: r.staffId,
           checkOutTime: null,
@@ -282,51 +285,51 @@ export async function reminderStillRelevant(
       return !!task.dueTime && r.event.endsWith(task.dueTime.toISOString());
   }
   if (kind === "training") {
-    const item = await prisma.training.findFirst({
+    const item = await db.training.findFirst({
       where: { id, storeId, staffId: r.staffId },
     });
     return !!item && ["scheduled", "in_progress"].includes(item.status);
   }
   if (kind === "swap-confirm") {
-    const item = await prisma.shiftSwap.findFirst({
+    const item = await db.shiftSwap.findFirst({
       where: { id, storeId, targetStaffId: r.staffId },
     });
     return !!item && item.status === "pending" && !item.targetConfirmed;
   }
   return true;
 }
-export async function deliver(storeId: string) {
-  const reminders = (await listWork(storeId, "reminder.")).filter(
+export async function deliver(storeId: string, db: any = prisma, push: typeof webpush = webpush) {
+  const reminders = (await listWork(storeId, "reminder.", db)).filter(
       (r) => r && r.status === "pending",
     ),
-    subscriptions = (await listWork(storeId, "subscription.")).filter(
+    subscriptions = (await listWork(storeId, "subscription.", db)).filter(
       (s) => s.active,
     );
-  const keys = await pushKeys(storeId);
+  const keys = await readWork(storeId, "push-keys", db); // Existing keys only; delivery never creates credentials.
   for (const r of reminders) {
-    const employee = await prisma.staff.findFirst({
+    const employee = await db.staff.findFirst({
       where: { id: r.staffId, storeId, status: "active" },
     });
-    if (!employee) continue;
-    if (!(await reminderStillRelevant(storeId, r))) {
+    if (!employee) { await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, status: 'cancelled' }, db); continue; }
+    if (!(await reminderStillRelevant(storeId, r, new Date(), db))) {
       await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
         ...r,
         status: "cancelled",
-      });
+      }, db);
       continue;
     }
     const activeSubscriptions = subscriptions.filter(
       (s) => s.staffId === r.staffId,
     );
-    if (!activeSubscriptions.length) {
+    if (!activeSubscriptions.length || !keys) {
       await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
         ...r,
         status: "in_app",
-      });
+      }, db);
       continue;
     }
     for (const sub of activeSubscriptions) {
-      const user = await prisma.user.findUnique({
+      const user = await db.user.findUnique({
         where: { id: employee.userId },
       });
       if (
@@ -337,11 +340,11 @@ export async function deliver(storeId: string) {
         await writeWork(storeId, `subscription.${sub.id}`, {
           ...sub,
           active: false,
-        });
+        }, db);
         continue;
       }
       const key = `delivery.${r.id}.${sub.id}`;
-      const claimed = await prisma.$transaction(async (db) => {
+      const claimed = await db.$transaction(async (db) => {
         await workLock(storeId, key, db);
         let attempt = (await readWork(storeId, key, db)) || {
           attempts: 0,
@@ -370,7 +373,7 @@ export async function deliver(storeId: string) {
       });
       if (!claimed) continue;
       {
-        const attempt = await readWork(storeId, key);
+        const attempt = await readWork(storeId, key, db);
         if (
           attempt?.status === "sent" ||
           attempt?.attempts >= 3 ||
@@ -382,7 +385,12 @@ export async function deliver(storeId: string) {
         try {
           if (!validPushEndpoint(sub.subscription.endpoint))
             throw new Error("INVALID_PUSH_ENDPOINT");
-          await webpush.sendNotification(
+          const latest = await readWork(storeId, `reminder.${r.staffId}.${r.id}`, db);
+          if (latest?.status === 'cancelled' || !await reminderStillRelevant(storeId, r, new Date(), db)) {
+            await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, status: 'cancelled' }, db);
+            continue;
+          }
+          await push.sendNotification(
             sub.subscription,
             JSON.stringify({ title: r.title, url: r.url, id: r.id }),
             {
@@ -399,7 +407,7 @@ export async function deliver(storeId: string) {
             status: "sent",
             attempts: attempt.attempts + 1,
             sentAt: new Date().toISOString(),
-          });
+          }, db);
         } catch (e: any) {
           await writeWork(storeId, key, {
             status: "failed",
@@ -408,18 +416,18 @@ export async function deliver(storeId: string) {
               Date.now() + 60000 * 2 ** attempt.attempts,
             ).toISOString(),
             error: e.statusCode ? String(e.statusCode) : "PUSH_DELIVERY_FAILED",
-          });
+          }, db);
           if ([404, 410].includes(e.statusCode))
             await writeWork(storeId, `subscription.${sub.id}`, {
               ...sub,
               active: false,
-            });
+            }, db);
         }
       }
     }
     const deliveryStates = await Promise.all(
       activeSubscriptions.map((sub) =>
-        readWork(storeId, `delivery.${r.id}.${sub.id}`),
+        readWork(storeId, `delivery.${r.id}.${sub.id}`, db),
       ),
     );
     if (
@@ -430,7 +438,7 @@ export async function deliver(storeId: string) {
       await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
         ...r,
         status: "sent",
-      });
+      }, db);
   }
 }
 export function startEmployeeWorker() {

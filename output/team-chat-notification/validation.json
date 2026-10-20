@@ -1,0 +1,21 @@
+{
+  "base": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "isolatedNotificationGroups": 5,
+  "existingTeamRegression": {
+    "passed": 67,
+    "failed": 0
+  },
+  "scopeAndServiceWorkerUnits": 27,
+  "serverBuild": true,
+  "staffBuild": true,
+  "adminBuild": true,
+  "testBatches": [
+    "bt-test-fbe1933ecf4c",
+    "bt-test-8a6615887f5f"
+  ],
+  "testResourcesCleaned": true,
+  "productionAccess": false,
+  "realPushCalls": 0,
+  "deviceDeliveryTested": false,
+  "credentialsCreated": false
+}
