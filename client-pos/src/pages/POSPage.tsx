@@ -4790,7 +4790,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                   )}
 
                   </>}
-                  {handoverPreview && <ShiftHandoverPreview data={handoverPreview} actualCash={Number(shiftActualCash)} receipts={{qris:Number(manualReceipts.qris),shopeefood:Number(manualReceipts.shopeefood),gofood:Number(manualReceipts.gofood)}} cashierName={user?.staff?.name || t('pos.cashier')} shiftName={activeShifts.find(s=>s.key===handoverPreview.shift.shift)?.name || handoverPreview.shift.shift} />}
+                  {handoverPreview && <ShiftHandoverPreview settings={handoverPreview.displaySettings} data={handoverPreview} actualCash={Number(shiftActualCash)} receipts={{qris:Number(manualReceipts.qris),shopeefood:Number(manualReceipts.shopeefood),gofood:Number(manualReceipts.gofood)}} cashierName={user?.staff?.name || t('pos.cashier')} shiftName={activeShifts.find(s=>s.key===handoverPreview.shift.shift)?.name || handoverPreview.shift.shift} />}
 
                   {/* 交班按钮 */}
                   <div className="flex gap-3">
@@ -4818,9 +4818,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                         if (!handoverPreview) {
                           setHandoverLoading(true)
                           try {
-                            const fresh = (await posApi.getCurrentShift()).data?.data
+                            const [shiftResponse,configResponse] = await Promise.all([posApi.getCurrentShift(),posApi.getConfigs(user!.storeId!)])
+                            const fresh = shiftResponse.data?.data
+                            const displaySettings = configResponse.data?.data?.shiftSettings || {}
                             if (!fresh?.hasOpenShift || !fresh.shift?.updatedAt || !fresh.cashReconciliation || fresh.shift.id !== shiftData?.shift?.id) throw Error('SHIFT_PREVIEW_UNAVAILABLE')
-                            setHandoverPreview(fresh)
+                            setHandoverPreview({...fresh,displaySettings})
                             setShiftInputTarget(null)
                           } catch { showToast(t('handoverFlow.previewFailed'), 'error') }
                           finally { setHandoverLoading(false) }
