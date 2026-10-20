@@ -124,6 +124,34 @@ async function messageRows(db: DB, storeId: string, id: string, after: number, l
     ...(until !== undefined ? { lte: prefix + pad(until) } : {}) } }, orderBy: { key: 'asc' }, take: limit }))
     .map((r: any) => JSON.parse(r.value))
 }
+export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused'; updatedAt: string }
+/** Read-only source status. Never project a colleague's job or an audit-only history floor. */
+export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel, messages: any[]) {
+  const member = c.members.find(m => m.staffId === a.staffId)
+  const own = member && !c.archived ? messages.filter(m => m.channelId === c.id && m.authorId === a.staffId && !m.ai && Number.isSafeInteger(m.seq) && m.seq >= member.fromSeq) : []
+  const output = new Map<string, OwnAiHandling>()
+  if (!own.length) return output
+  const prefix = `workflow.job.${c.id}.`, settings = [`workflow.policy.${c.id}`, 'workflow.defaults', `workflow.exception.${c.id}`]
+  const keys = [...own.map(m => TEAM_PREFIX + prefix + pad(m.seq)), ...settings.map(key => TEAM_PREFIX + key)]
+  const rows = await db.config.findMany({ where: { storeId: a.storeId, key: { in: keys } }, select: { key: true, value: true } })
+  const records = new Map<string, any>(rows.map((row: any) => [row.key.slice(TEAM_PREFIX.length), JSON.parse(row.value)]))
+  const p = records.get(settings[0]), defaults = records.get(settings[1]), exception = records.get(settings[2])
+  const paused = p?.paused === true || p?.enabled === false || defaults?.enabled === false || !!exception
+  for (const m of own) {
+    const j = records.get(prefix + pad(m.seq))
+    if (!j || j.id !== m.id || j.channelId !== c.id || j.sourceSeq !== m.seq || j.sourceAuthorId !== a.staffId || typeof j.updatedAt !== 'string' || !Number.isFinite(Date.parse(j.updatedAt))) continue
+    let state: OwnAiHandling['state'] | undefined
+    if (j.status === 'pending_action') state = 'pending_action'
+    else if (j.status === 'awaiting_owner') state = 'waiting_owner'
+    else if (['blocked', 'uncertain', 'awaiting_approval'].includes(j.status)) state = 'needs_review'
+    else if (j.replyMessageId) state = 'replied'
+    else if (j.status === 'reviewed' && (j.management?.kind === 'no_reply' || j.result?.management?.kind === 'no_reply')) state = 'understood'
+    else if (j.status === 'processing') state = 'processing'
+    else if (['queued', 'retry_wait'].includes(j.status)) state = paused ? 'paused' : 'queued'
+    if (state) output.set(m.id, { state, updatedAt: j.updatedAt })
+  }
+  return output
+}
 async function closeRound(db: DB, a: TeamActor, c: TeamChannel) {
   if (!c.round) fail(409, 'TEAM_NO_OPEN_ROUND')
   const r = c.round
@@ -202,8 +230,17 @@ export function teamCommunication(db: DB = prisma) {
       seq.parse(after)
       const { c, fromSeq } = await channel(db, a, id, auditReason)
       const rows = await messageRows(db, a.storeId, id, Math.max(after, fromSeq - 1), 101)
-      const messages = rows.slice(0, 100)
-      return { channel: c, messages, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
+      const sourceMessages = rows.slice(0, 100), member = c.members.find(m => m.staffId === a.staffId)
+      // Existing incremental polls must refresh saved source statuses without replaying message history.
+      const messagePrefix = TEAM_PREFIX + `message.${id}.`
+      const refreshRows = member && !c.archived && after >= member.fromSeq ? await db.config.findMany({ where: { storeId: a.storeId,
+        key: { startsWith: messagePrefix, gte: messagePrefix + pad(member.fromSeq), lte: messagePrefix + pad(after) },
+        value: { contains: '"authorId":' + JSON.stringify(a.staffId) } }, orderBy: { key: 'desc' }, take: 100, select: { value: true } }) : []
+      const refreshSources = refreshRows.map((row: any) => JSON.parse(row.value)).filter((m: any) => m.channelId === id && m.authorId === a.staffId && !m.ai && m.seq >= member!.fromSeq && m.seq <= after)
+      const handling = await projectOwnAiHandling(db, a, c, [...sourceMessages, ...refreshSources])
+      const messages = sourceMessages.map(({ aiHandling: _untrusted, ...m }: any) => ({ ...m, ...(handling.has(m.id) ? { aiHandling: handling.get(m.id) } : {}) }))
+      const aiHandlingUpdates = refreshSources.map((m: any) => ({ messageId: m.id, seq: m.seq, aiHandling: handling.get(m.id) || null }))
+      return { channel: c, messages, aiHandlingUpdates, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
         canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), audit: auditReason !== undefined }
     },
     async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization, managementAuthorization?: ManagementAuthorization) {

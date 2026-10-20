@@ -24,7 +24,7 @@ interface Channel {
   preview?: { text: string; authorName: string; createdAt: string } | null
   round: { id: string; title: string } | null
 }
-interface Message { id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: import('./TeamChatMessages').TeamMessageAi }
+interface Message { channelId?: string; aiHandling?: import('./TeamChatMessages').TeamAiHandling; id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: import('./TeamChatMessages').TeamMessageAi }
 interface Minute {
   id: string; title: string; participants: string[]; fromSeq: number; toSeq: number; startedAt: string; endedAt: string
   version: number; status: 'draft' | 'confirmed'; decisions: string[]; pending: string[]; sourceSeq: number[]
@@ -164,7 +164,17 @@ export function TeamCommunication({ client, scope, staffId, language, administra
         const response = await client.request('get', `/team/channels/${selectedId}/messages?after=${cursor}${auditReason ? '&auditReason=' + encodeURIComponent(auditReason) : ''}`)
         if (!active || !client.current()) return
         setMeta({ ...currentChannel!, ...response.channel, canEdit: response.canEdit }); setMessageChannelId(selectedId)
-        setMessages(previous => [...new Map([...previous, ...response.messages].map((m: Message) => [m.seq, m])).values()].sort((a, b) => a.seq - b.seq))
+        const ownMember = response.channel?.members?.find((member: { staffId: string; fromSeq: number }) => member.staffId === staffId)
+        const handlingUpdates = new Map<string, { messageId: string; seq: number; aiHandling: import('./TeamChatMessages').TeamAiHandling | null }>((Array.isArray(response.aiHandlingUpdates) ? response.aiHandlingUpdates.slice(0, 100) : []).map((update: any) => [update.messageId, update]))
+        setMessages(previous => [...new Map([...previous, ...response.messages].map((m: Message) => [m.seq, m])).values()]
+          .filter(m => !ownMember || m.seq >= ownMember.fromSeq)
+          .map(m => {
+            const update = handlingUpdates.get(m.id)
+            if (!ownMember) { const { aiHandling: _stale, ...source } = m; return source }
+            if (m.authorId !== staffId || m.channelId !== selectedId || m.ai || m.seq < ownMember.fromSeq || update?.seq !== m.seq) return m
+            const { aiHandling: _old, ...source } = m
+            return { ...source, ...(update.aiHandling ? { aiHandling: update.aiHandling } : {}) }
+          }).sort((a, b) => a.seq - b.seq))
         cursor = response.cursor; setHistoryReady(!response.hasMore); setError('')
         const [records, followUps] = await Promise.all([client.request('get', `/team/channels/${selectedId}/minutes${query}`), client.request('get', `/team/channels/${selectedId}/tasks${query}`)])
         if (!active || !client.current()) return
