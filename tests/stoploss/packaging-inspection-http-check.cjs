@@ -109,6 +109,13 @@ async function main() {
       value:JSON.stringify({id,channelId:f.channel.id,version:1,revision:1,status:'draft',content,audienceHash:require(root+'/server/dist/services/PackagingInspectionSnapshot').inspectionHash(c.members),fromSeq:1,taskIds:[],createdBy:f.owner.staffId,updatedAt:at,automaticMessages:false,memberIds:c.members.map(m=>m.staffId)})}});
     await prisma.config.createMany({data});return content;
   };
+  const seedTasks=async(f,total)=>{
+    const at=new Date().toISOString();await prisma.config.createMany({data:Array.from({length:total},()=>{
+      const id=randomUUID();return {storeId:f.storeId,category:'staff',key:`team.communication.task.${f.channel.id}.${id}`,
+        value:JSON.stringify({id,channelId:f.channel.id,roundId:randomUUID(),minuteVersion:1,actionIndex:0,text:'Synthetic ordinary completed task',
+          ownerId:f.alice.staffId,dueDate:'2026-10-20',sourceSeq:[],fromSeq:1,status:'completed',version:1,createdAt:at,updatedAt:at,events:[]})};
+    })});
+  };
   try {
     // Install the repository's existing ledger triggers only in this wrapper-owned database.
     for (const sql of require(root+'/server/dist/utils/inventoryLedger').pgLedgerDDL) await prisma.$executeRawUnsafe(sql);
@@ -242,6 +249,56 @@ async function main() {
       await f.service.runBatch(f.storeId);assert.equal((await readJob(f)).state,'awaiting_approval');assert.equal(f.calls(),1);
       const history=await f.service.jobs(f.owner);assert.equal(history.jobs.length,400);assert.equal(history.jobs[0].id,f.job.id);
       assert.equal(await prisma.config.count({where:{storeId:f.storeId,key:{startsWith:'team.communication.inspection.pending.'}}}),0);
+    });
+    await test('200 ordinary tasks block model admission; the 199th-task boundary reserves capacity against manual minutes and plan publication until approval',async()=>{
+      const f=await fixture();await seedTasks(f,200);await prepare(f);assert.equal((await readJob(f)).code,'TEAM_TASK_LIMIT');assert.equal(f.calls(),0);
+      assert.equal(await readTeam(prisma,f.storeId,'aiBudget.'+new Date().toISOString().slice(0,7)),null);
+      for(const kind of ['planSlot','taskSlot'])assert.equal(await prisma.config.count({where:{storeId:f.storeId,key:{startsWith:'team.communication.inspection.'+kind+'.'}}}),0);
+      let release,entered;const started=new Promise(r=>entered=r),gate=new Promise(r=>release=r);
+      const g=await fixture(async()=>{entered();await gate;return result()});await seedTasks(g,199);await seedPlans(g,1);
+      const ordinary=(await good(g.owner,'GET',`/team/channels/${g.channel.id}/operations`))[0];
+      const current=await readTeam(prisma,g.storeId,'channel.'+g.channel.id);
+      const round=await good(g.owner,'POST',`/team/channels/${g.channel.id}/rounds/start`,{expectedVersion:current.version});
+      const source=await good(g.alice,'POST',`/team/channels/${g.channel.id}/messages`,{requestId:randomUUID(),text:'Synthetic manually confirmed task source',files:[]});
+      const minutes=await good(g.owner,'POST',`/team/channels/${g.channel.id}/rounds/close`,{expectedVersion:round.version});
+      const confirmed=await good(g.owner,'PUT',`/team/channels/${g.channel.id}/minutes/${minutes.id}`,{requestId:randomUUID(),expectedVersion:minutes.version,title:'Synthetic manual minutes',decisions:[],pending:[],
+        actions:[{text:'Synthetic ordinary manual task',ownerId:g.alice.staffId,dueDate:'2026-10-21',sourceSeq:[source.seq]}],sourceSeq:[source.seq],status:'confirmed'});
+      const manualMinute=()=>request(g.owner,'POST',`/team/channels/${g.channel.id}/tasks`,{requestId:randomUUID(),roundId:minutes.id,minuteVersion:confirmed.version,actionIndex:0});
+      const manualPlan=()=>request(g.owner,'POST',`/team/channels/${g.channel.id}/operations/${ordinary.id}/actions`,{requestId:randomUUID(),expectedVersion:ordinary.version,action:'publish',approved:true,note:'Synthetic manual publication'});
+      g.job=await g.service.enqueueDaily(g.storeId);const processing=g.service.process(g.storeId,g.job.id);await started;
+      try {
+        assert.equal((await manualMinute()).body.message,'TEAM_TASK_LIMIT');assert.equal((await manualPlan()).body.message,'TEAM_TASK_LIMIT');
+      } finally { release() }
+      await processing;assert.equal((await readJob(g)).state,'awaiting_approval');assert.equal(g.calls(),1);
+      assert.equal(await prisma.config.count({where:{storeId:g.storeId,key:{startsWith:'team.communication.inspection.taskSlot.'}}}),1);
+      assert.equal((await manualMinute()).body.message,'TEAM_TASK_LIMIT');assert.equal((await manualPlan()).body.message,'TEAM_TASK_LIMIT');
+      await approve(g);assert.equal(await prisma.config.count({where:{storeId:g.storeId,key:{startsWith:`team.communication.task.${g.channel.id}.`}}}),200);
+      assert.equal(await prisma.config.count({where:{storeId:g.storeId,key:{startsWith:'team.communication.inspection.taskSlot.'}}}),0);
+    });
+    await test('published work without a count can be atomically closed by a real backup admin only after invalidation, without private-channel access or stock changes',async()=>{
+      for(const accepted of [false,true]) {
+        const f=await fixture();await prepare(f);await approve(f);if(accepted)await act(f,f.alice,'accept');
+        const j=await readJob(f),t=await task(f);assert(!j.countId);
+        const target=`/team/packaging-inspection/jobs/${j.id}/dismiss`,body={expectedVersion:j.version,note:'Synthetic explicit cleanup of invalid published work'};
+        assert.equal((await request(f.otherAdmin,'POST',target,body)).body.message,'INSPECTION_REVIEWER_REQUIRED');
+        assert.equal((await request(f.alice,'POST',target,body)).status,403);
+        await prisma.staff.update({where:{id:f.owner.staffId},data:{status:'inactive'}});
+        assert.equal((await request(f.otherAdmin,'POST',target,{...body,expectedVersion:j.version-1})).body.message,'TEAM_VERSION_CONFLICT');
+        const broken={...prisma,$transaction:(fn)=>prisma.$transaction(tx=>fn({...tx,config:new Proxy(tx.config,{get(target,key){
+          if(key==='upsert')return args=>{if(args.create?.key.startsWith('team.communication.inspection.planArchive.'))throw Error('SYNTHETIC_ARCHIVE_UNAVAILABLE');return target.upsert(args)};
+          const v=target[key];return typeof v==='function'?v.bind(target):v;
+        }})}))};
+        await assert.rejects(()=>packagingInspection(broken).dismiss(f.otherAdmin,j.id,body),/SYNTHETIC_ARCHIVE_UNAVAILABLE/);
+        assert.equal((await readJob(f)).state,'published');assert.equal((await task(f)).status,t.status);assert.equal(JSON.parse((await reminders(f.storeId))[0].value).status,'pending');
+        await good(f.otherAdmin,'POST',target,body);assert.equal((await readJob(f)).state,'cancelled');assert.equal((await task(f)).status,'cancelled');
+        for(const prefix of ['operationPlan.','task.'])assert.equal(await prisma.config.count({where:{storeId:f.storeId,key:{startsWith:'team.communication.'+prefix+f.channel.id+'.'}}}),0);
+        assert.equal(JSON.parse((await reminders(f.storeId))[0].value).status,'cancelled');assert.equal(await prisma.inventoryCount.count({where:{storeId:f.storeId}}),0);
+        assert.equal((await prisma.inventory.findUnique({where:{id:f.item.id}})).currentStock,20);
+        assert.equal((await request(f.otherAdmin,'GET',`/team/channels/${f.channel.id}/messages`)).status,403);
+        assert.equal((await request(f.otherAdmin,'POST',`/team/channels/${f.channel.id}/tasks/${t.id}/actions`,{requestId:randomUUID(),expectedVersion:t.version,action:'complete',note:'Forbidden',criteriaConfirmed:true})).status,403);
+        const audit=await prisma.financeAuditLog.findMany({where:{storeId:f.storeId,userId:f.otherAdmin.id}});
+        assert(audit.some(a=>JSON.parse(a.newValue||'{}').action==='inspection_published_cancelled'&&JSON.parse(a.newValue).cleanupByBackupAdmin));
+      }
     });
     await test('revoked session permission, removed membership and disabled policy invalidate approved reminder and legacy count mutation',async()=>{
       const f=await fixture();await prepare(f);await approve(f);await act(f,f.alice,'accept');const t=await task(f);

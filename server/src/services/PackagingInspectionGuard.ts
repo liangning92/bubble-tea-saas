@@ -3,7 +3,7 @@ import { TeamActor, TeamTask, readTeam, writeTeam, lockTeam, auditTeam } from '.
 import { writeWork, readWork } from './EmployeeWorkspaceStore'
 import { inspectionAdmin, inspectionCurrent, inspectionFail, inspectionHash } from './PackagingInspectionSnapshot'
 import { TeamError } from './TeamCommunicationService'
-import { releaseInspectionPlan } from './PackagingInspectionCapacity'
+import { releaseInspectionPlan, releaseInspectionTask } from './PackagingInspectionCapacity'
 
 export const inspectionJobKey = (id: string) => 'workflow.inspection.job.' + id
 export async function inspectionJob(db: any, storeId: string, id: string) {
@@ -20,6 +20,7 @@ export async function inspectionEvent(db: any, storeId: string, job: any, state:
   else {
     await db.config.deleteMany({ where: { storeId, key: 'team.communication.inspection.pending.' + job.id } })
     await releaseInspectionPlan(db, storeId, job.policy.channelId, job.id)
+    if (state !== 'awaiting_approval') await releaseInspectionTask(db, storeId, job.policy.channelId, job.id)
   }
 }
 /** Keep immutable history out of the bounded active plan/task windows; old IDs remain readable/exportable. */
@@ -173,4 +174,23 @@ export async function inspectionCountCancelled(db: any, storeId: string, countId
   await archiveInspection(db, storeId, job, task || undefined)
   await auditTeam(db, a, job.id, 'update', { action: 'inspection_count_cancelled', countId, taskId: job.taskId,
     cleanupByBackupAdmin: a.id !== job.policy.operatorId })
+}
+/** Store administrators can close invalid published work without joining or reading its private channel. */
+export async function inspectionPublishedCancelled(db: any, a: TeamActor, job: any, note: string) {
+  const actor = await inspectionCleanupActor(db, a.storeId, job, a.staffId)
+  if (actor.id !== a.id || job.state !== 'published') inspectionFail('INSPECTION_TRANSITION')
+  const task = await readTeam<TeamTask>(db, a.storeId, `task.${job.policy.channelId}.${job.taskId}`)
+  if (!task || task.inspectionId !== job.id || task.planId !== job.planId || ['completed', 'cancelled'].includes(task.status)) inspectionFail('INSPECTION_TASK_MISMATCH')
+  // Cancellation only closes unapproved counts. It never reverses an approved inventory adjustment.
+  if (job.countId) await db.inventoryCount.updateMany({ where: { id: job.countId, storeId: a.storeId,
+    status: { in: ['in_progress', 'pending_review'] } }, data: { status: 'cancelled' } })
+  task.status = 'cancelled'; task.version++; task.updatedAt = new Date().toISOString()
+  task.events.push({ action: 'cancel', by: a.staffId, at: task.updatedAt, note, sourceSeq: [] })
+  await writeTeam(db, a.storeId, `task.${task.channelId}.${task.id}`, task)
+  const r = reminderKey(job), reminder = await readWork(a.storeId, r.key, db)
+  if (reminder) await writeWork(a.storeId, r.key, { ...reminder, status: 'cancelled' }, db)
+  await inspectionEvent(db, a.storeId, job, 'cancelled')
+  await archiveInspection(db, a.storeId, job, task)
+  await auditTeam(db, a, job.id, 'update', { action: 'inspection_published_cancelled', note, taskId: task.id,
+    countId: job.countId || null, cleanupByBackupAdmin: a.id !== job.policy.operatorId })
 }

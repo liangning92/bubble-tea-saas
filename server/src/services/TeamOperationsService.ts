@@ -3,7 +3,7 @@ import { z } from 'zod'
 import prisma from '../config/database'
 import { TeamActor, TeamTask, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam } from './TeamCommunicationService'
 import { inspectionPlanGuard, inspectionPublished, inspectionReminderState } from './PackagingInspectionGuard'
-import { operationPlanCapacity, releaseInspectionPlan } from './PackagingInspectionCapacity'
+import { operationPlanCapacity, operationTaskCapacity, releaseInspectionPlan } from './PackagingInspectionCapacity'
 
 const uuid = z.string().uuid(), staff = z.string().min(1).max(128)
 const instant = z.string().datetime({ offset: true }).refine(v => Number.isFinite(Date.parse(v)))
@@ -134,7 +134,7 @@ export function teamOperations(db: any = prisma) {
           await validateMembers(tx, a, c, p.content)
           if (v.action === 'publish') {
             if ((await tasksFor(tx, a, p)).some(open)) fail('TEAM_PLAN_OPEN_TASKS')
-            if ((await rows(tx, a.storeId, `task.${id}.`, 201)).length + p.content.items.length > 200) fail('TEAM_TASK_LIMIT')
+            await operationTaskCapacity(tx, a, id, p.content.items.length, p.inspectionId)
             const at = new Date().toISOString()
             for (const [i, item] of p.content.items.entries()) {
               const task: TeamTask = { id: randomUUID(), channelId: id, roundId: p.id, minuteVersion: p.revision, actionIndex: i,

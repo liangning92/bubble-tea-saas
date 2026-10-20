@@ -370,7 +370,7 @@ export function teamCommunication(db: DB = prisma) {
           await write(tx, a.storeId, requestKey, { hash, taskId: existing.taskId })
           return read(tx, a.storeId, `task.${id}.${existing.taskId}`)
         }
-        if ((await list(tx, a.storeId, `task.${id}.`, 201)).length >= 200) fail(409, 'TEAM_TASK_LIMIT')
+        await (await import('./PackagingInspectionCapacity.js')).operationTaskCapacity(tx, a, id, 1)
         const at = new Date().toISOString()
         const task: TeamTask = { id: randomUUID(), channelId: id, roundId: v.roundId, minuteVersion: m.version, actionIndex: v.actionIndex,
           ...action, fromSeq: m.fromSeq, status: 'assigned', version: 1, createdAt: at, updatedAt: at,

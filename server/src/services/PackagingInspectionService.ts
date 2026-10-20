@@ -8,7 +8,7 @@ import { teamOperations, OperationPlan } from './TeamOperationsService'
 import { createInventoryCount } from './InventoryCountService'
 import { InspectionPolicy, inspectionActor, inspectionAdmin, inspectionAssignee, inspectionScope,
   inspectionCurrent, inspectionAiReady, packagingSnapshot, inspectionFail, inspectionHash } from './PackagingInspectionSnapshot'
-import { inspectionJob, inspectionJobKey, inspectionEvent, archiveInspection, inspectionCleanupActor } from './PackagingInspectionGuard'
+import { inspectionJob, inspectionJobKey, inspectionEvent, archiveInspection, inspectionCleanupActor, inspectionPublishedCancelled } from './PackagingInspectionGuard'
 import { reserveInspectionPlan } from './PackagingInspectionCapacity'
 
 const uuid = z.string().uuid(), identity = z.string().min(1).max(128)
@@ -80,11 +80,16 @@ export function packagingInspection(db: any = prisma, ai = teamAi(db), clock = (
       const initial = await inspectionJob(db, a.storeId, id)
       return db.$transaction(async (tx: any) => {
         await lockTeam(tx, a.storeId, 'channel.' + initial.policy.channelId)
+        await tx.store.update({ where: { id: a.storeId }, data: { updatedAt: new Date() } })
         await inspectionAdmin(tx, a)
         const job = await inspectionJob(tx, a.storeId, id)
         await inspectionCleanupActor(tx, a.storeId, job, a.staffId)
         if (job.version !== v.expectedVersion) inspectionFail('TEAM_VERSION_CONFLICT')
-        if (['processing', 'published', 'completed', 'cancelled', 'dismissed'].includes(job.state)) inspectionFail('INSPECTION_TRANSITION')
+        if (job.state === 'published') {
+          await inspectionPublishedCancelled(tx, a, job, v.note)
+          return job
+        }
+        if (['processing', 'completed', 'cancelled', 'dismissed'].includes(job.state)) inspectionFail('INSPECTION_TRANSITION')
         await inspectionEvent(tx, a.storeId, job, 'dismissed', clock())
         await archiveInspection(tx, a.storeId, job)
         await auditTeam(tx, a, id, 'update', { action: 'inspection_dismissed', note: v.note, aiRequestId: job.aiRequestId })
