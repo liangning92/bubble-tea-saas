@@ -1,5 +1,8 @@
 """Launcher tests use private tempdirs and fake processes only."""
 import copy
+import ast
+import contextlib
+import types
 import json
 import os
 import shutil
@@ -44,9 +47,10 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(result['argv'], [sys.executable, '-m', 'hermes_cli.main', '--profile', PROFILE, 'gateway', 'run'])
         self.assertFalse(Path(self.spec['profile_home']).exists())
     def test_activation_isolated_env_bearer_and_exact_toolset(self):
-        with patch.dict(os.environ, {'MINIMAX_API_KEY': 'must-not-inherit', 'OPENAI_API_KEY': 'must-not-inherit', 'TELEGRAM_BOT_TOKEN': 'must-not-inherit'}): self.start()
+        with patch.dict(os.environ, {'MINIMAX_API_KEY': 'must-not-inherit', 'OPENAI_API_KEY': 'must-not-inherit', 'TELEGRAM_BOT_TOKEN': 'must-not-inherit', 'HERMES_DISABLE_LAZY_INSTALLS': '0', 'TIRITH_ENABLED': '1'}): self.start()
         args, kw = self.spawned[0]; env = kw['env']; home = Path(self.spec['profile_home'])
         self.assertEqual(env['API_SERVER_HOST'], '127.0.0.1')
+        self.assertEqual(env['HERMES_DISABLE_LAZY_INSTALLS'], '1'); self.assertEqual(env['TIRITH_ENABLED'], '0')
         self.assertEqual(env['API_SERVER_KEY'], (self.root / 'gateway-key').read_text())
         self.assertNotIn('MINIMAX_API_KEY', env); self.assertNotIn('OPENAI_API_KEY', env); self.assertNotIn('TELEGRAM_BOT_TOKEN', env)
         self.assertEqual(env['HOME'], str(home / 'isolated-user-home'))
@@ -54,6 +58,7 @@ class LauncherTests(unittest.TestCase):
         cfg = json.loads((home / 'config.yaml').read_text())
         self.assertEqual(cfg['platform_toolsets']['api_server'], ['pdca_executor_only'])
         self.assertEqual(cfg['fallback_model'], [])
+        self.assertEqual(cfg['security'], {'allow_lazy_installs': False, 'tirith_enabled': False})
         self.assertFalse(cfg['auxiliary']['title_generation']['enabled'])
         self.assertFalse(cfg['compression']['enabled'])
         self.assertNotIn(env['API_SERVER_KEY'], (home / 'config.yaml').read_text())
@@ -82,6 +87,48 @@ class LauncherTests(unittest.TestCase):
         cfg = json.loads((home / 'config.yaml').read_text()); cfg['platform_toolsets']['api_server'].append('terminal')
         (home / 'config.yaml').write_text(json.dumps(cfg))
         with self.assertRaises(Blocked): live_runtime_projector(home, environment=env)
+    def test_runtime_installer_config_cannot_be_removed_or_enabled(self):
+        self.start(); home=Path(self.spec['profile_home']); env=self.spawned[0][1]['env']
+        original=json.loads((home/'config.yaml').read_text())
+        for value in (None, {}, {'allow_lazy_installs': True,'tirith_enabled':False}, {'allow_lazy_installs':False,'tirith_enabled':True}):
+            with self.subTest(security=value):
+                changed=copy.deepcopy(original)
+                if value is None:changed.pop('security')
+                else:changed['security']=value
+                (home/'config.yaml').write_text(json.dumps(changed))
+                with self.assertRaises(Blocked):live_runtime_projector(home,environment=env)
+        (home/'config.yaml').write_text(json.dumps(original))
+        self.assertEqual(live_runtime_projector(home,environment=env)['profile'],PROFILE)
+    def test_runtime_installer_environment_cannot_be_removed_or_enabled(self):
+        self.start();home=Path(self.spec['profile_home']);env=self.spawned[0][1]['env']
+        for key,bad in [('HERMES_DISABLE_LAZY_INSTALLS','0'),('TIRITH_ENABLED','1')]:
+            for remove in (False,True):
+                changed=dict(env)
+                if remove:changed.pop(key)
+                else:changed[key]=bad
+                with self.assertRaisesRegex(Blocked,'RUNTIME_INSTALL_GUARD_CHANGED'):live_runtime_projector(home,environment=changed)
+    def test_actual_a719_installer_gates_return_before_probe_or_download(self):
+        root=Path(os.environ.get('HERMES_SOURCE','/Users/liangning/.hermes/hermes-agent'))
+        if not root.exists():self.skipTest('explicit pinned Hermes source unavailable')
+        # Compile only pure gate functions. Never import the real env/config loader or
+        # installer modules, which could access user state or start background work.
+        def functions(path,names,namespace):
+            tree=ast.parse(path.read_text());selected=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in names]
+            self.assertEqual({n.name for n in selected},set(names))
+            exec(compile(ast.Module(body=selected,type_ignores=[]),str(path),'exec',flags=__import__('__future__').annotations.compiler_flag),namespace)
+        cfg={'security':{'allow_lazy_installs':False,'tirith_enabled':False}}
+        config=types.ModuleType('hermes_cli.config');config.load_config=lambda:cfg;config.load_config_readonly=lambda:cfg
+        package=types.ModuleType('hermes_cli');package.config=config
+        def forbidden(*args,**kwargs):self.fail('installer probe/download must not run')
+        with patch.dict(sys.modules,{'hermes_cli':package,'hermes_cli.config':config}),patch.dict(os.environ,{'HERMES_DISABLE_LAZY_INSTALLS':'1','TIRITH_ENABLED':'0'}):
+            lazy={'contextlib':contextlib,'os':os,'_lazy_install_target':forbidden}
+            functions(root/'tools/lazy_deps.py',{'_allow_lazy_installs'},lazy)
+            self.assertFalse(lazy['_allow_lazy_installs']())
+            tirith={'os':os,'_cached_path':forbidden,'_install_thread':None,'is_platform_supported':forbidden}
+            functions(root/'tools/tirith_security.py',{'_env_bool','_env_int','_load_security_config','ensure_installed'},tirith)
+            self.assertFalse(tirith['_load_security_config']()['tirith_enabled'])
+            self.assertIsNone(tirith['ensure_installed'](log_failures=False))
+
     def test_bootstrap_template_is_deferred_and_actual_factory_signatures(self):
         path = Path(__file__).parents[1] / 'plugin/bootstrap.py.template'
         namespace = {}; exec(compile(path.read_text(), str(path), 'exec'), namespace)
