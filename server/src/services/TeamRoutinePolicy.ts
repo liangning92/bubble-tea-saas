@@ -5,6 +5,7 @@ import type { WorkflowPolicy } from './TeamWorkflowQueue'
 /** This reviewed list is consent scope, never a role or a privilege grant. IDs are bound by the saved policy. */
 export const ROUTINE_EMPLOYEE_NAMES = ['Najwa', 'Chyntia', 'Naila', 'Sekar', 'Rizky', 'Rangga'] as const
 export const routineConsentSchema = z.object({ version: z.literal(1), employeeName: z.enum(ROUTINE_EMPLOYEE_NAMES),
+  employeeRecordName: z.string().trim().min(1).max(128).optional(),
   region: z.literal('cn'), scope: z.literal('routine_codes_v1'), dataConsent: z.literal(true) }).strict()
 export type RoutineConsent = z.infer<typeof routineConsentSchema> & { sourceFloor: number; aiCheckRevision: number }
 export const ROUTINE_REPLIES = Object.freeze({
@@ -46,12 +47,17 @@ export function assertRoutineFresh(c: TeamChannel, sourceSeq: number, createdAt:
 }
 export async function assertRoutineAudience(db: any, a: TeamActor, c: TeamChannel, p: WorkflowPolicy) {
   const r = p.routine
-  if (!r || !routineConsentSchema.safeParse({ version: r.version, employeeName: r.employeeName, region: r.region, scope: r.scope, dataConsent: r.dataConsent }).success ||
+  if (!r || !routineConsentSchema.safeParse({ version: r.version, employeeName: r.employeeName, ...(r.employeeRecordName ? { employeeRecordName: r.employeeRecordName } : {}), region: r.region, scope: r.scope, dataConsent: r.dataConsent }).success ||
       c.kind !== 'direct' || c.members.length !== 2 || p.employeeIds.length !== 1 ||
       !c.members.some(m => m.staffId === a.staffId) || !c.members.some(m => m.staffId === p.employeeIds[0]) || p.employeeIds[0] === a.staffId) fail('TEAM_ROUTINE_PRIVATE_SCOPE_REQUIRED')
   const employee = await db.staff.findFirst({ where: { id: p.employeeIds[0], storeId: a.storeId, status: 'active' },
     select: { name: true, user: { select: { role: true, storeId: true } } } })
-  if (!employee?.user || employee.user.storeId !== a.storeId || employee.name.trim() !== r.employeeName) fail('TEAM_ROUTINE_EMPLOYEE_SCOPE_CHANGED')
+  if (!employee?.user || employee.user.storeId !== a.storeId) fail('TEAM_ROUTINE_EMPLOYEE_SCOPE_CHANGED')
+  // A canonical consent name is not a directory identifier. A full/lowercase
+  // record needs an explicit exact snapshot in addition to the bound staff ID.
+  // Never infer an identity from a substring or silently follow a later rename.
+  const recordName = employee.name.trim(), expectedName = r.employeeRecordName || r.employeeName
+  if (recordName !== expectedName || expectedName.split(/\s+/)[0].toLowerCase() !== r.employeeName.toLowerCase()) fail('TEAM_ROUTINE_EMPLOYEE_SCOPE_CHANGED')
 }
 export async function routineContext(db: any, a: TeamActor, c: TeamChannel, p: WorkflowPolicy, sourceSeq: number) {
   await assertRoutineAudience(db, a, c, p)

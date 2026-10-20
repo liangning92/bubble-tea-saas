@@ -1,0 +1,5 @@
+{
+  "url": "/settings",
+  "text": "Something went wrong\n\nError\n\nReact is not defined\n\nGo Back\nReload Page\nStack Trace (Dev Only)",
+  "error": "locator.selectOption: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('Store timezone', { exact: true })\u001b[22m\n"
+}
