@@ -28,7 +28,7 @@ function traceId(value: unknown, protectedText: string[] = []) {
   const candidate = value.toLowerCase()
   if (!/[a-f]/.test(candidate) || !/[0-9]/.test(candidate)) return undefined
   // Never echo a credential or submitted text disguised as a trace identifier.
-  if (protectedText.some(text => text && text.toLowerCase().includes(candidate))) return undefined
+  if (protectedText.some(text => text && (text.toLowerCase().includes(candidate) || candidate.includes(text.toLowerCase())))) return undefined
   return value
 }
 export function visibleProviderDiagnostics(value: unknown): ProviderDiagnostics | undefined {

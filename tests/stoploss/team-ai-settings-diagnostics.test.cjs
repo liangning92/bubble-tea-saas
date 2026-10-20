@@ -25,7 +25,7 @@ test('nested secrets and arbitrary allowed-field values cannot become diagnostic
  for(const code of ['1004','toString','__proto__',null,{},[1004]])assert.equal((await read(json({base_resp:{status_code:code}}),[secret])).businessCode,undefined);
 });
 test('trace values reject credential, submitted identifier, emails, numbers and overlength',async()=>{
- for(const value of [secret,'private@example.test','1234567890123456','a'.repeat(100),'Bearer '+secret,'<html>']){
+ for(const value of [secret,'a'+secret+'b','private@example.test','1234567890123456','a'.repeat(100),'Bearer '+secret,'<html>']){
   const result=await read(json({trace_id:value},529,{trace_id:value}),[secret]);assert.equal(result.traceId,undefined);
  }
  assert.equal((await read(json({trace_id:trace}),['synthetic submitted identifier '+trace])).traceId,undefined);
