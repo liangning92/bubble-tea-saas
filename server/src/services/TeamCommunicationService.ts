@@ -239,6 +239,7 @@ export function teamCommunication(db: DB = prisma) {
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
           authorId: a.staffId, authorName: employee.name, text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
+        const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
         await write(tx, a.storeId, channelKey(id), c)
         await write(tx, a.storeId, requestKey, { hash, message })
@@ -248,7 +249,7 @@ export function teamCommunication(db: DB = prisma) {
           await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, ...(routineAuthorization ? { automaticallySentAt: new Date(now).toISOString() } : { approvedAt: new Date(now).toISOString() }) })
           await audit(tx, a, id, 'update', { action: routineAuthorization ? 'routine_authorized_send' : 'ai_publish', draftId: aiDraftId, messageId: message.id, ...(routineAuthorization ? { authorization: routineAuthorization } : {}) })
         }
-        await enqueueTeamWorkflow(tx, a, c, message, { read, write })
+        await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
         return message
       })
     },

@@ -1,0 +1,55 @@
+[docker-test] batch bt-test-34ea2caad1f6
+postgres (PostgreSQL) 15.17 (Homebrew)
+Prisma schema loaded from server/prisma/schema.prisma
+Datasource "db": PostgreSQL database "team_test", schema "public" at "127.0.0.1:65238"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 664ms
+
+PASS anonymous, employee, manager and foreign-store requests cannot use this connection
+PASS region/key/destination guards preserve configuration on failure
+PASS probe uses saved region, bounded fixed text and does not enable AI
+PASS duplicate request cannot duplicate model cost
+PASS region changes require fresh key/consent and invalidate previous success
+PASS provider refusal is failed; unknown outcomes retain cost and reject retries
+PASS configuration changed during a provider call cannot return current-version success
+PASS identity revocation during a check denies its final response
+PASS stale checking projects unknown and old versions never project ready
+PASS shared budget rejects before an outbound call
+PASS business execution remains forbidden, real actor audited, key removal explicit
+PASS connection outcome 500: uncertain with idempotency and conservative billing
+PASS connection outcome 502: uncertain with idempotency and conservative billing
+PASS connection outcome 503: uncertain with idempotency and conservative billing
+PASS connection outcome 504: uncertain with idempotency and conservative billing
+PASS connection outcome 400: uncertain with idempotency and conservative billing
+PASS connection outcome 403: uncertain with idempotency and conservative billing
+PASS connection outcome 408: uncertain with idempotency and conservative billing
+PASS connection outcome 302: uncertain with idempotency and conservative billing
+PASS connection outcome timeout: uncertain with idempotency and conservative billing
+PASS connection outcome reset: uncertain with idempotency and conservative billing
+PASS connection outcome abort: uncertain with idempotency and conservative billing
+PASS connection outcome invalid-json: uncertain with idempotency and conservative billing
+PASS connection outcome incomplete: uncertain with idempotency and conservative billing
+PASS connection outcome missing-usage: uncertain with idempotency and conservative billing
+PASS connection outcome 401: failed with idempotency and conservative billing
+PASS connection outcome 429: failed with idempotency and conservative billing
+PASS strict request/version/consent input rejects before transport or reservation
+PASS legacy failed records without rejection evidence remain unknown and cannot bypass either guard
+PASS late V1 HTTP500 cannot replace V2 success or clear V1 reservation
+PASS late V1 HTTP500 cannot replace V2 success or clear V1 reservation with another admin reusing its UUID
+PASS changing region, replacing/removing key and newer success retain old unknown request and cost
+PASS delayed gateway original plus different-ID race invokes model only once
+PASS delayed gateway original plus same-ID replay invokes model only once
+PASS sanitized HTTP529 diagnostics persist with same-ID replay and unchanged billing protection
+PASS sanitized HTTP500 diagnostics persist with same-ID replay and unchanged billing protection
+PASS sanitized HTTP401 diagnostics persist with same-ID replay and unchanged billing protection
+PASS sanitized HTTP429 diagnostics persist with same-ID replay and unchanged billing protection
+PASS old receipt without diagnostics replays without new metadata, calls or charges
+PASS no chosen output limit is omitted and valid usage above previous 32/4096 is accepted
+PASS Flash connection uses saved model without M3-only parameters or an unchosen output cap
+PASS explicit user output limit survives an older-client save; null clears it without migrating old constants
+PASS unknown model without a reliable bound and malformed legacy prices fail before admission
+PASS supplier ceiling is a nonzero reservation only; low monthly budget stops before any provider request
+PASS malformed or overflowing budget counters fail before admission without changing the receipt or ledger
+PASS normal draft generation omits unchosen cap and saves sanitized non-success diagnostics
+Owned temporary PostgreSQL instance cleaned
+[docker-test] cleaned bt-test-34ea2caad1f6

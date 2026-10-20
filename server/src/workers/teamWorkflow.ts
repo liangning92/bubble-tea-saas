@@ -3,7 +3,7 @@ import { readTeam, writeTeam } from '../services/TeamCommunicationService'
 import { teamWorkflow } from '../services/TeamWorkflowService'
 
 /** Explicit separate process; never imported by API startup. No cross-store scan. */
-export async function runTeamWorkflowWorker(workflow = teamWorkflow(), db: any = prisma, intervalMs = 2000) {
+export async function runTeamWorkflowWorker(workflow = teamWorkflow(), db: any = prisma, intervalMs = 250) {
   const storeId = process.env.TEAM_WORKFLOW_STORE_ID
   if (process.env.TEAM_WORKFLOW_RUN !== '1' || !storeId || storeId.length > 128) throw new Error('TEAM_WORKFLOW_EXPLICIT_SINGLE_STORE_START_REQUIRED')
   const controller = new AbortController()

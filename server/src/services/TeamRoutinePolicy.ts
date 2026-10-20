@@ -11,9 +11,10 @@ export const ROUTINE_REPLIES = Object.freeze({
   acknowledge: 'Terima kasih atas pembaruan pekerjaan. Catatan ini masih menunggu verifikasi penanggung jawab.',
   progress: 'Baik, silakan lanjutkan tugas yang sudah ditugaskan dan kabari progresnya di percakapan ini.',
   evidence: 'Terima kasih. Jika tugas memerlukan bukti, tambahkan bukti di percakapan ini untuk ditinjau penanggung jawab.',
+  clarify: 'Tugas kerja mana yang belum selesai, dan kendala apa yang perlu dibantu penanggung jawab?',
   supervisor: 'Mohon tunggu arahan penanggung jawab di percakapan ini. Saya tidak menyetujui perubahan tugas atau data.'
 })
-export const routineReplySchema = z.object({ replyCode: z.enum(['acknowledge', 'progress', 'evidence', 'supervisor']) }).strict()
+export const routineReplySchema = z.object({ replyCode: z.enum(['acknowledge', 'progress', 'evidence', 'clarify', 'supervisor']) }).strict()
 export type RoutineReplyCode = keyof typeof ROUTINE_REPLIES
 // A positive, finite language accepts complete phrases only. No arbitrary strings, names, numbers or attachments reach the provider.
 // Unknown phrases (including mixed sensitive/routine text) go to a human. This is deliberately not a universal sensitive-text detector.
@@ -36,6 +37,13 @@ export function routineCode(message: { text: string; files?: unknown[] }) {
   return Object.hasOwn(phrases, text) ? phrases[text] : null
 }
 const fail = (code: string): never => { throw new TeamError(409, code) }
+export const ROUTINE_REPLY_MAX_AGE_MS = 120000
+export function assertRoutineFresh(c: TeamChannel, sourceSeq: number, createdAt: string, now = Date.now()) {
+  const age = now - Date.parse(createdAt)
+  if (!Number.isFinite(age) || age < 0 || age >= ROUTINE_REPLY_MAX_AGE_MS) fail('TEAM_ROUTINE_SOURCE_EXPIRED')
+  // A correction, new employee message or human intervention invalidates the old reply.
+  if (c.lastSeq !== sourceSeq) fail('TEAM_ROUTINE_SOURCE_SUPERSEDED')
+}
 export async function assertRoutineAudience(db: any, a: TeamActor, c: TeamChannel, p: WorkflowPolicy) {
   const r = p.routine
   if (!r || !routineConsentSchema.safeParse({ version: r.version, employeeName: r.employeeName, region: r.region, scope: r.scope, dataConsent: r.dataConsent }).success ||
@@ -77,5 +85,6 @@ export async function assertRoutineSend(db: any, a: TeamActor, c: TeamChannel, d
       !Object.hasOwn(ROUTINE_REPLIES, proof.replyCode) || text !== ROUTINE_REPLIES[proof.replyCode] ||
       JSON.stringify(draft.routineAuthorization) !== JSON.stringify(proof)) fail('TEAM_ROUTINE_SEND_SCOPE_CHANGED')
   if (!await db.user.findFirst({ where: { id: a.id, storeId: a.storeId, role: 'admin', staff: { id: a.staffId, storeId: a.storeId, status: 'active' } }, select: { id: true } })) fail('TEAM_ROUTINE_OPERATOR_UNAVAILABLE')
+  assertRoutineFresh(c, proof.sourceSeq, j.createdAt)
   await routineContext(db, a, c, p, proof.sourceSeq)
 }

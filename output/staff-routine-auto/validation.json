@@ -1,27 +1,29 @@
 {
-  "base": "91305bf9d140538770effbce4f506071f8f8747a",
-  "originMasterBase": "ceb25d4aa590b716822d6bacae8b92797953fe70",
-  "routinePGGroups": 13,
-  "existingTeamRegression": {
-    "passed": 67,
-    "failed": 0
-  },
-  "scopeAndComponentUnits": 28,
-  "mockBrowserCases": 21,
-  "serverBuild": true,
-  "adminBuild": true,
-  "staffBuild": true,
-  "testBatches": [
-    "bt-test-1ae2b116d3ae",
-    "bt-test-202a5f5df198",
-    "bt-test-ae6df6568232"
-  ],
-  "allTestResourcesCleaned": true,
+  "base": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "inheritedRoutine": "87cf27a53524bd2080572878365adf3dfc7938b5",
+  "notificationCommitExcluded": "91305bf9d140538770effbce4f506071f8f8747a",
+  "productionEnabled": false,
   "realModelCalls": 0,
-  "productionAccess": false,
-  "realMessages": 0,
-  "newCredentialsCreated": false,
-  "proactiveSchedulingImplemented": false,
-  "arbitraryNaturalLanguageImplemented": false,
-  "deviceDeliveryTested": false
+  "productionMessages": 0,
+  "newCredentials": false,
+  "httpIsolatedGroups": 17,
+  "existingTeamHttpGroups": 67,
+  "aiSettingsHttpRegression": "passed (see ai-settings-http.log)",
+  "unitGroups": 27,
+  "mockBrowserCases": 21,
+  "builds": {
+    "api": "passed",
+    "admin": "passed",
+    "staff": "passed"
+  },
+  "i18n": {
+    "admin": "passed with existing advisory warnings",
+    "staff": "passed with existing advisory warnings"
+  },
+  "realBrowserProductionVerification": "not performed: production access intentionally excluded",
+  "ui": "synthetic actual built app, zh/id/en 390/768/1440, no horizontal overflow; screenshots inspected at zh390 and automatic-mode-disabled1440; all controls retained",
+  "sourceReview": "initial independent review reproduced 2 P2 (ordering and stale replies), fixed in current changes; final fixed-SHA review pending",
+  "ci": "fixed-SHA CI pending",
+  "testCleanup": "all owned temporary PostgreSQL and labelled wrapper batches cleaned; no production resource mutation",
+  "businessBoundary": "22 exact routine phrases and 5 safe reply/question codes. Unknown text/attachments block before model. No arbitrary natural-language ongoing communication or proactive tasks/reminders."
 }

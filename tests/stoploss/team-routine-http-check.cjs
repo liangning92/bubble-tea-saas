@@ -10,8 +10,8 @@ const response=(code='acknowledge')=>({text:JSON.stringify({replyCode:code}),inp
 const mockAi=(db,transport)=>teamAi(db,transport,async()=> 'synthetic-not-a-key');
 if(process.argv[2]==='worker'){
  const storeId=process.argv[3];process.env.TEAM_WORKFLOW_RUN='1';process.env.TEAM_WORKFLOW_STORE_ID=storeId;
- const ai=mockAi(prisma,async()=>{const n=await readTeam(prisma,storeId,'routine.mockCalls')||0;await writeTeam(prisma,storeId,'routine.mockCalls',n+1);return response()});
- require(root+'/server/dist/workers/teamWorkflow').runTeamWorkflowWorker(teamWorkflow(prisma,ai),prisma,50).catch(e=>{console.error(e);process.exitCode=1});
+ const ai=mockAi(prisma,async()=>{await prisma.$transaction(async tx=>{await require(root+'/server/dist/services/TeamCommunicationService').lockTeam(tx,storeId,'synthetic-mock-count');const n=await readTeam(tx,storeId,'routine.mockCalls')||0;await writeTeam(tx,storeId,'routine.mockCalls',n+1)});await new Promise(r=>setTimeout(r,30));return response()});
+ require(root+'/server/dist/workers/teamWorkflow').runTeamWorkflowWorker(teamWorkflow(prisma,ai),prisma).catch(e=>{console.error(e);process.exitCode=1});
 }else main().catch(e=>{console.error(e);process.exitCode=1});
 async function main(){
  const express=require(root+'/server/node_modules/express'),jwt=require(root+'/server/node_modules/jsonwebtoken');
@@ -19,7 +19,7 @@ async function main(){
  const {teamCommunicationRouter}=require(root+'/server/dist/routes/teamCommunication'),{config}=require(root+'/server/dist/config/env');
  const app=express();app.use(express.json());app.use('/api/team',authenticateBeforeRouting,declareAccessRoutes('/api/team',teamCommunicationRouter));const {employeeWorkspaceRouter}=require(root+'/server/dist/routes/employeeWorkspace');app.use('/api/staff-work',authenticateBeforeRouting,declareAccessRoutes('/api/staff-work',employeeWorkspaceRouter));
  const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base='http://127.0.0.1:'+server.address().port;
- const results=[],children=new Set();let n=0,tenant,workerEvidence;
+ const results=[],children=new Set();let n=0,tenant,workerEvidence;const timingSamples=[];
  const request=async(person,method,target,data,opts={})=>{const token=jwt.sign({...person,issuedAtMs:Date.now(),role:opts.role||person.role},config.jwt.secret,{expiresIn:'1h'});const r=await fetch(base+'/api'+(target.startsWith('/staff-work/')?'':'/team')+target,{method,headers:{Authorization:'Bearer '+token,...(person.role==='staff'||opts.employee?{'X-Client-App':'employee'}:{}),...(data?{'Content-Type':'application/json'}:{})},...(data?{body:JSON.stringify(data)}:{})});return {status:r.status,body:await r.json()}};
  const good=async(...args)=>{const r=await request(...args);assert.equal(r.status,200,JSON.stringify(r));return r.body.data};
  const test=async(name,fn)=>{await fn();results.push(name);console.log('PASS',name)};
@@ -27,14 +27,15 @@ async function main(){
  const send=(f,text='siap',extra={})=>good(f.employee,'POST',`/channels/${f.channel.id}/messages`,{requestId:randomUUID(),text,files:[],...extra});
  const messages=f=>teamCommunication(prisma).messages(f.owner,f.channel.id,0);
  async function fixture(options={}){
-  const i=++n,storeId='routine-store-'+i;await prisma.store.create({data:{id:storeId,tenantId:tenant.id,name:'Synthetic routine '+i}});
+  const i=++n,storeId=options.storeId||'routine-store-'+i;if(!options.storeId)await prisma.store.create({data:{id:storeId,tenantId:tenant.id,name:'Synthetic routine '+i}});
   const people={};for(const [key,name,role] of [['owner','Synthetic reviewer','admin'],['employee',options.name||'Najwa',options.role||'staff'],['other','Unlisted synthetic staff','staff']]){
+   if(key==='owner'&&options.owner){people.owner=options.owner;continue}
    const id=`routine-user-${i}-${key}`,staffId=`routine-staff-${i}-${key}`;await prisma.user.create({data:{id,storeId,role,phone:`0877${String(i).padStart(5,'0')}${key==='owner'?0:key==='employee'?1:2}`,password:'synthetic-unused',staff:{create:{id:staffId,storeId,name,employeeNumber:'RT-'+i+'-'+key}}}});people[key]={id,storeId,staffId,role};
   }
   const channel=await teamCommunication(prisma).create(people.owner,{requestId:randomUUID(),title:'Synthetic routine private',kind:options.kind||'direct',members:[people.employee.staffId]});
-  const settings={version:7,enabled:true,provider:'minimax',region:options.region||'cn',model:'MiniMax-M3.1-Flash',secret:`v2.${options.region||'cn'}.synthetic.synthetic.synthetic`,monthlyBudgetUsd:null,inputPerMillionUsd:.3,outputPerMillionUsd:1.2,maxOutputTokens:128};
+  const settings={version:7,enabled:true,provider:'minimax',region:options.region||'cn',model:'MiniMax-M3.1-Flash',secret:`v2.${options.region||'cn'}.synthetic.synthetic.synthetic`,monthlyBudgetUsd:null,inputPerMillionUsd:.3,outputPerMillionUsd:1.2,maxOutputTokens:null};
   await writeTeam(prisma,storeId,'ai.settings',settings);await writeTeam(prisma,storeId,'ai.connection',{requestId:randomUUID(),ownerStaffId:people.owner.staffId,configVersion:7,region:settings.region,model:settings.model,status:'ready',checkRevision:3,checkedAt:new Date().toISOString()});
-  let calls=0;const inputs=[];const ai=mockAi(prisma,async(...args)=>{calls++;const payload=JSON.parse(args[3]);assert.equal(args[4],'cn');assert.equal(payload.schema,'team.routine.codes.v1');assert(payload.context.length<=6);assert(payload.context.every(x=>Object.keys(x).sort().join(',')==='actor,code,seq'));assert(!args[3].includes('Najwa'));inputs.push(payload);return options.transport?options.transport(...args):response()});
+  let calls=0;const inputs=[];const ai=mockAi(prisma,async(...args)=>{calls++;const payload=JSON.parse(args[3]);assert.equal(args[4],'cn');assert.equal(args[5],null);assert.equal(payload.schema,'team.routine.codes.v1');assert(payload.context.length<=6);assert(payload.context.every(x=>Object.keys(x).sort().join(',')==='actor,code,seq'));assert(!args[3].includes('Najwa'));inputs.push(payload);return options.transport?options.transport(...args):response()});
   const workflow=teamWorkflow(prisma,ai),input={expectedVersion:0,enabled:true,paused:false,automaticSend:true,consent:true,employeeIds:[people.employee.staffId],expectedAiConfigVersion:7,expectedAiCheckRevision:3,routine:{version:1,employeeName:options.consentName||'Najwa',region:'cn',scope:'routine_codes_v1',dataConsent:true}};
   return {storeId,...people,channel,workflow,ai,input,settings,inputs,calls:()=>calls};
  }
@@ -67,6 +68,9 @@ async function main(){
    assert.equal(await readJob(f,reply),null);await f.workflow.runBatch(f.storeId);assert.equal(f.calls(),1);assert.equal((await messages(f)).messages.length,2);
    const audit=await prisma.financeAuditLog.findMany({where:{storeId:f.storeId,userId:f.owner.id}});assert(audit.some(a=>JSON.parse(a.newValue||'{}').action==='routine_authorized_send'));
    const exported=await f.workflow.export(f.owner,f.channel.id);assert.equal(exported.details[0].replyApproved,false);assert.equal(exported.details[0].automaticReply,true);assert(exported.textZh.includes('持续授权'));
+  });
+  await test('missing work detail can produce only the reviewed same-channel clarification question',async()=>{
+   const f=await fixture({transport:async()=>response('clarify')});const {j}=await seedAndProcess(f,'belum selesai');assert.equal(j.status,'reviewed');const reply=(await messages(f)).messages.at(-1);assert.equal(reply.text,ROUTINE_REPLIES.clarify);assert.equal(reply.ai.routineAuthorization.replyCode,'clarify');assert.equal(reply.ai.approvedBy,undefined);
   });
   await test('explicitly allowlisted recipient may already be an administrator; existing role is preserved and operator/AI still cannot loop',async()=>{
    const f=await fixture({name:'Sekar',consentName:'Sekar',role:'admin'});const {m,j}=await seedAndProcess(f);assert.equal(j.status,'reviewed');assert.equal(f.calls(),1);assert.equal((await prisma.user.findUnique({where:{id:f.employee.id}})).role,'admin');assert.equal((await messages(f)).messages.length,2);
@@ -110,9 +114,10 @@ async function main(){
    const j=await readJob(f,m);assert.equal(j.status,'processing');j.leaseUntil=Date.now()-1;await writeTeam(prisma,f.storeId,workflowJobKey(f.channel.id,m.seq),j);broken=false;
    await workflow.process(f.storeId,f.channel.id,m.seq);assert.equal((await readJob(f,m)).status,'reviewed');assert.equal((await messages(f)).messages.length,2);assert.equal(f.calls(),1);
   });
-  await test('existing store-wide three-per-minute rate and budget ceilings remain enforced without releasing uncertain reserves',async()=>{
-   const f=await fixture();await enable(f);for(let i=0;i<4;i++){const m=await send(f);await f.workflow.process(f.storeId,f.channel.id,m.seq);assert.equal((await readJob(f,m)).status,i<3?'reviewed':'retry_wait')};assert.equal(f.calls(),3);
+  await test('routine twelve-per-channel limit and shared budget ceilings hold without capping provider output',async()=>{
+   const f=await fixture();await enable(f);for(let i=0;i<13;i++){const m=await send(f);await f.workflow.process(f.storeId,f.channel.id,m.seq);assert.equal((await readJob(f,m)).status,i<12?'reviewed':'retry_wait')};assert.equal(f.calls(),12);
    const g=await fixture();await writeTeam(prisma,g.storeId,'ai.settings',{...g.settings,monthlyBudgetUsd:.000001});const {j}=await seedAndProcess(g);assert.equal(j.error,'TEAM_AI_BUDGET_LIMIT');assert.equal(g.calls(),0);
+   const h=await fixture();await writeTeam(prisma,h.storeId,'aiBudget.'+new Date().toISOString().slice(0,7),{spentMicros:0,reservedMicros:0,calls:[],routineCalls:Array.from({length:60},(_,i)=>({at:Date.now(),channelId:'other-channel-'+i}))});const limited=await seedAndProcess(h);assert.equal(limited.j.error,'TEAM_AI_RATE_LIMIT');assert.equal(h.calls(),0);
   });
   await test('durable heartbeat and deduplicated alert transitions expose backlog, blocked work and automatic send latency without message text',async()=>{
    const f=await fixture();await enable(f);const m=await send(f,'private and ambiguous');await f.workflow.runBatch(f.storeId);
@@ -126,12 +131,40 @@ async function main(){
    const f=await fixture();await enable(f);const m=await send(f);const start=()=>{const c=spawn(process.execPath,[__filename,'worker',f.storeId],{cwd:root,env:process.env,stdio:['ignore','pipe','pipe']});children.add(c);let logs='';c.stdout.on('data',b=>logs+=b);c.stderr.on('data',b=>logs+=b);c.logs=()=>logs;return c};
    const wait=async fn=>{for(let i=0;i<200;i++){if(await fn())return;await new Promise(r=>setTimeout(r,50))}throw Error('CHILD_DID_NOT_PROGRESS')};
    const stop=async c=>{const ended=new Promise(r=>c.once('exit',(code,signal)=>r({code,signal})));c.kill('SIGTERM');const r=await ended;children.delete(c);assert.equal(r.code,0,c.logs())};
-   let c=start();await wait(async()=>(await readJob(f,m)).status==='reviewed');await stop(c);const j=await readJob(f,m);assert.equal(await readTeam(prisma,f.storeId,'routine.mockCalls'),1);assert.equal((await readTeam(prisma,f.storeId,'workflow.worker')).running,false);
+   let c=start(),rival=start();await wait(async()=>(await readJob(f,m)).status==='reviewed');await stop(c);await stop(rival);const j=await readJob(f,m);assert.equal(await readTeam(prisma,f.storeId,'routine.mockCalls'),1);assert.equal((await readTeam(prisma,f.storeId,'workflow.worker')).running,false);
    c=start();await wait(async()=>(await readTeam(prisma,f.storeId,'workflow.worker'))?.running===true);await stop(c);assert.equal(await readTeam(prisma,f.storeId,'routine.mockCalls'),1);assert.equal((await readJob(f,m)).replyMessageId,j.replyMessageId);assert.equal((await messages(f)).messages.length,2);
-   workerEvidence={actualChild:true,sourceMessageId:m.id,jobId:j.id,replyMessageId:j.replyMessageId,providerAdmissions:1,replyCount:1,pageRequests:0,gracefulStop:true,restartDedup:true,sendLatencyMs:j.sendLatencyMs};
+   workerEvidence={actualChild:true,concurrentWorkers:2,sourceMessageId:m.id,jobId:j.id,replyMessageId:j.replyMessageId,providerAdmissions:1,replyCount:1,pageRequests:0,gracefulStop:true,restartDedup:true,sendLatencyMs:j.sendLatencyMs};
+  });
+  await test('newer employee correction and human intervention supersede old replies; only one in-flight call per channel',async()=>{
+   for(const who of ['employee','owner']){
+    let release,entered;const gate=new Promise(r=>release=r),started=new Promise(r=>entered=r);
+    const f=await fixture({transport:async()=>{entered();await gate;return response()}});await enable(f);const first=await send(f);const pending=f.workflow.process(f.storeId,f.channel.id,first.seq);await started;
+    const second=who==='employee'?await send(f,'belum selesai'):await good(f.owner,'POST',`/channels/${f.channel.id}/messages`,{requestId:randomUUID(),text:'Human intervention',files:[]});
+    if(who==='employee'){assert.equal(await f.workflow.process(f.storeId,f.channel.id,second.seq),null);assert.equal(f.calls(),1)}
+    release();await pending;const old=await readJob(f,first);assert.equal(old.status,'blocked');assert.equal(old.error,'TEAM_ROUTINE_SOURCE_SUPERSEDED');assert.equal((await messages(f)).messages.length,2);
+    if(who==='employee'){await f.workflow.process(f.storeId,f.channel.id,second.seq);assert.equal(f.calls(),2);assert.equal((await readJob(f,second)).status,'reviewed');assert.equal((await messages(f)).messages.length,3)}
+   }
+  });
+  await test('expired backlog is blocked before admission; expiry during transport also blocks publication',async()=>{
+   const f=await fixture();await enable(f);const m=await send(f);let job=await readJob(f,m);job.createdAt=new Date(Date.now()-120001).toISOString();await writeTeam(prisma,f.storeId,workflowJobKey(f.channel.id,m.seq),job);await f.workflow.process(f.storeId,f.channel.id,m.seq);assert.equal(f.calls(),0);assert.equal((await readJob(f,m)).error,'TEAM_ROUTINE_SOURCE_EXPIRED');
+   let now=Date.now();const g=await fixture({transport:async()=>{now+=120001;return response()}});await enable(g);const next=await send(g);now=Date.now();await teamWorkflow(prisma,g.ai,()=>now).process(g.storeId,g.channel.id,next.seq);assert.equal((await readJob(g,next)).error,'TEAM_ROUTINE_SOURCE_EXPIRED');assert.equal((await messages(g)).messages.length,1);
+  });
+  await test('six same-store channels use the actual worker default interval and parallel pool; 24 complete synthetic stage samples',async()=>{
+   const first=await fixture();const group=[first];for(const name of ROUTINE_EMPLOYEE_NAMES.slice(1))group.push(await fixture({storeId:first.storeId,owner:first.owner,name,consentName:name}));for(const f of group)await enable(f);
+   const start=()=>{const c=spawn(process.execPath,[__filename,'worker',first.storeId],{cwd:root,env:process.env,stdio:['ignore','pipe','pipe']});children.add(c);let logs='';c.stdout.on('data',b=>logs+=b);c.stderr.on('data',b=>logs+=b);c.logs=()=>logs;return c};
+   const c=start();const wait=async fn=>{for(let i=0;i<400;i++){if(await fn())return;await new Promise(r=>setTimeout(r,25))}throw Error('SIX_CHANNEL_WORKER_TIMEOUT '+c.logs())};
+   await wait(async()=>(await readTeam(prisma,first.storeId,'workflow.worker'))?.running===true);
+   for(let round=0;round<4;round++){
+    const sources=await Promise.all(group.map(async f=>{const requestStartedAt=new Date().toISOString(),m=await send(f);return {f,m,requestStartedAt,sourceCommitObservedAt:new Date().toISOString()}}));
+    const committed=new Map();await wait(async()=>{const jobs=await Promise.all(sources.map(async({f,m})=>readJob(f,m)));jobs.forEach((j,i)=>{if(j?.status==='reviewed'&&!committed.has(i))committed.set(i,new Date().toISOString())});return jobs.every(j=>j?.status==='reviewed')});
+    for(const [index,{f,m,requestStartedAt,sourceCommitObservedAt}] of sources.entries()){const j=await readJob(f,m),t=j.timing;assert(t);for(const key of ['sourceWrittenAt','enqueuedAt','claimedAt','modelStartedAt','modelCompletedAt','replyWrittenAt'])assert(Number.isFinite(Date.parse(t[key])),key);const values=Object.values(t).map(Date.parse);assert(values.every((v,i)=>!i||v>=values[i-1]));assert(j.sendLatencyMs<10000);timingSamples.push({channel:f.channel.id,sourceSeq:m.seq,requestStartedAt,sourceCommitObservedAt,...t,replyCommitObservedAt:committed.get(index),httpCommitToReplyObservedMs:Date.parse(committed.get(index))-Date.parse(sourceCommitObservedAt),requestToReplyObservedMs:Date.parse(committed.get(index))-Date.parse(requestStartedAt),endToEndWriteMs:Date.parse(t.replyWrittenAt)-Date.parse(t.sourceWrittenAt),queueWriteMs:Date.parse(t.enqueuedAt)-Date.parse(t.sourceWrittenAt),queueWaitMs:Date.parse(t.claimedAt)-Date.parse(t.enqueuedAt),modelAdmissionMs:Date.parse(t.modelStartedAt)-Date.parse(t.claimedAt),modelMs:Date.parse(t.modelCompletedAt)-Date.parse(t.modelStartedAt),publicationWriteMs:Date.parse(t.replyWrittenAt)-Date.parse(t.modelCompletedAt)})}
+   }
+   const end=new Promise(r=>c.once('exit',code=>r(code)));c.kill('SIGTERM');assert.equal(await end,0,c.logs());children.delete(c);assert.equal(await readTeam(prisma,first.storeId,'routine.mockCalls'),24);
+   // First round must overlap model intervals in different channels: a global serial worker fails this.
+   const a=timingSamples.slice(0,6);assert(a.some((x,i)=>a.some((y,k)=>i!==k&&Date.parse(x.modelStartedAt)<Date.parse(y.modelCompletedAt)&&Date.parse(y.modelStartedAt)<Date.parse(x.modelCompletedAt))));
   });
   assert.equal(fs.existsSync(path.join(process.env.UPLOADS_PATH,'.employee-private','.team-ai-master.key')),false);
   // Synthetic existing keys above belong exclusively to this disposable database.
-  const out=root+'/output/staff-routine-auto';fs.mkdirSync(out,{recursive:true});fs.writeFileSync(out+'/http-results.json',JSON.stringify({passed:results.length,tests:results,workerEvidence,realModelCalls:0,realMessages:0,productionAccess:false,credentialsCreated:false,webPushMockTested:false,deviceDeliveryTested:false},null,2));
+  const out=root+'/output/staff-routine-auto';fs.mkdirSync(out,{recursive:true});fs.writeFileSync(out+'/http-results.json',JSON.stringify({passed:results.length,tests:results,workerEvidence,timing:{model:'controlled_mock_30ms_no_external_network',workerIntervalMs:250,sampleCount:timingSamples.length,percentileMethod:'nearest_rank',p50Ms:timingSamples.map(s=>s.endToEndWriteMs).sort((a,b)=>a-b)[Math.ceil(timingSamples.length*.5)-1],p95Ms:timingSamples.map(s=>s.endToEndWriteMs).sort((a,b)=>a-b)[Math.ceil(timingSamples.length*.95)-1],observedCommitP50Ms:timingSamples.map(s=>s.httpCommitToReplyObservedMs).sort((a,b)=>a-b)[Math.ceil(timingSamples.length*.5)-1],observedCommitP95Ms:timingSamples.map(s=>s.httpCommitToReplyObservedMs).sort((a,b)=>a-b)[Math.ceil(timingSamples.length*.95)-1],commitBoundary:'source and queue writes share one transaction; reply writes share another. Stage timestamps describe write completion, not commit instants. HTTP response/sourceCommitObservedAt and DB polling/replyCommitObservedAt are commit upper bounds.',samples:timingSamples},realModelCalls:0,realMessages:0,productionAccess:false,credentialsCreated:false,webPushMockTested:false,deviceDeliveryTested:false},null,2));
  }finally{for(const c of children){c.kill('SIGTERM');await new Promise(r=>c.once('exit',r))}await new Promise(r=>server.close(r));await prisma.$disconnect()}
 }

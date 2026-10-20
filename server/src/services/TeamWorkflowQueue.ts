@@ -21,6 +21,7 @@ export interface WorkflowJob {
   createdAt: string; updatedAt: string; leaseToken?: string; leaseUntil?: number; claimEpoch?: number
   nextAttemptAt?: number; error?: string; aiRequestId?: string; replyMessageId?: string; planId?: string
   sentAt?: string; sendLatencyMs?: number; automaticReply?: boolean
+  timing?: { sourceWrittenAt: string; enqueuedAt: string; claimedAt?: string; modelStartedAt?: string; modelCompletedAt?: string; replyWrittenAt?: string }
   billingStatus?: 'not_started' | 'possible' | 'usage_recorded'
   billingAttempts?: WorkflowBillingAttempt[]
   result?: { routineCode?: RoutineReplyCode; replyText: string; summaryZh: string; suggestedTask: null | {
@@ -41,7 +42,8 @@ export async function enqueueTeamWorkflow(db: any, a: TeamActor, c: TeamChannel,
     operatorUserId: p.operatorUserId, operatorStaffId: p.operatorStaffId,
     sourceFloor: Math.max(...c.members.map(m => m.fromSeq)), version: 1, attempt: 0,
     status: message.text ? 'queued' : 'blocked', billingStatus: 'not_started', ...(message.text ? {} : { error: 'TEAM_WORKFLOW_TEXT_REQUIRED' }),
-    createdAt: message.createdAt, updatedAt: message.createdAt }
+    createdAt: message.createdAt, updatedAt: message.createdAt,
+    timing: { sourceWrittenAt: message.sourceWrittenAt || message.createdAt, enqueuedAt: new Date().toISOString() } }
   await ports.write(db, a.storeId, key, job)
   await workflowEvent(db, a.storeId, c.id, { jobId: job.id, sourceSeq: job.sourceSeq, version: 1, status: job.status }, ports)
 }
