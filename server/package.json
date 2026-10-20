@@ -30,16 +30,19 @@
     "express-rate-limit": "^8.6.0",
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
+    "ipaddr.js": "2.2.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "multer": "^2.1.1",
     "pg": "^8.23.0",
     "sharp": "0.35.5",
     "socket.io": "^4.7.4",
+    "standardwebhooks": "1.0.0",
     "web-push": "^3.6.7",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.22.4",
-    "zod-mcp": "npm:zod@4.6.7"
+    "zod-mcp": "npm:zod@4.6.7",
+    "zod-to-json-schema": "3.25.2"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "2.3.1",
