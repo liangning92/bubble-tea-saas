@@ -261,7 +261,7 @@ export function AttendanceCorrectionPage() {
           ) : (
             <div className="divide-y divide-gray-100">
               {requests.map((req) => (
-                <div key={req.id} className="p-4">
+                <div key={req.id} data-notice-object={req.id} className="p-4">
                   {req.status==='pending'&&<div className="flex justify-end gap-4 text-sm mb-2"><button disabled={isSubmitting} onClick={()=>{setEditingId(req.id);setEditingVersion(req.updatedAt);setFormData({date:req.date.slice(0,10),originalCheckIn:req.originalCheckIn||'',originalCheckOut:req.originalCheckOut||'',correctCheckIn:req.correctCheckIn||'',correctCheckOut:req.correctCheckOut||'',reason:req.reason});setShowForm(true)}}>{t('entryFix.edit')}</button><button disabled={isSubmitting} onClick={async()=>{if(!await dialogs.confirm(t('entryFix.withdrawHint')))return;setIsSubmitting(true);try{await staffApi.withdrawRequest('staff-correction',req.id);await loadData()}catch(e:any){await dialogs.alert(e.response?.data?.message||t('entryFix.error'))}finally{setIsSubmitting(false)}}}>{t('entryFix.withdraw')}</button></div>}
 
                   <div className="flex items-start justify-between mb-2">

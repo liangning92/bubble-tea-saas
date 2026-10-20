@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { CorrectionDialog } from '../../components/CorrectionDialog'
 import { staffApi } from '../../services/api'
 import { formatNumber } from '../../utils/numberDisplay'
@@ -32,7 +33,9 @@ const AREA_LABELS: Record<string, string> = {
 export function HygieneTodayTasksPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [selectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [noticeParams] = useSearchParams()
+  const noticeDate = noticeParams.get('date') || ''
+  const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(noticeDate) ? noticeDate : new Date().toISOString().split('T')[0]
   const [editingTask,setEditingTask]=useState<any>(null)
   const {data:staffData}=useQuery({queryKey:['task-staff'],queryFn:()=>staffApi.list({pageSize:100})})
   const [selectedTask, setSelectedTask] = useState<any>(null)
@@ -223,6 +226,8 @@ export function HygieneTodayTasksPage() {
         </button>
       </div>
 
+      {noticeDate && <p className="text-sm text-gray-500 mb-3">{selectedDate}</p>}
+
       {/* Stats Summary */}
       <div className="grid grid-cols-5 gap-4 mb-6">
         <div className="card text-center">
@@ -265,7 +270,7 @@ export function HygieneTodayTasksPage() {
         <div className="space-y-3">
           {tasks.map((task: any) => (
             <div
-              key={task.id}
+              key={task.id} data-notice-object={task.id}
               className="card cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => openDetail(task)}
             >
