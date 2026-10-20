@@ -66,7 +66,7 @@ async function minimax(key: string, model: string, system: string, input: string
   return { text: choice?.message?.content, inputTokens: result.usage?.prompt_tokens,
     outputTokens: result.usage?.completion_tokens, providerRequestId: typeof result.id === 'string' ? result.id.slice(0, 160) : '' }
 }
-const generationSchema = z.object({ requestId: uuid, kind: z.enum(['translate', 'draft', 'report']), consent: z.literal(true),
+const generationSchema = z.object({ requestId: uuid, kind: z.enum(['translate', 'draft', 'report', 'workflow']), consent: z.literal(true),
   sourceSeq: z.array(z.number().int().positive()).max(20), instruction: z.string().trim().max(1500).default(''),
   operation: z.object({ planId: uuid, taskId: uuid, planVersion: z.number().int().positive(), taskVersion: z.number().int().positive(),
     purpose: z.enum(['explain', 'followup', 'remind']) }).strict().optional() }).strict()
@@ -78,7 +78,8 @@ const settingsSchema = z.object({ expectedVersion: z.number().int().nonnegative(
 const instructions = {
   translate: 'Translate the selected Indonesian or English work messages into clear Chinese. Preserve numbers, dates, names, negation and message numbers. Flag ambiguities. Do not invent content.',
   draft: 'Draft one concise Indonesian work message following the Chinese instruction. Preserve quantities and deadlines. If important information is missing, ask for clarification. Do not claim the employee has agreed or completed anything.',
-  report: 'Write a concise Chinese draft report with sections 员工陈述、已有证据、仍待核实、建议下一步. Distinguish statements from verified evidence. Cite the supplied #message numbers for each factual item. Never claim a photo was reviewed: no attachments are provided.'
+  report: 'Write a concise Chinese draft report with sections 员工陈述、已有证据、仍待核实、建议下一步. Distinguish statements from verified evidence. Cite the supplied #message numbers for each factual item. Never claim a photo was reviewed: no attachments are provided.',
+  workflow: 'Return only a JSON object with replyText (concise Indonesian draft), summaryZh (Chinese unverified employee statement with supplied #message citation), suggestedTask (null or {category: communication|training|inspection, text, evidenceRequired, acceptanceCriteria}), exceptions (array of Chinese strings). All fields required. Suggest only clarification, training or inspection for the source employee. Do not assign dates or people. Never approve evidence or infer completion. No attachments were reviewed. Flag financial, refund, salary, discipline or unclear requests in exceptions and set suggestedTask to null. All replies and tasks require human approval; never claim an action was performed.'
 }
 export function teamAi(db: any = prisma, transport: Transport = minimax) {
   const settings = async (storeId: string): Promise<Settings> => ({ ...defaults(), ...await readTeam(db, storeId, 'ai.settings') })
@@ -122,12 +123,14 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
       return this.settings(a)
     },
     draft: readDraft,
-    async generate(a: TeamActor, id: string, input: unknown) {
+    async generate(a: TeamActor, id: string, input: unknown, guard?: (tx: any) => Promise<void>) {
       admin(a); const v = generationSchema.parse(input), source = [...new Set(v.sourceSeq)].sort((a, b) => a - b)
+      if (v.kind === 'workflow' && !guard) denied('TEAM_WORKFLOW_GUARD_REQUIRED')
       if (v.operation ? v.kind !== 'draft' || !!v.instruction || source.length > 0 : v.kind !== 'draft' && !source.length || v.kind === 'draft' && !v.instruction) denied('TEAM_AI_INPUT_REQUIRED', 400)
       const key = `aiDraft.${a.staffId}.${v.requestId}`, hash = createHash('sha256').update(JSON.stringify({ id, ...v, sourceSeq: source })).digest('hex')
       const prepared = await db.$transaction(async tx => {
         await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(id))
+        if (guard) await guard(tx)
         const { c, fromSeq } = await accessTeamChannel(tx, a, id)
         if (c.archived) denied('TEAM_CHANNEL_CLOSED', 409)
         const scoped = v.operation ? await assertOperationScope(tx, a, c, v.operation) : null
@@ -153,6 +156,7 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
         if (text.length > 16000) denied('TEAM_AI_CONTEXT_LIMIT', 400)
         await lockTeam(tx, a.storeId, 'ai-budget')
         const config: Settings = { ...defaults(), ...await readTeam(tx, a.storeId, 'ai.settings') }
+        if (guard) await guard(tx)
         if (!config.enabled || !config.secret) denied('TEAM_AI_NOT_CONFIGURED', 409)
         endpoint(config.region); assertCredentialRegion(config.secret, config.region)
         const month = new Date().toISOString().slice(0, 7)
