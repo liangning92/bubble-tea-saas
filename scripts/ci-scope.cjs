@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
- agentTasks:{paths:/(?:agentTasks\/|hermesTransport|TeamStockReadOnlySource|agent-tasks|agent-dispatch|team-stock-readonly)/i,tests:/agent-tasks|agent-dispatch|team-stock-readonly/i},
+ agentTasks:{paths:/(?:agentTasks\/|hermesTransport|TeamStockReadOnlySource|agent-tasks|agent-dispatch|agent-runtime|team-stock-readonly)/i,tests:/agent-tasks|agent-dispatch|agent-runtime|team-stock-readonly/i},
  teamManagement:{paths:/(?:TeamManagement|team-management|team-message-ai-handling)/i,tests:/team-management|team-message-ai-handling/i},
  routineAuto:{paths:/(?:TeamRoutinePolicy|team-routine|staff-routine-auto)/i,tests:/team-routine/i},
 notificationAwareness:{paths:/(?:EmployeePushDevice|ManagementFollowupReminder|pushDevice|PushSettings|employee-push-device|employee-push-worker|employee-communication-path|Notification(?:Inbox|Approval|Awareness)|notification-awareness|notification-queue|server\/src\/(?:services\/(?:EmployeeReminderService|TeamChatReminderService|TeamCommunicationService)|routes\/teamCommunication)\.ts|TrainingLibraryStore|training(?:-admin)?-update-notices|training-admin-notices|trainingNotices|TrainingPage|TrainingListPage|StaffApprovalInbox|StaffApprovalPage|LeaveListPage|LeavePage|OvertimeRequestListPage|OvertimeRequestPage|ShiftSwapListPage|ShiftSwapPage|AttendanceCorrectionListPage|AttendanceCorrectionPage|ReimbursementListPage|ReimbursementPage|EmployeePrivatePages|EmployeeWorkspacePage|HygienePage)/i,tests:/notification-awareness|approval-notices/i},
