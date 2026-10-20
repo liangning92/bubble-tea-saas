@@ -65,6 +65,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ desktop:{scripts:['tests/stoploss/online-update-page-check.cjs'],components:['pos']},
  aiSettings:{scripts:['tests/stoploss/team-ai-settings-browser-check.cjs'],components:['admin']},
  manualStockCorrection:{scripts:['tests/stoploss/manual-inventory-correction-page-check.cjs'],components:['admin']},
  posRisk:{scripts:['tests/stoploss/pos-risk-page-check.cjs','tests/stoploss/cleared-cart-page-check.cjs'],components:['admin']},

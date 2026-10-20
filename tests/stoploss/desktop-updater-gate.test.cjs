@@ -59,3 +59,14 @@ test('same and lower available versions are suppressed',t=>{
 test('automatic updates download in background and TV releases never replace the POS latest feed',t=>{const f=fixture(t);assert.equal(f.autoUpdater.autoDownload,true);assert.match(fs.readFileSync('.github/workflows/build-tv-apk.yml','utf8'),/gh release create.*--latest=false/)});
 
 test('a customer display cannot install an update or close a busy cashier window',async t=>{const f=fixture(t);f.download();assert.equal(await f.handlers['install-update']({sender:{}},f.snapshot),false);assert.deepEqual(f.actions,[])});
+
+
+test('explicit install intent survives a background download and cached state reads',async t=>{
+ const f=fixture(t);f.events['download-progress']({percent:70});
+ await f.handlers['download-update']({});
+ f.download();
+ const cached=await f.handlers['get-update-state']({});
+ assert.equal(cached.status,'downloaded');assert.equal(cached.info.installRequested,true);
+ assert.equal(f.sent.findLast(row=>row[0]==='update-status')[2].installRequested,true);
+ assert.deepEqual(f.actions,[],'main process must still wait for the cashier safety check and backup');
+});
