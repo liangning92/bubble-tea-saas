@@ -1,0 +1,24 @@
+{
+  "originalReviewThread": "01a15494-65d0-70a4-a3c4-ac7e933bc0d6",
+  "originalFindings": {
+    "P1": 0,
+    "P2": 2
+  },
+  "additionalSolReviewFindings": {
+    "P1": 0,
+    "P2": 3
+  },
+  "fixes": [
+    "transactional bidirectional cancellation and audited backup-admin cleanup for invalid work",
+    "durable plan capacity reservation counted by manual imports before AI admission; completed history archives preserve original IDs",
+    "independent pending queue index; chronological last-400 history display"
+  ],
+  "newRegressionGroups": [
+    "task/count cancellation closes both directions atomically, frees active capacity, preserves history and lets a real backup admin clean invalid work",
+    "full plan capacity rejects before model admission; durable reservation prevents concurrent manual imports stealing the last slot",
+    "pending queue is independent of 400 terminal histories and history display is truly chronological"
+  ],
+  "productionChanged": false,
+  "realModelCalls": 0,
+  "externalNotifications": 0
+}

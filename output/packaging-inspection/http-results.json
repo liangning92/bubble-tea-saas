@@ -1,0 +1,39 @@
+{
+  "tests": [
+    "default off; real DB admin, explicit scoped grants and consent; forged role/client/store denied",
+    "minimal pure read snapshot: packaging only, signed ledger units, valid last count, committed pending arrivals and uncertainty",
+    "store + business day + rule version dedup under concurrency; model drafts cause zero employee notifications",
+    "existing publication rechecks stock staleness and grants; immutable origin cannot be stripped by plan import",
+    "approved task + reminder outbox atomic and idempotent; only assignee can link/fill; only designated reviewer can approve",
+    "lost acknowledgement rolls back task + plan + reminder atomically if outbox persistence fails",
+    "timeout and worker interruption remain uncertain with no blind retry; changed result scope is blocked",
+    "task/count cancellation closes both directions atomically, frees active capacity, preserves history and lets a real backup admin clean invalid work",
+    "full plan capacity rejects before model admission; durable reservation prevents concurrent manual imports stealing the last slot",
+    "pending queue is independent of 400 terminal histories and history display is truly chronological",
+    "revoked session permission, removed membership and disabled policy invalidate approved reminder and legacy count mutation",
+    "no-UI worker and restart dedup drive the complete HTTP approval → inbox reminder → assignee count → designated human acceptance chain"
+  ],
+  "passed": 12,
+  "workerEndToEnd": {
+    "jobId": "a3049abe-f5a9-4962-8650-2ce841249903",
+    "aiRequestId": "52032a6c-4b83-436f-9b73-910363d4ea08",
+    "taskId": "223d5db0-f07f-40b7-8258-81213898abe8",
+    "countId": "cmvg8sel601ql1kn6iwbw2s08",
+    "reminderId": "ba5c0bf3887c9a9390854d97a18b0df1ee868ebc12f40a4a3d78862cd924f610",
+    "actualChildWorker": true,
+    "uiRequestsDuringGeneration": 0,
+    "gracefulRestart": true,
+    "dailyProviderAdmissions": 1,
+    "approvalViaHttp": true,
+    "employeeInboxViaHttp": true,
+    "assigneeFillAndSubmitViaHttp": true,
+    "separateCountApprovalViaHttp": true,
+    "taskAcceptanceViaHttp": true,
+    "externalPushTested": false
+  },
+  "realModelCalls": 0,
+  "externalNotifications": 0,
+  "productionAccess": false,
+  "credentialsCreated": false,
+  "workerStopped": true
+}

@@ -10,6 +10,22 @@ test('team communication selects its isolated HTTP regression without unrelated 
  }finally{f.close()}
 });
 function fixture(){const root=fs.mkdtempSync(path.join(os.tmpdir(),'ci-scope-'));const write=(name,source='')=>{fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true});fs.writeFileSync(path.join(root,name),source)};return {root,write,close:()=>fs.rmSync(root,{recursive:true,force:true})}}
+test('packaging service, worker, fixtures and their actual permission/count consumers retain the isolated workflow check',()=>{
+ const f=fixture();try{
+  f.write('server/src/services/TeamAiService.ts');f.write('server/src/services/InventoryCountService.ts');
+  f.write('server/src/services/PackagingInspectionService.ts',"import './TeamAiService'; import './InventoryCountService'");
+  for(const file of ['server/src/services/PackagingInspectionService.ts','server/src/workers/packagingInspection.ts','tests/stoploss/packaging-inspection-http-check.cjs','server/src/services/InventoryCountService.ts','server/src/services/TeamAiService.ts']){
+   if(!file.endsWith('PackagingInspectionService.ts'))f.write(file);const p=selectScope([file],f);assert(p.packagingInspection,file);assert(p.needsServer);assert(p.needsDependencies);assert(!p.components.includes('pos'));
+  }
+ }finally{f.close()}
+});
+test('packaging browser selection follows the actual shared task fixture without adding unrelated clients',()=>{
+ const f=fixture();try{
+  f.write('shared/TeamTasks.tsx');f.write('tests/stoploss/packaging-inspection-browser-check.cjs',"require.resolve('../../shared/TeamTasks.tsx')");
+  for(const client of ['admin','staff'])f.write(`client-${client}/src/App.tsx`,"import '../../shared/TeamTasks'");
+  const p=selectScope(['shared/TeamTasks.tsx'],f);assert(p.packagingInspection);assert.deepEqual(p.components,['admin','staff']);assert(p.browser.some(b=>b.domain==='packagingInspection'));
+ }finally{f.close()}
+});
 test('workflow queue, service, worker and fixture changes retain the isolated communication regression',()=>{
  const f=fixture();try{
   for(const file of ['server/src/services/TeamWorkflowQueue.ts','server/src/services/TeamWorkflowService.ts','server/src/workers/teamWorkflow.ts','tests/stoploss/team-workflow-queue-check.cjs']){

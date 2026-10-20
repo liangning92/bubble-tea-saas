@@ -113,7 +113,7 @@ router.post('/:id/complete', authenticate, authorize('admin', 'manager'), async 
 // POST /api/inventory-counts/:id/cancel
 router.post('/:id/cancel', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    const count = await InventoryCountService.cancelInventoryCount(req.params.id,req.user!.storeId)
+    const count = await InventoryCountService.cancelInventoryCount(req.params.id,req.user!.storeId,req.user!.staffId||req.user!.id)
     res.json({ code: 200, message: 'Inventory count cancelled', data: visibleCount(count,req.user!), timestamp: new Date().toISOString() })
   } catch (error: any) {
     console.error('Cancel inventory count error:', error)

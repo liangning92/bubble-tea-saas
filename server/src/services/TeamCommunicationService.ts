@@ -29,6 +29,7 @@ export interface TeamTask {
   events: { action: string; by: string; at: string; note: string; sourceSeq: number[]; criteriaConfirmed?: boolean }[]
   planId?: string; planRevision?: number; reviewerId?: string; acceptByAt?: string; deadlineAt?: string
   evidenceRequired?: string; acceptanceCriteria?: string; audienceIds?: string[]
+  inspectionId?: string; inventoryCountId?: string
 }
 export class TeamError extends Error {
   constructor(public status: number, message: string) { super(message) }
@@ -336,7 +337,9 @@ export function teamCommunication(db: DB = prisma) {
       const { c, fromSeq } = await channel(db, a, id, auditReason)
       const plans = new Map<string, any>()
       const tasks = (await list(db, a.storeId, `task.${id}.`, 201)).filter((t: TeamTask) => t.fromSeq >= fromSeq && (!t.planId || auditReason !== undefined || t.audienceIds?.includes(a.staffId)))
-      for (const t of tasks) if (t.planId && !plans.has(t.planId)) plans.set(t.planId, await read(db, a.storeId, `operationPlan.${id}.${t.planId}`))
+      const archived = await db.config.findMany({ where: { storeId: a.storeId, key: { startsWith: TEAM_PREFIX + `inspection.taskArchive.${id}.` } }, orderBy: { createdAt: 'desc' }, take: 20 })
+      tasks.push(...archived.map((r: any) => JSON.parse(r.value)).filter((t: TeamTask) => t.fromSeq >= fromSeq && (auditReason !== undefined || t.audienceIds?.includes(a.staffId))))
+      for (const t of tasks) if (t.planId && !plans.has(t.planId)) plans.set(t.planId, await read(db, a.storeId, `operationPlan.${id}.${t.planId}`) || await read(db, a.storeId, `inspection.planArchive.${id}.${t.planId}`))
       return tasks.map(t => ({ ...t, ...(t.planId ? { planPaused: plans.get(t.planId)?.status !== 'published' || plans.get(t.planId)?.revision !== t.planRevision || plans.get(t.planId)?.audienceHash !== digest(c.members) } : {}) }))
         .sort((a: TeamTask, b: TeamTask) => b.createdAt.localeCompare(a.createdAt))
     },
@@ -386,7 +389,7 @@ export function teamCommunication(db: DB = prisma) {
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id)
-        const key = `task.${id}.${taskId}`, task: TeamTask = await read(tx, a.storeId, key)
+        const key = `task.${id}.${taskId}`, task: TeamTask = await read(tx, a.storeId, key) || await read(tx, a.storeId, `inspection.taskArchive.${id}.${taskId}`)
         if (!task || task.fromSeq < fromSeq || task.planId && !task.audienceIds?.includes(a.staffId)) fail(404, 'TEAM_TASK_NOT_FOUND')
         const { criteriaConfirmed, ...legacyInput } = v
         const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, taskId, ...legacyInput, ...(criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
@@ -417,12 +420,17 @@ export function teamCommunication(db: DB = prisma) {
           if (v.sourceSeq.length) fail(400, 'TEAM_INVALID_INPUT')
         }
         if (task.events.length >= 100) fail(409, 'TEAM_TASK_HISTORY_LIMIT')
+        if (task.inspectionId) await (await import('./PackagingInspectionGuard.js')).inspectionTaskGuard(tx, a, task, v.action)
         const at = new Date().toISOString(), states = { accept: 'accepted', submit: 'submitted', return: 'changes_requested', complete: 'completed', cancel: 'cancelled' } as const
         task.status = states[v.action]; task.version++; task.updatedAt = at
         task.events.push({ action: v.action, by: a.staffId, at, note: v.note, sourceSeq: v.sourceSeq, ...(v.criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
         await write(tx, a.storeId, key, task)
         await write(tx, a.storeId, requestKey, { hash, taskId })
         await audit(tx, a, id, 'update', { action: 'task', taskId, version: task.version, status: task.status })
+        if (task.inspectionId && ['completed', 'cancelled'].includes(task.status)) {
+          const inspection = await import('./PackagingInspectionGuard.js')
+          await inspection.archiveInspection(tx, a.storeId, await inspection.inspectionJob(tx, a.storeId, task.inspectionId), task)
+        }
         return task
       })
     },

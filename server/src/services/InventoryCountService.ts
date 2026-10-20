@@ -5,6 +5,7 @@ import {loadInventoryActors} from '../utils/inventoryActors'
 import {COUNT_OBSERVATION_PREFIX,captureCountBoundary} from '../utils/countObservation'
 import prisma from '../config/database'
 import {validatePackage} from '../utils/inventoryUnits'
+import {inspectionCountGuard,inspectionCountCancelled} from './PackagingInspectionGuard'
 export interface CreateInventoryCountData {storeId:string;period:'monthly'|'quarterly'|'annual'|'ad_hoc';startDate:Date;endDate:Date;notes?:string;inventoryIds?:string[]}
 const include={items:{orderBy:{inventoryId:'asc' as const},include:{inventory:{select:{id:true,name:true,unit:true,currentStock:true,updatedAt:true,avgCost:true}}}}} as const
 function view(count:any){
@@ -37,9 +38,9 @@ async function lockCount(tx:any,countId:string,storeId:string,statuses=['in_prog
  const changed=await tx.inventoryCount.updateMany({where:{id:countId,storeId,status:{in:statuses}},data:{updatedAt:new Date()}})
  if(changed.count!==1)throw new Error('COUNT_NOT_ACTIVE_OR_STORE_MISMATCH')
 }
-export async function createInventoryCount(data:CreateInventoryCountData){
+export async function createInventoryCount(data:CreateInventoryCountData,db:any=prisma){
  if(!Number.isFinite(data.startDate.getTime())||!Number.isFinite(data.endDate.getTime())||data.startDate>data.endDate)throw new Error('INVALID_COUNT_PERIOD')
- return prisma.$transaction(async tx=>{
+ return db.$transaction(async tx=>{
   // Lock store row to prevent two simultaneous active sessions without a schema migration.
   await tx.store.update({where:{id:data.storeId},data:{updatedAt:new Date()}})
   if(await tx.inventoryCount.findFirst({where:{storeId:data.storeId,status:{in:['in_progress','pending_review']}}}))throw new Error('COUNT_ALREADY_ACTIVE')
@@ -71,6 +72,7 @@ export async function updateCountItems(countId:string,storeId:string,countedBy:s
  if(!items.length||items.length>1000||new Set(items.map(i=>i.itemId)).size!==items.length)throw Error('INVALID_COUNT_SELECTION')
  // One transaction: a stale or foreign row rolls back every observation in the batch.
  return prisma.$transaction(async tx=>{
+  await inspectionCountGuard(tx,storeId,countId,countedBy,'observe')
   await lockCount(tx,countId,storeId)
   const saved=[]
   for(const item of [...items].sort((a,b)=>a.itemId.localeCompare(b.itemId)))saved.push(await recordObservation(tx,item.itemId,item.countedQty,countedBy,item.note,{countId,storeId,expectedStock:item.expectedStock,observedVersion:item.observedVersion}))
@@ -83,6 +85,7 @@ export async function updateCountItem(countItemId:string,countedQty:number,count
 }
 export async function completeInventoryCount(countId:string,staffId:string,storeId:string){
  return prisma.$transaction(async tx=>{
+  await inspectionCountGuard(tx,storeId,countId,staffId,'complete')
   await tx.store.update({where:{id:storeId},data:{updatedAt:new Date()}})
   await lockCount(tx,countId,storeId,['in_progress','pending_review'])
   const count=await tx.inventoryCount.findUniqueOrThrow({where:{id:countId},include:{items:{include:{inventory:true}}}})
@@ -118,11 +121,12 @@ export async function completeInventoryCount(countId:string,staffId:string,store
   return view(await tx.inventoryCount.update({where:{id:countId},data:{status:'completed'},include}))
  })
 }
-export async function cancelInventoryCount(countId:string,storeId:string){return prisma.$transaction(async tx=>{await lockCount(tx,countId,storeId,['in_progress','pending_review']);return tx.inventoryCount.update({where:{id:countId},data:{status:'cancelled'},include})})}
+export async function cancelInventoryCount(countId:string,storeId:string,staffId?:string){return prisma.$transaction(async tx=>{await inspectionCountGuard(tx,storeId,countId,staffId,'cancel');await lockCount(tx,countId,storeId,['in_progress','pending_review']);const count=await tx.inventoryCount.update({where:{id:countId},data:{status:'cancelled'},include});await inspectionCountCancelled(tx,storeId,countId,staffId!);return count})}
 
 export async function submitInventoryCount(countId:string,storeId:string,countedBy?:string,items:CountObservation[]=[]){
  if(items.length>1000||new Set(items.map(i=>i.itemId)).size!==items.length||items.length&&!countedBy)throw Error('INVALID_COUNT_SELECTION')
  return prisma.$transaction(async tx=>{
+  await inspectionCountGuard(tx,storeId,countId,countedBy,'submit')
   const existing=await tx.inventoryCount.findFirst({where:{id:countId,storeId},include})
   if(existing?.status==='pending_review')return view(existing)
   await lockCount(tx,countId,storeId)

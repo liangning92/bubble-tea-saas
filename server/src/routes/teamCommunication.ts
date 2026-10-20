@@ -6,6 +6,7 @@ import { canTeam, teamCommunication, TeamActor, TeamError } from '../services/Te
 import { teamAi } from '../services/TeamAiService'
 import { teamOperations } from '../services/TeamOperationsService'
 import { teamWorkflow } from '../services/TeamWorkflowService'
+import { packagingInspection } from '../services/PackagingInspectionService'
 
 export const teamCommunicationRouter = Router()
 const router = teamCommunicationRouter, service = teamCommunication()
@@ -23,6 +24,13 @@ const ok = (res: any, data: unknown) => res.json({ code: 200, data })
 const ai = teamAi()
 const operations = teamOperations()
 const workflow = teamWorkflow()
+const inspection = packagingInspection()
+router.get('/packaging-inspection/policy', run(async (req, res) => ok(res, await inspection.policy(actor(req)))))
+router.put('/packaging-inspection/policy', run(async (req, res) => ok(res, await inspection.savePolicy(actor(req), req.body))))
+router.get('/packaging-inspection/snapshot', run(async (req, res) => ok(res, await inspection.snapshot(actor(req)))))
+router.get('/packaging-inspection/jobs', run(async (req, res) => ok(res, await inspection.jobs(actor(req)))))
+router.post('/packaging-inspection/jobs/:jobId/dismiss', run(async (req, res) => ok(res, await inspection.dismiss(actor(req), req.params.jobId, req.body))))
+router.post('/channels/:id/tasks/:taskId/inspection-count', run(async (req, res) => ok(res, await inspection.linkCount(actor(req), req.params.id, req.params.taskId, req.body))))
 const workflowAfter = (req: AuthRequest) => z.coerce.number().int().nonnegative().max(999999999999).parse(req.query.after ?? 0)
 router.get('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.policy(actor(req), req.params.id))))
 router.put('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.savePolicy(actor(req), req.params.id, req.body))))

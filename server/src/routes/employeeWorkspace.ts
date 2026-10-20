@@ -10,6 +10,7 @@ import path from "path";
 import fs from "fs/promises";
 import { randomUUID, createHash } from "crypto";
 import prisma from "../config/database";
+import { inspectionReminderRelevant } from '../services/PackagingInspectionGuard';
 import { isTeamAttachment, teamCommunication, TeamActor, TeamError } from "../services/TeamCommunicationService";
 import { authenticate, AuthRequest } from "../middlewares/auth";
 import {
@@ -888,6 +889,11 @@ router.get(
       results[i].status === "fulfilled"
         ? (results[i] as PromiseFulfilledResult<any>).value
         : [];
+    const inspectionReminders = new Set<string>();
+    for (const reminder of value(3)) {
+      if (reminder.event?.startsWith('packaging-inspection:') &&
+          !await inspectionReminderRelevant(prisma, u.storeId, reminder, now)) inspectionReminders.add(reminder.id);
+    }
     res.json({
       code: 200,
       data: {
@@ -913,6 +919,7 @@ router.get(
         reminders: value(3).filter(
           (r: any) =>
             r.status !== "cancelled" &&
+            !inspectionReminders.has(r.id) &&
             (!r.expiresAt || new Date(r.expiresAt) > now),
         ),
         failedModules: results.flatMap((r, i) =>
