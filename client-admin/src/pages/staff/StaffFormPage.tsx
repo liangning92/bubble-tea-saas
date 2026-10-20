@@ -1,4 +1,5 @@
-import {staffAccessLabels} from '../../../../shared/staffAccessLabels'
+import { staffProfileRoleLabel, staffProfileRoleText } from '../../../../shared/staffProfileRole'
+import {staffAccessLabels,staffRoleLabel} from '../../../../shared/staffAccessLabels'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -158,6 +159,9 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
     submitData.storeId = staffData?.data?.data?.storeId || user?.storeId
 
 
+    // Historical titles are never synchronized with authorization bindings.
+    if (isEdit) delete submitData.position
+
     // Convert empty strings to appropriate values
     submitData.baseSalary = submitData.baseSalary === '' ? undefined : Number(submitData.baseSalary)
     submitData.hourlyRate = submitData.hourlyRate === '' ? undefined : Number(submitData.hourlyRate)
@@ -273,6 +277,16 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
 
           <div className="grid grid-cols-2 gap-4">
             <div>
+              {isEdit ? <>
+                <label htmlFor="staff-access-role" className="block text-sm font-medium text-gray-700 mb-1">{staffAccessLabels(i18n.language).role}</label>
+                <select id="staff-access-role" className="input" disabled value={staffData?.data?.data?.accessRoleSelection ?? staffData?.data?.data?.accessRole?.id ?? '__account__'}>
+                  {!staffData?.data?.data?.accessRole && <option value="__account__">{staffProfileRoleLabel(staffData?.data?.data || {}, i18n.language, t('staff.roleAdmin'))}</option>}
+                  {(staffData?.data?.data?.accessRoles || (staffData?.data?.data?.accessRole ? [staffData.data.data.accessRole] : [])).map((role: {id:string;name:string}) => <option key={role.id} value={role.id}>{role.id === '' ? staffAccessLabels(i18n.language).basic : staffRoleLabel(role.id, role.name, staffAccessLabels(i18n.language))}</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">{staffProfileRoleText(i18n.language).hint}</p>
+                {user?.role === 'admin' && <Link className="text-sm text-primary underline" to={'/settings/permissions?storeId='+encodeURIComponent(staffData?.data?.data?.storeId || '')+'&staffId='+encodeURIComponent(id || '')}>{staffAccessLabels(i18n.language).employees}</Link>}
+                {form.position && <p className="text-xs text-gray-500 mt-2">{staffProfileRoleText(i18n.language).historical}: {form.position}</p>}
+              </> : <>
               <label htmlFor="staff-position" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.position')} *</label><p className="text-xs text-gray-500 mb-1">{staffAccessLabels(i18n.language).jobTitleHint}</p>
               <select
                 id="staff-position" value={form.position}
@@ -287,6 +301,7 @@ export function StaffFormPage({ onSaved, onCancel }: { onSaved?: () => void; onC
                 <option value="barista">{t('staff.barista')}</option>
                 <option value="kitchen">{t('staff.kitchen')}</option>
               </select>
+              </>}
             </div>
             <div>
               <label htmlFor="staff-status" className="block text-sm font-medium text-gray-700 mb-1">{t('staff.status')}</label>

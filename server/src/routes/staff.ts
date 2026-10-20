@@ -2,7 +2,7 @@ import { getAttendanceReport } from '../services/AttendanceReportService'
 import { ensureOnboardingDeposit } from '../services/SalaryDepositPlan'
 import { readPayslip } from '../services/SalaryPayslipService'
 import { calculateSalary } from '../services/StaffService'
-import {userAccessV2} from '../services/StaffPermissionV2Service'
+import {staffProfileRoles} from '../services/StaffProfileRoleService'
 import { isPayrollEmployee, saveStaffIdentity } from '../services/StaffIdentityService'
 import { getPayrollRules, savePayrollRules } from '../services/PayrollRuleService'
 import { isLegacyAutomaticBasis, refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
@@ -141,7 +141,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
           probation: await staffProbation(prisma,s),
           phone: s.user.phone,
           role: s.user.role,
-          accessRole: s.user.role==='admin'?null:await userAccessV2({role:s.user.role,staffId:s.id,storeId:s.storeId}).then(a=>a?{id:a.id,name:a.name,revision:a.revision}:null),
+          ...await staffProfileRoles(s),
           _count: undefined
         }) : ({ id: s.id, name: s.name, employeeNumber: s.employeeNumber, position: s.position, status: s.status }))),
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) }
@@ -209,7 +209,7 @@ router.get('/:id', authenticate, authorize('admin', 'manager'), async (req: Auth
         probation: await staffProbation(prisma, staff),
         phone: staff.user.phone,
         role: staff.user.role,
-        accessRole: staff.user.role==='admin'?null:await userAccessV2({role:staff.user.role,staffId:staff.id,storeId:staff.storeId}).then(access=>access?{id:access.id,name:access.name,revision:access.revision}:null)
+        ...await staffProfileRoles(staff)
       },
       timestamp: new Date().toISOString()
     })
