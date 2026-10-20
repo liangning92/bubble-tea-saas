@@ -1,0 +1,8 @@
+{
+  "scenario": "new notice before matching material",
+  "renderedText": "📖\n延迟课程甲\n\n旧版正文\n\n⏱️ 4 分钟\n·\n📖 1 个章节\n·\n✍️ 0 道测验题\n1\n测试章节\n旧版正文\n关闭",
+  "renderedFingerprint": "c2fe221169ae8fa01ab29c126811bd8c7dc24962d5ebe12d939e40b10084de07",
+  "noticeFingerprint": "0da689ac9e55e14a26b5aa9a5d992152f8b12aea2d808560ffecf5ef6e3b64c3",
+  "noticeRead": false,
+  "readRequests": []
+}

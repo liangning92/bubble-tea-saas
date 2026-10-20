@@ -24,6 +24,7 @@ export async function chatReminderRelevant(db: any, storeId: string, r: any) {
 }
 /** Caller holds the message/channel transaction. Never start a nested transaction or create push credentials. */
 export async function enqueueChatReminders(db: any, storeId: string, c: TeamChannel, message: any) {
+  let queued = false
   for (const member of c.members) {
     if (member.staffId === message.authorId || member.fromSeq > message.seq || !await chatRecipientAccess(db, storeId, member.staffId)) continue
     const person = await db.staff.findFirst({ where: { id: member.staffId, storeId, status: 'active' }, select: { userId: true } })
@@ -34,5 +35,9 @@ export async function enqueueChatReminders(db: any, storeId: string, c: TeamChan
     await writeWork(storeId, key, { id, userId: person.userId, staffId: member.staffId, event, title: 'Pesan kerja baru / 新工作消息',
       url: '/team?channel=' + encodeURIComponent(c.id), createdAt: message.createdAt, read: false, status: 'pending',
       chat: { channelId: c.id, messageId: message.id, seq: message.seq } }, db)
+    queued = true
   }
+  // One exact-key, body-free signal per store; the reminder rows remain the
+  // durable queue. The signal commits or rolls back with the source message.
+  if (queued) await writeWork(storeId, 'notification.chat.pending', { eventId: message.id }, db)
 }

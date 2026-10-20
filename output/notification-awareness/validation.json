@@ -1,86 +1,98 @@
 {
-  "recordedAt": "2026-10-20T06:53:37.685286+00:00",
+  "recordedAt": "2026-10-20T07:49:04.994775+00:00",
   "baseSha": "ceb25d4aa590b716822d6bacae8b92797953fe70",
   "source": "commit containing this record",
-  "componentTypes": {
-    "api": true,
-    "admin": true,
-    "pos": true,
-    "staff": true
+  "currentValidation": {
+    "apiBuild": true,
+    "adminTypeAndBuild": true,
+    "staffTypeAndBuild": true,
+    "scopeUnitPassed": 27,
+    "notificationHttp": 14,
+    "crossProcessAndQueue": 7,
+    "chat": 5,
+    "employeeProviders": [
+      "sqlite",
+      "postgresql"
+    ],
+    "groupsPassedTotal": 28,
+    "summary": "../notification-queue-wake/current-final-regression-summary.json",
+    "awarenessActualReact": [
+      "client-admin",
+      "client-staff"
+    ],
+    "adminApprovalBeforeAfterActualReact": true,
+    "trainingContentRaceGroups": 16,
+    "workflowOriginalAssertions": 20,
+    "workflowGuardWithOriginalMalformedFixturePassed": true,
+    "workflowExplicitContractFixturePassed": true
   },
-  "clientBuilds": {
-    "admin": true,
-    "pos": true,
-    "staff": true
+  "previousValidation": {
+    "posTypesAndBuild": "passed earlier candidate; shared POS source unchanged in this increment; final exact CI must recheck",
+    "trainingPostgresGroups": 11,
+    "teamCommunicationGroups": 67,
+    "unitPassed": 241,
+    "auditPassed": 300,
+    "scope": "these prior runs do not substitute for fixed-head CI"
   },
-  "i18n": {
-    "admin": true,
-    "pos": true,
-    "staff": true
+  "firstCandidateCi": {
+    "runId": 39383263838,
+    "headSha": "6e802c1c9538fae1a5f20199692344e7e262cd38",
+    "conclusion": "failure",
+    "reason": "old employee-workspace fixture expected automatic push key generation; corrected to missing-key in_app and existing synthetic key mock transport; zero generation"
   },
-  "unit": {
-    "passed": 241,
-    "failed": 0
+  "secondCandidateCi": {
+    "runId": 39384205439,
+    "headSha": "acaf93275b3272c93711f6b2fd0ee80362fea39e",
+    "conclusion": "failure",
+    "step": "browser",
+    "reason": "unhandled inbox fixture returned [] and app shell crashed reading counts.unread, React boundary caught error",
+    "evidence": "../notification-workflow-ci-fix",
+    "fix": "validate successful inbox data, contain errors and recover; explicit native inbox fixture; keep all 20 workflow cases and timeout unchanged"
   },
-  "audits": {
-    "passed": 300,
-    "failed": 0,
-    "verifiedBy": "fixed-source CI39383263838 unit/audit step; original empty-staff fixture correction retained"
+  "independentReview": {
+    "originalHead": "acaf93275b3272c93711f6b2fd0ee80362fea39e",
+    "P1": 0,
+    "P2": 3,
+    "fixesImplemented": true,
+    "originalReport": "../notification-p2-review/original-review-acaf9327.md",
+    "fixedHeadIndependentRereview": "pending"
   },
-  "scopeUnit": {
-    "passed": 27,
-    "failed": 0
+  "queue": {
+    "apiFinishDelayMs": 25,
+    "crossProcessPollMs": 500,
+    "scheme": "fixed per-store employee.workspace.notification.chat.pending marker in same transaction as message/reminders",
+    "collectionAndPayrollIntervalMs": 60000,
+    "newProcess": false,
+    "newDatabasePermission": false,
+    "newCredentials": false,
+    "sameProcessOnlyClaim": false,
+    "realDeviceDeliveryProven": false
   },
-  "browserSuites": [
-    "notification-awareness-ui-20261020",
-    "notification-approval-target-ui-20261020 (noticeObject + legacy requestId)",
-    "training-update-notices",
-    "training-admin-notices"
+  "componentScope": [
+    "api",
+    "admin",
+    "pos",
+    "staff"
   ],
-  "postgresGroups": {
-    "awareness": 10,
-    "chatNotify": 5,
-    "training": 11,
-    "approvalProjection": "passed",
-    "teamCommunication": 67
+  "windowsInstaller": false,
+  "networkRecovery": {
+    "requestDeadlineMs": 15000,
+    "actualAxiosTimeoutAndRecovery": [
+      "admin",
+      "staff"
+    ],
+    "malformedSuccessfulResponseContainedAndRecovery": [
+      "admin",
+      "staff"
+    ]
   },
+  "ci": "pending exact fixed-head scoped run",
   "temporaryServicesCleaned": true,
-  "dependencyPreparation": "POS bcryptjs 3.0.3 downloaded without scripts and verified against lock SHA512; task-local only",
   "notExecuted": [
     "production deployment",
     "real business UI acceptance",
     "physical device push delivery",
     "real model call",
     "production worker"
-  ],
-  "ci": "pending fixed-SHA scoped run",
-  "networkRecovery": {
-    "adminRequestDeadlineMs": 15000,
-    "realAxiosTimeoutThenFocusRecovery": true,
-    "clients": [
-      "admin",
-      "staff"
-    ],
-    "browserErrors": []
-  },
-  "firstCandidateCi": {
-    "runId": 39383263838,
-    "headSha": "6e802c1c9538fae1a5f20199692344e7e262cd38",
-    "conclusion": "failure",
-    "step": "HTTP",
-    "reason": "old employee workspace fixture expected automatic push key generation; no-key delivery correctly remained in_app",
-    "fix": "assert missing-key in_app and zero key creation; seed two fake strings for mocked existing-key delivery; retain original dedup/expiry/logout assertions",
-    "newExactCiRequired": true
-  },
-  "employeeWorkspaceProviderRetest": {
-    "providers": [
-      "sqlite",
-      "postgresql"
-    ],
-    "passed": true,
-    "generatedPushKeys": 0,
-    "batch": "bt-test-1567228eb771",
-    "ownedDatabasesAndRuntimeRemoved": true,
-    "evidence": "employee-workspace-providers-summary.json"
-  }
+  ]
 }

@@ -15,6 +15,7 @@ const app=express();app.use(express.json());
 app.all('/api/*',(req,res)=>{
  const ok=data=>res.json({code:200,data}),role=req.headers.authorization?.includes('manager')?'manager':'admin';
  if(req.path==='/api/auth/me')return ok({...user,role});
+ if(req.path==='/api/staff-work/my/inbox')return ok({items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}});
  if(req.path==='/api/team/ai/settings')return ok(settings);
  if(req.path==='/api/ai/permissions')return ok({executionEnabled:false});
  if(['/api/team/admin/channels','/api/team/channels'].includes(req.path))return ok([channel,{...channel,id:otherId,title:'Other channel',member:false}]);
@@ -113,5 +114,5 @@ async function reviewReply(page){await page.getByRole('button',{name:'审阅回�
  });
  await pass('manager does not receive AI review controls or workflow reads',async()=>{const {page,context}=await open('zh',390,'manager');let count=0;page.on('request',r=>{if(r.url().includes('/workflow/'))count++});await page.goto(origin+'/staff/communication');await page.getByRole('button',{name:'Synthetic pilot channel',exact:false}).click();await page.locator('.team-tabs button').nth(1).click();assert.equal(await page.getByTestId('team-workflow').count(),0);assert.equal(count,0);await context.close()});
  assert.deepEqual(pageErrors,[]);assert.deepEqual(external,[]);fs.writeFileSync(out+'/results.json',JSON.stringify({passed,pageErrors,externalRequests:external,allApiRequestsMocked:true,realModelCalls:0,productionWrites:0,replyCount,taskCount},null,2)+'\n');
- }catch(e){if(browser)for(const context of browser.contexts())for(const page of context.pages())await page.screenshot({path:out+'/failure.png',fullPage:true});throw e}finally{if(browser)await browser.close();if(server)await new Promise(r=>server.close(r))}
+ }catch(e){fs.writeFileSync(out+'/failure.json',JSON.stringify({error:e.message,pageErrors,passed,externalRequests:external},null,2)+'\n');if(browser)for(const context of browser.contexts())for(const page of context.pages())await page.screenshot({path:out+'/failure.png',fullPage:true});throw e}finally{if(browser)await browser.close();if(server)await new Promise(r=>server.close(r))}
 })().catch(e=>{console.error(e);process.exitCode=1});

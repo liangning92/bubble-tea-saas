@@ -1,0 +1,7 @@
+
+> bubble-tea-saas@2026.10.02.1748 build:server
+> cd server && npm run build
+
+
+> bubble-tea-server@1.0.0 build
+> tsc

@@ -1,0 +1,44 @@
+{
+  "batch": "bt-test-ce4971a70de5",
+  "passed": 6,
+  "tests": [
+    "API HTTP finish wakes committed source/outbox only; importing standalone services never starts production workers",
+    "independent child staged transaction is invisible to API scan; commit is delivered and rollback never transports",
+    "scanner shutdown then restart recovers a child commit without IPC signal or HTTP wake",
+    "duplicate scans/wakes coalesce; another child enqueue during active transport is delivered once without overlapping store delivery",
+    "concurrent scanOnce calls use one database scan at a time",
+    "actual owned PostgreSQL interruption is contained and scanner reconnects after restart to recover committed pending chat"
+  ],
+  "observations": [
+    {
+      "path": "api-http-finish",
+      "httpStartToMockMs": 125,
+      "independentSamples": 1
+    },
+    {
+      "path": "independent-child-commit-poll",
+      "commitAcknowledgedToMockMs": 105,
+      "pollMs": 500,
+      "independentSamples": 1
+    },
+    {
+      "path": "real-postgresql-stop-start",
+      "reconnected": true,
+      "mockedDatabaseFailure": false
+    }
+  ],
+  "twoIndependentNodeProcesses": true,
+  "realPostgreSQLInterruption": true,
+  "realPushCalls": 0,
+  "credentialsCreated": false,
+  "realModelCalls": 0,
+  "productionWorkerStarted": false,
+  "latencyIsSingleSample": true,
+  "p95Measured": false,
+  "deviceDeliveryTested": false,
+  "wrapperExitCode": 0,
+  "ownedPostgreSQLCleaned": true,
+  "wrapperCleaned": true,
+  "rootHttpGroupsPassed": 13,
+  "externalProvidersMocked": true
+}

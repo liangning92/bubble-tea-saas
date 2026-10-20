@@ -14,6 +14,82 @@ import {
 import { processLatePayroll, wibDate } from "./EmployeeAttendanceService";
 let timer: NodeJS.Timeout | undefined,
   running = false;
+
+/** Coalesce post-commit wakes in this API process; no polling or payroll work. */
+export function notificationDeliveryWake(deliverStore: (storeId: string) => Promise<void>, delayMs = 25) {
+  const scheduled = new Map<string, NodeJS.Timeout>(), active = new Map<string, Promise<void>>(), again = new Set<string>();
+  let closed = false;
+  const wake = (storeId: string, waitMs = delayMs) => {
+    if (closed || !storeId) return;
+    if (active.has(storeId)) { again.add(storeId); return; }
+    if (scheduled.has(storeId)) return;
+    const handle = setTimeout(() => {
+      scheduled.delete(storeId);
+      let failed = false;
+      const task = Promise.resolve().then(() => deliverStore(storeId)).catch(() => {
+        failed = true;
+        console.error('[EmployeeReminders] post-commit delivery failed');
+      }).finally(() => {
+        active.delete(storeId);
+        const pending = again.delete(storeId);
+        if (failed || pending) wake(storeId, failed ? Math.max(delayMs, 500) : delayMs);
+      });
+      active.set(storeId, task);
+    }, waitMs);
+    handle.unref();
+    scheduled.set(storeId, handle);
+  };
+  return { wake, async close() {
+    closed = true;
+    for (const handle of scheduled.values()) clearTimeout(handle);
+    scheduled.clear(); again.clear(); await Promise.all(active.values());
+  } };
+}
+const immediateDelivery = notificationDeliveryWake(storeId => deliver(storeId));
+
+/** The durable outbox is also the cross-process signal. Scan only committed
+ * pending chat deliveries, without collecting business work or running payroll. */
+export function notificationQueueScanner(db: any, wake: (storeId: string) => void, pollMs = 500) {
+  let closed = false, started = false, failures = 0, handle: NodeJS.Timeout | undefined, active: Promise<void> | undefined;
+  const seen = new Map<string, string>();
+  const scanOnce = (): Promise<void> => {
+    if (closed) return Promise.resolve();
+    if (active) return active;
+    active = Promise.resolve().then(async () => {
+      const stores = await db.store.findMany({ select: { id: true } });
+      if (!stores.length || closed) return;
+      // Exact storeId/key lookups use the existing unique index instead of
+      // repeatedly scanning all historical messages or reminder JSON bodies.
+      const signals = await db.config.findMany({ where: {
+        storeId: { in: stores.map((store: any) => store.id) }, key: 'employee.workspace.notification.chat.pending',
+      }, select: { storeId: true, value: true } });
+      if (!closed) for (const signal of signals) {
+        if (seen.get(signal.storeId) === signal.value) continue;
+        wake(signal.storeId);
+        seen.set(signal.storeId, signal.value);
+      }
+    }).finally(() => { active = undefined; });
+    return active;
+  };
+  const tick = async () => {
+    if (closed) return;
+    try { await scanOnce(); failures = 0; }
+    catch { failures++; console.error('[EmployeeReminders] pending chat scan failed'); }
+    if (!closed) {
+      handle = setTimeout(() => void tick(), Math.min(5000, pollMs * 2 ** Math.min(failures, 4)));
+      handle.unref();
+    }
+  };
+  return { scanOnce, start() { if (!started && !closed) { started = true; void tick(); } }, async close() {
+    closed = true; if (handle) clearTimeout(handle); await active?.catch(() => {});
+  } };
+}
+const pendingChatScan = notificationQueueScanner(prisma, storeId => immediateDelivery.wake(storeId));
+export function wakeEmployeeDelivery(storeId: string) {
+  // Reuse only the existing API worker. Tests and standalone tools do not
+  // enable a background sender merely by importing routes or this module.
+  if (timer) immediateDelivery.wake(storeId);
+}
 export async function pushKeys(storeId: string) {
   return prisma.$transaction(async (db) => {
     await workLock(storeId, "push-keys", db);
@@ -250,6 +326,22 @@ export async function reminderStillRelevant(
   }
   return true;
 }
+// Serialize reminder status changes with personal read acknowledgements. A
+// delivery snapshot must never restore an earlier unread value.
+async function updateReminder(storeId: string, reminder: any, patch: any, db: any, userId?: string) {
+  const key = `reminder.${reminder.staffId}.${reminder.id}`;
+  await db.$transaction(async (tx: any) => {
+    await workLock(storeId, key, tx);
+    const current = await readWork(storeId, key, tx);
+    if (!current) return;
+    const person = current.userId || userId;
+    const receipt = person && await readWork(storeId, `inbox.read.${person}.${current.id}`, tx);
+    const read = current.read === true || patch.read === true || !!receipt;
+    const status = current.status === 'cancelled' || patch.status === 'cancelled' ? 'cancelled'
+      : read ? 'in_app' : patch.status;
+    await writeWork(storeId, key, { ...current, ...patch, read, status }, tx);
+  });
+}
 export async function deliver(storeId: string, db: any = prisma, push: typeof webpush = webpush) {
   const reminders = (await listWork(storeId, "reminder.", db)).filter(
       (r) => r && r.status === "pending",
@@ -262,27 +354,21 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
     const employee = await db.staff.findFirst({
       where: { id: r.staffId, storeId, status: "active" },
     });
-    if (!employee) { await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, status: 'cancelled' }, db); continue; }
+    if (!employee) { await updateReminder(storeId, r, { status: 'cancelled' }, db); continue; }
     if (!(await reminderStillRelevant(storeId, r, new Date(), db))) {
-      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
-        ...r,
-        status: "cancelled",
-      }, db);
+      await updateReminder(storeId, r, { status: 'cancelled' }, db, employee.userId);
       continue;
     }
     const readReceipt = await readWork(storeId, `inbox.read.${r.userId || employee.userId}.${r.id}`, db);
     if (r.read || readReceipt) {
-      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, read: true, status: 'in_app' }, db);
+      await updateReminder(storeId, r, { read: true, status: 'in_app' }, db, employee.userId);
       continue;
     }
     const activeSubscriptions = subscriptions.filter(
       (s) => s.staffId === r.staffId,
     );
     if (!activeSubscriptions.length || !keys) {
-      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
-        ...r,
-        status: "in_app",
-      }, db);
+      await updateReminder(storeId, r, { status: 'in_app' }, db, employee.userId);
       continue;
     }
     for (const sub of activeSubscriptions) {
@@ -343,12 +429,37 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
           if (!validPushEndpoint(sub.subscription.endpoint))
             throw new Error("INVALID_PUSH_ENDPOINT");
           const latest = await readWork(storeId, `reminder.${r.staffId}.${r.id}`, db);
-          if (latest?.status === 'cancelled' || !await reminderStillRelevant(storeId, r, new Date(), db)) {
-            await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, status: 'cancelled' }, db);
+          if (!latest || latest.status === 'cancelled' || !await reminderStillRelevant(storeId, latest, new Date(), db)) {
+            await updateReminder(storeId, r, { status: 'cancelled' }, db, employee.userId);
             continue;
           }
+          // A read may commit while this worker is waiting for its delivery
+          // lease or relevance queries. Recheck immediately before transport.
+          const [beforeSend, receipt, liveSubscription, liveStaff, liveUser] = await Promise.all([
+            readWork(storeId, `reminder.${r.staffId}.${r.id}`, db),
+            readWork(storeId, `inbox.read.${r.userId || employee.userId}.${r.id}`, db),
+            readWork(storeId, `subscription.${sub.id}`, db),
+            db.staff.findFirst({ where: { id: r.staffId, storeId, status: 'active' } }),
+            db.user.findUnique({ where: { id: employee.userId } }),
+          ]);
+          if (!beforeSend || beforeSend.status === 'cancelled') continue;
+          if (!liveStaff || liveStaff.userId !== employee.userId || !liveUser ||
+              liveUser.storeId && liveUser.storeId !== storeId || !liveSubscription?.active ||
+              liveSubscription.staffId !== r.staffId || liveSubscription.userId !== employee.userId ||
+              liveSubscription.issuedAtMs < liveUser.updatedAt.getTime()) {
+            if (liveSubscription?.userId === employee.userId)
+              await writeWork(storeId, `subscription.${sub.id}`, { ...liveSubscription, active: false }, db);
+            await writeWork(storeId, key, { ...attempt, status: 'skipped_subscription', leaseUntil: undefined }, db);
+            continue;
+          }
+          if (beforeSend.read === true || receipt) {
+            await updateReminder(storeId, r, { read: true, status: 'in_app' }, db, employee.userId);
+            await writeWork(storeId, key, { ...attempt, status: 'skipped_read', leaseUntil: undefined }, db);
+            continue;
+          }
+          if (!validPushEndpoint(liveSubscription.subscription?.endpoint)) throw new Error('INVALID_PUSH_ENDPOINT');
           await push.sendNotification(
-            sub.subscription,
+            liveSubscription.subscription,
             JSON.stringify({ title: r.title, url: r.url, id: r.id }),
             {
               TTL: 300,
@@ -392,11 +503,10 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
         (state) => state?.status === "sent" || state?.attempts >= 3,
       )
     )
-      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
-        ...r,
+      await updateReminder(storeId, r, {
         status: deliveryStates.every(state => state?.status === 'sent') ? 'sent'
           : deliveryStates.some(state => state?.status === 'sent') ? 'partially_sent' : 'delivery_failed',
-      }, db);
+      }, db, employee.userId);
   }
 }
 export function startEmployeeWorker() {
@@ -430,4 +540,5 @@ export function startEmployeeWorker() {
   void run();
   timer = setInterval(run, 60000);
   timer.unref();
+  pendingChatScan.start();
 }

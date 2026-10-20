@@ -6,6 +6,8 @@
       768,
       1365
     ],
+    "malformedResponseContainedAndRecovers": true,
+    "malformedRefreshPreservesValidData": true,
     "openingInboxDoesNotRead": true,
     "approvalReadRemainsPending": true,
     "trainingNotReadByInbox": true,
@@ -25,7 +27,7 @@
       "team-read",
       "result-1"
     ],
-    "requestCount": 62
+    "requestCount": 71
   },
   {
     "app": "client-admin",
@@ -34,6 +36,8 @@
       768,
       1365
     ],
+    "malformedResponseContainedAndRecovers": true,
+    "malformedRefreshPreservesValidData": true,
     "openingInboxDoesNotRead": true,
     "approvalReadRemainsPending": true,
     "trainingNotReadByInbox": true,
@@ -53,6 +57,6 @@
       "team-read",
       "result-1"
     ],
-    "requestCount": 47
+    "requestCount": 48
   }
 ]

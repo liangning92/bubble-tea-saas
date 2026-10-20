@@ -28,6 +28,20 @@ export interface AwarenessClient {
 const empty: AwarenessInbox = { items: [], chats: [], counts: { unread: 0, chatUnread: 0, trainingUnread: 0, approvalPending: 0 } }
 const Context = createContext({ data: empty, loading: false, failed: false, refresh: async () => {}, markRead: async (_id: string) => {}, isCurrent: (): boolean => true })
 
+// A successful HTTP envelope can still contain incompatible data during a
+// rollout or proxy failure. Keep that failure inside the inbox, not the app shell.
+function validInbox(value: AwarenessInbox): boolean {
+  const count = (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n >= 0
+  return !!value && Array.isArray(value.items) && Array.isArray(value.chats) && !!value.counts &&
+    ['unread', 'chatUnread', 'trainingUnread', 'approvalPending'].every(key => count(value.counts[key as keyof AwarenessInbox['counts']])) &&
+    value.items.every(item => !!item && typeof item.id === 'string' && typeof item.event === 'string' &&
+      ['chat', 'training_update', 'approval_request', 'approval_result', 'business_reminder'].includes(item.kind) &&
+      typeof item.title === 'string' && typeof item.url === 'string' && typeof item.createdAt === 'string' && typeof item.read === 'boolean' &&
+      (item.adminUrl === undefined || typeof item.adminUrl === 'string')) &&
+    value.chats.every(chat => !!chat && typeof chat.id === 'string' && typeof chat.title === 'string' && typeof chat.url === 'string' && count(chat.unread) &&
+      (chat.preview === null || !!chat.preview && typeof chat.preview.text === 'string' && typeof chat.preview.authorName === 'string' && typeof chat.preview.createdAt === 'string'))
+}
+
 // Identity is supplied by the authenticated app, including its current store/session.
 // A prior identity's response is never exposed during a switch, even before effects run.
 export function AwarenessProvider({ client, identity, children }: { client: AwarenessClient; identity: string; children: ReactNode }) {
@@ -47,6 +61,7 @@ export function AwarenessProvider({ client, identity, children }: { client: Awar
       controller = new AbortController()
       try {
         const data = await client.inbox(controller.signal)
+        if (!validInbox(data)) throw new Error('INVALID_NOTIFICATION_INBOX')
         if (active && current.current === identity) setState({ identity, data, loading: false, failed: false })
       } catch (error: any) {
         if (active && current.current === identity && !controller.signal.aborted) setState(previous => ({ ...previous, data: [401, 403].includes(error?.response?.status) ? empty : previous.data, loading: false, failed: true }))

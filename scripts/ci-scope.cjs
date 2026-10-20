@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
- notificationAwareness:{paths:/(?:Notification(?:Inbox|Approval|Awareness)|notification-awareness|TrainingLibraryStore|training(?:-admin)?-update-notices|training-admin-notices|trainingNotices|TrainingPage|TrainingListPage|StaffApprovalInbox|StaffApprovalPage|LeaveListPage|LeavePage|OvertimeRequestListPage|OvertimeRequestPage|ShiftSwapListPage|ShiftSwapPage|AttendanceCorrectionListPage|AttendanceCorrectionPage|ReimbursementListPage|ReimbursementPage|EmployeePrivatePages|EmployeeWorkspacePage|HygienePage)/i,tests:/notification-awareness|approval-notices/i},
+ notificationAwareness:{paths:/(?:Notification(?:Inbox|Approval|Awareness)|notification-awareness|notification-queue|server\/src\/(?:services\/(?:EmployeeReminderService|TeamChatReminderService|TeamCommunicationService)|routes\/teamCommunication)\.ts|TrainingLibraryStore|training(?:-admin)?-update-notices|training-admin-notices|trainingNotices|TrainingPage|TrainingListPage|StaffApprovalInbox|StaffApprovalPage|LeaveListPage|LeavePage|OvertimeRequestListPage|OvertimeRequestPage|ShiftSwapListPage|ShiftSwapPage|AttendanceCorrectionListPage|AttendanceCorrectionPage|ReimbursementListPage|ReimbursementPage|EmployeePrivatePages|EmployeeWorkspacePage|HygienePage)/i,tests:/notification-awareness|approval-notices/i},
  chatNotification:{paths:/(?:TeamChatReminderService|team-chat-notification)/i,tests:/team-chat-notification/i},
  staffProfiles:{paths:/(?:StaffProfileRole|staffProfileRole|Staff(?:List|Detail|Form)Page|staff-profile)/i,tests:/staff-profile-roles/i},
  aiSettings:{paths:/(?:AiSettings|AiPermissions|aiSettingsCopy|TeamAiService|team-ai-settings)/i,tests:/ai-settings/i},
@@ -69,7 +69,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
- notificationAwareness:{scripts:['output/notification-awareness-ui-20261020/browser-check.cjs','output/notification-approval-target-ui-20261020/browser-check.cjs','tests/stoploss/training-update-notices-page-check.cjs','tests/stoploss/training-admin-notices-page-check.cjs'],components:['admin','staff']},
+ notificationAwareness:{scripts:['output/notification-awareness-ui-20261020/browser-check.cjs','output/notification-approval-target-ui-20261020/browser-check.cjs','output/notification-admin-approval-race-20261020/browser-check.cjs','tests/stoploss/training-update-notices-page-check.cjs','tests/stoploss/training-admin-notices-page-check.cjs','tests/stoploss/training-notice-content-race-page-check.cjs'],components:['admin','staff']},
  desktop:{scripts:['tests/stoploss/online-update-page-check.cjs'],components:['pos']},
  staffProfiles:{scripts:['tests/stoploss/staff-profile-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
  aiSettings:{scripts:['tests/stoploss/team-ai-settings-browser-check.cjs'],components:['admin']},

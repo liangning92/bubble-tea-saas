@@ -1,0 +1,82 @@
+[docker-test] batch bt-test-79c00f204050
+Prisma schema loaded from server/prisma/schema.prisma
+Datasource "db": PostgreSQL database "notification_awareness_test", schema "public" at "127.0.0.1:52233"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 492ms
+
+PASS inbox opening preserves both conversation cursors; successful selected fetch plus ack clears only that conversation across sessions
+PASS nonmembers and cross-store/forged identity cannot expose preview or use notification deep links/read IDs
+PASS backend business deny preserves existing employee APP inbox/chat/training while forged manager grants fail
+PASS real training draft stays silent; published content emits deduplicated personal updates and shared read does not complete learning
+prisma:error
+Invalid `prisma.config.upsert()` invocation:
+
+
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"Config\" violates check constraint \"notification_publish_failure\"", severity: "ERROR", detail: Some("Failing row contains (cmvgdfrar006e146rftrbqzcc, notice-store-6, employee.workspace.reminder.notice-staff-6-owner.7c530b1a6205bd9..., {\"id\":\"7c530b1a6205bd9e8998b9ead94d03151dd1e2dc22b964727999d0dea..., staff, 2026-10-20 07:38:11.571, 2026-10-20 07:38:11.571)."), column: None, hint: None }), transient: false })
+PASS training newer published revision replaces old relevance; reminder failure rolls back actual HTTP publication/version
+PASS current authorized handler pending survives read across devices; revocation removes inbox and queued-push relevance without altering source
+PASS fixture node completion removes pending and queued push; only applicant gets result including no-staff administrator in-app
+PASS read committed after delivery lease suppresses transport and cannot be restored to unread
+PASS read committed during an already-started mocked transport survives final delivery status merge
+PASS logout or session revocation committed after the lease prevents transport without marking the notice read
+PASS chat outbox persistence failure atomically rolls back message, reminder and workflow event
+PASS no subscription preserves in-app item; mocked push uses generic existing-key deep link and deterministic concurrent dedup
+prisma:error
+Invalid `prisma.config.upsert()` invocation:
+
+
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"Config\" violates check constraint \"notification_message_failure\"", severity: "ERROR", detail: Some("Failing row contains (cmvgdfs3v00ju146raawk9bak, notice-store-16, employee.workspace.reminder.notice-staff-16-employee.6702253f331..., {\"id\":\"6702253f331de46e301d27c4d635cefce5573e743b51da7d080c23e5b..., staff, 2026-10-20 07:38:12.619, 2026-10-20 07:38:12.619)."), column: None, hint: None }), transient: false })
+PASS successful HTTP commit wakes only notification delivery; in-flight messages coalesce without loss and failed sends never wake
+PASS queued chat rechecks member/floor/archive/active identity; disabled/stale/404/410 subscriptions never repeat transport
+PASS API HTTP finish wakes committed source/outbox only; importing standalone services never starts production workers
+PASS independent child staged transaction is invisible to API scan; commit is delivered and rollback never transports
+PASS scanner shutdown then restart recovers a child commit without IPC signal or HTTP wake
+PASS duplicate scans/wakes coalesce; another child enqueue during active transport is delivered once without overlapping store delivery
+PASS concurrent scanOnce calls use one database scan at a time
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error Error in PostgreSQL connection: Error { kind: Db, cause: Some(DbError { severity: "FATAL", parsed_severity: Some(Fatal), code: SqlState(E57P01), message: "terminating connection due to administrator command", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("postgres.c"), line: Some(3213), routine: Some("ProcessInterrupts") }) }
+prisma:error
+Invalid `prisma.store.findMany()` invocation:
+
+
+Server has closed the connection.
+[EmployeeReminders] pending chat scan failed
+prisma:error
+Invalid `prisma.store.findMany()` invocation:
+
+
+Server has closed the connection.
+[EmployeeReminders] pending chat scan failed
+prisma:error
+Invalid `prisma.store.findMany()` invocation:
+
+
+Server has closed the connection.
+[EmployeeReminders] pending chat scan failed
+prisma:error
+Invalid `prisma.store.findMany()` invocation:
+
+
+Server has closed the connection.
+[EmployeeReminders] pending chat scan failed
+PASS actual owned PostgreSQL interruption is contained and scanner reconnects after restart to recover committed pending chat
+[EmployeeReminders] post-commit delivery failed
+PASS dispatcher retries transient delivery rejection after scanner cached the exact signal, without another enqueue or signal change
+Owned notification PostgreSQL instance cleaned
+[docker-test] cleaned bt-test-79c00f204050
