@@ -307,7 +307,7 @@ export function teamAi(db: any = prisma, transport: Transport = minimax, resolve
         if (!config.enabled || !config.secret) denied('TEAM_AI_NOT_CONFIGURED', 409)
         if (v.kind === 'routine' && config.region !== 'cn') denied('TEAM_ROUTINE_CN_REQUIRED', 409)
         const reservation = await reserveUsage(tx, a.storeId, config, text, v.kind === 'routine' ? id : undefined)
-        const draft = { id: v.requestId, channelId: id, ownerId: a.staffId, kind: v.kind, sourceSeq: source,
+        const draft = { id: v.requestId, channelId: id, contextLastSeq: c.lastSeq, ownerId: a.staffId, kind: v.kind, sourceSeq: source,
           sourceFloor: source[0] ?? c.lastSeq + 1, audienceHash: createHash('sha256').update(JSON.stringify(c.members)).digest('hex'),
           model: config.model, region: config.region, configVersion: config.version, status: 'pending',
           text: '', createdAt: new Date().toISOString(), modelStartedAt: null as string | null, modelCompletedAt: null as string | null, inputHash: hash, ...(v.operation ? { operation: v.operation } : {}) }

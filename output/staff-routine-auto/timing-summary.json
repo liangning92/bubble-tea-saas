@@ -2,16 +2,16 @@
   "model": "controlled_mock_30ms_no_external_network",
   "sampleCount": 24,
   "workerIntervalMs": 250,
-  "observedCommitP50Ms": 639,
-  "observedCommitP95Ms": 737,
-  "writeIntervalP50Ms": 626,
-  "writeIntervalP95Ms": 716,
+  "observedCommitP50Ms": 423,
+  "observedCommitP95Ms": 475,
+  "writeIntervalP50Ms": 422,
+  "writeIntervalP95Ms": 475,
   "meanStageMs": {
-    "queueWriteMs": 6,
-    "queueWaitMs": 245.4,
-    "modelAdmissionMs": 158.6,
-    "modelMs": 37.8,
-    "publicationWriteMs": 175.7
+    "queueWriteMs": 3.3,
+    "queueWaitMs": 243.4,
+    "modelAdmissionMs": 73.5,
+    "modelMs": 33.2,
+    "publicationWriteMs": 67.8
   },
   "boundary": "source and queue writes share one transaction; reply writes share another. Stage timestamps describe write completion, not commit instants. HTTP response/sourceCommitObservedAt and DB polling/replyCommitObservedAt are commit upper bounds.",
   "notProductionSLA": true

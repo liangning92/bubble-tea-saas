@@ -205,8 +205,8 @@ export function teamCommunication(db: DB = prisma) {
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
         const policy = await read(tx, a.storeId, `workflow.policy.${id}`)
-        const humanTakeover = !aiDraftId && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
-        if (humanTakeover && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
+        const humanTakeover = !routineAuthorization && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
+        if (humanTakeover && !aiDraftId && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
         let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; authorizedBy?: string } | undefined
         if (aiDraftId) {
           uuid.parse(aiDraftId)
@@ -215,6 +215,7 @@ export function teamCommunication(db: DB = prisma) {
           const draft = await read(tx, a.storeId, `aiDraft.${a.staffId}.${aiDraftId}`)
           const settings = await read(tx, a.storeId, 'ai.settings')
           if (!draft || draft.channelId !== id || draft.status !== 'ready' || draft.kind !== 'draft') fail(409, 'TEAM_AI_DRAFT_NOT_READY')
+          if (humanTakeover && draft.contextLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
           if (!settings?.enabled || settings.version !== draft.configVersion) fail(409, 'TEAM_AI_CONFIG_CHANGED')
           if (c.members.some(member => member.fromSeq > draft.sourceFloor) || digest(c.members) !== draft.audienceHash) fail(403, 'TEAM_AI_AUDIENCE_CHANGED')
           if (draft.operation) await assertOperationScope(tx, a, c, draft.operation)
