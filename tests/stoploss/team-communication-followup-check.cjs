@@ -118,7 +118,8 @@ module.exports = async ({ prisma, good, request, create, send, test, dropRespons
   const monthKey=`team.communication.aiBudget.${new Date().toISOString().slice(0,7)}`;
   const row=await prisma.config.findUniqueOrThrow({where:{storeId_key:{storeId:owner.storeId,key:monthKey}}});
   await prisma.config.update({where:{id:row.id},data:{value:JSON.stringify({spentMicros:0,reservedMicros:0,calls:[]})}});
-  await configure({monthlyBudgetUsd:0.006});
+  // One uncapped request reserves the supplier ceiling (~$0.63), two exceed $0.80.
+  await configure({monthlyBudgetUsd:0.8});
   let started,release,calls=0;const ready=new Promise(r=>{started=r}), gate=new Promise(r=>{release=r});
   const slow=teamAi(prisma,async()=>{calls++;started();await gate;return {text:'合成结果 #1',inputTokens:50,outputTokens:10,providerRequestId:'concurrent'};});
   const input={requestId:randomUUID(),kind:'report',sourceSeq:[1],consent:true};
@@ -140,7 +141,7 @@ module.exports = async ({ prisma, good, request, create, send, test, dropRespons
   global.fetch=async(url,options)=>{
    calls++;assert.equal(url,'https://api.minimax.io/v1/chat/completions');assert.equal(options.redirect,'error');
    assert.equal(options.headers.Authorization,'Bearer synthetic-minimax-key-only');
-   const body=JSON.parse(options.body);assert.equal(body.model,'MiniMax-M3');assert.equal(body.reasoning_split,true);assert.equal(body.max_completion_tokens,4096);assert(!body.tools);
+   const body=JSON.parse(options.body);assert.equal(body.model,'MiniMax-M3');assert.equal(body.reasoning_split,true);assert(!Object.hasOwn(body,'max_completion_tokens'));assert(!Object.hasOwn(body,'max_tokens'));assert(!body.tools);
    return new Response(JSON.stringify({id:'synthetic-adapter',choices:[{finish_reason:'stop',message:{content:'合成报告 #1',reasoning_content:'not retained'}}],usage:{prompt_tokens:50,completion_tokens:12},base_resp:{status_code:0}}));
   };
   try {
