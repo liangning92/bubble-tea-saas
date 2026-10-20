@@ -35,7 +35,7 @@ node server/node_modules/jest/bin/jest.js --config server/jest.audit.config.cjs 
 python3 scripts/with-docker-test.py -- python3 scripts/test-external-mcp.py
 ```
 
-临时 PostgreSQL 与唯一批次 loopback HTTP 由 finally 清理。官方 v2 Client 与官方仍维护的 v1 `@modelcontextprotocol/sdk@1.32.1` Client 都经实际 HTTP 连接；测试不是直接调用 mock 内部函数。记录 wire 方法以证明 v1 的 initialize、tools/list、tools/call，另验证 v2 协议、401/403及元数据、门店/频道/任务/成员/fromSeq限制、撤销与版本变化、最小化、审计及业务数据不变。单元安全测试另覆盖更多畸形令牌。
+临时 PostgreSQL 与唯一批次 loopback HTTP 由 finally 清理。官方 v2 Client 显式 pin 2026-07-28 并断言协商版本（SDK 默认 legacy，不能以库版本代替协议版本）；官方仍维护的 v1 `@modelcontextprotocol/sdk@1.32.1` Client 都经实际 HTTP 连接；测试不是直接调用 mock 内部函数。记录 wire 方法以证明 v1 的 initialize、tools/list、tools/call，另验证 v2 协议、401/403及元数据、门店/频道/任务/成员/fromSeq限制、撤销与版本变化、最小化、审计及业务数据不变。单元安全测试另覆盖更多畸形令牌。
 
 ## 生产仍需的条件与一个决定
 
