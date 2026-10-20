@@ -80,7 +80,7 @@ let server,browser;async function pass(name,fn){await fn();passed.push(name);con
  for(const language of ['zh','id','en'])for(const [label,viewport]of [['desktop',{width:1440,height:1000}],['phone',{width:390,height:844}],...(language==='zh'?[['tablet',{width:768,height:1024}]]:[])]){
   await pass(language+' '+label+' actual built page: three actionable areas without static introductions or horizontal overflow',async()=>{
    const {page,context}=await open(language,viewport),main=page.getByTestId('ai-settings-page'),area=page.getByTestId('team-ai-settings');
-   assert.equal(await main.locator('section').count(),3);assert.equal(await area.locator('section').count(),2);
+   assert.equal(await main.locator('section:not([data-testid="external-agent-settings"])').count(),3);assert.equal(await main.getByTestId('external-agent-settings').count(),1);assert.equal(await area.locator('section').count(),2);
    assert.equal(await main.locator('#ai-capabilities, #ai-boundaries').count(),0);
    assert.equal(await main.getByText(({zh:'查看原有权限草稿',id:'Lihat draf izin tersimpan',en:'Previously saved permission draft'})[language],{exact:true}).count(),0);
    assert.equal(await main.locator('h4, dl').count(),0,'removed static capability cards and approval table must not be rendered');

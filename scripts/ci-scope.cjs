@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ externalAgentAccess:{paths:/(?:externalAccess|ExternalAgentSettings|externalAgentCopy|external-access)/i,tests:/external-access/i},
  staffProfiles:{paths:/(?:StaffProfileRole|staffProfileRole|Staff(?:List|Detail|Form)Page|staff-profile)/i,tests:/staff-profile-roles/i},
  aiSettings:{paths:/(?:AiSettings|AiPermissions|aiSettingsCopy|TeamAiService|team-ai-settings)/i,tests:/ai-settings/i},
  teamWorkflowReview:{paths:/(?:client-admin\/src\/pages\/(?:staff\/(?:TeamWorkflowPanel|teamWorkflowUi|TeamCommunicationPage)|settings\/(?:TeamWorkflowSettings|AiSettingsPage))|^shared\/TeamCommunication\.tsx$|team-workflow-browser)/i,tests:/team-workflow/i},
@@ -67,6 +68,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ externalAgentAccess:{scripts:[],components:['admin']},
  desktop:{scripts:['tests/stoploss/online-update-page-check.cjs'],components:['pos']},
  staffProfiles:{scripts:['tests/stoploss/staff-profile-page-check.cjs'],components:['admin'],preview:{component:'admin',port:5191}},
  aiSettings:{scripts:['tests/stoploss/team-ai-settings-browser-check.cjs'],components:['admin']},
