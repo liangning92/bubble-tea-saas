@@ -59,6 +59,19 @@ async function trainingDraft(f,suffix){
  return good(f.owner,'PUT','/training/library/draft',{requestId:randomUUID(),expectedGeneration:edit.generation,catalogue});
 }
 async function publish(f,draft){const body={requestId:randomUUID(),expectedGeneration:draft.generation};return{body,result:await good(f.owner,'POST','/training/library/publish',body)}}
+function subscriptionLookupBarrier(f,subId,lookupIndex){
+ let entered,release,snapshotRead,lookups=0;const gate=new Promise(resolve=>release=resolve),waiting=new Promise(resolve=>entered=resolve),snapshot=new Promise(resolve=>snapshotRead=resolve);
+ const facade={...db,$transaction:db.$transaction.bind(db),user:new Proxy(db.user,{get(target,key){if(key==='findUnique')return async args=>{if(args.where?.id===f.employee.id&&++lookups===lookupIndex){entered();await gate}return target.findUnique(args)};const value=target[key];return typeof value==='function'?value.bind(target):value}}),config:new Proxy(db.config,{get(target,key){
+  if(key==='findMany')return async args=>{const value=await target.findMany(args);if(lookupIndex===1&&args.where?.key?.startsWith==='employee.workspace.subscription.'&&value.some(row=>row.key==='employee.workspace.subscription.'+subId))snapshotRead();return value};
+  if(key==='findUnique')return async args=>{const value=await target.findUnique(args);if(lookupIndex===2&&args.where?.storeId_key?.key==='employee.workspace.subscription.'+subId)snapshotRead();return value};
+  const value=target[key];return typeof value==='function'?value.bind(target):value}})};
+ return{facade,release,async ready(){let timeout;try{await Promise.race([Promise.all([waiting,snapshot]),new Promise((_,reject)=>timeout=setTimeout(()=>reject(Error('SUBSCRIPTION_SNAPSHOT_BARRIER_NOT_REACHED')),5000))])}finally{clearTimeout(timeout)}}};
+}
+async function httpSubscriptionFixture(f,suffix){
+ await writeWork(f.storeId,'push-keys',{publicKey:'synthetic-existing-public',privateKey:'synthetic-existing-private'},db);
+ const body={endpoint:'https://fcm.googleapis.com/send/synthetic-'+f.storeId+'-'+suffix,keys:{p256dh:'synthetic-original-public',auth:'synthetic-original-auth'}};
+ const {id}=await good(f.employee,'PUT','/staff-work/my/subscription',body);await message(f.owner,f.channel);return{id,body,old:await readWork(f.storeId,'subscription.'+id,db)};
+}
 async function main(){
  const express=require(root+'/server/node_modules/express'),{authenticateBeforeRouting}=require(build+'/middlewares/auth'),{declareAccessRoutes}=require(build+'/middlewares/staffAccessV2');
  const app=express();app.use(express.json({limit:'4mb'}));
@@ -178,6 +191,40 @@ async function main(){
    await deliver(f.storeId,db,mock);const saved=await readWork(f.storeId,'reminder.'+f.employee.staffId+'.'+notice.id,db);
    assert.equal(saved.read,false);assert.equal(saved.status,'in_app');assert.equal(mock.sent.length,0);
    assert.equal(await readWork(f.storeId,'inbox.read.'+f.employee.id+'.'+notice.id,db),null);assert.equal((await db.leave.findUnique({where:{id:leave.id}})).status,'approved');
+  }
+ });
+ await test('HTTP renewal during pre-lease or final User lookup preserves the entire newer subscription and permits the next delivery',async()=>{
+  for(const lookup of [1,2]){
+   const f=await fixture(),sub=await httpSubscriptionFixture(f,'renew-'+lookup),barrier=subscriptionLookupBarrier(f,sub.id,lookup),mock=pushMock();let renewed;
+   const sending=deliver(f.storeId,barrier.facade,mock);
+   try{await barrier.ready();const revokedAt=sub.old.issuedAtMs+100;await db.user.update({where:{id:f.employee.id},data:{updatedAt:new Date(revokedAt)}});
+    const body={...sub.body,keys:{p256dh:'synthetic-renewed-public-'+lookup,auth:'synthetic-renewed-auth-'+lookup}},claims={issuedAtMs:revokedAt+1000};
+    assert.equal((await good(f.employee,'PUT','/staff-work/my/subscription',body,{claims})).id,sub.id);renewed=await readWork(f.storeId,'subscription.'+sub.id,db);assert.equal(renewed.active,true);assert.equal(renewed.issuedAtMs,claims.issuedAtMs);assert.deepEqual(renewed.subscription,body);
+   }finally{barrier.release()}
+   await sending;assert.equal(mock.sent.length,0,'The old session snapshot must never transport');assert.deepEqual(await readWork(f.storeId,'subscription.'+sub.id,db),renewed,'Old invalidation must not overwrite an HTTP200 renewal');
+   let calls=0;await deliver(f.storeId,db,{sendNotification:async current=>{calls++;assert.deepEqual(current,renewed.subscription);return{statusCode:201}}});assert.equal(calls,1);assert.deepEqual(await readWork(f.storeId,'subscription.'+sub.id,db),renewed);
+  }
+ });
+ await test('HTTP renewal followed by logout during either User lookup keeps the newer logged-out snapshot intact and never transports',async()=>{
+  for(const lookup of [1,2]){
+   const f=await fixture(),sub=await httpSubscriptionFixture(f,'logout-'+lookup),barrier=subscriptionLookupBarrier(f,sub.id,lookup),mock=pushMock();let loggedOut;
+   const sending=deliver(f.storeId,barrier.facade,mock);
+   try{await barrier.ready();const revokedAt=sub.old.issuedAtMs+100;await db.user.update({where:{id:f.employee.id},data:{updatedAt:new Date(revokedAt)}});
+    const body={...sub.body,keys:{p256dh:'synthetic-logout-public-'+lookup,auth:'synthetic-logout-auth-'+lookup}},options={claims:{issuedAtMs:revokedAt+1000}};
+    await good(f.employee,'PUT','/staff-work/my/subscription',body,options);await good(f.employee,'DELETE','/staff-work/my/subscription',{id:sub.id},options);loggedOut=await readWork(f.storeId,'subscription.'+sub.id,db);assert.equal(loggedOut.active,false);assert.equal(loggedOut.issuedAtMs,options.claims.issuedAtMs);assert.deepEqual(loggedOut.subscription,body);
+   }finally{barrier.release()}
+   await sending;await deliver(f.storeId,db,mock);assert.equal(mock.sent.length,0);assert.deepEqual(await readWork(f.storeId,'subscription.'+sub.id,db),loggedOut,'Old invalidation must preserve the later HTTP logout');
+  }
+ });
+ await test('404 or 410 from an old in-flight transport cannot disable or overwrite a newer HTTP subscription renewal or logout',async()=>{
+  for(const status of [404,410])for(const logout of [false,true]){
+   const f=await fixture(),sub=await httpSubscriptionFixture(f,'terminal-'+status+'-'+logout);let latest,calls=0;
+   await deliver(f.storeId,db,{sendNotification:async current=>{calls++;assert.deepEqual(current,sub.body);const body={...sub.body,keys:{p256dh:'synthetic-terminal-renewed-'+status,auth:'synthetic-terminal-auth-'+status}};
+    const options={claims:{issuedAtMs:sub.old.issuedAtMs+1000}};await good(f.employee,'PUT','/staff-work/my/subscription',body,options);if(logout)await good(f.employee,'DELETE','/staff-work/my/subscription',{id:sub.id},options);latest=await readWork(f.storeId,'subscription.'+sub.id,db);assert.equal(latest.active,!logout);assert.deepEqual(latest.subscription,body);throw{statusCode:status};
+   }});assert.equal(calls,1);assert.deepEqual(await readWork(f.storeId,'subscription.'+sub.id,db),latest,'Terminal errors belong only to the exact attempted subscription snapshot');
+   // Existing provider backoff remains in force for the failed event. A new
+   // committed event must use the renewed subscription without waiting for it.
+   await message(f.owner,f.channel,'Independent new event after old transport failed');let freshCalls=0;await deliver(f.storeId,db,{sendNotification:async current=>{freshCalls++;assert.deepEqual(current,latest.subscription);return{statusCode:201}}});assert.equal(freshCalls,logout?0:1);assert.deepEqual(await readWork(f.storeId,'subscription.'+sub.id,db),latest);
   }
  });
  await test('chat outbox persistence failure atomically rolls back message, reminder and workflow event',async()=>{

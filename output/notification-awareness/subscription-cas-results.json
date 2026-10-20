@@ -1,0 +1,45 @@
+{
+  "recordedAt": "2026-10-20T08:12:41.577069+00:00",
+  "runs": [
+    {
+      "case": "old-module-expected-failure",
+      "batch": "bt-test-680db50e068b",
+      "exitCode": 1,
+      "passedGroupsBeforeExit": 10,
+      "postgresCleaned": true,
+      "wrapperCleaned": true
+    },
+    {
+      "case": "current-cas-pass",
+      "batch": "bt-test-b0f131178e6b",
+      "exitCode": 0,
+      "passedGroupsBeforeExit": 24,
+      "postgresCleaned": true,
+      "wrapperCleaned": true
+    }
+  ],
+  "finalHttpGroups": 17,
+  "finalQueueGroups": 7,
+  "finalTotalPassed": 24,
+  "newRegressionGroups": 3,
+  "newInterleavings": 8,
+  "oldProofScope": "Only old EmployeeReminderService; remaining runtime current, not a whole-tree old-SHA test",
+  "oldWorkerCommit": "108e4b0638f6392051ac355b97f17f655d0135c5",
+  "oldWorkerSourceSha256": "3c983649718f3a79367628b69fa3f54ce76ee0b7a2697430997b2b3ec00ff348",
+  "newWorkerSourceSha256": "4d2568b3b425c40ab0247a4b5c9d0882c8a94a83d60cc4858da7a47b309a77ad",
+  "newWorkerCompiledSha256": "2dbae468fdd3b61d18bddb6d0f7f0abe1d35662f8f2b7602a17bb7c3b9224513",
+  "repoServiceFilesUnmodifiedByOverlay": true,
+  "expiredProviderBackoffUnchanged": true,
+  "leaseOrAttemptTimestampsManuallyChanged": false,
+  "initialInvalidDistRun": {
+    "batch": "bt-test-935dec9af42e",
+    "groupsRun": 0,
+    "reason": "restored dist lacked authenticateBeforeRouting export; not counted as defect proof",
+    "cleaned": true
+  },
+  "productionAccess": false,
+  "realPushCalls": 0,
+  "realModelCalls": 0,
+  "newCredentialsCreated": false,
+  "otherRegressionsRepeated": false
+}

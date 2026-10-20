@@ -1,0 +1,12 @@
+{
+  "oldWorkerCommit": "108e4b0638f6392051ac355b97f17f655d0135c5",
+  "oldWorkerSourceSha256": "3c983649718f3a79367628b69fa3f54ce76ee0b7a2697430997b2b3ec00ff348",
+  "newWorkerSourceSha256": "4d2568b3b425c40ab0247a4b5c9d0882c8a94a83d60cc4858da7a47b309a77ad",
+  "newWorkerCompiledSha256": "2dbae468fdd3b61d18bddb6d0f7f0abe1d35662f8f2b7602a17bb7c3b9224513",
+  "oldWorkerTranspiledSha256": "7063cce7dcb74acffe4dc7a6cd551f718a3f64efdbbb4841f79d18793bf18db5",
+  "bootstrapSha256": "cd926d1f07454365a3dd0d45eddc338d13162b852c08fbeb332f12f3d18bcbaa",
+  "targetModule": "/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/server/dist/services/EmployeeReminderService.js",
+  "overlay": "require.cache only; repository TS and dist unmodified",
+  "scope": "Only old EmployeeReminderService; remaining runtime current, not a whole-tree old-SHA test",
+  "batch": "bt-test-680db50e068b"
+}

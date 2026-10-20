@@ -66,5 +66,7 @@
     "real device receipt or user browser acceptance"
   ],
   "businessSourceModifiedByThisAgent": false,
-  "committedByThisAgent": false
+  "committedByThisAgent": false,
+  "scope": "Previous pre-CAS 28-group run; does not verify the subscription CAS fix",
+  "supersededForCurrentCasSourceBy": "../notification-awareness/subscription-cas-results.json"
 }

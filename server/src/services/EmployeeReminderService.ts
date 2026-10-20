@@ -10,6 +10,7 @@ import {
   writeWork,
   listWork,
   workLock,
+  WORK_PREFIX,
 } from "./EmployeeWorkspaceStore";
 import { processLatePayroll, wibDate } from "./EmployeeAttendanceService";
 let timer: NodeJS.Timeout | undefined,
@@ -342,6 +343,14 @@ async function updateReminder(storeId: string, reminder: any, patch: any, db: an
     await writeWork(storeId, key, { ...current, ...patch, read, status }, tx);
   });
 }
+// A session lookup or transport can overlap an HTTP renewal/logout. Invalidate
+// only the exact persisted snapshot we checked/sent; never restore old fields.
+async function invalidateSubscription(storeId: string, snapshot: any, db: any) {
+  await db.config.updateMany({
+    where: { storeId, key: WORK_PREFIX + `subscription.${snapshot.id}`, value: JSON.stringify(snapshot) },
+    data: { value: JSON.stringify({ ...snapshot, active: false }) },
+  });
+}
 export async function deliver(storeId: string, db: any = prisma, push: typeof webpush = webpush) {
   const reminders = (await listWork(storeId, "reminder.", db)).filter(
       (r) => r && r.status === "pending",
@@ -380,10 +389,7 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
         sub.userId !== user.id ||
         sub.issuedAtMs < user.updatedAt.getTime()
       ) {
-        await writeWork(storeId, `subscription.${sub.id}`, {
-          ...sub,
-          active: false,
-        }, db);
+        await invalidateSubscription(storeId, sub, db);
         continue;
       }
       const key = `delivery.${r.id}.${sub.id}`;
@@ -425,6 +431,7 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
         )
           continue;
         // Send ownership is finalized below with a delivery lock; subscriptions never expose secrets to clients.
+        let transportSubscription: any;
         try {
           if (!validPushEndpoint(sub.subscription.endpoint))
             throw new Error("INVALID_PUSH_ENDPOINT");
@@ -448,7 +455,7 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
               liveSubscription.staffId !== r.staffId || liveSubscription.userId !== employee.userId ||
               liveSubscription.issuedAtMs < liveUser.updatedAt.getTime()) {
             if (liveSubscription?.userId === employee.userId)
-              await writeWork(storeId, `subscription.${sub.id}`, { ...liveSubscription, active: false }, db);
+              await invalidateSubscription(storeId, liveSubscription, db);
             await writeWork(storeId, key, { ...attempt, status: 'skipped_subscription', leaseUntil: undefined }, db);
             continue;
           }
@@ -458,6 +465,7 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
             continue;
           }
           if (!validPushEndpoint(liveSubscription.subscription?.endpoint)) throw new Error('INVALID_PUSH_ENDPOINT');
+          transportSubscription = liveSubscription;
           await push.sendNotification(
             liveSubscription.subscription,
             JSON.stringify({ title: r.title, url: r.url, id: r.id }),
@@ -485,11 +493,8 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
             ).toISOString(),
             error: e.statusCode ? String(e.statusCode) : "PUSH_DELIVERY_FAILED",
           }, db);
-          if ([404, 410].includes(e.statusCode))
-            await writeWork(storeId, `subscription.${sub.id}`, {
-              ...sub,
-              active: false,
-            }, db);
+          if (transportSubscription && [404, 410].includes(e.statusCode))
+            await invalidateSubscription(storeId, transportSubscription, db);
         }
       }
     }

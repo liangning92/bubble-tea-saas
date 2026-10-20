@@ -1,0 +1,30 @@
+[docker-test] batch bt-test-935dec9af42e
+Prisma schema loaded from server/prisma/schema.prisma
+Datasource "db": PostgreSQL database "notification_awareness_test", schema "public" at "127.0.0.1:53785"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 558ms
+
+TypeError: Router.use() requires a middleware function but got a undefined
+    at Function.use (/Users/liangning/Documents/ChatGPT/奶茶门店管理系统/refund-flow-20261016/server/node_modules/express/lib/router/index.js:469:13)
+    at Function.<anonymous> (/Users/liangning/Documents/ChatGPT/奶茶门店管理系统/refund-flow-20261016/server/node_modules/express/lib/application.js:227:21)
+    at Array.forEach (<anonymous>)
+    at Function.use (/Users/liangning/Documents/ChatGPT/奶茶门店管理系统/refund-flow-20261016/server/node_modules/express/lib/application.js:224:7)
+    at main (/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/notification-awareness-http-check.cjs:78:216)
+    at Object.<anonymous> (/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/notification-awareness-http-check.cjs:283:1)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Module._load (node:internal/modules/cjs/loader:1309:12)
+Owned notification PostgreSQL instance cleaned
+Traceback (most recent call last):
+  File "/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/scripts/test-notification-awareness.py", line 55, in <module>
+    command(['node', 'tests/stoploss/notification-awareness-http-check.cjs'], env=env)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/scripts/test-notification-awareness.py", line 37, in command
+    return subprocess.run(args, cwd=root, check=True, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['node', 'tests/stoploss/notification-awareness-http-check.cjs']' returned non-zero exit status 1.
+[docker-test] cleaned bt-test-935dec9af42e
