@@ -34,19 +34,21 @@ async function participant(db: any, storeId: string, staffId: string) {
   if (!person?.userId || person.user?.id !== person.userId || person.user.storeId !== storeId) fail('TEAM_MANAGEMENT_ACTION_MEMBER_UNAVAILABLE')
   return person
 }
-async function live(db: any, a: TeamActor, id: string, record?: ManagementAction) {
+async function live(db: any, a: TeamActor, id: string, record?: ManagementAction, readOnly = false) {
   // Audit access is intentionally unavailable: an action remains bound to its actual conversation audience.
   const { c, fromSeq } = await accessTeamChannel(db, a, id)
   if (c.archived || !['direct','group','public','meeting'].includes(c.kind)) fail('TEAM_MANAGEMENT_ACTION_CHANNEL_UNAVAILABLE')
   if (record && (record.storeId !== a.storeId || record.channelId !== c.id || record.audienceHash !== hash(c.members) || record.channelOwnerId !== c.ownerId ||
     record.fromSeq < fromSeq || c.members.some(m => m.fromSeq > record.fromSeq) || !c.members.some(m => m.staffId === record.assignedStaffId) ||
     !c.members.some(m => m.staffId === record.operatorStaffId))) fail('TEAM_MANAGEMENT_ACTION_SCOPE_CHANGED')
+  let ownerUnavailable = false
   if (record) {
     const employee = await participant(db, a.storeId, record.assignedStaffId)
     if (employee.userId !== record.assignedUserId) fail('TEAM_MANAGEMENT_ACTION_MEMBER_UNAVAILABLE')
-    if (!await db.user.findFirst({ where: { id: record.operatorUserId, storeId: a.storeId, role: 'admin', staff: { id: record.operatorStaffId, storeId: a.storeId, status: 'active' } }, select: { id: true } })) fail('TEAM_MANAGEMENT_ACTION_OWNER_UNAVAILABLE')
+    ownerUnavailable = !await db.user.findFirst({ where: { id: record.operatorUserId, storeId: a.storeId, role: 'admin', staff: { id: record.operatorStaffId, storeId: a.storeId, status: 'active' } }, select: { id: true } })
+    if (ownerUnavailable && !readOnly) fail('TEAM_MANAGEMENT_ACTION_OWNER_UNAVAILABLE')
   }
-  return { c, fromSeq }
+  return { c, fromSeq, ownerUnavailable }
 }
 async function source(db: any, storeId: string, channelId: string, n: number, floor: number) {
   if (n < floor) fail('TEAM_MANAGEMENT_ACTION_SOURCE_RANGE')
@@ -55,7 +57,7 @@ async function source(db: any, storeId: string, channelId: string, n: number, fl
   return m
 }
 function affirmedClause(clause: string) {
-  return !/[?？吗]|不|没|未|別|别|jangan|tidak|belum|bukan|\bnot\b|\bno\b|cannot|can't/i.test(clause) &&
+  return !/[?？吗]|不|没|未|別|别|\b(?:jangan|tidak|belum|bukan)\b|\bnot\b|\bno\b|cannot|can't/i.test(clause) &&
     /会|将|承诺|完成|提交|核实|核对|请|要求|akan|selesai|kirim|will|finish|submit|harap|tolong/i.test(clause)
 }
 async function citedDeadline(db: any, storeId: string, text: string, createdAt: string, proposed: string | null) {
@@ -106,7 +108,7 @@ async function explicitAssignment(db: any, a: TeamActor, c: TeamChannel, assigne
       // A name followed by a comma can address the next instruction, without borrowing another sentence.
       const addressed = part.replace(/[，,\s]+$/g, '').trim() === alias
       const directive = addressed && clauses[i + 1] ? part + clauses[i + 1] : part
-      if (/[?？吗]|是否|能否|不|没|未|別|别|jangan|tidak|belum|bukan|apakah|bisakah|bolehkah|\b(?:not|no|cannot|can|could|should|would)\b|can't|(?:他|她|员工|老板)说|katanya|bilang|\b(?:said|says|quoted)\b/i.test(directive)) continue
+      if (/[?？吗]|是否|能否|不|没|未|別|别|\b(?:jangan|tidak|belum|bukan)\b|apakah|bisakah|bolehkah|\b(?:not|no|cannot|can|could|should|would)\b|can't|(?:他|她|员工|老板)说|katanya|bilang|\b(?:said|says|quoted)\b/i.test(directive)) continue
       if (/请|让|安排|指派|负责|交给|harap|tolong|tugaskan|bertugas|tanggung\s+jawab|\b(?:assign|responsible|please|handle)\b/i.test(directive)) return true
     }
   }
@@ -120,11 +122,12 @@ async function save(db: any, a: TeamActor, record: ManagementAction, action: str
   return record
 }
 /** Joins the caller's real transaction. It never sends messages, invokes a model or mutates stock/purchases. */
-export async function ensureAction(tx: any, a: TeamActor, snapshot: TeamChannel, job: SourceJob, input: unknown, now = Date.now()) {
+export async function ensureAction(tx: any, a: TeamActor, snapshot: TeamChannel, job: SourceJob, input: unknown, now = Date.now(), options: { previewOnly?: boolean } = {}) {
+  const previewOnly = options.previewOnly === true
   const proposal = proposalSchema.parse(input)
   if (!!proposal.actionId !== !!proposal.expectedVersion) fail('TEAM_MANAGEMENT_ACTION_VERSION_REQUIRED')
   if (job.channelId !== snapshot.id || job.operatorUserId !== a.id || job.operatorStaffId !== a.staffId || a.employeeApp || a.role !== 'admin') fail('TEAM_MANAGEMENT_ACTION_OPERATOR_REQUIRED')
-  await lockTeam(tx, a.storeId, 'channel.' + snapshot.id)
+  if (!previewOnly) await lockTeam(tx, a.storeId, 'channel.' + snapshot.id)
   const { c, fromSeq } = await live(tx, a, snapshot.id)
   if (hash(c.members) !== hash(snapshot.members) || c.lastSeq !== snapshot.lastSeq) fail('TEAM_MANAGEMENT_ACTION_SCOPE_CHANGED')
   if (!await tx.user.findFirst({ where: { id: a.id, storeId: a.storeId, role: 'admin', staff: { id: a.staffId, storeId: a.storeId, status: 'active' } }, select: { id: true } })) fail('TEAM_MANAGEMENT_ACTION_OPERATOR_REQUIRED')
@@ -136,7 +139,7 @@ export async function ensureAction(tx: any, a: TeamActor, snapshot: TeamChannel,
     if (stored?.ownerDecision?.requestId === job.ownerDecision.requestId && stored.ownerDecision.byStaffId === a.staffId && uuid.safeParse(job.ownerDecision.requestId).success) ownerDecision = stored.ownerDecision
   }
   const originKey = 'management.action.origin.' + uuid.parse(job.id) + (ownerDecision ? '.' + ownerDecision.requestId : ''), digest = hash(proposal)
-  await lockTeam(tx, a.storeId, originKey)
+  if (!previewOnly) await lockTeam(tx, a.storeId, originKey)
   const receipt = await readTeam(tx, a.storeId, originKey)
   if (receipt) {
     if (receipt.hash !== digest) fail('TEAM_REQUEST_CONFLICT')
@@ -144,7 +147,7 @@ export async function ensureAction(tx: any, a: TeamActor, snapshot: TeamChannel,
     await live(tx, a, c.id, old); return old
   }
   const id = proposal.actionId || idFor(`team.management.action.v1:${job.id}`)
-  await lockTeam(tx, a.storeId, key(id))
+  if (!previewOnly) await lockTeam(tx, a.storeId, key(id))
   const old = await readTeam<ManagementAction>(tx, a.storeId, key(id))
   if (proposal.actionId && !old || !proposal.actionId && old) fail('TEAM_MANAGEMENT_ACTION_ORIGIN_CONFLICT')
   if (old) {
@@ -155,6 +158,7 @@ export async function ensureAction(tx: any, a: TeamActor, snapshot: TeamChannel,
   const assignedStaffId = old?.assignedStaffId || proposal.assignedStaffId || job.sourceAuthorId
   if (!c.members.some(x => x.staffId === assignedStaffId) || old && proposal.assignedStaffId && proposal.assignedStaffId !== old.assignedStaffId) fail('TEAM_MANAGEMENT_ACTION_ASSIGNMENT_REQUIRED')
   if (old && old.assignedStaffId !== job.sourceAuthorId && !ownerDecision && m.authorId !== a.staffId) {
+    if (previewOnly) return old
     if (!old.sourceJobs.some(j => j.id === job.id)) old.sourceJobs.push({ id: job.id, seq: job.sourceSeq })
     await save(tx, a, old, 'contribution', 'Participant added information; assignment, promise and acceptance criteria are unchanged', [job.sourceSeq], now)
     await writeTeam(tx, a.storeId, originKey, { actionId: old.id, hash: digest }); return old
@@ -191,6 +195,7 @@ export async function ensureAction(tx: any, a: TeamActor, snapshot: TeamChannel,
   if (job.management?.kind === 'owner_question') record.status = 'waiting_owner'
   else if (record.status !== 'awaiting_evidence') record.status = dueAt && evidenceRequired ? 'open' : 'waiting_details'
   if (record.followup && record.followup.dueAt !== dueAt) { record.followupHistory = [...record.followupHistory || [], record.followup]; delete record.followup }
+  if (previewOnly) return record
   await save(tx, a, record, old ? 'details_confirmed' : 'created', '', [job.sourceSeq], now)
   await writeTeam(tx, a.storeId, originKey, { actionId: id, hash: digest })
   return record
@@ -202,7 +207,13 @@ export async function listActions(db: any, a: TeamActor, channelId: string) {
   for (const row of rows) {
     const r: ManagementAction = JSON.parse(row.value)
     if (!r.id || r.channelId !== c.id || r.fromSeq < fromSeq) continue
-    try { await live(db, a, channelId, r); found.push(r) } catch (e) { if (!(e instanceof TeamError)) throw e }
+    try {
+      const { ownerUnavailable } = await live(db, a, channelId, r, true)
+      if (ownerUnavailable && !['verified', 'cancelled'].includes(r.status)) {
+        const canCancelBlocked = !a.employeeApp && !!await db.user.findFirst({ where: { id: a.id, storeId: a.storeId, role: 'admin', staff: { id: a.staffId, storeId: a.storeId, status: 'active' } }, select: { id: true } })
+        found.push({ ...r, blockedReason: 'responsible_owner_unavailable', canCancelBlocked } as ManagementAction)
+      } else found.push(r)
+    } catch (e) { if (!(e instanceof TeamError)) throw e }
   }
   return found
 }
@@ -211,7 +222,7 @@ export async function advanceAction(tx: any, a: TeamActor, channelId: string, ac
     sourceSeq: z.array(seq).max(20).default([]), criteriaConfirmed: z.boolean().default(false) }).strict().parse(input)
   await lockTeam(tx, a.storeId, 'channel.' + uuid.parse(channelId)); await lockTeam(tx, a.storeId, key(actionId))
   const r = await readTeam<ManagementAction>(tx, a.storeId, key(actionId)); if (!r) fail('TEAM_MANAGEMENT_ACTION_NOT_FOUND')
-  const { fromSeq } = await live(tx, a, channelId, r)
+  const { fromSeq, ownerUnavailable } = await live(tx, a, channelId, r, v.action === 'cancel')
   const rk = `management.action.request.${a.staffId}.${v.requestId}`, receipt = await readTeam(tx, a.storeId, rk), digest = hash({ actionId, expectedVersion, ...v })
   if (receipt) { if (receipt.hash !== digest) fail('TEAM_REQUEST_CONFLICT'); return r }
   if (r.version !== expectedVersion) fail('TEAM_VERSION_CONFLICT')
@@ -226,7 +237,9 @@ export async function advanceAction(tx: any, a: TeamActor, channelId: string, ac
     r.status = 'awaiting_evidence'
     if (r.followup) { r.followup.deliveryState = 'accepted'; r.followup.state = 'settled'; delete r.followup.leaseUntil } // Explicit employee evidence submission proves awareness only, never task completion.
   } else {
-    if (a.employeeApp || a.role !== 'admin' || a.id !== r.operatorUserId || a.staffId !== r.operatorStaffId) fail('TEAM_MANAGEMENT_ACTION_OWNER_REQUIRED')
+    const currentAdmin = !a.employeeApp && !!await tx.user.findFirst({ where: { id: a.id, storeId: a.storeId, role: 'admin', staff: { id: a.staffId, storeId: a.storeId, status: 'active' } }, select: { id: true } })
+    const closesUnavailable = v.action === 'cancel' && ownerUnavailable && currentAdmin
+    if (!currentAdmin || !closesUnavailable && (a.id !== r.operatorUserId || a.staffId !== r.operatorStaffId)) fail('TEAM_MANAGEMENT_ACTION_OWNER_REQUIRED')
     if (v.action === 'verify' && (!v.criteriaConfirmed || !r.evidence.length || !r.evidenceRequired || r.status !== 'awaiting_evidence')) fail('TEAM_MANAGEMENT_ACTION_HUMAN_VERIFICATION_REQUIRED')
     r.status = v.action === 'verify' ? 'verified' : 'cancelled'
   }

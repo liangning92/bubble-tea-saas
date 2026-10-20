@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { TeamClient } from './TeamCommunication'
 
 export interface ManagementActionView {
+  blockedReason?: 'responsible_owner_unavailable'; canCancelBlocked?: boolean
   id: string; channelId: string; assignedStaffId: string; operatorStaffId: string; title: string; nextStep: string
   evidenceRequired: string | null; dueAt: string | null; version: number; sourceSeq: number
   status: 'waiting_details'|'open'|'waiting_owner'|'awaiting_evidence'|'verified'|'cancelled'
@@ -11,7 +12,7 @@ export interface ManagementActionView {
 type Action = 'submit_evidence'|'verify'|'cancel'
 interface Command {actionId:string;requestId:string;expectedVersion:number;action:Action;note:string;sourceSeq:number[];criteriaConfirmed:boolean}
 const zh = {
-  title:'工作行动与证据',help:'工作承诺和待处理事项保存在本会话。回复“好的”不代表完成；本人提供证据后由负责人验收。',
+  blockedOwner:'原负责人当前不可用，行动已保留，等待有权管理员明确关闭。',title:'工作行动与证据',help:'工作承诺和待处理事项保存在本会话。回复“好的”不代表完成；本人提供证据后由负责人验收。',
   loading:'正在读取工作行动…',failed:'无法刷新工作行动，显示的内容可能已过时。',empty:'本会话暂无工作行动',refresh:'刷新行动',owner:'负责人',reviewer:'验收人',due:'期限',missingDue:'待确认期限',next:'下一步',evidenceRequired:'需要的证据',missingEvidence:'待确认验收证据',evidence:'已提交证据',attachments:'附件已记录，系统未自动审阅',source:'来源消息',
   waiting_details:'待补充信息',open:'进行中',waiting_owner:'等待负责人决定',awaiting_evidence:'证据已提交，等待负责人验收',verified:'负责人已验收',cancelled:'已取消',
   unknownDelivery:'提醒结果待核对，不能据此认定员工未配合。',inApp:'提醒仅已保存到系统内，不等于已送达、已读或已执行。',accepted:'员工回应已记录，仍不代表行动已验收。',
@@ -19,7 +20,7 @@ const zh = {
   saved:'行动状态已保存',unknown:'保存结果尚未确定，操作已锁定；只查询原请求回执，不重复提交。',check:'查询操作回执',unresolved:'尚未查到匹配回执，原请求继续保留并锁定。',journal:'无法安全记录操作请求，已停止提交。',conflict:'行动版本已变化，请关闭表单并重新读取；你的输入仍保留。',invalidRefs:'请填写 1 至 20 个有效的消息序号。',failure:'操作失败，请刷新核对当前状态。'
 }
 const en:typeof zh = {
-  title:'Work actions and evidence',help:'Work commitments and pending items stay in this conversation. Saying “OK” does not complete work. The assignee supplies evidence for a responsible person to verify.',
+  blockedOwner:'The original responsible person is unavailable. The action remains saved until an authorized administrator explicitly closes it.',title:'Work actions and evidence',help:'Work commitments and pending items stay in this conversation. Saying “OK” does not complete work. The assignee supplies evidence for a responsible person to verify.',
   loading:'Loading work actions…',failed:'Could not refresh work actions. Displayed information may be outdated.',empty:'No work actions in this conversation',refresh:'Refresh actions',owner:'Assignee',reviewer:'Verifier',due:'Due',missingDue:'Deadline needs clarification',next:'Next step',evidenceRequired:'Required evidence',missingEvidence:'Evidence requirements need clarification',evidence:'Submitted evidence',attachments:'Attachments recorded; not automatically reviewed',source:'Source message',
   waiting_details:'Needs details',open:'In progress',waiting_owner:'Awaiting responsible decision',awaiting_evidence:'Evidence submitted; awaiting verification',verified:'Verified by responsible person',cancelled:'Cancelled',
   unknownDelivery:'Reminder outcome is unresolved. This is not evidence of employee noncooperation.',inApp:'Reminder saved in the app only; delivery, read and execution are not proven.',accepted:'Employee response recorded; action completion is not yet verified.',
@@ -27,7 +28,7 @@ const en:typeof zh = {
   saved:'Action saved',unknown:'The save outcome is unresolved. Actions are locked. Only the original receipt is queried; nothing is submitted again.',check:'Check action receipt',unresolved:'No matching receipt is visible. The original request and lock are retained.',journal:'The request could not be recorded safely. Nothing was submitted.',conflict:'The action changed. Close the form and refresh; your input is retained.',invalidRefs:'Enter between 1 and 20 valid message numbers.',failure:'The action failed. Refresh to check the current state.'
 }
 const id:typeof zh = {
-  title:'Tindakan kerja dan bukti',help:'Janji kerja dan tindak lanjut disimpan di percakapan ini. Jawaban “baik” bukan berarti selesai. Pelaksana mengirim bukti untuk diperiksa penanggung jawab.',
+  blockedOwner:'Penanggung jawab awal tidak tersedia. Tindakan tetap tersimpan sampai administrator berwenang menutupnya secara eksplisit.',title:'Tindakan kerja dan bukti',help:'Janji kerja dan tindak lanjut disimpan di percakapan ini. Jawaban “baik” bukan berarti selesai. Pelaksana mengirim bukti untuk diperiksa penanggung jawab.',
   loading:'Memuat tindakan kerja…',failed:'Tindakan kerja tidak dapat diperbarui. Informasi yang terlihat mungkin sudah berubah.',empty:'Belum ada tindakan kerja di percakapan ini',refresh:'Muat ulang tindakan',owner:'Pelaksana',reviewer:'Pemeriksa',due:'Tenggat',missingDue:'Tenggat perlu dikonfirmasi',next:'Langkah berikutnya',evidenceRequired:'Bukti yang diperlukan',missingEvidence:'Persyaratan bukti perlu dikonfirmasi',evidence:'Bukti terkirim',attachments:'Lampiran dicatat; tidak diperiksa otomatis',source:'Pesan sumber',
   waiting_details:'Perlu informasi',open:'Berjalan',waiting_owner:'Menunggu keputusan penanggung jawab',awaiting_evidence:'Bukti terkirim; menunggu pemeriksaan',verified:'Diverifikasi penanggung jawab',cancelled:'Dibatalkan',
   unknownDelivery:'Hasil pengingat belum pasti. Ini bukan bukti pegawai tidak bekerja sama.',inApp:'Pengingat baru disimpan di aplikasi; belum membuktikan diterima, dibaca atau dilaksanakan.',accepted:'Tanggapan pegawai dicatat; tindakan belum dinyatakan selesai.',
@@ -124,6 +125,7 @@ export function TeamManagementActions({client,scope,channelId,staffId,language,a
     {state.resource===resource&&!state.loading&&!state.failed&&!items.length&&<p className="text-sm text-gray-500">{c.empty}</p>}
     {items.map(record=><article key={record.id} className="min-w-0 space-y-2 rounded-lg border p-3 text-sm" data-testid={`management-action-${record.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-2"><h4 className="whitespace-pre-wrap break-words font-medium">{record.title}</h4><span className="rounded-full bg-gray-100 px-2 py-1">{c[record.status]}</span></div>
+      {record.blockedReason === 'responsible_owner_unavailable' && <p role="status" className="text-sm text-amber-800">{c.blockedOwner}</p>}
       <p className="break-words">{c.owner}: {name(record.assignedStaffId)} · {c.reviewer}: {name(record.operatorStaffId)}</p>
       <p>{c.due}: {record.dueAt?new Date(record.dueAt).toLocaleString(language):c.missingDue}</p>
       <p className="whitespace-pre-wrap break-words">{c.next}: {record.nextStep}</p><p className="whitespace-pre-wrap break-words">{c.evidenceRequired}: {record.evidenceRequired||c.missingEvidence}</p>
@@ -131,8 +133,8 @@ export function TeamManagementActions({client,scope,channelId,staffId,language,a
       {!!record.evidence.length&&<div className="space-y-1"><p>{c.evidence}</p>{record.evidence.map((e,i)=><p key={i}><a className="underline" href={`#team-message-${e.sourceSeq}`}>#{e.sourceSeq}</a>{e.attachmentIds?.length>0&&<span> · {c.attachments} ({e.attachmentIds.length})</span>}</p>)}</div>}
       {record.followup&&<p className="rounded-lg bg-amber-50 p-2 text-xs" data-testid="management-followup-state">{record.followup.deliveryState==='in_app'?c.inApp:record.followup.deliveryState==='accepted'?c.accepted:c.unknownDelivery}</p>}
       {!closed(record)&&<div className="flex flex-wrap gap-2">
-        {record.assignedStaffId===staffId&&<button type="button" className={button} disabled={busy||!!command||feedbackHere.blocked||state.failed} onClick={()=>begin(record,'submit_evidence')}>{c.submit_evidence}</button>}
-        {administration&&record.operatorStaffId===staffId&&<>{record.status==='awaiting_evidence'&&record.evidence.length>0&&!!record.evidenceRequired&&<button type="button" className={button} disabled={busy||!!command||feedbackHere.blocked||state.failed} onClick={()=>begin(record,'verify')}>{c.verify}</button>}<button type="button" className={button} disabled={busy||!!command||feedbackHere.blocked||state.failed} onClick={()=>begin(record,'cancel')}>{c.cancel}</button></>}
+        {!record.blockedReason&&record.assignedStaffId===staffId&&<button type="button" className={button} disabled={busy||!!command||feedbackHere.blocked||state.failed} onClick={()=>begin(record,'submit_evidence')}>{c.submit_evidence}</button>}
+        {administration&&(record.blockedReason?record.canCancelBlocked===true:record.operatorStaffId===staffId)&&<>{!record.blockedReason&&record.operatorStaffId===staffId&&record.status==='awaiting_evidence'&&record.evidence.length>0&&!!record.evidenceRequired&&<button type="button" className={button} disabled={busy||!!command||feedbackHere.blocked||state.failed} onClick={()=>begin(record,'verify')}>{c.verify}</button>}<button type="button" className={button} disabled={busy||!!command||feedbackHere.blocked||state.failed} onClick={()=>begin(record,'cancel')}>{c.cancel}</button></>}
       </div>}
     </article>)}
     {form&&<form className="min-w-0 space-y-3 rounded-lg border border-red-200 p-3" data-testid="management-action-form" onSubmit={e=>{e.preventDefault();void apply()}}>

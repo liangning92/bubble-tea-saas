@@ -12,7 +12,7 @@ function fixture(model='MiniMax-M3.1-Flash',kind='management',options={}){
  const exports={};new Function('require','exports','fetch',code+'\nexports.nativeTransport=minimax;')(name=>{
   if(name==='crypto')return crypto;if(name==='fs/promises')return{};if(name==='path')return path;if(name==='zod')return{z};if(name.includes('config/database'))return{default:db};
   if(name.includes('TeamCommunicationService'))return{TeamError,readTeam:async(_db,store,key)=>{assert.equal(store,actor.storeId);return structuredClone(rows.get(key)||null)},writeTeam:async(_db,store,key,value)=>{assert.equal(store,actor.storeId);rows.set(key,structuredClone(value))},lockTeam:async()=>{},accessTeamChannel:async()=>({c,fromSeq:1}),auditTeam:async(_db,_a,_id,_action,value)=>audits.push(value)};
-  if(name.includes('TeamManagementContext'))return{managementContext:async()=>({factsFingerprint:'synthetic-facts',context:{schema:'team.management.context.v1',messages:[{seq:1,text:'Synthetic work report'}],inventory:[],receipts:[],tasks:[]}})};
+  if(name.includes('TeamManagementContext'))return{managementContext:async()=>({factsFingerprint:'synthetic-facts',context:{schema:'team.management.context.v1',coverage:{actionsLimited:false},messages:[{seq:1,text:'Synthetic work report'}],inventory:[],receipts:[],tasks:[]}})};
   if(name.includes('TeamManagementPolicy'))return policy;
   if(name.includes('TeamRoutinePolicy'))return{routineContext:async()=>JSON.stringify({schema:'team.routine.codes.v1',context:[{seq:1,code:'acknowledged',actor:'employee'}]}),routineReplySchema:z.object({replyCode:z.string()})};
   if(name.includes('TeamAiDiagnostics'))return{readProviderDiagnostics:async()=>{throw Error('UNEXPECTED_ERROR_BODY')},visibleProviderDiagnostics:()=>undefined};throw Error(name);

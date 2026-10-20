@@ -361,6 +361,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           if (p.management) {
             if (!result.management || !d?.managementFactsFingerprint) fail('TEAM_MANAGEMENT_RESULT_REQUIRED')
             const parsed = result.management, context = await readTeam(tx, storeId, `channel.${channelId}`)
+            if (parsed.action && !parsed.action.actionId && d.managementActionsLimited) fail('TEAM_MANAGEMENT_ACTION_REFERENCE_REQUIRED')
             if (parsed.kind === 'no_reply') {
               const currentFacts=await managementContext(tx,a,context,{...p,management:p.management},j.sourceSeq,j.ownerDecision?.at,j.ownerDecision?.contextLastSeq)
               if(currentFacts.factsFingerprint!==d.managementFactsFingerprint) fail('TEAM_MANAGEMENT_FACTS_CHANGED')
@@ -369,9 +370,15 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
               await auditTeam(tx,a,channelId,'update',{action:'workflow_management_observed',jobId:j.id})
               return save(tx,storeId,j,clock())
             }
-            if (parsed.kind === 'pending_action' && parsed.action && (!parsed.action.dueAt || !parsed.action.evidenceRequired)) {
-              result.replyText += '\nUntuk tindak lanjut ini, kapan batas waktunya (tanggal dan jam), dan bukti apa yang akan diberikan?'
-              parsed.replyText=result.replyText
+            if (parsed.kind === 'pending_action' && parsed.action) {
+              const { details, ...proposal } = parsed.action
+              // Validate native evidence before publication, without persisting an action or changing the context fingerprint.
+              const confirmed = await ensureAction(tx, a, context, { ...j, management: { kind: parsed.kind } },
+                { ...proposal, nextStep: details, evidenceRequired: proposal.evidenceRequired || null, dueAt: proposal.dueAt || null, deadlineSourceSeq: proposal.deadlineSourceSeq || null }, clock(), { previewOnly: true })
+              if (!confirmed.dueAt || !confirmed.evidenceRequired) {
+                result.replyText += '\nUntuk tindak lanjut ini, kapan batas waktunya (tanggal dan jam), dan bukti apa yang akan diberikan?'
+                parsed.replyText = result.replyText
+              }
             }
             assertManagementReplyBoundary(result.replyText)
             const draftId = replyRequestId(j), original = await readTeam(tx, storeId, `aiDraft.${a.staffId}.${j.aiRequestId}`)

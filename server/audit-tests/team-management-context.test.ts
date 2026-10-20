@@ -1,4 +1,5 @@
 import { describe, expect, jest, test } from '@jest/globals'
+import { createHash } from 'crypto'
 jest.mock('../src/services/TeamCommunicationService', () => ({
   TEAM_PREFIX: 'team.communication.',
   TeamError: class extends Error { constructor(public status: number, code: string) { super(code) } },
@@ -28,7 +29,7 @@ function fixture() {
   const db: any = {
     user: { findFirst: jest.fn(async () => state.owner) }, staff: { findFirst: jest.fn(async (q: any) => state.employees ? state.employees.get(q.where.id) || null : state.employee) },
     config: {
-      findMany: jest.fn(async (q: any) => q.where.key.startsWith.includes('message.') ? messages.filter(m => m.seq >= Number(q.where.key.gte.split('.').at(-1)) && m.seq <= Number(q.where.key.lte.split('.').at(-1)))
+      findMany: jest.fn(async (q: any) => q.where.key.startsWith.includes('management.action.') ? [] : q.where.key.startsWith.includes('message.') ? messages.filter(m => m.seq >= Number(q.where.key.gte.split('.').at(-1)) && m.seq <= Number(q.where.key.lte.split('.').at(-1)))
         .sort((l, r) => r.seq - l.seq).slice(0, q.take).map(m => ({ value: JSON.stringify(m) })) : tasks.slice(0, q.take).map(t => ({ value: JSON.stringify(t) }))),
       findUnique: jest.fn(async (q: any) => { const key = q.where.storeId_key.key;
         const value = key.includes('.message.') ? messages.find(m => m.seq === Number(key.split('.').at(-1))) : [...plans].find(([id]) => key.endsWith('.' + id))?.[1];
@@ -312,4 +313,23 @@ describe('existing schedule, shift and assigned SOP facts', () => {
     if (kind === 'sop') f.sops[0].template.standardAfter = 'Ask the responsible person to inspect the work station'
     const after = await f.read(); expect(after.factsFingerprint).not.toBe(before.factsFingerprint)
   })
+})
+
+
+test('long action context reduces whole actions and marks partial while fingerprint retains omitted facts', async () => {
+  const f = fixture(), audienceHash = createHash('sha256').update(JSON.stringify(f.c.members)).digest('hex')
+  const actions = Array.from({ length: 20 }, (_, i) => ({ id: 'action-' + i, storeId: f.a.storeId, channelId: f.c.id,
+    audienceHash, fromSeq: 1, operatorUserId: f.a.id, operatorStaffId: f.a.staffId, assignedStaffId: 'employee', status: 'open',
+    version: 1, title: 'P'.repeat(120), nextStep: 'a'.repeat(600), evidenceRequired: 'b'.repeat(600), dueAt: null }))
+  const originalFind = f.db.config.findMany.getMockImplementation()!
+  f.db.config.findMany.mockImplementation(async (q: any) => q.where.key.startsWith.includes('management.action.') ?
+    actions.map(r => ({ key: 'team.communication.management.action.' + r.id, value: JSON.stringify(r) })) : originalFind(q))
+  const before = await f.read()
+  expect(JSON.stringify(before.context).length).toBeLessThanOrEqual(12000)
+  expect(before.context.actions.length).toBeGreaterThan(0); expect(before.context.actions.length).toBeLessThan(20)
+  expect(before.context.coverage.actionsLimited).toBe(true); expect(before.context.coverage.contextReduced).toBe(true)
+  expect(before.context.actions[0].nextStep).toBe(actions[0].nextStep)
+  actions[19].evidenceRequired = 'c'.repeat(600)
+  const after = await f.read(); expect(after.factsFingerprint).not.toBe(before.factsFingerprint)
+  expect(after.context.coverage.actionsLimited).toBe(true)
 })
