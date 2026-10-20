@@ -10,9 +10,9 @@ type Region='global'|'cn'
 interface Connection { status:'ready'|'failed'|'checking'|'unverified'|'uncertain'; configVersion:number; region:Region; model:string; checkedAt?:string; error?:string; requestId?:string; checkRevision?:number }
 interface Settings {
  version:number; checkRevision:number; enabled:boolean; provider:'minimax'; model:string; region:Region; monthlyBudgetUsd:number|null
- inputPerMillionUsd:number; outputPerMillionUsd:number; keyConfigured:boolean; month:string; estimatedMonthUsd:number; connection?:Connection
+ inputPerMillionUsd:number; outputPerMillionUsd:number; maxOutputTokens?:number|null; keyConfigured:boolean; month:string; estimatedMonthUsd:number; connection?:Connection
 }
-const editable=(s:Settings)=>({enabled:s.enabled,provider:s.provider,model:s.model,region:s.region,monthlyBudgetUsd:s.monthlyBudgetUsd,inputPerMillionUsd:s.inputPerMillionUsd,outputPerMillionUsd:s.outputPerMillionUsd})
+const editable=(s:Settings)=>({enabled:s.enabled,provider:s.provider,model:s.model,region:s.region,monthlyBudgetUsd:s.monthlyBudgetUsd,inputPerMillionUsd:s.inputPerMillionUsd,outputPerMillionUsd:s.outputPerMillionUsd,maxOutputTokens:s.maxOutputTokens??null})
 const errorCode=(e:any)=>e?.response?.data?.message||''
 
 export function TeamAiSettings({client,identity,language,children}:{client:Pick<TeamClient,'request'|'current'>;identity:CheckIdentity;language:string;children?:ReactNode}) {
@@ -51,7 +51,7 @@ export function TeamAiSettings({client,identity,language,children}:{client:Pick<
  }
  useEffect(()=>{alive.current=true;void load();return()=>{alive.current=false;epoch.current++}},[client])
  function change(patch:Partial<Settings>){if(draft){setDraft({...draft,...patch});setError('');setErrorField('');setCheckConsent(false)}}
- function fail(text:string,name:string){setRemoveOpen(false);setError(text);setErrorField(name);if(name==='rates')setAdvanced(true);requestAnimationFrame(()=>{const element=form.current?.querySelector<HTMLElement>(`[data-field="${name}"]`);element?.focus();element?.scrollIntoView({block:'center',behavior:'smooth'})})}
+ function fail(text:string,name:string){setRemoveOpen(false);setError(text);setErrorField(name);if(name==='rates'||name==='outputLimit')setAdvanced(true);requestAnimationFrame(()=>{const element=form.current?.querySelector<HTMLElement>(`[data-field="${name}"]`);element?.focus();element?.scrollIntoView({block:'center',behavior:'smooth'})})}
  async function save(remove=false){
   if(!draft||!base||busy||checking)return
   const next={...draft,enabled:remove?false:draft.enabled}
@@ -59,6 +59,7 @@ export function TeamAiSettings({client,identity,language,children}:{client:Pick<
   if(!remove&&((regionChanged&&base.keyConfigured)||next.enabled&&!base.keyConfigured)&&!apiKey){fail(c.keyRequired,'key');return}
   if(!remove&&apiKey&&!/^[\x21-\x7e]{10,8192}$/.test(apiKey)){fail(c.keyInvalid,'key');return}
   if(!remove&&apiKey&&!consent){fail(c.consentRequired,'consent');return}
+  if(next.maxOutputTokens!=null&&(!Number.isInteger(next.maxOutputTokens)||next.maxOutputTokens<1||next.maxOutputTokens>524288)){fail(c.outputLimitInvalid,'outputLimit');return}
   const rateValid=(value:number,max:number)=>Number.isFinite(value)&&value>0&&value<=max
   if(!rateValid(next.inputPerMillionUsd,1000)||!rateValid(next.outputPerMillionUsd,1000)){fail(c.ratesInvalid,'rates');return}
   if(next.monthlyBudgetUsd!==null&&!rateValid(next.monthlyBudgetUsd,100000)){fail(c.ratesInvalid,'budget');return}
@@ -87,7 +88,7 @@ export function TeamAiSettings({client,identity,language,children}:{client:Pick<
    if(!current()||request!==epoch.current)return
    if(!linked(result,ticket)){setConnection(unknownConnection(ticket));setError(c.resultChanged);return}
    const next={...snapshot,checkRevision:Math.max(snapshot.checkRevision,result.checkRevision!),connection:result};setBase(next);setConnection(observe(next,ticket))
-  }catch(e){if(current()&&request===epoch.current){const code=errorCode(e);if(['TEAM_AI_CHECK_CONFLICT','TEAM_VERSION_CONFLICT','TEAM_AI_CONFIG_CHANGED'].includes(code)){try{finishCheckTicket(ticket);setPending(readCheckTicket(identity,snapshot))}catch{setJournalBlocked(true)}setError(c.resultChanged)}else setError(c.outcomeUnknown);setConnection(unknownConnection(ticket))}}
+  }catch(e){if(current()&&request===epoch.current){const code=errorCode(e);if(['TEAM_AI_COST_ESTIMATE_REQUIRED','TEAM_AI_BUDGET_STATE_INVALID','TEAM_AI_BUDGET_LIMIT'].includes(code)){try{finishCheckTicket(ticket);setPending(readCheckTicket(identity,snapshot))}catch{setJournalBlocked(true)}setConnection(snapshot.connection||null);setError(code==='TEAM_AI_BUDGET_LIMIT'?c.budgetBlocked:c.estimateRequired);return}if(['TEAM_AI_CHECK_CONFLICT','TEAM_VERSION_CONFLICT','TEAM_AI_CONFIG_CHANGED'].includes(code)){try{finishCheckTicket(ticket);setPending(readCheckTicket(identity,snapshot))}catch{setJournalBlocked(true)}setError(c.resultChanged)}else setError(c.outcomeUnknown);setConnection(unknownConnection(ticket))}}
   finally{if(current()&&request===epoch.current){setChecking(false);setCheckConsent(false)}}
  }
  async function refreshStatus(){
@@ -133,6 +134,7 @@ export function TeamAiSettings({client,identity,language,children}:{client:Pick<
    <details open={advanced} onToggle={event=>setAdvanced(event.currentTarget.open)} className="mt-4 border-t pt-4"><summary className="cursor-pointer text-sm font-medium">{c.advanced}</summary><fieldset disabled={busy||checking} className="mt-3 grid gap-3 sm:grid-cols-2">
     <label className="text-sm">{c.input}<input className={field} data-field="rates" type="number" min="0.000001" max="1000" step="any" value={draft.inputPerMillionUsd} onChange={e=>change({inputPerMillionUsd:Number(e.target.value)})}/></label>
     <label className="text-sm">{c.output}<input className={field} type="number" min="0.000001" max="1000" step="any" value={draft.outputPerMillionUsd} onChange={e=>change({outputPerMillionUsd:Number(e.target.value)})}/></label>
+    {(validConnection?.status==='ready'||base.maxOutputTokens!=null||draft.maxOutputTokens!=null)&&<label className="text-sm sm:col-span-2">{c.outputLimit}<input className={field} data-field="outputLimit" data-testid="ai-output-limit" aria-invalid={invalid('outputLimit')} type="number" min="1" max="524288" step="1" placeholder={c.outputLimitDefault} value={draft.maxOutputTokens??''} onChange={e=>change({maxOutputTokens:e.target.value===''?null:Number(e.target.value)})}/><span className="mt-1 block text-xs text-gray-500">{c.outputLimitNote}</span></label>}
    </fieldset><p className="mt-3 text-xs text-gray-500">{c.priceNote}</p></details>
    {base.keyConfigured&&<div className="mt-4 border-t pt-4"><button type="button" className="text-sm text-red-700 underline" disabled={busy||checking} onClick={()=>setRemoveOpen(true)}>{c.remove}</button>
     {removeOpen&&<AdminDialog title={c.removeTitle} onClose={()=>setRemoveOpen(false)} busy={busy} className="max-w-md"><div className="space-y-4 p-5"><h3 className="font-semibold">{c.removeTitle}</h3><p className="text-sm leading-relaxed">{c.removeWarning}</p>{error&&<p role="alert" className="text-sm text-red-700">{error}</p>}<div className="flex flex-wrap justify-end gap-2"><button type="button" className={button} onClick={()=>setRemoveOpen(false)}>{c.cancel}</button><button type="button" className={`${button} border-red-700 bg-red-700 text-white`} onClick={()=>save(true)}>{c.removeConfirm}</button></div></div></AdminDialog>}
