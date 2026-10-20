@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
+import { assertManagementSend, ManagementAuthorization } from './TeamManagementPolicy'
 import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
@@ -44,7 +45,7 @@ export const createChannelSchema = z.object({
   kind: z.enum(['direct', 'group', 'public', 'meeting']), members: z.array(staffId).min(1).max(100)
 }).strict()
 export const messageSchema = z.object({
-  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional()
+  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional(), takeover: z.boolean().optional()
 }).strict().refine(v => v.text.length > 0 || v.files.length > 0, 'EMPTY_MESSAGE')
 export const minutesSchema = z.object({
   requestId: uuid, expectedVersion: z.number().int().positive(), title: z.string().trim().min(1).max(120),
@@ -122,6 +123,34 @@ async function messageRows(db: DB, storeId: string, id: string, after: number, l
   return (await db.config.findMany({ where: { storeId, key: { startsWith: prefix, gt: prefix + pad(after),
     ...(until !== undefined ? { lte: prefix + pad(until) } : {}) } }, orderBy: { key: 'asc' }, take: limit }))
     .map((r: any) => JSON.parse(r.value))
+}
+export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused'; updatedAt: string }
+/** Read-only source status. Never project a colleague's job or an audit-only history floor. */
+export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel, messages: any[]) {
+  const member = c.members.find(m => m.staffId === a.staffId)
+  const own = member && !c.archived ? messages.filter(m => m.channelId === c.id && m.authorId === a.staffId && !m.ai && Number.isSafeInteger(m.seq) && m.seq >= member.fromSeq) : []
+  const output = new Map<string, OwnAiHandling>()
+  if (!own.length) return output
+  const prefix = `workflow.job.${c.id}.`, settings = [`workflow.policy.${c.id}`, 'workflow.defaults', `workflow.exception.${c.id}`]
+  const keys = [...own.map(m => TEAM_PREFIX + prefix + pad(m.seq)), ...settings.map(key => TEAM_PREFIX + key)]
+  const rows = await db.config.findMany({ where: { storeId: a.storeId, key: { in: keys } }, select: { key: true, value: true } })
+  const records = new Map<string, any>(rows.map((row: any) => [row.key.slice(TEAM_PREFIX.length), JSON.parse(row.value)]))
+  const p = records.get(settings[0]), defaults = records.get(settings[1]), exception = records.get(settings[2])
+  const paused = p?.paused === true || p?.enabled === false || defaults?.enabled === false || !!exception
+  for (const m of own) {
+    const j = records.get(prefix + pad(m.seq))
+    if (!j || j.id !== m.id || j.channelId !== c.id || j.sourceSeq !== m.seq || j.sourceAuthorId !== a.staffId || typeof j.updatedAt !== 'string' || !Number.isFinite(Date.parse(j.updatedAt))) continue
+    let state: OwnAiHandling['state'] | undefined
+    if (j.status === 'pending_action') state = 'pending_action'
+    else if (j.status === 'awaiting_owner') state = 'waiting_owner'
+    else if (['blocked', 'uncertain', 'awaiting_approval'].includes(j.status)) state = 'needs_review'
+    else if (j.replyMessageId) state = 'replied'
+    else if (j.status === 'reviewed' && (j.management?.kind === 'no_reply' || j.result?.management?.kind === 'no_reply')) state = 'understood'
+    else if (j.status === 'processing') state = 'processing'
+    else if (['queued', 'retry_wait'].includes(j.status)) state = paused ? 'paused' : 'queued'
+    if (state) output.set(m.id, { state, updatedAt: j.updatedAt })
+  }
+  return output
 }
 async function closeRound(db: DB, a: TeamActor, c: TeamChannel) {
   if (!c.round) fail(409, 'TEAM_NO_OPEN_ROUND')
@@ -201,11 +230,20 @@ export function teamCommunication(db: DB = prisma) {
       seq.parse(after)
       const { c, fromSeq } = await channel(db, a, id, auditReason)
       const rows = await messageRows(db, a.storeId, id, Math.max(after, fromSeq - 1), 101)
-      const messages = rows.slice(0, 100)
-      return { channel: c, messages, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
+      const sourceMessages = rows.slice(0, 100), member = c.members.find(m => m.staffId === a.staffId)
+      // Existing incremental polls must refresh saved source statuses without replaying message history.
+      const messagePrefix = TEAM_PREFIX + `message.${id}.`
+      const refreshRows = member && !c.archived && after >= member.fromSeq ? await db.config.findMany({ where: { storeId: a.storeId,
+        key: { startsWith: messagePrefix, gte: messagePrefix + pad(member.fromSeq), lte: messagePrefix + pad(after) },
+        value: { contains: '"authorId":' + JSON.stringify(a.staffId) } }, orderBy: { key: 'desc' }, take: 100, select: { value: true } }) : []
+      const refreshSources = refreshRows.map((row: any) => JSON.parse(row.value)).filter((m: any) => m.channelId === id && m.authorId === a.staffId && !m.ai && m.seq >= member!.fromSeq && m.seq <= after)
+      const handling = await projectOwnAiHandling(db, a, c, [...sourceMessages, ...refreshSources])
+      const messages = sourceMessages.map(({ aiHandling: _untrusted, ...m }: any) => ({ ...m, ...(handling.has(m.id) ? { aiHandling: handling.get(m.id) } : {}) }))
+      const aiHandlingUpdates = refreshSources.map((m: any) => ({ messageId: m.id, seq: m.seq, aiHandling: handling.get(m.id) || null }))
+      return { channel: c, messages, aiHandlingUpdates, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
         canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), audit: auditReason !== undefined }
     },
-    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization) {
+    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization, managementAuthorization?: ManagementAuthorization) {
       const v = messageSchema.parse(input)
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
@@ -213,10 +251,18 @@ export function teamCommunication(db: DB = prisma) {
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
+        // Serialize the final automatic effect with store revocation, before
+        // acquiring ai-budget (defaults saves use defaults -> ai-budget).
+        if (routineAuthorization || managementAuthorization) {
+          await lock(tx, a.storeId, 'workflow-defaults')
+          const defaults = await read(tx, a.storeId, 'workflow.defaults')
+          if (defaults && !defaults.enabled) fail(409, 'TEAM_WORKFLOW_PAUSED')
+        }
         const policy = await read(tx, a.storeId, `workflow.policy.${id}`)
-        const humanTakeover = !routineAuthorization && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
+        const humanDraftRequiresFreshContext = !routineAuthorization && !managementAuthorization && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId
+        const humanTakeover = !routineAuthorization && !managementAuthorization && (policy?.origin !== 'store_default' || v.takeover === true) && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
         if (humanTakeover && !aiDraftId && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
-        let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; authorizedBy?: string } | undefined
+        let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; managementAuthorization?: ManagementAuthorization; authorizedBy?: string } | undefined
         if (aiDraftId) {
           uuid.parse(aiDraftId)
           if (a.role !== 'admin' || a.employeeApp || v.requestId !== aiDraftId || v.files.length) fail(403, 'TEAM_AI_ADMIN_REQUIRED')
@@ -224,15 +270,18 @@ export function teamCommunication(db: DB = prisma) {
           const draft = await read(tx, a.storeId, `aiDraft.${a.staffId}.${aiDraftId}`)
           const settings = await read(tx, a.storeId, 'ai.settings')
           if (!draft || draft.channelId !== id || draft.status !== 'ready' || draft.kind !== 'draft') fail(409, 'TEAM_AI_DRAFT_NOT_READY')
-          if (humanTakeover && draft.contextLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
+          if (humanDraftRequiresFreshContext && draft.contextLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
           if (!settings?.enabled || settings.version !== draft.configVersion) fail(409, 'TEAM_AI_CONFIG_CHANGED')
           if (c.members.some(member => member.fromSeq > draft.sourceFloor) || digest(c.members) !== draft.audienceHash) fail(403, 'TEAM_AI_AUDIENCE_CHANGED')
           if (draft.operation) await assertOperationScope(tx, a, c, draft.operation)
-          if (routineAuthorization) {
+          if (managementAuthorization) {
+            await assertManagementSend(tx, a, c, draft, managementAuthorization, v.text)
+            ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, managementAuthorization, authorizedBy: a.staffId }
+          } else if (routineAuthorization) {
             await assertRoutineSend(tx, a, c, draft, routineAuthorization, v.text)
             ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, routineAuthorization, authorizedBy: a.staffId }
           } else {
-            if (draft.routineAuthorization) fail(403, 'TEAM_ROUTINE_INTERNAL_SEND_REQUIRED')
+            if (draft.routineAuthorization || draft.managementAuthorization) fail(403, 'TEAM_ROUTINE_INTERNAL_SEND_REQUIRED')
             ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, approvedBy: a.staffId }
           }
         }
@@ -259,8 +308,8 @@ export function teamCommunication(db: DB = prisma) {
         await write(tx, a.storeId, rateKey, [...recent, now])
         if (ai) {
           const key = `aiDraft.${a.staffId}.${aiDraftId}`, draft = await read(tx, a.storeId, key)
-          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, ...(routineAuthorization ? { automaticallySentAt: new Date(now).toISOString() } : { approvedAt: new Date(now).toISOString() }) })
-          await audit(tx, a, id, 'update', { action: routineAuthorization ? 'routine_authorized_send' : 'ai_publish', draftId: aiDraftId, messageId: message.id, ...(routineAuthorization ? { authorization: routineAuthorization } : {}) })
+          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, ...(routineAuthorization || managementAuthorization ? { automaticallySentAt: new Date(now).toISOString() } : { approvedAt: new Date(now).toISOString() }) })
+          await audit(tx, a, id, 'update', { action: managementAuthorization ? 'management_authorized_send' : routineAuthorization ? 'routine_authorized_send' : 'ai_publish', draftId: aiDraftId, messageId: message.id, ...(managementAuthorization || routineAuthorization ? { authorization: managementAuthorization || routineAuthorization } : {}) })
         }
         if (humanTakeover) {
           const takeover = { byStaffId: a.staffId, at: new Date().toISOString(), sourceSeq: message.seq, reason: 'human_message' }

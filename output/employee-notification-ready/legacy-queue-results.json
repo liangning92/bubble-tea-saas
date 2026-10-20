@@ -1,0 +1,49 @@
+{
+  "batch": "bt-test-324632601ec2",
+  "passed": 7,
+  "tests": [
+    "API HTTP finish wakes committed source/outbox only; importing standalone services never starts production workers",
+    "independent child staged transaction is invisible to API scan; commit is delivered and rollback never transports",
+    "scanner shutdown then restart recovers a child commit without IPC signal or HTTP wake",
+    "duplicate scans/wakes coalesce; another child enqueue during active transport is delivered once without overlapping store delivery",
+    "concurrent scanOnce calls use one database scan at a time",
+    "actual owned PostgreSQL interruption is contained and scanner reconnects after restart to recover committed pending chat",
+    "dispatcher retries transient delivery rejection after scanner cached the exact signal, without another enqueue or signal change"
+  ],
+  "observations": [
+    {
+      "path": "api-http-finish",
+      "httpStartToMockMs": 163,
+      "independentSamples": 1
+    },
+    {
+      "path": "independent-child-commit-poll",
+      "commitAcknowledgedToMockMs": 507,
+      "pollMs": 500,
+      "independentSamples": 1
+    },
+    {
+      "path": "real-postgresql-stop-start",
+      "reconnected": true,
+      "mockedDatabaseFailure": false
+    },
+    {
+      "path": "cached-signal-dispatcher-retry",
+      "attempts": 2,
+      "wakes": 1,
+      "controlledDeliveryRejection": true,
+      "newSignalRequired": false
+    }
+  ],
+  "scannerSignal": "exact storeId + employee.workspace.notification.chat.pending key; no reminder JSON polling",
+  "signalCommitsWithMessage": true,
+  "twoIndependentNodeProcesses": true,
+  "realPostgreSQLInterruption": true,
+  "realPushCalls": 0,
+  "credentialsCreated": false,
+  "realModelCalls": 0,
+  "productionWorkerStarted": false,
+  "latencyIsSingleSample": true,
+  "p95Measured": false,
+  "deviceDeliveryTested": false
+}

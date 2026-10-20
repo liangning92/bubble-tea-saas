@@ -1,12 +1,16 @@
 import { createHash } from 'crypto'
 import type { RoutineConsent, RoutineReplyCode } from './TeamRoutinePolicy'
+import type { ManagementConsent } from './TeamManagementContext'
+import type { ManagementResult } from './TeamManagementPolicy'
+import { inheritManagementPolicy } from './TeamManagementDefaults'
 import type { TeamActor, TeamChannel } from './TeamCommunicationService'
 
 export const workflowHash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 export const workflowPad = (n: number) => String(n).padStart(12, '0')
 export interface WorkflowPolicy {
+  origin?: 'store_default'; defaultsVersion?: number
   channelId: string; version: number; epoch: number; enabled: boolean; paused: boolean
-  automaticSend: boolean; routine?: RoutineConsent; consent: true; employeeIds: string[]; operatorUserId: string; operatorStaffId: string
+  automaticSend: boolean; routine?: RoutineConsent; management?: ManagementConsent; consent: true; employeeIds: string[]; operatorUserId: string; operatorStaffId: string
   audienceHash: string; aiConfigVersion: number; hash: string
   takeover?: { byStaffId: string; at: string; sourceSeq: number; reason: 'human_message' }
 }
@@ -15,18 +19,25 @@ export interface WorkflowBillingAttempt {
   billingStatus: 'not_started' | 'possible' | 'usage_recorded'
   usage?: { inputTokens: number; outputTokens: number; estimatedUsd: number }; error?: string
 }
+export interface WorkflowOwnerDecision { text: string; byStaffId: string; at: string; requestId: string; contextLastSeq: number; attemptFloor?: number }
 export interface WorkflowJob {
   id: string; channelId: string; sourceSeq: number; sourceAuthorId: string; sourceHash: string; policyHash: string
   operatorUserId: string; operatorStaffId: string; sourceFloor: number; version: number; attempt: number
-  status: 'queued' | 'processing' | 'retry_wait' | 'awaiting_approval' | 'reviewed' | 'uncertain' | 'blocked' | 'dismissed'
+  status: 'queued' | 'processing' | 'retry_wait' | 'awaiting_approval' | 'awaiting_owner' | 'pending_action' | 'reviewed' | 'uncertain' | 'blocked' | 'dismissed'
   createdAt: string; updatedAt: string; leaseToken?: string; leaseUntil?: number; claimEpoch?: number
   nextAttemptAt?: number; error?: string; aiRequestId?: string; replyMessageId?: string; planId?: string
+  managementIntake?: boolean; mergedInto?: string; mergedSourceSeq?: number[]
+  managementUnavailable?: { reason: string; ownerStaffId: string; ownerUserId: string; defaultsVersion: number }
+  management?: ManagementResult & { summary: string; originalText: string; factsFingerprint: string; contextLastSeq: number; waitingMessageId?: string }
+  ownerDecision?: WorkflowOwnerDecision
+  ownerDecisionHistory?: WorkflowOwnerDecision[]
   publicationRetries?: number
+  managementActionId?: string; managementActionVersion?: number
   sentAt?: string; sendLatencyMs?: number; automaticReply?: boolean
   timing?: { sourceWrittenAt: string; enqueuedAt: string; claimedAt?: string; modelStartedAt?: string; modelCompletedAt?: string; replyWrittenAt?: string }
   billingStatus?: 'not_started' | 'possible' | 'usage_recorded'
   billingAttempts?: WorkflowBillingAttempt[]
-  result?: { routineCode?: RoutineReplyCode; replyText: string; summaryZh: string; suggestedTask: null | {
+  result?: { management?: ManagementResult; routineCode?: RoutineReplyCode; replyText: string; summaryZh: string; suggestedTask: null | {
     category: 'communication' | 'training' | 'inspection'; text: string; evidenceRequired: string; acceptanceCriteria: string
   }; exceptions: string[] }
 }
@@ -35,15 +46,30 @@ export const workflowJobKey = (c: string, seq: number) => `workflow.job.${c}.${w
 
 /** Called under the message's channel transaction lock. No provider, timer or credentials. */
 export async function enqueueTeamWorkflow(db: any, a: TeamActor, c: TeamChannel, message: any, ports: Ports) {
+  if (message.ai) return
+  const inherited = await inheritManagementPolicy(db, a.storeId, c)
+  if (inherited.active && 'paused' in inherited && inherited.paused) return
+  if (inherited.active && 'unavailable' in inherited && inherited.unavailable) {
+    const unavailable = inherited.unavailable, key = workflowJobKey(c.id, message.seq)
+    if (!await ports.read(db, a.storeId, key)) {
+      const job: WorkflowJob = { id: message.id, channelId: c.id, sourceSeq: message.seq, sourceAuthorId: a.staffId, sourceHash: workflowHash({text:message.text,files:message.files}),
+        policyHash: '', operatorUserId: unavailable.ownerUserId, operatorStaffId: unavailable.ownerStaffId, sourceFloor: Math.max(...c.members.map(m=>m.fromSeq)),
+        version:1, attempt:0, status:'awaiting_owner', billingStatus:'not_started', createdAt:message.createdAt, updatedAt:message.createdAt, managementUnavailable:unavailable,
+        timing:{sourceWrittenAt:message.sourceWrittenAt||message.createdAt,enqueuedAt:new Date().toISOString()} }
+      await ports.write(db,a.storeId,key,job)
+      await workflowEvent(db,a.storeId,c.id,{jobId:job.id,sourceSeq:job.sourceSeq,status:job.status,reason:unavailable.reason},ports)
+    }
+    return
+  }
   const p: WorkflowPolicy = await ports.read(db, a.storeId, `workflow.policy.${c.id}`)
-  if (!p?.enabled || !p.employeeIds.includes(a.staffId) || a.staffId === p.operatorStaffId || a.role === 'admin' && !p.automaticSend || message.ai) return
+  if (!p?.enabled || !(p.employeeIds.includes(a.staffId) || p.management && a.staffId === p.operatorStaffId) || a.staffId === p.operatorStaffId && !p.management || a.role === 'admin' && !p.automaticSend || message.ai) return
   const key = workflowJobKey(c.id, message.seq)
   if (await ports.read(db, a.storeId, key)) return
   const job: WorkflowJob = { id: message.id, channelId: c.id, sourceSeq: message.seq, sourceAuthorId: a.staffId,
     sourceHash: workflowHash({ text: message.text, files: message.files }), policyHash: p.hash,
     operatorUserId: p.operatorUserId, operatorStaffId: p.operatorStaffId,
     sourceFloor: Math.max(...c.members.map(m => m.fromSeq)), version: 1, attempt: 0,
-    status: message.text ? 'queued' : 'blocked', billingStatus: 'not_started', ...(message.text ? {} : { error: 'TEAM_WORKFLOW_TEXT_REQUIRED' }),
+    ...(p.management ? {managementIntake:true} : {}), status: message.text ? 'queued' : 'blocked', billingStatus: 'not_started', ...(message.text ? {} : { error: 'TEAM_WORKFLOW_TEXT_REQUIRED' }),
     createdAt: message.createdAt, updatedAt: message.createdAt,
     timing: { sourceWrittenAt: message.sourceWrittenAt || message.createdAt, enqueuedAt: new Date().toISOString() } }
   await ports.write(db, a.storeId, key, job)

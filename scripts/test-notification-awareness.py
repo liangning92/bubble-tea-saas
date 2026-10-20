@@ -52,6 +52,7 @@ try:
                BT_NOTIFICATION_PG_DIR=str(base / 'pg'), BT_NOTIFICATION_PG_LOG=str(base / 'pg.log'),
                BT_NOTIFICATION_PG_OPTIONS='-h 127.0.0.1 -p ' + str(port) + ' -k ' + str(base))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
+    command(['node', 'tests/stoploss/employee-push-device-http-check.cjs'], env=env)
     command(['node', 'tests/stoploss/notification-awareness-http-check.cjs'], env=env)
     command(['node', 'tests/stoploss/notification-queue-wake-check.cjs'], env=env)
 finally:

@@ -1,0 +1,77 @@
+{
+  "candidateSha": "a8d51c31d53068f0432ae78369ac52052d544083",
+  "snapshotHash": "27ca688f7f44ad576f0cdd0dec23cdc5bd5f5a5ee25f4de673a2a56298bec164",
+  "btTestRun": "bt-test-a6d6c8f1a4ad",
+  "workerDefaultIntervalMs": 250,
+  "cleanup": "owned temporary PostgreSQL/runtime/uploads removed",
+  "productionWrites": 0,
+  "productionMessages": 0,
+  "blindRetries": 0,
+  "quantiles": "not reported: one completed model result, one unknown outcome",
+  "results": [
+    {
+      "caseId": "morning_report",
+      "status": "reviewed",
+      "error": null,
+      "kind": "no_reply",
+      "sourceCommitObservedAt": "2026-10-20T14:16:28.803Z",
+      "terminalObservedAt": "2026-10-20T14:16:42.877Z",
+      "observedSourceCommitToTerminalMs": 14074,
+      "replyCount": 0,
+      "timing": {
+        "sourceWrittenAt": "2026-10-20T14:16:28.544Z",
+        "enqueuedAt": "2026-10-20T14:16:28.677Z",
+        "claimedAt": "2026-10-20T14:16:29.098Z",
+        "modelStartedAt": "2026-10-20T14:16:29.237Z",
+        "modelCompletedAt": "2026-10-20T14:16:42.735Z"
+      },
+      "noBusinessWrites": true,
+      "providerOutcome": "provider_result_recorded",
+      "requestId": "ba9c8cc4-bcb2-4c5b-8bac-8f5304572b22",
+      "providerRequestId": "0726aac16d2c88f55003c91bcaef286d",
+      "modelStartedAt": "2026-10-20T14:16:29.671Z",
+      "modelCompletedAt": "2026-10-20T14:16:42.671Z",
+      "modelText": "{\n  \"kind\": \"no_reply\",\n  \"replyText\": \"\",\n  \"summaryZh\": \"员工在消息#1中报告晨班期间未发现问题、运行顺利；这是未经系统验证的员工陈述，目前没有待协调事项。\",\n  \"knownFacts\": [\n    \"员工报告（#1）：晨班未发现问题，运行顺利。\",\n    \"系统快照：当前没有任务、管理行动、库存或收货记录。\"\n  ],\n  \"question\": null,\n  \"action\": null\n}",
+      "inputTokens": 1051,
+      "outputTokens": 475
+    },
+    {
+      "caseId": "physical_stock_unknown",
+      "status": "uncertain",
+      "error": "TEAM_AI_PROVIDER_UNAVAILABLE",
+      "kind": null,
+      "sourceCommitObservedAt": "2026-10-20T14:16:43.053Z",
+      "terminalObservedAt": "2026-10-20T14:17:12.135Z",
+      "observedSourceCommitToTerminalMs": 29082,
+      "replyCount": 0,
+      "timing": {
+        "sourceWrittenAt": "2026-10-20T14:16:43.035Z",
+        "enqueuedAt": "2026-10-20T14:16:43.043Z",
+        "claimedAt": "2026-10-20T14:16:43.358Z",
+        "modelStartedAt": "2026-10-20T14:16:43.443Z"
+      },
+      "noBusinessWrites": true,
+      "providerOutcome": "uncertain_do_not_retry",
+      "requestId": "49e9afbf-e6a3-4e98-aabf-31c3220b8117",
+      "providerRequestId": null,
+      "modelStartedAt": null,
+      "modelCompletedAt": null,
+      "modelText": null,
+      "inputTokens": null,
+      "outputTokens": null
+    }
+  ],
+  "notDispatched": [
+    "physical_stock_37",
+    "receipt_already_recorded"
+  ],
+  "semanticReview": {
+    "morning_report": "Recognized work report and chose no_reply with Chinese source citation; no outgoing reply. This is processing latency, not reply latency.",
+    "physical_stock_unknown": "Not validated: outcome unknown, no retry."
+  },
+  "nextEvidence": {
+    "officialSource": "https://platform.minimax.cn/docs/api-reference/text-openai-api",
+    "finding": "Flash defaults to max reasoning; low supported, thinking cannot be disabled. Actual low performance untested.",
+    "plannedScope": "Only the two never-dispatched scenarios, unique fences; old unknown remains unresolved."
+  }
+}

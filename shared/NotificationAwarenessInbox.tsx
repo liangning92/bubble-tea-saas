@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Bell } from 'lucide-react'
 import { useAwareness, type AwarenessItem } from './NotificationAwareness'
 import { notificationAwarenessCopy } from './notificationAwarenessCopy'
+import { NotificationDeliveryStatus } from './NotificationDeliveryStatus'
 import './notificationAwareness.css'
 
 // Only same-origin app paths are actionable, even if a malformed item is returned.
@@ -53,6 +54,7 @@ export function NotificationAwarenessInbox({ administration = false }: { adminis
       <div className="awareness-list">{items.map(item => <article id={'awareness-notice-'+item.id} key={item.id} className={`awareness-item ${item.id===notice?'awareness-target':''} ${item.read ? '' : 'awareness-item-new'}`}>
         <div className="awareness-item-meta"><span>{labels[item.kind]}</span><span>{item.read ? w.read : w.unread}</span>{item.pending && <strong className="awareness-pending">{w.pending}</strong>}{item.kind === 'training_update' && !item.read && <strong className="awareness-training">{w.new}</strong>}</div>
         <h2>{domainName(item.domain) ? domainName(item.domain) + ' · ' : ''}{item.title}</h2>
+        <NotificationDeliveryStatus value={item.delivery} language={i18n.language} />
         {item.status && <p className="awareness-preview">{w.status}: {({pending:w.statusPending,approved:w.statusApproved,rejected:w.statusRejected,authorized:w.statusAuthorized,executed:w.statusExecuted,cancelled:w.statusCancelled,withdrawn:w.statusWithdrawn} as Record<string,string>)[item.status] || item.status}</p>}
         {item.kind === 'chat' && data.chats.find(chat => chat.id === item.objectId)?.preview && <p className="awareness-preview">{data.chats.find(chat => chat.id === item.objectId)!.preview!.authorName}: {data.chats.find(chat => chat.id === item.objectId)!.preview!.text}</p>}
         <div className="awareness-item-footer"><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString(i18n.language)}</time><button type="button" disabled={!!opening || !awarenessPath(administration ? item.adminUrl || item.url : item.url)} onClick={() => void open(item)}>{w.open} →</button></div>

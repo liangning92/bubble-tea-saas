@@ -111,8 +111,10 @@ module.exports = async ({ prisma, good, request, create, send, test, dropRespons
   const d=await failed.draft(owner,aiChannel.id,input.requestId);assert.equal(d.status,'uncertain');assert.equal(d.text,'');
   await assert.rejects(failed.generate(owner,aiChannel.id,input),e=>e.message==='TEAM_AI_NEW_REQUEST_REQUIRED');assert.equal(calls,1);
   assert((await ai.settings(owner)).estimatedMonthUsd>0);
-  const fabricated=teamAi(prisma,async()=>({text:'Invented #999',inputTokens:20,outputTokens:10,providerRequestId:'invalid'}));
-  await assert.rejects(fabricated.generate(owner,aiChannel.id,{...input,requestId:randomUUID()}),e=>e.message==='TEAM_AI_INVALID_SOURCE');
+  let fabricatedCalls=0;const fabricated=teamAi(prisma,async()=>{fabricatedCalls++;return {text:'Invented #999',inputTokens:20,outputTokens:10,providerRequestId:'invalid'}}),fabricatedInput={...input,requestId:randomUUID()};
+  await assert.rejects(fabricated.generate(owner,aiChannel.id,fabricatedInput),e=>e.message==='TEAM_AI_RESULT_SCHEMA_INVALID');
+  const rejected=await fabricated.draft(owner,aiChannel.id,fabricatedInput.requestId);assert.equal(rejected.status,'blocked');assert.equal(rejected.providerRequestId,'invalid');assert.deepEqual([rejected.usage.inputTokens,rejected.usage.outputTokens],[20,10]);
+  await assert.rejects(fabricated.generate(owner,aiChannel.id,fabricatedInput),e=>e.message==='TEAM_AI_NEW_REQUEST_REQUIRED');assert.equal(fabricatedCalls,1);
  });
  await test('concurrent AI requests reserve budget atomically and a pending request is never transmitted twice',async()=>{
   const monthKey=`team.communication.aiBudget.${new Date().toISOString().slice(0,7)}`;

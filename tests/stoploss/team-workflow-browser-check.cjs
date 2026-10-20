@@ -18,6 +18,8 @@ app.all('/api/*',(req,res)=>{
  if(req.path==='/api/auth/me')return ok({...user,role});
  if(req.path==='/api/staff-work/my/inbox')return ok({items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}});
  if(req.path==='/api/team/ai/settings')return ok(settings);
+ if(req.method==='GET'&&req.path==='/api/team/workflow/defaults')return ok({version:0,enabled:false,ownerStaffId:null});
+ if(req.method==='GET'&&req.path==='/api/team/channels/'+channelId+'/management/actions')return ok({actions:[]});
  if(req.path==='/api/ai/permissions')return ok({executionEnabled:false});
  if(['/api/team/admin/channels','/api/team/channels'].includes(req.path))return ok([channel,{...channel,id:otherId,title:'Other channel',member:false}]);
  if(req.path==='/api/team/directory')return ok(directory);
@@ -73,6 +75,20 @@ async function reviewReply(page){await page.getByRole('button',{name:'审阅回�
 (async()=>{try{
  server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));origin='http://127.0.0.1:'+server.address().port;browser=await chromium.launch({headless:true});
  const {page,context}=await open();
+ await pass('permission status distinguishes unselected, pending, failed, disabled, paused and saved processing modes',async()=>{
+  let releaseRead,failPolicy=false,holdPolicy=true;const gate=new Promise(resolve=>{releaseRead=resolve});
+  await page.route('**/workflow/policy',async route=>{if(route.request().method()!=='GET')return route.continue();if(holdPolicy)await gate;if(failPolicy)return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'SYNTHETIC_POLICY_READ_FAILURE'})});return route.continue()});
+  await page.goto(origin+'/settings/ai');const area=page.getByTestId('workflow-settings'),state=area.getByTestId('workflow-permission-state');
+  await state.filter({hasText:'尚未选择频道'}).waitFor();assert(!(await area.textContent()).includes('人工草稿模式：'));assert.equal(await area.locator('fieldset').count(),0);
+  await area.getByRole('combobox').selectOption(channelId);await state.filter({hasText:'正在读取频道许可'}).waitFor();assert(!(await area.textContent()).includes('人工草稿模式：'));assert.equal(await area.locator('fieldset').count(),0);
+  failPolicy=true;holdPolicy=false;releaseRead();await state.filter({hasText:'无法确认处理模式'}).waitFor();assert.equal(await area.locator('fieldset').count(),0);assert(!(await area.textContent()).includes('人工草稿模式：'));
+  failPolicy=false;await area.getByRole('button',{name:'重新读取许可',exact:true}).click();await state.filter({hasText:'频道已禁用'}).waitFor();
+  policy={...policy,enabled:true,paused:true};await area.getByRole('button',{name:'重新读取许可',exact:true}).click();await state.filter({hasText:'频道已暂停'}).waitFor();
+  policy={...policy,paused:false};await area.getByRole('button',{name:'重新读取许可',exact:true}).click();await state.filter({hasText:'人工草稿模式：'}).waitFor();
+  policy={...policy,automaticSend:true,routine:{version:1,employeeName:'Najwa',region:'cn',scope:'routine_codes_v1',dataConsent:true}};await area.getByRole('button',{name:'重新读取许可',exact:true}).click();await state.filter({hasText:'仅受控例行状态可自动回复'}).waitFor();
+  policy={...policy,management:{version:1,employees:[{staffId:'s-alice',employeeName:'Najwa',employeeRecordName:'najwa synthetic surname'}],region:'cn',scope:'daily_management_v1',dataConsent:true,ownerStaffId:'s-admin',sourceFloor:3,aiCheckRevision:1},routine:undefined};await area.getByRole('button',{name:'重新读取许可',exact:true}).click();await state.filter({hasText:'日常工作自动处理，业务决策另行审批'}).waitFor();assert.equal(await area.getByRole('button',{name:'切换为人工草稿模式',exact:true}).count(),1);
+  assert.equal(policyWrites.length,0);await page.screenshot({path:out+'/permission-status-management.png'});await area.getByRole('button',{name:'暂停此频道',exact:true}).click();await state.filter({hasText:'频道已暂停'}).waitFor();assert.equal(policy.automaticSend,true);assert.equal(policy.management.scope,'daily_management_v1');assert.equal(policy.management.ownerStaffId,'s-admin');assert.equal(policy.management.employees[0].employeeRecordName,'najwa synthetic surname');assert.equal(policy.management.sourceFloor,undefined);assert.equal(policy.management.aiCheckRevision,undefined);assert.equal(policy.routine,undefined);await area.getByRole('button',{name:'禁用此频道',exact:true}).click();await state.filter({hasText:'频道已禁用'}).waitFor();assert.equal(policy.automaticSend,true);assert.equal(policy.management.scope,'daily_management_v1');policyWrites.length=0;await page.unroute('**/workflow/policy');policy={version:0,enabled:false,paused:true,employeeIds:[],automaticSend:false};
+ });
  await pass('permissions stay in AI settings; unverified connection and missing consent block activation',async()=>{
   await page.goto(origin+'/settings/ai');const area=page.getByTestId('workflow-settings');await area.getByRole('combobox').selectOption(channelId);await area.getByText('未启用 · 许可版本 0', {exact:false}).waitFor();assert.equal(await area.getByRole('option').count(),2);
   await area.getByLabel('Synthetic Alice',{exact:true}).check();await area.getByRole('checkbox').last().check();assert(await area.getByRole('button',{name:'保存并允许生成草稿'}).isDisabled());assert.equal(policyWrites.length,0);
@@ -115,6 +131,7 @@ async function reviewReply(page){await page.getByRole('button',{name:'审阅回�
   await area.getByRole('button',{name:'暂停此频道',exact:true}).click();await area.getByRole('status').filter({hasText:'已暂停'}).waitFor();assert.equal(policy.automaticSend,true);assert.equal(policy.routine.employeeName,'Najwa');assert.equal(policy.routine.employeeRecordName,'najwa synthetic surname');assert.equal(policy.routine.sourceFloor,undefined);
   await area.getByRole('checkbox').last().check();await area.getByRole('button',{name:'切换为人工草稿模式',exact:true}).click();await area.getByText('许可已保存',{exact:true}).waitFor();assert.equal(policy.automaticSend,false);assert.equal(policy.routine,undefined);
   policy={...policy,automaticSend:true,routine:{version:1,employeeName:'Najwa',employeeRecordName:'najwa synthetic surname',region:'cn',scope:'routine_codes_v1',dataConsent:true}};await area.getByRole('button',{name:'重新读取许可',exact:true}).click();await area.getByRole('button',{name:'禁用此频道',exact:true}).click();await area.getByRole('status').filter({hasText:'未启用'}).waitFor();assert.equal(policy.automaticSend,true);assert.equal(policy.routine.scope,'routine_codes_v1');assert.equal(policy.routine.employeeRecordName,'najwa synthetic surname');await page.screenshot({path:out+'/routine-mode-disabled.png'});
+  policy={...policy,automaticSend:true,routine:undefined,management:{version:1,employees:[{staffId:'s-alice',employeeName:'Najwa'}],region:'cn',scope:'daily_management_v1',dataConsent:true,ownerStaffId:'s-admin',sourceFloor:7,aiCheckRevision:1}};await area.getByRole('button',{name:'重新读取许可',exact:true}).click();await area.getByTestId('workflow-permission-state').filter({hasText:'频道已禁用'}).waitFor();await area.getByRole('checkbox').last().check();await area.getByRole('button',{name:'切换为人工草稿模式',exact:true}).click();await area.getByText('许可已保存',{exact:true}).waitFor();assert.equal(policy.automaticSend,false);assert.equal(policy.routine,undefined);assert.equal(policy.management,undefined);
   policy={...policy,automaticSend:false,routine:undefined};
  });
  await context.close();

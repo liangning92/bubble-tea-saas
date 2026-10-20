@@ -5,6 +5,10 @@ import { authenticate, AuthRequest } from '../middlewares/auth'
 import { canTeam, teamCommunication, TeamActor, TeamError } from '../services/TeamCommunicationService'
 import { teamAi } from '../services/TeamAiService'
 import { teamOperations } from '../services/TeamOperationsService'
+import { listActions, advanceAction } from '../services/TeamManagementActions'
+import { readTeam } from '../services/TeamCommunicationService'
+import { teamManagementDefaults } from '../services/TeamManagementDefaults'
+import prisma from '../config/database'
 import { teamWorkflow } from '../services/TeamWorkflowService'
 import { wakeEmployeeDelivery } from '../services/EmployeeReminderService'
 
@@ -31,10 +35,23 @@ const messageCommitted = (req: AuthRequest, res: any, data: unknown) => {
 const ai = teamAi()
 const operations = teamOperations()
 const workflow = teamWorkflow()
+const managementDefaults = teamManagementDefaults(prisma)
+router.get('/workflow/defaults',run(async(req,res)=>ok(res,await managementDefaults.read(actor(req),req.query.requestId===undefined?undefined:z.string().uuid().parse(req.query.requestId)))))
+router.put('/workflow/defaults',run(async(req,res)=>ok(res,await managementDefaults.save(actor(req),req.body))))
 const workflowAfter = (req: AuthRequest) => z.coerce.number().int().nonnegative().max(999999999999).parse(req.query.after ?? 0)
+router.get('/channels/:id/management/actions',run(async(req,res)=>{
+  const a=actor(req),actions=await listActions(prisma,a,req.params.id)
+  const rid=req.query.requestId===undefined?undefined:z.string().uuid().parse(req.query.requestId)
+  const receipt=rid?await readTeam(prisma,a.storeId,`management.action.request.${a.staffId}.${rid}`):null
+  return ok(res,{actions,...(receipt&&actions.some(x=>x.id===receipt.actionId)?{requestReceipt:{requestId:rid,actionId:receipt.actionId}}:{})})
+}))
+router.post('/channels/:id/management/actions/:actionId/actions',run(async(req,res)=>{
+  const {expectedVersion,...input}=z.object({expectedVersion:z.number().int().positive()}).passthrough().parse(req.body)
+  return ok(res,await prisma.$transaction((tx:any)=>advanceAction(tx,actor(req),req.params.id,req.params.actionId,expectedVersion,input)))
+}))
 router.get('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.policy(actor(req), req.params.id))))
 router.put('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.savePolicy(actor(req), req.params.id, req.body))))
-router.get('/channels/:id/workflow/jobs', run(async (req, res) => ok(res, await workflow.jobs(actor(req), req.params.id, workflowAfter(req)))))
+router.get('/channels/:id/workflow/jobs', run(async (req, res) => ok(res, await workflow.jobs(actor(req), req.params.id, workflowAfter(req), req.query.requestId === undefined ? undefined : z.string().uuid().parse(req.query.requestId)))))
 router.get('/channels/:id/workflow/events', run(async (req, res) => ok(res, await workflow.events(actor(req), req.params.id, workflowAfter(req)))))
 router.post('/channels/:id/workflow/jobs/:seq/actions', run(async (req, res) => {
   const result = await workflow.action(actor(req), req.params.id,

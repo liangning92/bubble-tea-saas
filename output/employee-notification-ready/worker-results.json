@@ -1,0 +1,12 @@
+{
+  "groups": 4,
+  "results": [
+    "showNotification completion records only browser display report in real local IndexedDB",
+    "receipt survives worker restart and click records a separate local report",
+    "notification click rejects network-path, backslash and control-character external navigation",
+    "failed display cannot create a false device display report"
+  ],
+  "realIndexedDB": true,
+  "syntheticWorkerEvents": true,
+  "realPushOrDeviceValidation": false
+}

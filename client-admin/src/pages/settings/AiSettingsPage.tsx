@@ -5,6 +5,7 @@ import api from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { TeamAiSettings } from './TeamAiSettings'
 import { aiSettingsCopy } from './aiSettingsCopy'
+import { TeamManagementDefaults } from './TeamManagementDefaults'
 import { TeamWorkflowSettings } from './TeamWorkflowSettings'
 
 export function AiSettingsPage() {
@@ -22,5 +23,6 @@ export function AiSettingsPage() {
     <header><h2 className="text-xl font-semibold">{c.title}</h2></header>
     <TeamAiSettings key={`${user.id}:${user.storeId}`} client={client} identity={{userId:user.id,storeId:user.storeId}} language={i18n.language} />
     <TeamWorkflowSettings key={`workflow:${user.id}:${user.storeId}`} client={client} scope={`${user.id}:${user.storeId}`} staffId={user.staff?.id || ''} language={i18n.language} />
+    <TeamManagementDefaults key={`management:${user.id}:${user.storeId}`} client={client} scope={`${user.id}:${user.storeId}`} staffId={user.staff?.id || ''} language={i18n.language} />
   </div>
 }
