@@ -1,0 +1,16 @@
+{
+  "staff-build": "passed (tsc + vite build)",
+  "admin-build": "passed (tsc + vite build)",
+  "staff-i18n": "passed; existing advisory warnings retained",
+  "admin-i18n": "passed; existing advisory warnings retained",
+  "photo-and-attachment-regressions": "7/7 passed",
+  "browser": "synthetic production components; metrics and screenshots retained",
+  "cleanup": "static fixture server stopped; browser tabs closed; temporary viewport reset; no Docker resources created",
+  "originalScreenshot": {
+    "library_file_id": "libfile_71a9c5f2ba9c8191b9cb3e9633dbf1d0",
+    "name": "IMG_9951.png",
+    "pixels": "947x2048",
+    "inspected": true,
+    "sha256": "dbcf73400041a83b24d4d3a6b680a4f35b1a05add4e8a5c9d9699c9936b86507"
+  }
+}

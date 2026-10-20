@@ -1,0 +1,375 @@
+{
+  "keyboardMetrics": [
+    {
+      "width": 375,
+      "open": {
+        "composer": {
+          "bottom": 425,
+          "height": 57,
+          "left": 0,
+          "right": 375,
+          "top": 368,
+          "width": 375,
+          "x": 0,
+          "y": 368
+        },
+        "height": 720,
+        "messageHeight": 266,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.36944444444444446,
+        "scrollHeight": 2253,
+        "scrollTop": 1987,
+        "shortMessages": 2,
+        "visibleMessageHeight": 266,
+        "width": 375
+      },
+      "closed": {
+        "composer": {
+          "bottom": 720,
+          "height": 91,
+          "left": 0,
+          "right": 375,
+          "top": 629,
+          "width": 375,
+          "x": 0,
+          "y": 629
+        },
+        "height": 720,
+        "messageHeight": 572,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.7944444444444444,
+        "scrollHeight": 2253,
+        "scrollTop": 1681,
+        "shortMessages": 6,
+        "visibleMessageHeight": 572,
+        "width": 375
+      }
+    },
+    {
+      "width": 390,
+      "open": {
+        "composer": {
+          "bottom": 425,
+          "height": 57,
+          "left": 0,
+          "right": 390,
+          "top": 368,
+          "width": 390,
+          "x": 0,
+          "y": 368
+        },
+        "height": 720,
+        "messageHeight": 266,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.36944444444444446,
+        "scrollHeight": 2253,
+        "scrollTop": 1987,
+        "shortMessages": 2,
+        "visibleMessageHeight": 266,
+        "width": 390
+      },
+      "closed": {
+        "composer": {
+          "bottom": 720,
+          "height": 91,
+          "left": 0,
+          "right": 390,
+          "top": 629,
+          "width": 390,
+          "x": 0,
+          "y": 629
+        },
+        "height": 720,
+        "messageHeight": 572,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.7944444444444444,
+        "scrollHeight": 2253,
+        "scrollTop": 1681,
+        "shortMessages": 6,
+        "visibleMessageHeight": 572,
+        "width": 390
+      }
+    },
+    {
+      "width": 430,
+      "open": {
+        "composer": {
+          "bottom": 425,
+          "height": 57,
+          "left": 0,
+          "right": 430,
+          "top": 368,
+          "width": 430,
+          "x": 0,
+          "y": 368
+        },
+        "height": 720,
+        "messageHeight": 266,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.36944444444444446,
+        "scrollHeight": 2253,
+        "scrollTop": 1987,
+        "shortMessages": 2,
+        "visibleMessageHeight": 266,
+        "width": 430
+      },
+      "closed": {
+        "composer": {
+          "bottom": 720,
+          "height": 91,
+          "left": 0,
+          "right": 430,
+          "top": 629,
+          "width": 430,
+          "x": 0,
+          "y": 629
+        },
+        "height": 720,
+        "messageHeight": 572,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.7944444444444444,
+        "scrollHeight": 2253,
+        "scrollTop": 1681,
+        "shortMessages": 6,
+        "visibleMessageHeight": 572,
+        "width": 430
+      }
+    }
+  ],
+  "secondaryChecks": [
+    {
+      "lang": "en",
+      "metric": {
+        "composer": {
+          "bottom": 720,
+          "height": 57,
+          "left": 0,
+          "right": 430,
+          "top": 663,
+          "width": 430,
+          "x": 0,
+          "y": 663
+        },
+        "height": 720,
+        "messageHeight": 606,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.8416666666666667,
+        "scrollHeight": 2253,
+        "scrollTop": 1647,
+        "shortMessages": 6,
+        "visibleMessageHeight": 606,
+        "width": 430
+      }
+    },
+    {
+      "lang": "id",
+      "metric": {
+        "composer": {
+          "bottom": 720,
+          "height": 57,
+          "left": 0,
+          "right": 430,
+          "top": 663,
+          "width": 430,
+          "x": 0,
+          "y": 663
+        },
+        "height": 720,
+        "messageHeight": 606,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.8416666666666667,
+        "scrollHeight": 2253,
+        "scrollTop": 1647,
+        "shortMessages": 6,
+        "visibleMessageHeight": 606,
+        "width": 430
+      }
+    },
+    {
+      "size": {
+        "width": 768,
+        "height": 900
+      },
+      "metric": {
+        "composer": {
+          "bottom": 900,
+          "height": 57,
+          "left": 280,
+          "right": 768,
+          "top": 843,
+          "width": 488,
+          "x": 280,
+          "y": 843
+        },
+        "height": 900,
+        "messageHeight": 786,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.8733333333333333,
+        "scrollHeight": 2277,
+        "scrollTop": 1491,
+        "shortMessages": 8,
+        "visibleMessageHeight": 786,
+        "width": 768
+      }
+    },
+    {
+      "size": {
+        "width": 1024,
+        "height": 800
+      },
+      "metric": {
+        "composer": {
+          "bottom": 800,
+          "height": 57,
+          "left": 312,
+          "right": 992,
+          "top": 743,
+          "width": 680,
+          "x": 312,
+          "y": 743
+        },
+        "height": 800,
+        "messageHeight": 686,
+        "navVisible": false,
+        "overflow": false,
+        "ratio": 0.8575,
+        "scrollHeight": 2277,
+        "scrollTop": 1591,
+        "shortMessages": 7,
+        "visibleMessageHeight": 686,
+        "width": 1024
+      }
+    },
+    {
+      "empty": true
+    },
+    {
+      "error": "操作失败，请重试。 SYNTHETIC_NETWORK_ERROR"
+    }
+  ],
+  "history": {
+    "listRestored": true,
+    "draftRestored": "最终草稿",
+    "scrollTopBefore": 1061,
+    "scrollTopAfter": 1061
+  },
+  "inputGrowth": {
+    "singleLine": 44,
+    "threeLines": 90,
+    "twelveLines": 144,
+    "overflow": "auto"
+  },
+  "photoSelection": {
+    "generatedInPage": true,
+    "optionVisible": true,
+    "separateChannelEmpty": true,
+    "originalChoiceRestored": true,
+    "nativeChooserBlocked": "Chrome extension file URL access disabled; not retried"
+  },
+  "longImage": {
+    "composer": {
+      "bottom": 720,
+      "height": 57,
+      "left": 0,
+      "right": 390,
+      "top": 663,
+      "width": 390,
+      "x": 0,
+      "y": 663
+    },
+    "height": 720,
+    "messageHeight": 606,
+    "navVisible": false,
+    "overflow": false,
+    "ratio": 0.8416666666666667,
+    "scrollHeight": 3411,
+    "scrollTop": 2804.5,
+    "shortMessages": 1,
+    "visibleMessageHeight": 606,
+    "width": 390,
+    "naturalWidth": 800,
+    "previewAndDialogPassed": true,
+    "pinnedGap": 0.5
+  },
+  "readingResize": {
+    "before": {
+      "composer": {
+        "bottom": 720,
+        "height": 57,
+        "left": 0,
+        "right": 390,
+        "top": 663,
+        "width": 390,
+        "x": 0,
+        "y": 663
+      },
+      "height": 720,
+      "messageHeight": 606,
+      "navVisible": false,
+      "overflow": false,
+      "ratio": 0.8416666666666667,
+      "scrollHeight": 3411,
+      "scrollTop": 0,
+      "shortMessages": 6,
+      "visibleMessageHeight": 606,
+      "width": 390
+    },
+    "keyboard": {
+      "composer": {
+        "bottom": 400,
+        "height": 57,
+        "left": 0,
+        "right": 390,
+        "top": 343,
+        "width": 390,
+        "x": 0,
+        "y": 343
+      },
+      "height": 400,
+      "messageHeight": 286,
+      "navVisible": false,
+      "overflow": false,
+      "ratio": 0.715,
+      "scrollHeight": 3411,
+      "scrollTop": 0,
+      "shortMessages": 2,
+      "visibleMessageHeight": 286,
+      "width": 390
+    },
+    "restored": {
+      "composer": {
+        "bottom": 720,
+        "height": 57,
+        "left": 0,
+        "right": 390,
+        "top": 663,
+        "width": 390,
+        "x": 0,
+        "y": 663
+      },
+      "height": 720,
+      "messageHeight": 606,
+      "navVisible": false,
+      "overflow": false,
+      "ratio": 0.8416666666666667,
+      "scrollHeight": 3411,
+      "scrollTop": 0,
+      "shortMessages": 6,
+      "visibleMessageHeight": 606,
+      "width": 390
+    }
+  },
+  "privacyText": "工作沟通会保留记录，具有独立审计权限的管理员可以查看。店内公共频道只向获准成员开放。",
+  "realEmployeeMessagesSent": 0,
+  "realImagesDownloaded": 0,
+  "productionAPICalls": 0
+}

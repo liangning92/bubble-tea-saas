@@ -1,0 +1,186 @@
+{
+  "baseline": "47a1f364212e8ce34df4713491b7fbf2088a1d04",
+  "before": {
+    "reading": {
+      "count": 300,
+      "firstVisible": "team-message-278",
+      "height": 606,
+      "lastVisible": "team-message-285",
+      "scrollHeight": 27283,
+      "top": 25237
+    },
+    "page100": {
+      "count": 100,
+      "firstVisible": "team-message-94",
+      "height": 606,
+      "lastVisible": "team-message-100",
+      "scrollHeight": 9145,
+      "top": 8539.5
+    },
+    "page200": {
+      "count": 200,
+      "firstVisible": "team-message-194",
+      "height": 606,
+      "lastVisible": "team-message-200",
+      "scrollHeight": 18214,
+      "top": 17608
+    },
+    "completed": {
+      "count": 300,
+      "firstVisible": "team-message-294",
+      "height": 606,
+      "lastVisible": "team-message-300",
+      "scrollHeight": 27283,
+      "top": 26677
+    }
+  },
+  "after": {
+    "reading": {
+      "count": 300,
+      "firstVisible": "team-message-278",
+      "height": 606,
+      "lastVisible": "team-message-285",
+      "scrollHeight": 27283,
+      "top": 25237
+    },
+    "page100": {
+      "count": 100,
+      "firstVisible": "team-message-1",
+      "height": 606,
+      "lastVisible": "team-message-6",
+      "scrollHeight": 9145,
+      "top": 0,
+      "visibility": "hidden"
+    },
+    "page200": {
+      "count": 200,
+      "firstVisible": "team-message-1",
+      "height": 606,
+      "lastVisible": "team-message-6",
+      "scrollHeight": 18214,
+      "top": 0
+    },
+    "completed": {
+      "count": 300,
+      "firstVisible": "team-message-278",
+      "height": 606,
+      "lastVisible": "team-message-285",
+      "scrollHeight": 27283,
+      "top": 25237
+    },
+    "stableAfterPolling": {
+      "count": 300,
+      "firstVisible": "team-message-278",
+      "height": 606,
+      "lastVisible": "team-message-285",
+      "scrollHeight": 27283,
+      "top": 25237
+    },
+    "pendingStatus": "读取中…",
+    "loadedHistoryCursors": [
+      0,
+      100,
+      200
+    ],
+    "unchangedTailPolling": 36
+  },
+  "density": [
+    {
+      "complete": 6,
+      "height": 606,
+      "overflow": false,
+      "width": 375
+    },
+    {
+      "complete": 6,
+      "height": 606,
+      "overflow": false,
+      "width": 390
+    },
+    {
+      "complete": 6,
+      "height": 606,
+      "overflow": false,
+      "width": 430
+    }
+  ],
+  "short": {
+    "reading": {
+      "count": 24,
+      "firstVisible": "team-message-11",
+      "height": 560,
+      "lastVisible": "team-message-17",
+      "scrollHeight": 2253,
+      "top": 973
+    },
+    "keyboard": {
+      "count": 24,
+      "firstVisible": "team-message-11",
+      "height": 240,
+      "lastVisible": "team-message-13",
+      "scrollHeight": 2253,
+      "top": 973
+    },
+    "listRestored": true,
+    "returned": {
+      "count": 24,
+      "firstVisible": "team-message-11",
+      "height": 560,
+      "lastVisible": "team-message-17",
+      "scrollHeight": 2253,
+      "top": 973
+    },
+    "draft": "分页修复后草稿\n第二行\n第三行",
+    "inputHeight": 90
+  },
+  "imagePinnedGap": 0.5,
+  "productionCalls": 0,
+  "checks": {
+    "originalComponentRegression": "expected failure: 2 failed, 2 passed",
+    "correctedRelatedRegressions": "11/11 passed",
+    "staffBuild": "passed including TypeScript",
+    "adminBuild": "passed including TypeScript; existing chunk warning",
+    "cleanup": "synthetic server stopped; tabs closed; viewport reset; no Docker resources created"
+  },
+  "finalRecheck": {
+    "asset": "/assets/index-DdsfQk-8.js",
+    "finalPagBefore": {
+      "count": 300,
+      "firstVisible": "team-message-278",
+      "height": 606,
+      "lastVisible": "team-message-285",
+      "scrollHeight": 27283,
+      "top": 25237
+    },
+    "finalPagFirst": {
+      "count": 100,
+      "firstVisible": "team-message-1",
+      "height": 606,
+      "lastVisible": "team-message-6",
+      "scrollHeight": 9145,
+      "top": 0
+    },
+    "finalPagSecond": {
+      "count": 200,
+      "firstVisible": "team-message-1",
+      "height": 606,
+      "lastVisible": "team-message-6",
+      "scrollHeight": 18214,
+      "top": 0
+    },
+    "finalPagAfter": {
+      "count": 300,
+      "firstVisible": "team-message-278",
+      "height": 606,
+      "lastVisible": "team-message-285",
+      "scrollHeight": 27283,
+      "top": 25237
+    },
+    "finalPagVisibility": "hidden",
+    "finalPagRequests": "请求游标：0,100,200,300；等待：0"
+  },
+  "sourceHashes": {
+    "shared/TeamChatMessages.tsx": "96f0c46732f15cfda4e6dc643838eb787f15700fb39c81d03493b217dd00ba7c",
+    "shared/TeamCommunication.tsx": "ee4bc6382bbe5a4174d8a48a1ecc52b6cabcf868b6ffd64078c1b62cf35c584a"
+  }
+}

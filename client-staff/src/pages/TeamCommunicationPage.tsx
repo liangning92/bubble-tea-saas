@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { TeamCommunication, TeamClient } from '../../../shared/TeamCommunication'
+import { TeamClient } from '../../../shared/TeamCommunication'
+import { StaffTeamConversation } from '../components/StaffTeamConversation'
 import { useAuthStore } from '../stores/auth'
 import { API_BASE, employeeApi, http } from '../services/api'
 
@@ -16,5 +17,5 @@ export function TeamCommunicationPage() {
     }
   }, [user?.id, user?.storeId])
   if (!user) return null
-  return <TeamCommunication client={client} scope={`${location.origin}:${user.storeId}:${user.staffId}`} staffId={user.staffId} language={i18n.language} />
+  return <StaffTeamConversation key={`${user.storeId}:${user.staffId}`} client={client} scope={`${location.origin}:${user.storeId}:${user.staffId}`} staffId={user.staffId} language={i18n.language} />
 }
