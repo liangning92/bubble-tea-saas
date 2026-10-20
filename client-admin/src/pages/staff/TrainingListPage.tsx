@@ -1,9 +1,10 @@
+import { trainingNoticeWords, useAdminTrainingNotices } from '../../utils/trainingNotices'
 import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import dateLocaleI18n from '../../i18n'
 import { TrainingSectionExtras, TrainingModuleExtras } from '../../../../shared/components/TrainingExtras'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuthStore } from '../../stores/auth'
 import { staffApi, trainingApi } from '../../services/api'
@@ -71,6 +72,14 @@ export function TrainingListPage() {
   const catalogue = useTrainingCatalogue(token, user?.storeId)
   const w = trainingCopy(i18n.language)
   const [params, setParams] = useSearchParams()
+  const noticeScope = `${user?.storeId}:${user?.id}:${user?.staff?.id}`
+  const notices = useAdminTrainingNotices(noticeScope, catalogue.revision, () => {
+    const actor = useAuthStore.getState().user
+    return noticeScope === `${actor?.storeId}:${actor?.id}:${actor?.staff?.id}`
+  })
+  const updateWords = trainingNoticeWords(i18n.language)
+  const handledLocation = useRef('')
+  const [missingUpdate, setMissingUpdate] = useState(false)
   const [editingLibrary, setEditingLibrary] = useState<string | null>(null)
 
   // Tab: 'records' | 'courses' | 'checklists'
@@ -95,6 +104,38 @@ export function TrainingListPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [categoryForm, setCategoryForm] = useState<TrainingCategory[]>([])
   const [selectedCourse, setSelectedCourse] = useState<TrainingModule | null>(null)
+
+  useEffect(() => {
+    // A global inbox can navigate to another item without remounting this page.
+    // Keep an open editor intact; consume the latest location after it closes.
+    if (editingLibrary !== null || catalogue.loading || catalogue.error || !catalogue.revision) return
+    const locationKey = `${noticeScope}:${catalogue.revision}:${params.toString()}`
+    if (handledLocation.current === locationKey) return
+    handledLocation.current = locationKey
+    setMissingUpdate(false)
+    const moduleKey = params.get('module'), itemKey = params.get('item')
+    const tab = moduleKey ? 'courses' : itemKey ? 'checklists' : params.get('tab')
+    setActiveTab(tab === 'courses' ? 'courses' : tab === 'checklists' ? 'checklists' : 'records')
+    setSelectedCourse(null)
+    if (moduleKey) {
+      const module = catalogue.modules.find(item => item.key === moduleKey)
+      if (module) setSelectedCourse(module); else setMissingUpdate(true)
+    } else if (itemKey && !catalogue.checklists.some(item => item.key === itemKey)) setMissingUpdate(true)
+  }, [noticeScope, catalogue.revision, catalogue.loading, catalogue.error, editingLibrary, params])
+  useEffect(() => {
+    if (editingLibrary !== null || catalogue.loading || catalogue.error) return
+    const itemKey = params.get('item')
+    if (activeTab !== 'checklists' || !itemKey || document.visibilityState !== 'visible') return
+    const element = document.getElementById('admin-training-checklist-' + itemKey)
+    if (element) {element.scrollIntoView({block:'center'});void notices.markRead('checklist',itemKey)}
+  }, [activeTab, catalogue.revision, catalogue.loading, catalogue.error, editingLibrary, params, notices.items])
+  useEffect(() => {
+    if (selectedCourse && editingLibrary === null && !catalogue.loading && !catalogue.error && document.visibilityState === 'visible') void notices.markRead('module', selectedCourse.key)
+  }, [selectedCourse?.key, editingLibrary, catalogue.loading, catalogue.error, notices.items])
+  useEffect(() => {
+    // Hide any previously opened content immediately after account/store changes or a failed catalogue read.
+    if (catalogue.loading || catalogue.error) setSelectedCourse(null)
+  }, [noticeScope, catalogue.loading, catalogue.error])
 
   const loadCategories = async () => {
     try {
@@ -251,7 +292,7 @@ export function TrainingListPage() {
 
         <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={() => {void loadData();catalogue.refresh()}}
+            onClick={() => {void loadData();catalogue.refresh();notices.refresh()}}
             className="p-2 border border-gray-200 bg-white rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
             disabled={isLoading}
             title={t('common.refresh', '刷新')}
@@ -312,6 +353,10 @@ export function TrainingListPage() {
         </div>
       </div>
 
+      {(notices.failed || notices.readFailed || missingUpdate) && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+        {missingUpdate ? updateWords.missing : notices.readFailed ? updateWords.readFailed : updateWords.failed}{' '}
+        {!missingUpdate && <button className="underline" onClick={() => {notices.refresh();if(selectedCourse)void notices.markRead('module', selectedCourse.key)}}>{updateWords.retry}</button>}
+      </div>}
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <div className="flex flex-wrap gap-3 sm:gap-6">
@@ -340,6 +385,7 @@ export function TrainingListPage() {
           >
             <BookOpen size={16} />
             {t('training.coursesTab', 'SOP 课程标准库')} ({catalogue.modules.length})
+            {notices.items.some(item=>!item.read&&item.trainingUpdate.kind==='module') && <span className="h-2 w-2 rounded-full bg-red-500" aria-label={updateWords.updated}/>}
             {activeTab === 'courses' && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
             )}
@@ -355,6 +401,7 @@ export function TrainingListPage() {
           >
             <CheckSquare size={16} />
             {t('training.checklistsTab', '开闭店规范标准')} ({catalogue.checklists.length})
+            {notices.items.some(item=>!item.read&&item.trainingUpdate.kind==='checklist') && <span className="h-2 w-2 rounded-full bg-red-500" aria-label={updateWords.updated}/>}
             {activeTab === 'checklists' && !catalogue.loading && !catalogue.error && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
             )}
@@ -559,6 +606,7 @@ export function TrainingListPage() {
             {catalogue.modules.map((mod) => (
               <div
                 key={mod.key}
+                data-training-module={mod.key}
                 className="card bg-white hover:shadow-md transition-all border border-gray-200 flex flex-col justify-between overflow-hidden group"
               >
                 <div>
@@ -574,6 +622,7 @@ export function TrainingListPage() {
                   {user?.role === 'admin' && <button className="float-right text-sm text-primary" aria-label={`${w.edit} ${tr(mod.title,i18n.language)}`} onClick={() => setEditingLibrary(mod.key)}>{w.edit}</button>}
                   <h3 className="font-bold text-gray-900 text-base mb-1 group-hover:text-primary transition-colors">
                     {tr(mod.title, i18n.language)}
+                    {notices.unread('module',mod.key).length > 0 && <span className="ml-2 inline-flex rounded-full bg-red-50 px-2 py-0.5 align-middle text-xs font-medium text-red-700">{updateWords.updated}</span>}
                   </h3>
                   <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed mb-4">
                     {tr(mod.subtitle, i18n.language)}
@@ -604,11 +653,15 @@ export function TrainingListPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {catalogue.checklists.length === 0 && <p className="text-gray-500">{w.emptyChecklists}</p>}
           {catalogue.checklists.map((list) => (
-            <div key={list.key} className="card bg-white p-5 border border-gray-200">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+            <div key={list.key} id={"admin-training-checklist-"+list.key} tabIndex={-1} className="card bg-white p-5 border border-gray-200">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3 mb-4">
                 <h3 className="font-bold text-gray-900 text-base">
                   {tr(list.title, i18n.language)}
                 </h3>
+                {notices.unread('checklist',list.key).length > 0 && <button className="rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700" onClick={() => {
+                  document.getElementById('admin-training-checklist-'+list.key)?.focus({preventScroll:true})
+                  void notices.markRead('checklist',list.key)
+                }}>{updateWords.open}</button>}
                 {user?.role === 'admin' && <button className="text-sm text-primary" aria-label={`${w.edit} ${tr(list.title,i18n.language)}`} onClick={() => setEditingLibrary('checklist:'+list.key)}>{w.edit}</button>}
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
                   共 {list.items.length} 条检查项
@@ -656,6 +709,7 @@ export function TrainingListPage() {
               </button>
             </div>
 
+            {notices.readFailed && <p role="status" className="bg-amber-50 p-3 text-sm text-amber-900">{updateWords.readFailed}{' '}<button className="underline" onClick={()=>void notices.markRead('module',selectedCourse.key)}>{updateWords.retry}</button></p>}
             <div className="p-6 overflow-y-auto space-y-6">
               {/* Sections */}
               <div>
