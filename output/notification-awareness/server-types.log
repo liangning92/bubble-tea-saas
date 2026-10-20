@@ -1,0 +1,4 @@
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:server
+> cd server && tsc --noEmit
+

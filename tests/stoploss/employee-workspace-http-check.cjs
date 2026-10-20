@@ -79,11 +79,16 @@ const ruleChange={...rule,expectedVersion:'v1',confirmRecalculate:true,enabled:f
 assert.equal((await request('PUT','/staff-work/admin/rule',{...ruleChange,previewToken:'stale'},'admin')).status,409)
 assert.equal((await request('PUT','/staff-work/admin/rule',{...ruleChange,previewToken:preview.data.previewToken},'admin')).status,200)
 // Push transport is mocked: never send to a real phone. Test per-device retry, dedup and invalidation.
-const push=require('web-push');let deliveries=0;push.sendNotification=async()=>{deliveries++}
+const push=require('web-push');let deliveries=0,generatedKeys=0;push.sendNotification=async()=>{deliveries++};push.generateVAPIDKeys=()=>{generatedKeys++;throw Error('CREDENTIAL_CREATION_FORBIDDEN')}
 const subscription=await request('PUT','/staff-work/my/subscription',{endpoint:'https://fcm.googleapis.com/fcm/send/synthetic',keys:{p256dh:'synthetic',auth:'synthetic'}});assert.equal(subscription.status,200)
+// Delivery now consumes existing keys only. Missing credentials must preserve
+// the station-side notification without silently provisioning credentials.
+await reminders.deliver('s');assert.equal(deliveries,0);assert.equal(await store.readWork('s','push-keys'),null);assert.equal((await store.listWork('s','reminder.employee.')).find(r=>r.event==='synthetic:event').status,'in_app')
+await store.writeWork('s','push-keys',{publicKey:'synthetic-existing-public',privateKey:'synthetic-existing-private'});await reminders.enqueueReminder('s','employee','synthetic:existing-key','Task','/hygiene')
 await reminders.deliver('s');await reminders.deliver('s');assert.equal(deliveries,1)
 const expired='hygiene-due:missing:2020-01-01T00:00:00.000Z';await reminders.enqueueReminder('s','employee',expired,'Expired','/hygiene','2020-01-01T00:00:00.000Z');await reminders.deliver('s');assert.equal(deliveries,1);assert.equal((await store.listWork('s','reminder.employee.')).find(r=>r.event===expired).status,'cancelled')
 await request('DELETE','/staff-work/my/subscription',{id:subscription.data.id});await reminders.enqueueReminder('s','employee','synthetic:after-logout','Task','/hygiene');await reminders.deliver('s');assert.equal(deliveries,1);assert.equal((await store.listWork('s','reminder.employee.')).find(r=>r.event==='synthetic:after-logout').status,'in_app')
+assert.equal(generatedKeys,0)
 const unscheduled=await service.createEmployeeAttendance({staffId:'other',checkInTime:at('2026-10-12T12:00:00'),status:'late'},'s');assert.equal(unscheduled.status,'pending_review')
 console.log('PASS employee workspace: real HTTP/auth/SQLite, minute and midnight snapshots, duplicate clock-in, tiers, idempotent deductions, private evidence isolation, appeal rollback and paid refund, profile review, cross-device progress and reminder deduplication')
 console.log('Provider: '+provider+'; evidence directory: '+root)

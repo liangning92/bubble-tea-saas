@@ -1,0 +1,19 @@
+{
+  "masterSha": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "checkedVia": "GitHub contents API on the immutable master SHA before notification branch push",
+  "workflows": [
+    "build-tv-apk.yml",
+    "build-windows.yml",
+    "ci.yml",
+    "docker-publish.yml",
+    "lumba-site.yml",
+    "release-docker.yml",
+    "release-windows.yml",
+    "test-exe.yml",
+    "test-windows.yml"
+  ],
+  "allTriggers": [
+    "workflow_dispatch"
+  ],
+  "automaticPushDeployment": false
+}

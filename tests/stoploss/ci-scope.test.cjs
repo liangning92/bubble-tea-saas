@@ -200,3 +200,24 @@ test('routine communication follows actual service consumers and retains its dis
   }
  }finally{f.close()}
 });
+
+test('chat notification checks follow actual message, reminder delivery and inbox consumers',()=>{
+ const f=fixture();try{
+  for(const file of ['server/src/services/TeamCommunicationService.ts','server/src/services/EmployeeReminderService.ts','server/src/routes/employeeWorkspace.ts'])f.write(file);
+  f.write('server/src/services/TeamChatReminderService.ts',"import './TeamCommunicationService'");
+  for(const file of ['server/src/services/TeamChatReminderService.ts','server/src/services/TeamCommunicationService.ts','server/src/services/EmployeeReminderService.ts','server/src/routes/employeeWorkspace.ts','tests/stoploss/team-chat-notification-http-check.cjs']){if(file.endsWith('.cjs'))f.write(file);const p=selectScope([file],f);assert(p.chatNotification,file);assert(p.needsServer);assert(!p.components.includes('pos'))}
+ }finally{f.close()}
+});
+
+test('notification inbox, publish events and approval sources retain isolated contracts and actual admin/staff browser consumers',()=>{
+ const f=fixture();try{
+  for(const file of ['server/src/services/NotificationInboxService.ts','server/src/services/NotificationApprovalService.ts','shared/NotificationAwareness.tsx','server/src/services/TrainingLibraryStore.ts','tests/stoploss/notification-awareness-http-check.cjs']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.notificationAwareness,true,file);assert.equal(p.needsServer,true);assert(!p.electronTypes);
+   assert.equal(p.browser.some(x=>x.domain==='notificationAwareness'),file.startsWith('shared/'),file);
+  }
+  for(const app of ['admin','staff'])f.write(`client-${app}/src/App.tsx`,"import '../../shared/NotificationAwareness'");
+  const ui=selectScope(['shared/NotificationAwareness.tsx'],f);
+  assert.deepEqual(ui.components,['admin','staff']);assert(ui.browser.some(x=>x.domain==='notificationAwareness'));
+  const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');assert.match(runner,/if\(plan\.notificationAwareness\)/);assert(runner.includes('scripts/test-notification-awareness.py'));assert(runner.includes('scripts/test-training-update-notices.py'));assert(runner.includes('scripts/test-approval-notices.py'));
+ }finally{f.close()}
+});

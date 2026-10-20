@@ -1,3 +1,5 @@
+import { useAwareness } from '../../../shared/NotificationAwareness'
+import { notificationAwarenessCopy } from '../../../shared/notificationAwarenessCopy'
 import { teamCopy } from '../../../shared/teamCopy'
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -21,6 +23,7 @@ import { useAuthStore } from "../stores/auth";
 import { staffApi, employeeApi } from "../services/api";
 import { QRCameraScannerModal } from "../components/QRCameraScannerModal";
 export function HomePage() {
+  const {data: awareness}=useAwareness();
   const { t, i18n } = useTranslation(),
     navigate = useNavigate(),
     { user } = useAuthStore();
@@ -157,7 +160,7 @@ export function HomePage() {
           <span>{t("ui.coreValueEnthusiasm")}</span>
         </p>
       </header>
-      <button className="m-4 flex w-[calc(100%-2rem)] items-center justify-between rounded-2xl border border-red-200 bg-white p-4 text-left font-semibold text-gray-900" onClick={() => navigate('/team')}>{teamCopy(i18n.language).title}<ChevronRight size={20}/></button>
+      <button className="m-4 flex w-[calc(100%-2rem)] items-center justify-between rounded-2xl border border-red-200 bg-white p-4 text-left font-semibold text-gray-900" onClick={() => navigate('/team')}>{teamCopy(i18n.language).title}<span className="ml-auto mr-2 text-sm text-red-600">{awareness.counts.chatUnread > 0 && `${awareness.counts.chatUnread} ${notificationAwarenessCopy(i18n.language).unread}`}</span><ChevronRight size={20}/></button>
       <section className="home-greeting">
         <div>
           <p className="home-date">{today} · WIB</p>

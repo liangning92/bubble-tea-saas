@@ -377,7 +377,7 @@ export function InventoryCountPage() {
           {filteredCounts.map((count) => (
             <button
               type="button"
-              key={count.id}
+              key={count.id} data-notice-object={count.id}
               className="card w-full text-left hover:shadow-md transition-shadow cursor-pointer"
               onClick={() => {
                 openCount(count.id);
@@ -456,7 +456,7 @@ export function InventoryCountPage() {
       countedItems.length > 0;
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" data-notice-object={selectedCount.id}>
         <PageHelp>{inventoryCountLabels(i18n.language).hint}</PageHelp><p className="text-sm text-amber-800">{t("inventoryUnified.count")}</p>
         <button disabled={draftDirty || busy} onClick={refreshCounts}>{t("countFlow.refresh")}</button>
         {/* Header */}

@@ -1,3 +1,4 @@
+import { AwarenessEntry } from '../../../shared/NotificationAwarenessInbox';
 import {staffAccessLabels,staffRoleLabel} from '../../../shared/staffAccessLabels';
 import {useMarketingCopy} from "../components/marketing/MarketingLayout";
 import { permissionForPage } from "../../../shared/StaffAccess";
@@ -436,6 +437,7 @@ export function MainLayout() {
             />
           </header>
           <div className="p-4 sm:p-6">
+            <div className="mb-4 flex justify-end"><AwarenessEntry /></div>
             {!ready ? (
               access?.failed ? (
                 <div role="alert" className="card text-red-600">

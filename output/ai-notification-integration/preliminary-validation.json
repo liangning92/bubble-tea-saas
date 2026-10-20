@@ -1,0 +1,17 @@
+{
+  "status": "provisional_notify_acaf_has_known_review_fixes_pending",
+  "aiSha": "fd0e8de8f8b7603d73beea564f14c0fee3864b5f",
+  "notificationCandidateSha": "acaf93275b3272c93711f6b2fd0ee80362fea39e",
+  "integrationRoutineGroups": 29,
+  "scopeUnits": 30,
+  "clientBuilds": [
+    "admin",
+    "staff"
+  ],
+  "notificationApps": [
+    "admin",
+    "staff"
+  ],
+  "newRealModelCalls": 0,
+  "checks": "three rollback paths, confirmed-uncommitted ready reuse, commit acknowledgement receipt reconciliation, retry cap, human/AI opposite winners, paused expired state closure, preserved original lease/TTL expiry -> human, messages/inbox/read visibility, both React AI body+identity"
+}

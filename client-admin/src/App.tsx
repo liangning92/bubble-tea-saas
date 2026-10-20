@@ -1,3 +1,7 @@
+import { NotificationAwarenessTarget } from '../../shared/NotificationAwarenessTarget'
+import { AwarenessProvider } from '../../shared/NotificationAwareness'
+import { NotificationAwarenessInbox } from '../../shared/NotificationAwarenessInbox'
+import { awarenessClient } from './services/notificationAwareness'
 import { CostSync } from './components/CostSync'
 import { AdminFeedback } from './components/AdminFeedback'
 import {StaffApprovalPage} from './pages/StaffApprovalPage'
@@ -152,10 +156,10 @@ function LegacyShiftRedirect() {
 }
 
 function App() {
-  const sessionReady = useAuthStore(state => state.sessionReady)
+  const {sessionReady, user, token, isAuthenticated} = useAuthStore()
   if (!sessionReady) return <RouteLoading />
   return (
-    <><CostSync/><AdminFeedback/><Suspense fallback={<RouteLoading />}><Routes>
+    <AwarenessProvider client={awarenessClient} identity={sessionReady && isAuthenticated && token && user ? [user.id,user.storeId,user.role,user.staff?.id,token].join(':') : ''}><NotificationAwarenessTarget/><CostSync/><AdminFeedback/><Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route
@@ -167,6 +171,7 @@ function App() {
         }
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="inbox" element={<NotificationAwarenessInbox administration />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="dashboard/shifts" element={<LegacyShiftRedirect />} />
         <Route path="finance/shifts" element={<LegacyShiftRedirect />} />
@@ -394,7 +399,7 @@ function App() {
         {/* 数据导入 */}
         <Route path="import" element={<ImportPage />} />
       </Route>
-    </Routes></Suspense></>
+    </Routes></Suspense></AwarenessProvider>
   )
 }
 

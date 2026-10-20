@@ -237,7 +237,13 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         }
         const p = await readTeam<WorkflowPolicy>(tx, storeId, `workflow.policy.${channelId}`)
         if (!p?.enabled || p.paused) {
-          if (billingChanged) await save(tx, storeId, j, now)
+          if (j.status === 'processing') {
+            // The live-lease guard above already returned. A stopped owner must
+            // not leave a human-taken-over job permanently impossible to close.
+            j.status = 'blocked'; j.error = 'TEAM_WORKFLOW_PAUSED'
+            delete j.leaseToken; delete j.leaseUntil
+            await save(tx, storeId, j, now)
+          } else if (billingChanged) await save(tx, storeId, j, now)
           return null
         }
         if (p.automaticSend) {
@@ -279,7 +285,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           })
         result = parseResult(d, prepared.sourceSeq)
       } catch (e) { error = e instanceof TeamError ? e.message : 'TEAM_WORKFLOW_RESULT_REVIEW_REQUIRED' }
-      return db.$transaction(async (tx: any) => {
+      try { return await db.$transaction(async (tx: any) => {
         await lockTeam(tx, storeId, 'channel.' + channelId)
         const j = await readTeam<WorkflowJob>(tx, storeId, workflowJobKey(channelId, sourceSeq))
         if (!j) return j
@@ -324,7 +330,37 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         }
         delete j.leaseToken; delete j.leaseUntil
         return save(tx, storeId, j, clock())
-      })
+      }) } catch (publicationError) {
+        // A transaction error can have an uncertain commit outcome. Re-read
+        // under the same channel lock before releasing only our own claim.
+        // Never repeat transport: only a complete saved ready result qualifies.
+        const reconciled = await db.$transaction(async (tx: any) => {
+          await lockTeam(tx, storeId, 'channel.' + channelId)
+          const j = await readTeam<WorkflowJob>(tx, storeId, workflowJobKey(channelId, sourceSeq))
+          if (!j) return null
+          const receipt = await readTeam(tx, storeId, `request.${j.operatorStaffId}.${derivedId(j.id, 'reply')}`)
+          if (j.status === 'reviewed' && j.replyMessageId && receipt?.message?.id === j.replyMessageId) return j
+          if (j.status !== 'processing' || j.leaseToken !== prepared.leaseToken || j.replyMessageId) return null
+          const d = await readTeam(tx, storeId, `aiDraft.${j.operatorStaffId}.${j.aiRequestId}`)
+          if (d?.status !== 'ready') return null
+          await refreshBilling(tx, storeId, j)
+          if (receipt) {
+            j.status = 'uncertain'; j.error = 'TEAM_WORKFLOW_PUBLICATION_OUTCOME_UNCERTAIN'
+            delete j.leaseToken; delete j.leaseUntil
+          } else {
+            j.publicationRetries = (j.publicationRetries || 0) + 1
+            j.error = 'TEAM_WORKFLOW_PUBLICATION_RETRY'
+            if (j.publicationRetries >= 3) {
+              j.status = 'blocked'; j.error = 'TEAM_WORKFLOW_PUBLICATION_REVIEW_REQUIRED'
+              delete j.leaseToken; delete j.leaseUntil
+            } else j.leaseUntil = clock() // confirmed no final receipt; allow the next batch to reuse ready result
+          }
+          await save(tx, storeId, j, clock())
+          return null
+        }).catch(() => null) // No fresh database proof means no recovery or automatic retry.
+        if (reconciled) return reconciled
+        throw publicationError
+      }
     },
     async runBatch(storeId: string, limit = 10) {
       z.string().min(1).max(128).parse(storeId); z.number().int().min(1).max(20).parse(limit)

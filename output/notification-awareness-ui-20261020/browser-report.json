@@ -1,0 +1,60 @@
+[
+  {
+    "app": "client-staff",
+    "widths": [
+      390,
+      768,
+      1365
+    ],
+    "openingInboxDoesNotRead": true,
+    "approvalReadRemainsPending": true,
+    "trainingNotReadByInbox": true,
+    "chatListDoesNotRead": true,
+    "chatReadAfterMessages": true,
+    "integratedAutomaticReplyBodyAndProvenanceVisible": true,
+    "inboxResultStatus": true,
+    "foregroundPollWithoutPush": true,
+    "crossIdentityAbortAndClear": true,
+    "safePlainTextPreview": true,
+    "hiddenPollPaused": true,
+    "focusResumes": true,
+    "inFlightProtected": true,
+    "hungRequestTimesOutAndRecovers": true,
+    "browserErrors": [],
+    "posts": [
+      "approval-1",
+      "team-read",
+      "result-1"
+    ],
+    "requestCount": 62
+  },
+  {
+    "app": "client-admin",
+    "widths": [
+      390,
+      768,
+      1365
+    ],
+    "openingInboxDoesNotRead": true,
+    "approvalReadRemainsPending": true,
+    "trainingNotReadByInbox": true,
+    "chatListDoesNotRead": true,
+    "chatReadAfterMessages": true,
+    "integratedAutomaticReplyBodyAndProvenanceVisible": true,
+    "inboxResultStatus": true,
+    "foregroundPollWithoutPush": true,
+    "crossIdentityAbortAndClear": true,
+    "safePlainTextPreview": true,
+    "hiddenPollPaused": true,
+    "focusResumes": true,
+    "inFlightProtected": true,
+    "hungRequestTimesOutAndRecovers": true,
+    "browserErrors": [],
+    "posts": [
+      "approval-1",
+      "team-read",
+      "result-1"
+    ],
+    "requestCount": 47
+  }
+]

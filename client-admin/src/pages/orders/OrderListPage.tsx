@@ -109,9 +109,9 @@ export function OrderListPage() {
   const orders = data?.data?.data?.list || []
 
   const refundQuery = useQuery({
-    queryKey: ['refund-requests', context.storeId, 'pending'],
+    queryKey: ['refund-requests', context.storeId, params.get('noticeObject') ? 'all' : 'pending'],
     enabled: context.valid,
-    queryFn: async () => { const res = await adminApi.getRefundRequests('pending'); return requireRead(res, Array.isArray(res.data?.data?.list)).data.data.list as RefundRequest[] },
+    queryFn: async () => { const res = await adminApi.getRefundRequests(params.get('noticeObject') ? 'all' : 'pending'); return requireRead(res, Array.isArray(res.data?.data?.list)).data.data.list as RefundRequest[] },
     refetchInterval: 30000,
     refetchOnWindowFocus: 'always'
   })
@@ -330,7 +330,7 @@ export function OrderListPage() {
                 </thead>
                 <tbody>
                   {refundRequests.map((req) => (
-                    <tr key={req.id} className="border-b last:border-0 hover:bg-gray-50">
+                    <tr key={req.id} data-notice-object={req.id} className="border-b last:border-0 hover:bg-gray-50">
                       <td className="p-4"><OrderItemsTable items={req.order?.items} /><ReferenceDetails value={req.orderNumber}/></td>
                       <td className="p-4 text-sm">{req.reason}</td>
                       <td className="p-4 text-sm">{req.requestedByName || '-'}</td>

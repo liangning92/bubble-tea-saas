@@ -1,3 +1,6 @@
+import { chatReminderRelevant } from './TeamChatReminderService';
+import { trainingUpdateRelevant } from './TrainingLibraryStore';
+import { collectApprovalNotices, approvalNoticeRelevant } from './NotificationApprovalService';
 import { assignedStaffAccess } from "./StaffPermissionService";
 import webpush from "web-push";
 import { createHash } from "crypto";
@@ -101,8 +104,6 @@ export async function collectReminders(storeId: string, now = new Date()) {
       checkInTime: { gte: new Date(now.getTime() - 24 * 3600000), lte: now },
     },
   });
-  const profiles = await listWork(storeId, "profile."),
-    appeals = await listWork(storeId, "appeal.");
   const trainings = await prisma.training.findMany({
     where: { storeId, status: { in: ["scheduled", "in_progress"] } },
   });
@@ -162,29 +163,8 @@ export async function collectReminders(storeId: string, now = new Date()) {
           "Tugas kebersihan baru / 新卫生任务",
           "/hygiene",
         );
-      if (
-        task.staffId &&
-        ["approved", "rejected"].includes(task.status) &&
-        task.updatedAt.toISOString() >= baseline.at
-      )
-        await enqueueReminder(
-          storeId,
-          id,
-          `hygiene-review:${task.id}:${task.updatedAt.toISOString()}`,
-          "Hasil pemeriksaan tugas / 任务审核结果",
-          "/hygiene",
-        );
     }
   }
-  for (const r of [...profiles, ...appeals])
-    if (r.reviewedAt >= baseline.at)
-      await enqueueReminder(
-        storeId,
-        r.staffId,
-        `review:${r.id}:${r.reviewedAt}`,
-        "Hasil pengajuan tersedia / 申请审核结果已更新",
-        r.attendanceId ? "/attendance/appeals" : "/profile/documents",
-      );
   for (const t of trainings)
     if (t.createdAt.toISOString() >= baseline.at)
       await enqueueReminder(
@@ -194,47 +174,13 @@ export async function collectReminders(storeId: string, now = new Date()) {
         "Pelatihan baru / 新培训任务",
         "/training",
       );
-  for (const [model, url] of [
-    ["leave", "/leave"],
-    ["reimbursement", "/reimbursement"],
-    ["overtimeRequest", "/overtime"],
-    ["shiftSwap", "/shift-swap"],
-    ["attendanceCorrection", "/attendance/correction"],
-  ] as const) {
-    const records = await (prisma[model] as any).findMany({
-      where: { storeId, updatedAt: { gte: new Date(baseline.at) } },
-    });
-    for (const r of records) {
-      if (["approved", "rejected"].includes(r.status))
-        await enqueueReminder(
-          storeId,
-          r.staffId,
-          `${model}-review:${r.id}:${r.updatedAt.toISOString()}`,
-          "Hasil pengajuan tersedia / 申请审核结果已更新",
-          url,
-        );
-      if (model === "shiftSwap" && r.targetStaffId) {
-        if (["approved", "rejected", "peer_rejected", "cancelled"].includes(r.status))
-          for (const staffId of [r.staffId, r.targetStaffId])
-            await enqueueReminder(storeId, staffId, `swap-result:${r.id}:${r.updatedAt.toISOString()}`, "Status tukar shift diperbarui / 调班流程已更新", url);
-        if (r.status === "pending" && r.targetConfirmed)
-          await enqueueReminder(storeId, r.staffId, `swap-agreed:${r.id}:${r.updatedAt.toISOString()}`, "Rekan setuju, menunggu admin / 对方已同意，等待审批", url);
-      }
-      if (
-        model === "shiftSwap" &&
-        r.status === "pending" &&
-        r.targetStaffId &&
-        !r.targetConfirmed
-      )
-        await enqueueReminder(
-          storeId,
-          r.targetStaffId,
-          `swap-confirm:${r.id}:${r.updatedAt.toISOString()}`,
-          "Konfirmasi pertukaran shift / 请确认换班",
-          "/shift-swap",
-        );
-    }
-  }
+  // Approval node/result events replace the old per-model notifications. Reads
+  // remain separate from the business pending state, and historic results do not replay.
+  await collectApprovalNotices(prisma, storeId);
+  const agreed = await prisma.shiftSwap.findMany({ where: { storeId, status: 'pending', targetConfirmed: true,
+    updatedAt: { gte: new Date(baseline.at) } } });
+  for (const r of agreed) await enqueueReminder(storeId, r.staffId, `swap-agreed:${r.id}:${r.updatedAt.toISOString()}`,
+    "Rekan setuju, menunggu admin / 对方已同意，等待审批", '/shift-swap');
   const reminders = await listWork(storeId, "reminder.");
   for (const reminder of reminders)
     if (
@@ -255,18 +201,27 @@ export async function reminderStillRelevant(
   storeId: string,
   r: any,
   now = new Date(),
+  db: any = prisma,
 ) {
   if (r.expiresAt && new Date(r.expiresAt) <= now) return false;
+  if (r.event?.startsWith('team-chat:')) return chatReminderRelevant(db, storeId, r);
+  if (r.event?.startsWith('training-content:')) return trainingUpdateRelevant(db, storeId, r, r.staffId);
+  if (r.event?.startsWith('approval-notice:')) return approvalNoticeRelevant(db, storeId, r, r.staffId);
+  if (/^(?:hygiene-review:|review:|leave-review:|reimbursement-review:|overtimeRequest-review:|shiftSwap-review:|attendanceCorrection-review:|swap-confirm:|swap-result:)/.test(r.event)) return false;
   const [kind, id] = r.event.split(":");
+  if (kind === 'swap-agreed') {
+    const item = await db.shiftSwap.findFirst({ where: { id, storeId, staffId: r.staffId, status: 'pending', targetConfirmed: true } });
+    return !!item && r.event === `swap-agreed:${id}:${item.updatedAt.toISOString()}`;
+  }
   if (kind.startsWith("hygiene-")) {
-    const task = await prisma.hygieneTask.findFirst({ where: { id, storeId } });
+    const task = await db.hygieneTask.findFirst({ where: { id, storeId } });
     if (!task || (task.staffId && task.staffId !== r.staffId)) return false;
     if (kind === "hygiene-review")
       return ["approved", "rejected"].includes(task.status);
     if (!["pending", "in_progress", "overdue"].includes(task.status))
       return false;
     if (!task.staffId) {
-      const active = await prisma.attendance.findFirst({
+      const active = await db.attendance.findFirst({
         where: {
           staffId: r.staffId,
           checkOutTime: null,
@@ -282,51 +237,56 @@ export async function reminderStillRelevant(
       return !!task.dueTime && r.event.endsWith(task.dueTime.toISOString());
   }
   if (kind === "training") {
-    const item = await prisma.training.findFirst({
+    const item = await db.training.findFirst({
       where: { id, storeId, staffId: r.staffId },
     });
     return !!item && ["scheduled", "in_progress"].includes(item.status);
   }
   if (kind === "swap-confirm") {
-    const item = await prisma.shiftSwap.findFirst({
+    const item = await db.shiftSwap.findFirst({
       where: { id, storeId, targetStaffId: r.staffId },
     });
     return !!item && item.status === "pending" && !item.targetConfirmed;
   }
   return true;
 }
-export async function deliver(storeId: string) {
-  const reminders = (await listWork(storeId, "reminder.")).filter(
+export async function deliver(storeId: string, db: any = prisma, push: typeof webpush = webpush) {
+  const reminders = (await listWork(storeId, "reminder.", db)).filter(
       (r) => r && r.status === "pending",
     ),
-    subscriptions = (await listWork(storeId, "subscription.")).filter(
+    subscriptions = (await listWork(storeId, "subscription.", db)).filter(
       (s) => s.active,
     );
-  const keys = await pushKeys(storeId);
+  const keys = await readWork(storeId, "push-keys", db); // Existing keys only; delivery never creates credentials.
   for (const r of reminders) {
-    const employee = await prisma.staff.findFirst({
+    const employee = await db.staff.findFirst({
       where: { id: r.staffId, storeId, status: "active" },
     });
-    if (!employee) continue;
-    if (!(await reminderStillRelevant(storeId, r))) {
+    if (!employee) { await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, status: 'cancelled' }, db); continue; }
+    if (!(await reminderStillRelevant(storeId, r, new Date(), db))) {
       await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
         ...r,
         status: "cancelled",
-      });
+      }, db);
+      continue;
+    }
+    const readReceipt = await readWork(storeId, `inbox.read.${r.userId || employee.userId}.${r.id}`, db);
+    if (r.read || readReceipt) {
+      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, read: true, status: 'in_app' }, db);
       continue;
     }
     const activeSubscriptions = subscriptions.filter(
       (s) => s.staffId === r.staffId,
     );
-    if (!activeSubscriptions.length) {
+    if (!activeSubscriptions.length || !keys) {
       await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
         ...r,
         status: "in_app",
-      });
+      }, db);
       continue;
     }
     for (const sub of activeSubscriptions) {
-      const user = await prisma.user.findUnique({
+      const user = await db.user.findUnique({
         where: { id: employee.userId },
       });
       if (
@@ -337,11 +297,11 @@ export async function deliver(storeId: string) {
         await writeWork(storeId, `subscription.${sub.id}`, {
           ...sub,
           active: false,
-        });
+        }, db);
         continue;
       }
       const key = `delivery.${r.id}.${sub.id}`;
-      const claimed = await prisma.$transaction(async (db) => {
+      const claimed = await db.$transaction(async (db) => {
         await workLock(storeId, key, db);
         let attempt = (await readWork(storeId, key, db)) || {
           attempts: 0,
@@ -370,7 +330,7 @@ export async function deliver(storeId: string) {
       });
       if (!claimed) continue;
       {
-        const attempt = await readWork(storeId, key);
+        const attempt = await readWork(storeId, key, db);
         if (
           attempt?.status === "sent" ||
           attempt?.attempts >= 3 ||
@@ -382,7 +342,12 @@ export async function deliver(storeId: string) {
         try {
           if (!validPushEndpoint(sub.subscription.endpoint))
             throw new Error("INVALID_PUSH_ENDPOINT");
-          await webpush.sendNotification(
+          const latest = await readWork(storeId, `reminder.${r.staffId}.${r.id}`, db);
+          if (latest?.status === 'cancelled' || !await reminderStillRelevant(storeId, r, new Date(), db)) {
+            await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, status: 'cancelled' }, db);
+            continue;
+          }
+          await push.sendNotification(
             sub.subscription,
             JSON.stringify({ title: r.title, url: r.url, id: r.id }),
             {
@@ -399,7 +364,7 @@ export async function deliver(storeId: string) {
             status: "sent",
             attempts: attempt.attempts + 1,
             sentAt: new Date().toISOString(),
-          });
+          }, db);
         } catch (e: any) {
           await writeWork(storeId, key, {
             status: "failed",
@@ -408,18 +373,18 @@ export async function deliver(storeId: string) {
               Date.now() + 60000 * 2 ** attempt.attempts,
             ).toISOString(),
             error: e.statusCode ? String(e.statusCode) : "PUSH_DELIVERY_FAILED",
-          });
+          }, db);
           if ([404, 410].includes(e.statusCode))
             await writeWork(storeId, `subscription.${sub.id}`, {
               ...sub,
               active: false,
-            });
+            }, db);
         }
       }
     }
     const deliveryStates = await Promise.all(
       activeSubscriptions.map((sub) =>
-        readWork(storeId, `delivery.${r.id}.${sub.id}`),
+        readWork(storeId, `delivery.${r.id}.${sub.id}`, db),
       ),
     );
     if (
@@ -429,8 +394,9 @@ export async function deliver(storeId: string) {
     )
       await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
         ...r,
-        status: "sent",
-      });
+        status: deliveryStates.every(state => state?.status === 'sent') ? 'sent'
+          : deliveryStates.some(state => state?.status === 'sent') ? 'partially_sent' : 'delivery_failed',
+      }, db);
   }
 }
 export function startEmployeeWorker() {

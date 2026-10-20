@@ -1,3 +1,5 @@
+import { useAwareness } from '../../../shared/NotificationAwareness';
+import { notificationAwarenessCopy } from '../../../shared/notificationAwarenessCopy';
 import { useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
@@ -27,7 +29,8 @@ export function modulePath(path: string) {
   return "/";
 }
 export function BottomNav() {
-  const { t } = useTranslation(),
+  const {data}=useAwareness();
+  const { t, i18n } = useTranslation(),
     navigate = useNavigate(),
     location = useLocation(),
     active = modulePath(location.pathname);
@@ -51,7 +54,7 @@ export function BottomNav() {
           <span className="employee-nav-icon">
             <Icon size={21} strokeWidth={active === path ? 2.2 : 1.8} />
           </span>
-          <span className="employee-nav-label">{t(key)}</span>
+          <span className="employee-nav-label">{t(key)}{path === "/training" && data.counts.trainingUnread > 0 && <span className="ml-1 text-red-600" aria-label={notificationAwarenessCopy(i18n.language).training}>•</span>}</span>
         </button>
       ))}
     </nav>

@@ -4,6 +4,7 @@ import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
 import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
+import { enqueueChatReminders } from './TeamChatReminderService'
 
 export const TEAM_PREFIX = 'team.communication.'
 export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
@@ -156,7 +157,15 @@ export function teamCommunication(db: DB = prisma) {
       return Promise.all(visible.map(async c => {
         const membership = c.members.find(m => m.staffId === a.staffId)
         const readSeq = (await read(db, a.storeId, `read.${c.id}.${a.staffId}`))?.seq || 0
-        return { ...c, unread: membership ? Math.max(0, c.lastSeq - Math.max(readSeq, membership.fromSeq - 1)) : 0,
+        const prefix = TEAM_PREFIX + `message.${c.id}.`
+        const [unread, latest] = membership ? await Promise.all([
+          db.config.count({ where: { storeId: a.storeId, key: { startsWith: prefix, gt: prefix + pad(Math.max(readSeq, membership.fromSeq - 1)) },
+            value: { not: { contains: `"authorId":${JSON.stringify(a.staffId)}` } } } }),
+          db.config.findFirst({ where: { storeId: a.storeId, key: { startsWith: prefix, gte: prefix + pad(membership.fromSeq) } }, orderBy: { key: 'desc' } })
+        ]) : [0, null]
+        const message = latest ? JSON.parse(latest.value) : null
+        return { ...c, unread, preview: message ? { text: [...message.text].slice(0, 120).join(''), authorName: message.authorName,
+          createdAt: message.createdAt, hasFiles: message.files?.length > 0 } : null,
           member: !!membership, canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), canAudit: canTeam(a, 'team.audit') }
       }))
     },
@@ -261,6 +270,7 @@ export function teamCommunication(db: DB = prisma) {
           await audit(tx, a, id, 'update', { action: 'workflow_human_takeover', takeover, policyVersion: paused.version })
         }
         await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
+        await enqueueChatReminders(tx, a.storeId, c, message)
         return message
       })
     },

@@ -1,0 +1,7 @@
+PASS admin list preserves unread and record metrics; actual module viewing reads only its personal event
+PASS same-page notification query switch replaces the displayed course without requiring remount
+PASS same-page checklist notification switches locate and read only the requested standard
+PASS cross-page notification opens the exact course and failed acknowledgement remains retryable
+PASS records table and editing controls remain; unknown targets never acknowledge nonexistent updates
+PASS checklist explicit reading preserves other unread events and desktop/tablet/mobile layouts
+PASS admin identity change hides former personal notices; no learning, checklist, publication or edit writes occurred

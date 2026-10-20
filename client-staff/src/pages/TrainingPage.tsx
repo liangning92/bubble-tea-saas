@@ -1,4 +1,5 @@
 import { employeeTrainingPresentation } from '../utils/trainingPresentation'
+import { trainingNoticeWords, useTrainingNotices } from '../utils/trainingNotices'
 import { useSearchParams } from 'react-router-dom'
 import { Modal } from '../components/Modal'
 import { PageHeader } from "../components/PageHeader";
@@ -6,7 +7,7 @@ import {
   TrainingSectionExtras,
   TrainingModuleExtras,
 } from "../../../shared/components/TrainingExtras";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../stores/auth";
 import { staffApi, employeeApi } from "../services/api";
@@ -70,6 +71,14 @@ export function TrainingPage() {
   const sourceCatalogue = useTrainingCatalogue(token, user?.storeId, 'employee');
   const catalogue = useMemo(() => employeeTrainingPresentation(sourceCatalogue), [sourceCatalogue.modules, sourceCatalogue.checklists, sourceCatalogue.revision, sourceCatalogue.loading, sourceCatalogue.error, sourceCatalogue.refresh]);
   const w = trainingCopy(i18n.language);
+  const updateWords = trainingNoticeWords(i18n.language);
+  const noticeScope = `${user?.storeId}:${user?.id}:${user?.staffId}`;
+  const notices = useTrainingNotices(noticeScope, sourceCatalogue.revision, employeeApi, () => {
+    const actor = useAuthStore.getState().user;
+    return noticeScope === `${actor?.storeId}:${actor?.id}:${actor?.staffId}`;
+  });
+  const handledLocation = useRef('');
+  const [missingUpdate, setMissingUpdate] = useState(false);
   const progressVersion = catalogue.revision || "1";
   const progressScope = `${user?.storeId}:${user?.staffId}:${progressVersion}`;
 
@@ -245,6 +254,35 @@ export function TrainingPage() {
     setQuizScore(null);
   };
 
+  // A link only acknowledges the item that is actually displayed, never every update.
+  useEffect(() => {
+    const moduleKey = searchParams.get('module'), itemKey = searchParams.get('item');
+    const locationKey = `${noticeScope}:${catalogue.revision}:${searchParams.toString()}`;
+    if (catalogue.loading || catalogue.error || !catalogue.revision || handledLocation.current === locationKey) return;
+    handledLocation.current = locationKey;
+    setMissingUpdate(false);
+    if (moduleKey) {
+      const module = catalogue.modules.find(item => item.key === moduleKey);
+      if (module) {setActiveTab('courses');handleOpenModule(module)} else setMissingUpdate(true);
+    } else if (itemKey) {
+      const checklist = catalogue.checklists.find(item => item.key === itemKey);
+      if (checklist) setActiveTab('checklists'); else setMissingUpdate(true);
+    }
+  }, [noticeScope, catalogue.revision, catalogue.loading, catalogue.error, searchParams]);
+  useEffect(() => {
+    const itemKey = searchParams.get('item');
+    if (activeTab !== 'checklists' || !itemKey || catalogue.loading || catalogue.error) return;
+    const element = document.getElementById('training-checklist-' + itemKey);
+    if (element && document.visibilityState === 'visible') {
+      element.scrollIntoView({block:'center'});
+      void notices.markRead('checklist', itemKey);
+    }
+  }, [activeTab, catalogue.revision, catalogue.loading, searchParams, notices.items]);
+
+  useEffect(() => {
+    if (selectedModule && document.visibilityState === 'visible') void notices.markRead('module', selectedModule.key);
+  }, [selectedModule?.key, notices.items]);
+
   // Submit Quiz
   const handleSubmitQuiz = async () => {
     if (!selectedModule || syncBusy || !selectedModule.quiz.length) return;
@@ -324,6 +362,7 @@ export function TrainingPage() {
             onClick={() => {
               void loadData();
               catalogue.refresh();
+              notices.refresh();
             }}
             className="p-3"
           >
@@ -364,6 +403,10 @@ export function TrainingPage() {
         )}
       </div>
 
+      {(notices.failed || notices.readFailed || missingUpdate) && <div role="status" className="mx-4 my-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
+        {missingUpdate ? updateWords.missing : notices.readFailed ? updateWords.readFailed : updateWords.failed}{' '}
+        {!missingUpdate && <button className="underline" onClick={() => {notices.refresh();if(selectedModule)void notices.markRead('module', selectedModule.key)}}>{updateWords.retry}</button>}
+      </div>}
       {/* Tabs Bar - Consistent with LeavePage / ProfilePage */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-xs">
         <div className="flex px-2">
@@ -378,6 +421,7 @@ export function TrainingPage() {
             <span className="flex items-center justify-center gap-1.5">
               <BookOpen size={16} />
               {t("training.coursesTab", "课程学习")}
+              {notices.items.some(item=>!item.read&&item.trainingUpdate.kind==='module') && <span className="h-2 w-2 rounded-full bg-red-500" aria-label={updateWords.updated} />}
             </span>
             {activeTab === "courses" &&
               !catalogue.loading &&
@@ -397,6 +441,7 @@ export function TrainingPage() {
             <span className="flex items-center justify-center gap-1.5">
               <CheckSquare size={16} />
               {t("training.checklistsTab", "开闭店规范")}
+              {notices.items.some(item=>!item.read&&item.trainingUpdate.kind==='checklist') && <span className="h-2 w-2 rounded-full bg-red-500" aria-label={updateWords.updated} />}
             </span>
             {activeTab === "checklists" &&
               !catalogue.loading &&
@@ -456,6 +501,7 @@ export function TrainingPage() {
             return (
               <div
                 key={mod.key}
+                data-training-module={mod.key}
                 onClick={() => handleOpenModule(mod)}
                 className="bg-white rounded-2xl p-4 shadow-xs border border-gray-100 hover:border-primary/30 transition-all cursor-pointer flex items-center gap-3.5"
               >
@@ -472,6 +518,7 @@ export function TrainingPage() {
                     <h3 className="font-bold text-gray-900 text-base truncate">
                       {tr(mod.title, i18n.language)}
                     </h3>
+                    {notices.unread('module',mod.key).length > 0 && <span className="shrink-0 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">{updateWords.updated}</span>}
                     {isCompleted && (
                       <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-sm font-medium bg-green-50 text-green-600 border border-green-200">
                         <CheckCircle2 size={11} />
@@ -482,7 +529,7 @@ export function TrainingPage() {
                   <p className="text-sm text-gray-500 line-clamp-1 mb-2">
                     {tr(mod.subtitle, i18n.language)}
                   </p>
-                  <div className="flex items-center gap-3 text-sm text-gray-400">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-400 [&>span]:whitespace-nowrap">
                     <span className="flex items-center gap-1">
                       <Clock size={12} />
                       {mod.minutes} {t("training.minutes", "分钟")}
@@ -537,6 +584,8 @@ export function TrainingPage() {
             return (
               <div
                 key={list.key}
+                id={"training-checklist-" + list.key}
+                tabIndex={-1}
                 className="bg-white rounded-2xl p-4 shadow-xs border border-gray-100"
               >
                 <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-3">
@@ -544,6 +593,10 @@ export function TrainingPage() {
                     <h3 className="font-bold text-gray-900 text-base">
                       {tr(list.title, i18n.language)}
                     </h3>
+                    {notices.unread('checklist',list.key).length > 0 && <button className="shrink-0 rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700" onClick={() => {
+                      document.getElementById('training-checklist-'+list.key)?.focus({preventScroll:true});
+                      void notices.markRead('checklist',list.key);
+                    }}>{updateWords.open}</button>}
                   </div>
                   <span
                     className={`text-sm font-medium px-2 py-0.5 rounded-full ${
@@ -826,6 +879,7 @@ export function TrainingPage() {
               </div>
             </div>
 
+            {notices.readFailed && <p role="status" className="bg-amber-50 p-3 text-sm text-amber-900">{updateWords.readFailed}{' '}<button className="underline" onClick={()=>void notices.markRead('module',selectedModule.key)}>{updateWords.retry}</button></p>}
             {/* Modal Content - Scrollable */}
             <div className="p-5 overflow-y-auto flex-1 space-y-5">
               {!showQuiz ? (

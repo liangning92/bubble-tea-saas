@@ -21,6 +21,7 @@ export interface WorkflowJob {
   status: 'queued' | 'processing' | 'retry_wait' | 'awaiting_approval' | 'reviewed' | 'uncertain' | 'blocked' | 'dismissed'
   createdAt: string; updatedAt: string; leaseToken?: string; leaseUntil?: number; claimEpoch?: number
   nextAttemptAt?: number; error?: string; aiRequestId?: string; replyMessageId?: string; planId?: string
+  publicationRetries?: number
   sentAt?: string; sendLatencyMs?: number; automaticReply?: boolean
   timing?: { sourceWrittenAt: string; enqueuedAt: string; claimedAt?: string; modelStartedAt?: string; modelCompletedAt?: string; replyWrittenAt?: string }
   billingStatus?: 'not_started' | 'possible' | 'usage_recorded'

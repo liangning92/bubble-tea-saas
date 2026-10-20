@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { ShiftSwapProgress } from '../../../../shared/ShiftSwapProgress'
 import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
@@ -29,6 +30,9 @@ const SHIFT_LABELS: Record<string, string> = {
 }
 
 export function ShiftSwapListPage() {
+  const [noticeParams] = useSearchParams()
+  const noticeObject = noticeParams.get('noticeObject') || ''
+  useEffect(() => { if (noticeObject) setFilter('') }, [noticeObject])
   const { t } = useTranslation()
   const { token, user } = useAuthStore()
   const [requests, setRequests] = useState<ShiftSwapRequest[]>([])
@@ -167,7 +171,7 @@ export function ShiftSwapListPage() {
           <div className="text-center py-12 text-gray-500">{t('common.noData')}</div>
         ) : (
           filteredRequests.map(request => (
-            <div key={request.id} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+            <div key={request.id} data-notice-object={request.id} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
               {/* Staff Info */}
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <User size={16} className="text-gray-400" />

@@ -10,6 +10,8 @@ import path from "path";
 import fs from "fs/promises";
 import { randomUUID, createHash } from "crypto";
 import prisma from "../config/database";
+import { notificationInbox } from "../services/NotificationInboxService";
+import { chatReminderRelevant } from "../services/TeamChatReminderService";
 import { isTeamAttachment, teamCommunication, TeamActor, TeamError } from "../services/TeamCommunicationService";
 import { authenticate, AuthRequest } from "../middlewares/auth";
 import {
@@ -72,6 +74,13 @@ function admin(req: AuthRequest) {
   if (req.user?.role !== "admin") throw new Error("FORBIDDEN");
   return req.user;
 }
+router.get('/my/inbox', handle(async (req, res) => {
+  res.json({ code: 200, data: await notificationInbox().read(req.user!) });
+}));
+router.post('/my/inbox/:id/read', handle(async (req, res) => {
+  z.object({}).strict().parse(req.body || {});
+  res.json({ code: 200, data: await notificationInbox().markRead(req.user!, req.params.id) });
+}));
 async function ownedFiles(user: any, files: string[], db: any = prisma) {
   for (const id of files) {
     const file = await readWork(user.storeId, `file.${id}`, db);
@@ -888,6 +897,9 @@ router.get(
       results[i].status === "fulfilled"
         ? (results[i] as PromiseFulfilledResult<any>).value
         : [];
+    const staleChatReminders = new Set<string>();
+    for (const reminder of value(3)) if (reminder.event?.startsWith('team-chat:') &&
+      !await chatReminderRelevant(prisma, u.storeId, reminder)) staleChatReminders.add(reminder.id);
     res.json({
       code: 200,
       data: {
@@ -913,6 +925,7 @@ router.get(
         reminders: value(3).filter(
           (r: any) =>
             r.status !== "cancelled" &&
+            !staleChatReminders.has(r.id) &&
             (!r.expiresAt || new Date(r.expiresAt) > now),
         ),
         failedModules: results.flatMap((r, i) =>

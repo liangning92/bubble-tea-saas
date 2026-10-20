@@ -16,6 +16,7 @@ const app=express();app.use(express.json());
 app.all('/api/*',(req,res)=>{
  const ok=data=>res.json({code:200,data}),role=req.headers.authorization?.includes('manager')?'manager':'admin';
  if(req.path==='/api/auth/me')return ok({...user,role});
+ if(req.path==='/api/staff-work/my/inbox')return ok({items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}});
  if(req.path==='/api/team/ai/settings')return ok(settings);
  if(req.path==='/api/ai/permissions')return ok({executionEnabled:false});
  if(['/api/team/admin/channels','/api/team/channels'].includes(req.path))return ok([channel,{...channel,id:otherId,title:'Other channel',member:false}]);

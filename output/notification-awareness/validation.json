@@ -1,0 +1,86 @@
+{
+  "recordedAt": "2026-10-20T06:53:37.685286+00:00",
+  "baseSha": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "source": "commit containing this record",
+  "componentTypes": {
+    "api": true,
+    "admin": true,
+    "pos": true,
+    "staff": true
+  },
+  "clientBuilds": {
+    "admin": true,
+    "pos": true,
+    "staff": true
+  },
+  "i18n": {
+    "admin": true,
+    "pos": true,
+    "staff": true
+  },
+  "unit": {
+    "passed": 241,
+    "failed": 0
+  },
+  "audits": {
+    "passed": 300,
+    "failed": 0,
+    "verifiedBy": "fixed-source CI39383263838 unit/audit step; original empty-staff fixture correction retained"
+  },
+  "scopeUnit": {
+    "passed": 27,
+    "failed": 0
+  },
+  "browserSuites": [
+    "notification-awareness-ui-20261020",
+    "notification-approval-target-ui-20261020 (noticeObject + legacy requestId)",
+    "training-update-notices",
+    "training-admin-notices"
+  ],
+  "postgresGroups": {
+    "awareness": 10,
+    "chatNotify": 5,
+    "training": 11,
+    "approvalProjection": "passed",
+    "teamCommunication": 67
+  },
+  "temporaryServicesCleaned": true,
+  "dependencyPreparation": "POS bcryptjs 3.0.3 downloaded without scripts and verified against lock SHA512; task-local only",
+  "notExecuted": [
+    "production deployment",
+    "real business UI acceptance",
+    "physical device push delivery",
+    "real model call",
+    "production worker"
+  ],
+  "ci": "pending fixed-SHA scoped run",
+  "networkRecovery": {
+    "adminRequestDeadlineMs": 15000,
+    "realAxiosTimeoutThenFocusRecovery": true,
+    "clients": [
+      "admin",
+      "staff"
+    ],
+    "browserErrors": []
+  },
+  "firstCandidateCi": {
+    "runId": 39383263838,
+    "headSha": "6e802c1c9538fae1a5f20199692344e7e262cd38",
+    "conclusion": "failure",
+    "step": "HTTP",
+    "reason": "old employee workspace fixture expected automatic push key generation; no-key delivery correctly remained in_app",
+    "fix": "assert missing-key in_app and zero key creation; seed two fake strings for mocked existing-key delivery; retain original dedup/expiry/logout assertions",
+    "newExactCiRequired": true
+  },
+  "employeeWorkspaceProviderRetest": {
+    "providers": [
+      "sqlite",
+      "postgresql"
+    ],
+    "passed": true,
+    "generatedPushKeys": 0,
+    "batch": "bt-test-1567228eb771",
+    "ownedDatabasesAndRuntimeRemoved": true,
+    "evidence": "employee-workspace-providers-summary.json"
+  }
+}

@@ -1,0 +1,294 @@
+verify	Run related HTTP regressions with disposable databases	﻿2026-10-20T06:57:56.1006280Z ##[group]Run export PATH="$(pg_config --bindir):$PATH"
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.1006792Z [36;1mexport PATH="$(pg_config --bindir):$PATH"[0m
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.1007201Z [36;1mnode scripts/run-scoped-ci.cjs http[0m
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.1067044Z shell: /usr/bin/bash -e {0}
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.1067395Z ##[endgroup]
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.1562318Z Scoped http: access, adminUi, chatNotification, ci, inventory, notificationAwareness, orders, payroll, routes, shifts, staff, teamCommunication, teamWorkflowReview, training
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.2543281Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.2544185Z > bubble-tea-saas@2026.10.02.1748 build:server
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.2544842Z > cd server && npm run build
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.2545140Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.3723406Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.3724357Z > bubble-tea-server@1.0.0 build
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.3725022Z > tsc
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:57:56.3725202Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:13.1827512Z [docker-test] batch bt-test-47ba538c3e90
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:15.3943901Z Prisma schema loaded from server/prisma/schema.prisma
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:15.4080314Z Datasource "db": PostgreSQL database "notification_awareness_test", schema "public" at "127.0.0.1:50517"
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:15.7996633Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:15.7997605Z 🚀  Your database is now in sync with your Prisma schema. Done in 346ms
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:15.7998156Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:16.4800382Z PASS inbox opening preserves both conversation cursors; successful selected fetch plus ack clears only that conversation across sessions
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:16.5849230Z PASS nonmembers and cross-store/forged identity cannot expose preview or use notification deep links/read IDs
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:16.6658774Z PASS backend business deny preserves existing employee APP inbox/chat/training while forged manager grants fail
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:16.9345155Z PASS real training draft stays silent; published content emits deduplicated personal updates and shared read does not complete learning
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.1057707Z prisma:error
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.1058484Z Invalid `prisma.config.upsert()` invocation:
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.1058959Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.1058975Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.1059278Z Error occurred during query execution:
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.1064488Z ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"Config\" violates check constraint \"notification_publish_failure\"", severity: "ERROR", detail: Some("Failing row contains (cmvgc0fps0062rflf5tcpf43f, notice-store-6, employee.workspace.reminder.notice-staff-6-owner.7c530b1a6205bd9..., {\"id\":\"7c530b1a6205bd9e8998b9ead94d03151dd1e2dc22b964727999d0dea..., staff, 2026-10-20 06:58:17.104, 2026-10-20 06:58:17.104)."), column: None, hint: None }), transient: false })
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.1885834Z PASS training newer published revision replaces old relevance; reminder failure rolls back actual HTTP publication/version
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.3180073Z PASS current authorized handler pending survives read across devices; revocation removes inbox and queued-push relevance without altering source
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.4595218Z PASS fixture node completion removes pending and queued push; only applicant gets result including no-staff administrator in-app
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.4893458Z PASS chat outbox persistence failure atomically rolls back message, reminder and workflow event
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.5766504Z PASS no subscription preserves in-app item; mocked push uses generic existing-key deep link and deterministic concurrent dedup
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:17.9552992Z PASS queued chat rechecks member/floor/archive/active identity; disabled/stale/404/410 subscriptions never repeat transport
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:18.1077557Z Owned notification PostgreSQL instance cleaned
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:18.5129745Z [docker-test] cleaned bt-test-47ba538c3e90
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:18.6190456Z [docker-test] batch bt-test-aa7c7d560149
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:19.7066091Z Prisma schema loaded from server/prisma/schema.prisma
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:19.7195162Z Datasource "db": PostgreSQL database "training_notices_test", schema "public" at "127.0.0.1:41525"
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.0869855Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.0871252Z 🚀  Your database is now in sync with your Prisma schema. Done in 328ms
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.0872039Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.5058012Z PASS draft and initial unchanged publication do not notify
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.5785680Z PASS actual publication creates deterministic individual events for current active store staff
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.5839754Z PASS request replay and conflicting retry do not duplicate events
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.6525490Z PASS draft/metadata-only publish is silent and does not invalidate current unchanged content
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.7178569Z PASS new version invalidates old item notice while checklist changes target only that checklist
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8304850Z PASS removal and identical reintroduction preserve prior read receipts without repeated alerts
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8412407Z PASS staff deactivation, store move, rebinding and forged recipient metadata cannot expose old updates
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8827449Z prisma:error
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8828190Z Invalid `prisma.config.upsert()` invocation:
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8828668Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8828684Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8828986Z Error occurred during query execution:
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8832494Z ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"Config\" violates check constraint \"training_notice_failure\"", severity: "ERROR", detail: Some("Failing row contains (cmvgc0imp002cp8saw3jn512e, training-a, employee.workspace.reminder.staff-bob.cf43ea86209698ffa45526c6a2..., {\"id\":\"cf43ea86209698ffa45526c6a24120187b224aa84f435d6b692c55fd8..., staff, 2026-10-20 06:58:20.881, 2026-10-20 06:58:20.881)."), column: None, hint: None }), transient: false })
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.8898989Z PASS notification persistence failure rolls back publication head and version
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:20.9304720Z PASS concurrent publishers produce one publication and one event per eligible person
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:21.0090534Z PASS new modules and standards create their own exact targets
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:21.1344258Z PASS rebinding an account gives the new user an independent receipt when identical content is reintroduced
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:21.1345940Z PASS training publication notices integration (temporary PostgreSQL only)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:21.2849858Z Owned training-notices PostgreSQL instance cleaned
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:21.5366576Z [docker-test] cleaned bt-test-aa7c7d560149
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:21.6421384Z [docker-test] batch bt-test-dac7116d1808
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:40.7107902Z PASS approval awareness PostgreSQL: all pending, fresh V2/native grants, legacy spoof isolation, peer/current nodes, owner-only profile/appeal, native refund self exception, no private fields/business writes, exact id dedup, read-independent pending, revoke/close/inactive/delivery rechecks and applicant results
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:40.8611777Z Owned synthetic approval PostgreSQL cleaned
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:41.0681204Z [docker-test] cleaned bt-test-dac7116d1808
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:41.1675353Z [docker-test] batch bt-test-1bb60e09838c
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:41.2040002Z postgres (PostgreSQL) 18.6 (Ubuntu 18.6-1.pgdg26.04+2)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:42.2682082Z Prisma schema loaded from server/prisma/schema.prisma
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:42.2807236Z Datasource "db": PostgreSQL database "team_test", schema "public" at "127.0.0.1:59141"
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:42.6441174Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:42.6444800Z 🚀  Your database is now in sync with your Prisma schema. Done in 324ms
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:42.6445647Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:43.1202550Z PASS chat reminder is atomic with message/queue, excludes sender, is deterministic and carries no message body
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:43.4092722Z PASS chat inbox and delivery recheck member/fromSeq/archive/active identity/read receipt; backend denied permissions preserve APP chat
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:43.4873914Z PASS unread/read cursors are per conversation and shared across sessions; notification deep links do not grant private channel access
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:43.5891754Z PASS chat delivery reuses existing keys/subscriptions, deduplicates concurrency, and no subscription/key becomes in-app without generating credentials
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:43.7426749Z PASS disabled/logout-stale subscriptions and terminal 404/410 endpoints stop pushes; send records are not device delivery proof
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:43.8910562Z Owned temporary PostgreSQL instance cleaned
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.0900656Z [docker-test] cleaned bt-test-1bb60e09838c
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.1943273Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.1944216Z > bubble-tea-saas@2026.10.02.1748 build:server
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.1944812Z > cd server && npm run build
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.1945088Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.3083362Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.3084421Z > bubble-tea-server@1.0.0 build
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.3084917Z > tsc
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:58:44.3085093Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:00.3772642Z [docker-test] batch bt-test-7db85215977e
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:00.4136693Z postgres (PostgreSQL) 18.6 (Ubuntu 18.6-1.pgdg26.04+2)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:01.4651516Z Prisma schema loaded from server/prisma/schema.prisma
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:01.4780003Z Datasource "db": PostgreSQL database "team_test", schema "public" at "127.0.0.1:56115"
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:01.8431781Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:01.8433415Z 🚀  Your database is now in sync with your Prisma schema. Done in 327ms
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:01.8434567Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.2886036Z PASS identity, store-scoped directory, separate management and audit capabilities
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.3696460Z PASS direct creation deduplication, request retry and payload-conflict rejection
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.5465402Z PASS concurrent messages receive unique contiguous sequence numbers; reconnect cursor recovers every message
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.5794237Z PASS lost HTTP response retries return the committed message without duplication
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.6166608Z PASS persisted cursor pagination recovers a gap larger than a response page
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.6476466Z PASS per-person monotonic read receipts and unread counters
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.6924977Z PASS private chat access is denied to nonmembers and other stores; authorized audit requires a reason and creates an audit record
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.7354991Z PASS private employee attachment can be read only through an authorized channel grant
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.7970728Z PASS image upload retries and concurrent tabs reuse one private file; lost responses and payload conflicts are safe
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.8624481Z PASS legacy file downloads enforce chat membership and audit reasons while ordinary employee files retain their permissions
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:02.9444839Z PASS attachment grants after the first hundred remain downloadable only from the current join sequence
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:03.0464716Z PASS membership join floor, removal, scoped public channels and historical minutes privacy
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:03.1349128Z PASS meeting close atomically creates a manual scaffold; versioned human decisions never rewrite source messages
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:03.2002413Z PASS retained minutes and revision history are not silently truncated by metadata limits
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:03.2843921Z PASS operations import is strict, private, member-scoped and creates no tasks or messages
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:03.3373849Z PASS operations publication survives lost responses and concurrent retries without duplicate assignments
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:03.4180417Z PASS operations audience changes block publication, and late joiners cannot read existing plan tasks
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:03.5953194Z PASS revised plan export filters old tasks, snapshots, counts, escalations and task IDs even at the same message floor
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:03.8662592Z PASS a supervisor joining after old messages can manage the current revision and review its own-scope evidence
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.0382910Z PASS rejoining at a later floor cannot replay a stale scan or regain old snapshots through a new revision
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.1066549Z PASS operations escalation reopens after an unavailable assignee recovers and becomes unavailable again
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.2172740Z PASS operations loop keeps read, acceptance, evidence and named human review distinct
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.3430405Z PASS operations escalation scan deduplicates and resolves as deterministic task state changes
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.4670068Z PASS operations pause blocks execution; revision cannot silently replace open tasks and preserves snapshots
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.5959154Z PASS operations scoped MiniMax uses only approved task text, stays private, and cannot change task state
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.6790440Z PASS operations in-flight scope changes withhold AI output; uncertain calls are visible and never automatically retried
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.7041908Z PASS operations results export separates employee statement, evidence and human decision without secret material
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.7820807Z PASS follow-up tasks require confirmed minutes, preserve snapshots and deduplicate retries
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:04.9157940Z PASS assignee acceptance and evidence submission are distinct from read; human review supports return and approval
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.0012402Z PASS task history follows membership floors, revocation and explicit audited reads
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.0182869Z PASS MiniMax settings default to no cap and no key; credentials are write-only and private
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.0823169Z PASS MiniMax text drafts send only selected text, replay once, stay private and publish only with human approval
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.1435118Z PASS AI context and publication recheck membership, audience and policy changes
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.1628670Z PASS optional monthly cap blocks before transmission; no cap remains configurable
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.1866509Z PASS uncertain AI outcomes retain reservations and never automatically retry or invent source references
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.2224951Z PASS concurrent AI requests reserve budget atomically and a pending request is never transmitted twice
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.2559279Z PASS disabling AI during generation withholds the output while retaining recorded usage
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.2805365Z PASS MiniMax adapter pins the official endpoint, keeps reasoning separate and supplies no tools
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.3001699Z PASS regional settings normalize legacy records read-only and keep legacy credentials on the international endpoint
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.3195996Z PASS region changes cannot reuse saved credentials or bypass destination confirmation; arbitrary hosts are rejected locally
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.3481787Z PASS China uses only the fixed official endpoint and region-bound ciphertext; omitted region retains China without moving the key
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.3540990Z PASS changing ciphertext region metadata is rejected before budget reservation or provider transmission
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.3728309Z PASS upstream China 401 is stored as uncertain and querying or replaying the same request never transmits again
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.4012908Z PASS region changes while a model is in flight withhold the old-region result
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.5263114Z PASS workflow defaults off; explicit consent, real admin and immutable automaticSend=false are enforced
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.6153306Z PASS active policy binds current verified config and check revision; stale proof fails while pause and disable remain available
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.7038191Z PASS workflow event failure rolls back the message, sequence, request record and queue atomically
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.7695445Z PASS parallel consumers claim one persisted lease and generate one private draft without auto sending
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.8352839Z PASS human reply approval retries publish one AI-labelled message and never reenqueue it
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:05.8900647Z PASS human task approval is atomic and deduplicated; source employee and human reviewer are fixed
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:06.0057313Z PASS workflow task follows employee acceptance, own evidence, return, resubmission and explicit human criteria review
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:06.1563954Z PASS queued pause consumes nothing; pause during provider work blocks the result and later publication
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:06.3143393Z PASS provider uncertainty retains billing risk and never auto retries; a new attempt requires explicit human acknowledgement
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:06.5069000Z PASS P2-1 all attempt billing survives explicit retry, pre-transport failure and later success in jobs and Chinese export
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:06.7600357Z PASS P2-2 paused and disabled expired leases reconcile pending billing without model calls, including read-only projections
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:06.8886973Z PASS pre-transport rate failure backs off durably and retries only when due without a duplicate charge
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:07.0368931Z PASS expired in-flight lease stops uncertain; later saved output can be reconciled manually without another model call
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:07.2507204Z PASS revoked operator, changed audience and changed model settings fail closed before provider transmission
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:07.3582530Z PASS recovery blocked by changed config still exposes the in-flight provider reservation as possible billing
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:07.5297867Z PASS failed final approval audit rolls back both the reused message service and the job decision
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:07.6610150Z PASS attachment-only messages need manual review; financial exceptions never create tasks; event cursors expose state without secrets
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:07.7542583Z PASS human pause remains available when an employee becomes inactive or AI is disabled
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:08.0363109Z PASS invalid structured output is withheld and uncertain attempts cannot exceed the explicit three-attempt limit
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:08.1294372Z PASS job, event and Chinese export cursors recover every record beyond one page and enforce the current membership floor
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:08.4754412Z PASS rate and length limits apply transactionally, and invalid requests do not allocate sequence numbers
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:08.4819580Z PASS reserved storage cannot be read or overwritten using ordinary configuration routes
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:08.5260324Z PASS archive retains history, and inactive employees or revoked old tokens cannot read it
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:08.5840296Z RESULT {"passed":67,"failed":0}
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:08.7424093Z Owned temporary PostgreSQL instance cleaned
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:08.9645267Z [docker-test] cleaned bt-test-7db85215977e
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:15.3570174Z PASS sqlite actual additive migration: durable owned backup and historical amounts unchanged, nullable receipt fields
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:16.9691085Z PASS sqlite lost reply: single/bulk original receipt; once-only theoretical consumption/points/cash/referral invocation; physical stock unchanged
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.0146521Z PASS sqlite replay before mutable shift/payment/price/points; changed content and foreign store rejected
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.0358803Z PASS sqlite NULL history and real sales report remain readable; replay does not change report count or revenue
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.0735939Z PASS sqlite status/detail/refund nested/KDS public projection; private receipts and NULL history preserved; cashier permissions unchanged
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.0908384Z PASS sqlite cashier channel orders and nested member history exclude private metadata, preserve amounts/items and reject unauthenticated reads
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2032789Z PASS sqlite concurrent same/different original content: one creator, matching replay or explicit conflict
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2320685Z Create order error: PrismaClientKnownRequestError:
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2321690Z Invalid `prisma.order.update()` invocation:
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2322114Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2322130Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2322476Z Foreign key constraint violated: `foreign key`
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2323894Z     at $n.handleRequestError (/tmp/pos-idempotency-runtime-ohfVUJ/sqlite/client/runtime/library.js:121:7315)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2325559Z     at $n.handleAndLogRequestError (/tmp/pos-idempotency-runtime-ohfVUJ/sqlite/client/runtime/library.js:121:6623)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2327099Z     at $n.request (/tmp/pos-idempotency-runtime-ohfVUJ/sqlite/client/runtime/library.js:121:6307)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2327970Z     at async l (/tmp/pos-idempotency-runtime-ohfVUJ/sqlite/client/runtime/library.js:130:9633)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2329529Z     at async /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/OrderService.ts:680:9
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2331215Z     at async Proxy._transactionWithCallback (/tmp/pos-idempotency-runtime-ohfVUJ/sqlite/client/runtime/library.js:130:8000)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2332756Z     at async Object.createOrder (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/OrderService.ts:706:21)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2334310Z     at async /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/order.ts:293:23 {
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2335260Z   code: 'P2003',
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2335694Z   clientVersion: '5.22.0',
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2336050Z   meta: { modelName: 'Order', field_name: 'foreign key' }
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2336370Z }
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2370852Z PASS sqlite receipt persistence failure rolls back order, theoretical consumption, points and cash; no referral invocation
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:17.2372512Z Evidence: /tmp/pos-receipt-http-Tk6YU9/evidence.json
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:19.0280876Z PASS partial/full refunds reduce shift net amount, effective order/employee counts, with audit records preserved
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:19.0506541Z PASS real pending-actions HTTP: authenticated store binding and unauthorized access blocked
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:19.1118219Z PASS actual HTTP date boundaries, reopened shifts, midnight, gaps, overlaps, money/quantity, refunds, store/auth isolation
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:19.1119273Z Evidence: /tmp/shift-review-http-zazx0g
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:20.8162778Z PASS actual HTTP date boundaries, reopened shifts, midnight, gaps, overlaps, money/quantity, refunds, store/auth isolation
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:20.8760869Z PASS actual HTTP/SQLite correction authorization, store isolation, zero amounts, derived report, audit history and stale writes
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:20.8762530Z Evidence: /tmp/shift-review-http-cII1Qs
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0491946Z Create expense error: BusinessInputError: Invalid calendar date
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0493957Z     at parseBusinessDate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/utils/businessDate.ts:23:11)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0495761Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:76:136
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0497528Z     at Proxy._transactionWithCallback (/tmp/pos-idempotency-runtime-ohfVUJ/sqlite/client/runtime/library.js:130:8006)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0499288Z     at async /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:168:25
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0555298Z Update expense error: BusinessInputError: Invalid calendar date
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0556901Z     at parseBusinessDate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/utils/businessDate.ts:23:11)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0559074Z     at Object.updateExpense (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:109:85)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0561159Z     at async /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:207:25
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0585536Z Create expense error: BusinessInputError: Invalid calendar date
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0587178Z     at parseBusinessDate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/utils/businessDate.ts:23:11)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0589103Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:76:136
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0591080Z     at Proxy._transactionWithCallback (/tmp/pos-idempotency-runtime-ohfVUJ/sqlite/client/runtime/library.js:130:8006)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0592934Z     at async /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:168:25
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0627284Z Update expense error: BusinessInputError: Invalid calendar date
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0629351Z     at parseBusinessDate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/utils/businessDate.ts:23:11)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0631874Z     at Object.updateExpense (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:109:85)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0634195Z     at async /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:207:25
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0666280Z Create expense error: BusinessInputError: Invalid calendar date
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0668105Z     at parseBusinessDate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/utils/businessDate.ts:23:11)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0670786Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:76:136
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0673271Z     at Proxy._transactionWithCallback (/tmp/pos-idempotency-runtime-ohfVUJ/sqlite/client/runtime/library.js:130:8006)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0675529Z     at async /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:168:25
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0735204Z Update expense error: BusinessInputError: Invalid calendar date
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0737503Z     at parseBusinessDate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/utils/businessDate.ts:23:11)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0769321Z     at Object.updateExpense (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:109:85)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0794768Z     at async /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:207:25
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0815484Z Create expense error: BusinessInputError: Expense amount must be a positive integer within the supported range
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0817446Z     at validateAmount (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:26:15)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0819367Z     at Object.createExpense (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:73:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0821094Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:168:46
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0822834Z     at Layer.handle [as handle_request] (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/layer.js:95:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0825136Z     at next (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/route.js:149:13)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0826749Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:218:9
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0828485Z     at Layer.handle [as handle_request] (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/layer.js:95:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0830420Z     at next (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/route.js:149:13)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0832191Z     at requireStoreAccess (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:251:16)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0834137Z     at authenticate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:190:16)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0836057Z Create expense error: BusinessInputError: Expense amount must be a positive integer within the supported range
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0837841Z     at validateAmount (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:26:15)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0839661Z     at Object.createExpense (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:73:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0841284Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:168:46
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0843045Z     at Layer.handle [as handle_request] (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/layer.js:95:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0845137Z     at next (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/route.js:149:13)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0846697Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:218:9
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0848565Z     at Layer.handle [as handle_request] (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/layer.js:95:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0850693Z     at next (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/route.js:149:13)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0852945Z     at requireStoreAccess (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:251:16)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0854927Z     at authenticate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:190:16)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0857447Z Create expense error: BusinessInputError: Expense amount must be a positive integer within the supported range
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0859182Z     at validateAmount (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:26:15)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0860957Z     at Object.createExpense (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:73:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0862541Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:168:46
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0864719Z     at Layer.handle [as handle_request] (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/layer.js:95:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0866728Z     at next (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/route.js:149:13)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0868316Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:218:9
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0870071Z     at Layer.handle [as handle_request] (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/layer.js:95:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0871947Z     at next (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/route.js:149:13)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0873808Z     at requireStoreAccess (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:251:16)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0875530Z     at authenticate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:190:16)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0886565Z Create expense error: BusinessInputError: Expense amount must be a positive integer within the supported range
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0888143Z     at validateAmount (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:26:15)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0889773Z     at Object.createExpense (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/services/ExpenseService.ts:73:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0891207Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/routes/expense.ts:168:46
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0892418Z     at Layer.handle [as handle_request] (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/layer.js:95:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0893726Z     at next (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/route.js:149:13)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0894710Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:218:9
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0896243Z     at Layer.handle [as handle_request] (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/layer.js:95:5)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0897698Z     at next (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/node_modules/express/lib/router/route.js:149:13)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0898986Z     at requireStoreAccess (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:251:16)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0900525Z     at authenticate (/home/runner/work/bubble-tea-saas/bubble-tea-saas/server/src/middlewares/auth.ts:190:16)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.0992327Z PASS sqlite real HTTP expense create/edit/list: date-only conversion, ISO compatibility, amount precision, audit logs, invalid dates/amounts rejected without writes, authenticated store binding
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.1211618Z PASS sqlite category collection PUT bypasses expense-id route: persisted create/read/rename/remove, no expense mutations
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.1241078Z PASS expense form amount separators and Jakarta calendar boundary/edit roundtrip
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:22.1691438Z PASS explicit payment source verification: store-local actual time, immutable amount, stale changes and cashier denied
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:24.4572636Z [env] CORS_ORIGIN not set, using localhost fallback (safe for local desktop app)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:27.0034038Z PASS admin self-refund direct/durable approve/reject, unprepared reversal, idempotency/audit attribution; employee self approve/reject denied without financial writes; other approver still works
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:30.6799806Z PASS mutual shift swap: scoped picker, required colleague, both histories, mandatory consent, re-consent after edit, stale/duplicate response protection, real PostgreSQL rollback, atomic schedule exchange and peer refusal
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:30.8122760Z PASS production global authentication, independent employee app data, malformed-policy isolation, unchanged POS/management restrictions; V2 real PostgreSQL + HTTP: drafts/activation/global owner/store scope/effective modes/privacy/production/refund requests/remote and onsite approval/idempotency/revocation/expiry/transaction rollback/dependencies/conflicts/basic fallback
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:32.2351345Z [env] CORS_ORIGIN not set, using localhost fallback (safe for local desktop app)
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2092381Z AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2093281Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2093466Z 0 !== 1
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2093930Z
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2095325Z     at run (/home/runner/work/bubble-tea-saas/bubble-tea-saas/tests/stoploss/employee-workspace-http-check.cjs:84:66) {
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2097001Z   generatedMessage: true,
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2097634Z   code: 'ERR_ASSERTION',
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2098086Z   actual: 0,
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2098473Z   expected: 1,
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2098902Z   operator: 'strictEqual',
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2099366Z   diff: 'simple'
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2099760Z }
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2525272Z Failed /opt/hostedtoolcache/node/22.23.3/x64/bin/node tests/stoploss/employee-workspace-http-check.cjs
+verify	Run related HTTP regressions with disposable databases	2026-10-20T06:59:33.2582429Z ##[error]Process completed with exit code 1.

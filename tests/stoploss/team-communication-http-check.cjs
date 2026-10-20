@@ -134,7 +134,12 @@ async function main() {
       const receipt = await good('alice', 'GET', `/team/channels/${direct.id}/receipts`);
       assert.equal(receipt.find(r => r.staffId === 's-bob').seq, 5);
       assert.equal(receipt.find(r => r.staffId === 's-alice').seq, 0);
-      assert.equal((await good('bob', 'GET', '/team/channels')).find(c => c.id === direct.id).unread, 8);
+      const all = await good('bob', 'GET', `/team/channels/${direct.id}/messages?after=0`);
+      assert.equal(all.messages.length, 13);
+      // Concurrent sends have no fixed author order. Only other people's
+      // messages after the persisted cursor count as unread.
+      const expected = all.messages.filter(m => m.seq > 5 && m.authorId !== 's-bob').length;
+      assert.equal((await good('bob', 'GET', '/team/channels')).find(c => c.id === direct.id).unread, expected);
     });
     await test('private chat access is denied to nonmembers and other stores; authorized audit requires a reason and creates an audit record', async () => {
       assert.equal((await request('carol', 'GET', `/team/channels/${direct.id}/messages`)).status, 403);
