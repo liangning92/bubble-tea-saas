@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { TeamCommunication, TeamClient } from '../../../../shared/TeamCommunication'
 import { useAuthStore } from '../../stores/auth'
 import api from '../../services/api'
+import { TeamWorkflowPanel } from './TeamWorkflowPanel'
 
 export function TeamCommunicationPage() {
   const { user } = useAuthStore(), { i18n } = useTranslation()
@@ -16,5 +17,7 @@ export function TeamCommunicationPage() {
     }
   }, [user?.id, user?.storeId])
   if (!user) return null
-  return <TeamCommunication client={client} scope={`${location.origin}:${user.storeId}:${user.staff?.id}`} staffId={user.staff?.id || ''} language={i18n.language} administration aiAdmin={user.role === 'admin'} />
+  const scope = `${location.origin}:${user.storeId}:${user.staff?.id}`
+  return <TeamCommunication client={client} scope={scope} staffId={user.staff?.id || ''} language={i18n.language} administration aiAdmin={user.role === 'admin'}
+    workflowPanel={context => <TeamWorkflowPanel key={`${user.id}:${scope}:${context.channelId}`} {...context} client={client} scope={`${user.id}:${scope}`} staffId={user.staff?.id || ''} language={i18n.language} />} />
 }

@@ -17,6 +17,13 @@ test('workflow queue, service, worker and fixture changes retain the isolated co
   }
  }finally{f.close()}
 });
+test('workflow review controls and their admin consumers select the built mocked browser contract without POS',()=>{
+ const f=fixture();try{
+  for(const file of ['client-admin/src/pages/staff/TeamWorkflowPanel.tsx','client-admin/src/pages/settings/TeamWorkflowSettings.tsx','client-admin/src/pages/staff/TeamCommunicationPage.tsx','client-admin/src/pages/settings/AiSettingsPage.tsx']){
+   f.write(file);const p=selectScope([file],f);assert(p.browser.some(check=>check.domain==='teamWorkflowReview'),file);assert(p.build.includes('admin'));assert(!p.components.includes('pos'));
+  }
+ }finally{f.close()}
+});
 test('operations plans and shared copy select protected communication checks for their actual clients',()=>{
  const f=fixture();try{
   f.write('server/src/services/TeamOperationsService.ts');f.write('shared/teamOperationCopy.ts');f.write('shared/TeamOperations.tsx',"import './teamOperationCopy'");

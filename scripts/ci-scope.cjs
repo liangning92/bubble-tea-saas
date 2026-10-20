@@ -3,6 +3,7 @@ const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('no
 const SERVICES=['api','admin','pos','staff'];
 const domains={
  aiSettings:{paths:/(?:AiSettings|AiPermissions|aiSettingsCopy|TeamAiService|team-ai-settings)/i,tests:/ai-settings/i},
+ teamWorkflowReview:{paths:/(?:client-admin\/src\/pages\/(?:staff\/(?:TeamWorkflowPanel|teamWorkflowUi|TeamCommunicationPage)|settings\/(?:TeamWorkflowSettings|AiSettingsPage))|^shared\/TeamCommunication\.tsx$|team-workflow-browser)/i,tests:/team-workflow/i},
  manualStockCorrection:{paths:/(?:ManualStockCorrection|manual-inventory-correction)/i,tests:/manual-inventory-correction/i},
  posRisk:{paths:/(?:POSRiskSummary|POSMonitorPage|POSActionLogService|posActionLog|drawerAudit|DrawerReasonDialog|pos-risk)/i,tests:/pos-risk|pos-cart|cleared-cart|receipt-monitor/i},
  teamCommunication:{paths:/(?:TeamCommunication|TeamOperations|TeamWorkflow|TeamTasks|TeamAi|TeamAttachment|teamCopy|teamWorkCopy|teamOperationCopy|teamOutbox|team-communication|team-operations|team-workflow)/i,tests:/team-communication|team-operations|team-workflow/i},
@@ -67,6 +68,7 @@ function impactedFiles(files,{reverse,inspection}){
 const browserChecks={
  desktop:{scripts:['tests/stoploss/online-update-page-check.cjs'],components:['pos']},
  aiSettings:{scripts:['tests/stoploss/team-ai-settings-browser-check.cjs'],components:['admin']},
+ teamWorkflowReview:{scripts:['tests/stoploss/team-workflow-browser-check.cjs'],components:['admin']},
  manualStockCorrection:{scripts:['tests/stoploss/manual-inventory-correction-page-check.cjs'],components:['admin']},
  posRisk:{scripts:['tests/stoploss/pos-risk-page-check.cjs','tests/stoploss/cleared-cart-page-check.cjs'],components:['admin']},
  shifts:{scripts:['tests/stoploss/pos-expense-page-check.cjs'],components:['pos']},
