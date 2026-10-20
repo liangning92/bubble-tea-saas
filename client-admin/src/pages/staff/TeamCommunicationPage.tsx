@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TeamCommunication, TeamClient } from '../../../../shared/TeamCommunication'
@@ -6,6 +7,7 @@ import api from '../../services/api'
 import { TeamWorkflowPanel } from './TeamWorkflowPanel'
 
 export function TeamCommunicationPage() {
+  const [params, setParams] = useSearchParams()
   const { user } = useAuthStore(), { i18n } = useTranslation()
   const client = useMemo<TeamClient>(() => {
     const expected = user?.id, store = user?.storeId
@@ -18,6 +20,6 @@ export function TeamCommunicationPage() {
   }, [user?.id, user?.storeId])
   if (!user) return null
   const scope = `${location.origin}:${user.storeId}:${user.staff?.id}`
-  return <TeamCommunication client={client} scope={scope} staffId={user.staff?.id || ''} language={i18n.language} administration aiAdmin={user.role === 'admin'}
+  return <TeamCommunication client={client} scope={scope} staffId={user.staff?.id || ''} language={i18n.language} navigation={{channelId: params.get('channel') || '', select: id => { const next = new URLSearchParams(params); if (id) next.set('channel', id); else next.delete('channel'); setParams(next) }}} administration aiAdmin={user.role === 'admin'}
     workflowPanel={context => <TeamWorkflowPanel key={`${user.id}:${scope}:${context.channelId}`} {...context} client={client} scope={`${user.id}:${scope}`} staffId={user.staff?.id || ''} language={i18n.language} />} />
 }

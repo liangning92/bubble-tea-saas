@@ -1,3 +1,7 @@
+import { NotificationAwarenessTarget } from '../../shared/NotificationAwarenessTarget'
+import { AwarenessProvider } from '../../shared/NotificationAwareness'
+import { AwarenessEntry, NotificationAwarenessInbox } from '../../shared/NotificationAwarenessInbox'
+import { awarenessClient } from './services/notificationAwareness'
 import { ShiftSwapInbox } from './components/ShiftSwapInbox'
 import {OfflineAttendanceSync} from './components/OfflineAttendanceSync'
 import { OfflineSession } from './components/OfflineSession'
@@ -43,6 +47,7 @@ function LayoutWithNav({ children }: { children: React.ReactNode }) {
   const path=useLocation().pathname, parent=modulePath(path), {t}=useTranslation()
   return (
     <div className="employee-shell">
+      <div className="px-4 pt-3"><AwarenessEntry /></div>
       {path!==parent&&<Link to={parent} className="employee-parent-link">← {t("common.back")}</Link>}
       <Suspense fallback={<RouteLoading />}>{children}</Suspense>
       <BottomNav />
@@ -58,16 +63,17 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  const {user, isAuthenticated, offlineUntil}=useAuthStore()
+  const {user, token, isAuthenticated, offlineUntil}=useAuthStore()
   const location=useLocation()
   if (isAuthenticated && user && offlineUntil && location.pathname!=='/login') return <OfflineSession/>
   return (
-    <StaffAccessProvider api={staffPermissionClient} actor={user?[user.id,user.storeId,'staff'].join(':'):''} owner={user?.role==='admin'}><StaffApprovalDialog/><OfflineAttendanceSync/>{isAuthenticated && user && <ShiftSwapInbox/>}{sessionStorage.getItem('employee-offline-setup-failed') && user && <p role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><OfflineSetupNotice/></p>}<Suspense fallback={<RouteLoading />}><Routes>
+    <AwarenessProvider client={awarenessClient} identity={isAuthenticated && token && user ? [user.id,user.storeId,user.role,user.staffId,token].join(':') : ''}><StaffAccessProvider api={staffPermissionClient} actor={user?[user.id,user.storeId,'staff'].join(':'):''} owner={user?.role==='admin'}><NotificationAwarenessTarget/><StaffApprovalDialog/><OfflineAttendanceSync/>{isAuthenticated && user && <ShiftSwapInbox/>}{sessionStorage.getItem('employee-offline-setup-failed') && user && <p role="status" className="m-4 rounded-xl border border-amber-200 bg-amber-50 p-4"><OfflineSetupNotice/></p>}<Suspense fallback={<RouteLoading />}><Routes>
+      <Route path="/inbox" element={<ProtectedRoute><LayoutWithNav><div className="p-4"><NotificationAwarenessInbox /></div></LayoutWithNav></ProtectedRoute>} />
       <Route path="/team" element={<ProtectedRoute><LayoutWithNav><TeamCommunicationPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/inventory/count" element={<ProtectedRoute><LayoutWithNav><InventoryCountPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/attendance/appeals" element={<ProtectedRoute><LayoutWithNav><EmployeeAppealsPage /></LayoutWithNav></ProtectedRoute>} />
       <Route path="/profile/documents" element={<ProtectedRoute><LayoutWithNav><EmployeeDocumentsPage /></LayoutWithNav></ProtectedRoute>} />
-      <Route path="/approvals" element={<ProtectedRoute><LayoutWithNav><StaffApprovalInbox api={staffPermissionClient} userId={user?.id||''}/></LayoutWithNav></ProtectedRoute>}/>
+      <Route path="/approvals" element={<ProtectedRoute><LayoutWithNav><StaffApprovalInbox key={`${user?.storeId}:${user?.id}`} api={staffPermissionClient} userId={user?.id||''}/></LayoutWithNav></ProtectedRoute>}/>
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/"
@@ -214,7 +220,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-    <Route path="*" element={<Navigate to="/" replace />} /></Routes></Suspense></StaffAccessProvider>
+    <Route path="*" element={<Navigate to="/" replace />} /></Routes></Suspense></StaffAccessProvider></AwarenessProvider>
   )
 }
 
