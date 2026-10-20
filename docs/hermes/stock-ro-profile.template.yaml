@@ -1,0 +1,35 @@
+# REVIEW TEMPLATE ONLY. Not installed. Contains no secrets. No listener enabled.
+# Future profile name: stock-ro-isolated (never default; never --clone).
+model:
+  provider: minimax-cn
+  default: MiniMax-M2.7
+# Empty until names/permissions and effective API tool visibility are accepted.
+toolsets: []
+platform_toolsets:
+  api_server: []
+cron:
+  max_parallel_jobs: 1
+kanban:
+  dispatch_in_gateway: false
+approvals:
+  mode: manual
+platforms:
+  api_server:
+    enabled: false
+    extra:
+      host: 127.0.0.1
+      port: 8642
+      # API_SERVER_KEY must be provisioned separately after explicit activation scope.
+mcp_servers:
+  store_executor:
+    enabled: false
+    url: https://executor.invalid/mcp
+    transport: http
+    protocol: legacy
+    tools:
+      include: []
+      resources: false
+      prompts: false
+# Proposed raw names to align, not enabled: store_task_get, store_task_claim,
+# store_task_read_stock_evidence, store_task_report. No assign/review tools.
+# After acceptance, expose only mcp-store_executor to api_server and set exact include names.
