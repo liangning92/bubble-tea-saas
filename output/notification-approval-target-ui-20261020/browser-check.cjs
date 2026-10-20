@@ -30,7 +30,7 @@ const row=(id)=>({id,action:'members.balance',targetId:id,payload:JSON.stringify
   return send([]);
  });
  const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));page.on('domcontentloaded',()=>pageLoads++);
- await page.goto(base+'/approvals?requestId=target-a');await page.locator('#staff-approval-target-a').waitFor();
+ await page.goto(base+'/approvals?noticeObject=target-a');await page.locator('#staff-approval-target-a').waitFor();
  assert.equal(await page.locator('article').count(),101);assert.equal(await page.locator('#staff-approval-target-a').count(),1);assert(await page.locator('#staff-approval-target-a').evaluate(el=>el.classList.contains('awareness-target')));assert((await page.locator('#staff-approval-target-a').innerText()).includes('Pending'));
  await page.screenshot({path:path.join(output,'beyond-latest-100.png')});
  const navigate=async id=>page.evaluate(id=>{history.pushState({},'',`/approvals?requestId=${encodeURIComponent(id)}`);window.dispatchEvent(new PopStateEvent('popstate'));},id);
@@ -43,6 +43,6 @@ const row=(id)=>({id,action:'members.balance',targetId:id,payload:JSON.stringify
  for(const id of ['forbidden','not-found']){await navigate(id);await page.getByRole('alert').waitFor();assert.equal(await page.locator('article').count(),0);assert.equal(await page.getByText('Approval details for target-c',{exact:false}).count(),0);await page.screenshot({path:path.join(output,`${id}-cleared.png`)});await navigate('target-c');await page.locator('#staff-approval-target-c').waitFor();}
  await navigate('unauthorized');await page.waitForURL('**/login');assert.equal(await page.locator('article').count(),0);assert.equal(await page.getByText('Approval details for target-c',{exact:false}).count(),0);
  assert.equal(posts.length,0,'Navigation cannot approve, reject, or clear pending');assert.equal(errors.length,0,errors.join('\n'));
- const report={beyondLatest100:true,mergedAndDeduplicated:true,nativeListAvoidsDetail:true,samePageRequestIdSwitch:true,clearedWhileNewTargetLoading:true,latePriorResponseIgnored:true,forbidden403Clears:true,missing404Clears:true,unauthorized401Clears:true,pendingRetained:true,noApprovalMutation:posts.length===0,sameDocumentNavigation:pageLoads===1,browserErrors:errors,detailRequests:requested};fs.writeFileSync(path.join(output,'browser-report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+ const report={noticeObjectSupported:true,beyondLatest100:true,mergedAndDeduplicated:true,nativeListAvoidsDetail:true,samePageRequestIdSwitch:true,clearedWhileNewTargetLoading:true,latePriorResponseIgnored:true,forbidden403Clears:true,missing404Clears:true,unauthorized401Clears:true,pendingRetained:true,noApprovalMutation:posts.length===0,sameDocumentNavigation:pageLoads===1,browserErrors:errors,detailRequests:requested};fs.writeFileSync(path.join(output,'browser-report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
  await context.close();
 }finally{await browser?.close();await server?.close()}})().catch(error=>{console.error(error);process.exitCode=1});

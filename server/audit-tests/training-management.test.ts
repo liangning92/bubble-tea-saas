@@ -1,6 +1,8 @@
 import { beforeEach, expect, jest, test } from '@jest/globals'
 import { randomUUID } from 'crypto'
-jest.mock('../src/config/database',()=>({__esModule:true,default:{config:{},$transaction:jest.fn()}}))
+// Catalogue history fixture has no staff. Publication notification recipients
+// are exercised separately against disposable PostgreSQL.
+jest.mock('../src/config/database',()=>({__esModule:true,default:{config:{},staff:{findMany:async()=>[]},$transaction:jest.fn()}}))
 jest.mock('../src/services/TrainingVideoStore',()=>({validateVideoReferences:jest.fn(async()=>{})}))
 jest.mock('../src/services/TrainingDocumentStore',()=>({validateDocumentReferences:jest.fn(async()=>{})}))
 import prisma from '../src/config/database'

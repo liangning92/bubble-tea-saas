@@ -1,0 +1,58 @@
+{
+  "recordedAt": "2026-10-20T06:48:32.805090+00:00",
+  "runs": [
+    {
+      "suite": "approval",
+      "log": "approval-regression.log",
+      "batch": "bt-test-c6844020cb97",
+      "exitCode": 0,
+      "passedGroups": 1,
+      "postgresCleaned": true,
+      "wrapperCleaned": true
+    },
+    {
+      "suite": "team-communication-first-run",
+      "log": "team-communication-first-run.log",
+      "batch": "bt-test-b6fa5c63718b",
+      "exitCode": 1,
+      "passedGroups": 5,
+      "postgresCleaned": true,
+      "wrapperCleaned": true
+    },
+    {
+      "suite": "team-communication-retest",
+      "log": "team-communication-regression.log",
+      "batch": "bt-test-a48938a9a407",
+      "exitCode": 0,
+      "passedGroups": 67,
+      "postgresCleaned": true,
+      "wrapperCleaned": true
+    }
+  ],
+  "finalResult": {
+    "approval": "passed",
+    "teamCommunication": {
+      "passed": 67,
+      "failed": 0
+    }
+  },
+  "firstFailure": {
+    "file": "tests/stoploss/team-communication-http-check.cjs",
+    "line": 137,
+    "reason": "Old unread expectation counted sender messages. Parent corrected expected count using real message seq and authorId, retaining 13-message and monotonic cursor assertions. Full rerun passed.",
+    "resolvedBy": "parent test-only contract fix"
+  },
+  "notRepeated": [
+    "integrated notification10",
+    "chat notification5",
+    "training updates11"
+  ],
+  "notExecuted": [
+    "production API/worker",
+    "real model or Push (existing AI tests use synthetic adapters)",
+    "physical device receipt",
+    "real user/browser UI acceptance"
+  ],
+  "businessSourceModifiedByThisAgent": false,
+  "committedByThisAgent": false
+}

@@ -4,7 +4,7 @@ import {useCallback,useEffect,useState,useRef} from 'react'
 import {useTranslation} from 'react-i18next'
 import {staffAccessLabels} from './staffAccessLabels'
 export function StaffApprovalInbox({api,userId}:{api:any;userId:string}){
- const [params]=useSearchParams(),requestId=params.get('requestId')||'',scope=JSON.stringify([userId,requestId]);
+ const [params]=useSearchParams(),requestId=params.get('noticeObject')||params.get('requestId')||'',scope=JSON.stringify([userId,requestId]);
  const located=useRef(''),currentScope=useRef(scope),requestVersion=useRef(0);currentScope.current=scope;
  const access=useStaffAccess();const {i18n}=useTranslation(),l=staffAccessLabels(i18n.language);
  const [storedRows,setRows]=useState<any[]>([]),[loadedScope,setLoadedScope]=useState(''),[storedError,setError]=useState(''),[busy,setBusy]=useState(false),[pin,setPin]=useState(''),[password,setPassword]=useState('');

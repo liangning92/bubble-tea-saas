@@ -1,0 +1,60 @@
+{
+  "recordedAt": "2026-10-20T06:53:37.685286+00:00",
+  "baseSha": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "source": "commit containing this record",
+  "componentTypes": {
+    "api": true,
+    "admin": true,
+    "pos": true,
+    "staff": true
+  },
+  "clientBuilds": {
+    "admin": true,
+    "pos": true,
+    "staff": true
+  },
+  "i18n": {
+    "admin": true,
+    "pos": true,
+    "staff": true
+  },
+  "unit": {
+    "passed": 241,
+    "failed": 0
+  },
+  "audits": {
+    "initialPassed": 299,
+    "initialFailed": 1,
+    "failure": "catalogue fixture did not define staff.findMany after publication notifications were added",
+    "correctedFixture": "explicit empty synthetic staff list",
+    "targetedRetestPassed": 2,
+    "remainingSuitesPassed": 38
+  },
+  "scopeUnit": {
+    "passed": 27,
+    "failed": 0
+  },
+  "browserSuites": [
+    "notification-awareness-ui-20261020",
+    "notification-approval-target-ui-20261020 (noticeObject + legacy requestId)",
+    "training-update-notices",
+    "training-admin-notices"
+  ],
+  "postgresGroups": {
+    "awareness": 10,
+    "chatNotify": 5,
+    "training": 11,
+    "approvalProjection": "passed",
+    "teamCommunication": 67
+  },
+  "temporaryServicesCleaned": true,
+  "dependencyPreparation": "POS bcryptjs 3.0.3 downloaded without scripts and verified against lock SHA512; task-local only",
+  "notExecuted": [
+    "production deployment",
+    "real business UI acceptance",
+    "physical device push delivery",
+    "real model call",
+    "production worker"
+  ],
+  "ci": "pending fixed-SHA scoped run"
+}

@@ -31,6 +31,8 @@ export function NotificationAwarenessInbox({ administration = false }: { adminis
     if (!row.read && row.kind !== 'chat' && row.kind !== 'training_update') void markRead(row.id).catch(() => {})
   }, [notice, loading, data.items, markRead])
   const labels: Record<AwarenessItem['kind'], string> = { chat: w.chat, training_update: w.training, approval_request: w.request, approval_result: w.result, business_reminder: w.reminder }
+  const domainNames: Record<string, string[]> = { leave: ['请假','Leave','Cuti'], overtimeRequest: ['加班','Overtime','Lembur'], attendanceCorrection: ['考勤更正','Attendance correction','Koreksi absensi'], shiftSwap: ['调班','Shift swap','Tukar shift'], reimbursement: ['报销','Reimbursement','Penggantian biaya'], hygiene: ['卫生检查','Hygiene','Higiene'], inventoryCount: ['库存盘点','Stock count','Stok opname'], profile: ['员工资料','Employee profile','Data pegawai'], appeal: ['考勤申诉','Attendance appeal','Banding absensi'], staffActionApproval: ['业务授权','Action approval','Persetujuan tindakan'], refundRequest: ['退款','Refund','Pengembalian dana'] }
+  const domainName = (domain?: string) => domain && domainNames[domain]?.[i18n.language.startsWith('zh') ? 0 : i18n.language.startsWith('en') ? 1 : 2]
   async function open(item: AwarenessItem) {
     const path = awarenessPath(administration ? item.adminUrl || item.url : item.url)
     if (!path || opening) return
@@ -50,7 +52,7 @@ export function NotificationAwarenessInbox({ administration = false }: { adminis
       {items.length === 0 && <p className="awareness-empty">{w.empty}</p>}
       <div className="awareness-list">{items.map(item => <article id={'awareness-notice-'+item.id} key={item.id} className={`awareness-item ${item.id===notice?'awareness-target':''} ${item.read ? '' : 'awareness-item-new'}`}>
         <div className="awareness-item-meta"><span>{labels[item.kind]}</span><span>{item.read ? w.read : w.unread}</span>{item.pending && <strong className="awareness-pending">{w.pending}</strong>}{item.kind === 'training_update' && !item.read && <strong className="awareness-training">{w.new}</strong>}</div>
-        <h2>{item.title}</h2>
+        <h2>{domainName(item.domain) ? domainName(item.domain) + ' · ' : ''}{item.title}</h2>
         {item.status && <p className="awareness-preview">{w.status}: {({pending:w.statusPending,approved:w.statusApproved,rejected:w.statusRejected,authorized:w.statusAuthorized,executed:w.statusExecuted,cancelled:w.statusCancelled,withdrawn:w.statusWithdrawn} as Record<string,string>)[item.status] || item.status}</p>}
         {item.kind === 'chat' && data.chats.find(chat => chat.id === item.objectId)?.preview && <p className="awareness-preview">{data.chats.find(chat => chat.id === item.objectId)!.preview!.authorName}: {data.chats.find(chat => chat.id === item.objectId)!.preview!.text}</p>}
         <div className="awareness-item-footer"><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString(i18n.language)}</time><button type="button" disabled={!!opening || !awarenessPath(administration ? item.adminUrl || item.url : item.url)} onClick={() => void open(item)}>{w.open} →</button></div>

@@ -1,4 +1,6 @@
 import { chatReminderRelevant } from './TeamChatReminderService';
+import { trainingUpdateRelevant } from './TrainingLibraryStore';
+import { collectApprovalNotices, approvalNoticeRelevant } from './NotificationApprovalService';
 import { assignedStaffAccess } from "./StaffPermissionService";
 import webpush from "web-push";
 import { createHash } from "crypto";
@@ -102,8 +104,6 @@ export async function collectReminders(storeId: string, now = new Date()) {
       checkInTime: { gte: new Date(now.getTime() - 24 * 3600000), lte: now },
     },
   });
-  const profiles = await listWork(storeId, "profile."),
-    appeals = await listWork(storeId, "appeal.");
   const trainings = await prisma.training.findMany({
     where: { storeId, status: { in: ["scheduled", "in_progress"] } },
   });
@@ -163,29 +163,8 @@ export async function collectReminders(storeId: string, now = new Date()) {
           "Tugas kebersihan baru / 新卫生任务",
           "/hygiene",
         );
-      if (
-        task.staffId &&
-        ["approved", "rejected"].includes(task.status) &&
-        task.updatedAt.toISOString() >= baseline.at
-      )
-        await enqueueReminder(
-          storeId,
-          id,
-          `hygiene-review:${task.id}:${task.updatedAt.toISOString()}`,
-          "Hasil pemeriksaan tugas / 任务审核结果",
-          "/hygiene",
-        );
     }
   }
-  for (const r of [...profiles, ...appeals])
-    if (r.reviewedAt >= baseline.at)
-      await enqueueReminder(
-        storeId,
-        r.staffId,
-        `review:${r.id}:${r.reviewedAt}`,
-        "Hasil pengajuan tersedia / 申请审核结果已更新",
-        r.attendanceId ? "/attendance/appeals" : "/profile/documents",
-      );
   for (const t of trainings)
     if (t.createdAt.toISOString() >= baseline.at)
       await enqueueReminder(
@@ -195,47 +174,13 @@ export async function collectReminders(storeId: string, now = new Date()) {
         "Pelatihan baru / 新培训任务",
         "/training",
       );
-  for (const [model, url] of [
-    ["leave", "/leave"],
-    ["reimbursement", "/reimbursement"],
-    ["overtimeRequest", "/overtime"],
-    ["shiftSwap", "/shift-swap"],
-    ["attendanceCorrection", "/attendance/correction"],
-  ] as const) {
-    const records = await (prisma[model] as any).findMany({
-      where: { storeId, updatedAt: { gte: new Date(baseline.at) } },
-    });
-    for (const r of records) {
-      if (["approved", "rejected"].includes(r.status))
-        await enqueueReminder(
-          storeId,
-          r.staffId,
-          `${model}-review:${r.id}:${r.updatedAt.toISOString()}`,
-          "Hasil pengajuan tersedia / 申请审核结果已更新",
-          url,
-        );
-      if (model === "shiftSwap" && r.targetStaffId) {
-        if (["approved", "rejected", "peer_rejected", "cancelled"].includes(r.status))
-          for (const staffId of [r.staffId, r.targetStaffId])
-            await enqueueReminder(storeId, staffId, `swap-result:${r.id}:${r.updatedAt.toISOString()}`, "Status tukar shift diperbarui / 调班流程已更新", url);
-        if (r.status === "pending" && r.targetConfirmed)
-          await enqueueReminder(storeId, r.staffId, `swap-agreed:${r.id}:${r.updatedAt.toISOString()}`, "Rekan setuju, menunggu admin / 对方已同意，等待审批", url);
-      }
-      if (
-        model === "shiftSwap" &&
-        r.status === "pending" &&
-        r.targetStaffId &&
-        !r.targetConfirmed
-      )
-        await enqueueReminder(
-          storeId,
-          r.targetStaffId,
-          `swap-confirm:${r.id}:${r.updatedAt.toISOString()}`,
-          "Konfirmasi pertukaran shift / 请确认换班",
-          "/shift-swap",
-        );
-    }
-  }
+  // Approval node/result events replace the old per-model notifications. Reads
+  // remain separate from the business pending state, and historic results do not replay.
+  await collectApprovalNotices(prisma, storeId);
+  const agreed = await prisma.shiftSwap.findMany({ where: { storeId, status: 'pending', targetConfirmed: true,
+    updatedAt: { gte: new Date(baseline.at) } } });
+  for (const r of agreed) await enqueueReminder(storeId, r.staffId, `swap-agreed:${r.id}:${r.updatedAt.toISOString()}`,
+    "Rekan setuju, menunggu admin / 对方已同意，等待审批", '/shift-swap');
   const reminders = await listWork(storeId, "reminder.");
   for (const reminder of reminders)
     if (
@@ -260,7 +205,14 @@ export async function reminderStillRelevant(
 ) {
   if (r.expiresAt && new Date(r.expiresAt) <= now) return false;
   if (r.event?.startsWith('team-chat:')) return chatReminderRelevant(db, storeId, r);
+  if (r.event?.startsWith('training-content:')) return trainingUpdateRelevant(db, storeId, r, r.staffId);
+  if (r.event?.startsWith('approval-notice:')) return approvalNoticeRelevant(db, storeId, r, r.staffId);
+  if (/^(?:hygiene-review:|review:|leave-review:|reimbursement-review:|overtimeRequest-review:|shiftSwap-review:|attendanceCorrection-review:|swap-confirm:|swap-result:)/.test(r.event)) return false;
   const [kind, id] = r.event.split(":");
+  if (kind === 'swap-agreed') {
+    const item = await db.shiftSwap.findFirst({ where: { id, storeId, staffId: r.staffId, status: 'pending', targetConfirmed: true } });
+    return !!item && r.event === `swap-agreed:${id}:${item.updatedAt.toISOString()}`;
+  }
   if (kind.startsWith("hygiene-")) {
     const task = await db.hygieneTask.findFirst({ where: { id, storeId } });
     if (!task || (task.staffId && task.staffId !== r.staffId)) return false;
@@ -316,6 +268,11 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
         ...r,
         status: "cancelled",
       }, db);
+      continue;
+    }
+    const readReceipt = await readWork(storeId, `inbox.read.${r.userId || employee.userId}.${r.id}`, db);
+    if (r.read || readReceipt) {
+      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, { ...r, read: true, status: 'in_app' }, db);
       continue;
     }
     const activeSubscriptions = subscriptions.filter(
@@ -437,7 +394,8 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
     )
       await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
         ...r,
-        status: "sent",
+        status: deliveryStates.every(state => state?.status === 'sent') ? 'sent'
+          : deliveryStates.some(state => state?.status === 'sent') ? 'partially_sent' : 'delivery_failed',
       }, db);
   }
 }

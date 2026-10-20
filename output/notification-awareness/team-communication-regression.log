@@ -1,0 +1,77 @@
+[docker-test] batch bt-test-a48938a9a407
+postgres (PostgreSQL) 15.17 (Homebrew)
+Prisma schema loaded from server/prisma/schema.prisma
+Datasource "db": PostgreSQL database "team_test", schema "public" at "127.0.0.1:49619"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 633ms
+
+PASS identity, store-scoped directory, separate management and audit capabilities
+PASS direct creation deduplication, request retry and payload-conflict rejection
+PASS concurrent messages receive unique contiguous sequence numbers; reconnect cursor recovers every message
+PASS lost HTTP response retries return the committed message without duplication
+PASS persisted cursor pagination recovers a gap larger than a response page
+PASS per-person monotonic read receipts and unread counters
+PASS private chat access is denied to nonmembers and other stores; authorized audit requires a reason and creates an audit record
+PASS private employee attachment can be read only through an authorized channel grant
+PASS image upload retries and concurrent tabs reuse one private file; lost responses and payload conflicts are safe
+PASS legacy file downloads enforce chat membership and audit reasons while ordinary employee files retain their permissions
+PASS attachment grants after the first hundred remain downloadable only from the current join sequence
+PASS membership join floor, removal, scoped public channels and historical minutes privacy
+PASS meeting close atomically creates a manual scaffold; versioned human decisions never rewrite source messages
+PASS retained minutes and revision history are not silently truncated by metadata limits
+PASS operations import is strict, private, member-scoped and creates no tasks or messages
+PASS operations publication survives lost responses and concurrent retries without duplicate assignments
+PASS operations audience changes block publication, and late joiners cannot read existing plan tasks
+PASS revised plan export filters old tasks, snapshots, counts, escalations and task IDs even at the same message floor
+PASS a supervisor joining after old messages can manage the current revision and review its own-scope evidence
+PASS rejoining at a later floor cannot replay a stale scan or regain old snapshots through a new revision
+PASS operations escalation reopens after an unavailable assignee recovers and becomes unavailable again
+PASS operations loop keeps read, acceptance, evidence and named human review distinct
+PASS operations escalation scan deduplicates and resolves as deterministic task state changes
+PASS operations pause blocks execution; revision cannot silently replace open tasks and preserves snapshots
+PASS operations scoped MiniMax uses only approved task text, stays private, and cannot change task state
+PASS operations in-flight scope changes withhold AI output; uncertain calls are visible and never automatically retried
+PASS operations results export separates employee statement, evidence and human decision without secret material
+PASS follow-up tasks require confirmed minutes, preserve snapshots and deduplicate retries
+PASS assignee acceptance and evidence submission are distinct from read; human review supports return and approval
+PASS task history follows membership floors, revocation and explicit audited reads
+PASS MiniMax settings default to no cap and no key; credentials are write-only and private
+PASS MiniMax text drafts send only selected text, replay once, stay private and publish only with human approval
+PASS AI context and publication recheck membership, audience and policy changes
+PASS optional monthly cap blocks before transmission; no cap remains configurable
+PASS uncertain AI outcomes retain reservations and never automatically retry or invent source references
+PASS concurrent AI requests reserve budget atomically and a pending request is never transmitted twice
+PASS disabling AI during generation withholds the output while retaining recorded usage
+PASS MiniMax adapter pins the official endpoint, keeps reasoning separate and supplies no tools
+PASS regional settings normalize legacy records read-only and keep legacy credentials on the international endpoint
+PASS region changes cannot reuse saved credentials or bypass destination confirmation; arbitrary hosts are rejected locally
+PASS China uses only the fixed official endpoint and region-bound ciphertext; omitted region retains China without moving the key
+PASS changing ciphertext region metadata is rejected before budget reservation or provider transmission
+PASS upstream China 401 is stored as uncertain and querying or replaying the same request never transmits again
+PASS region changes while a model is in flight withhold the old-region result
+PASS workflow defaults off; explicit consent, real admin and immutable automaticSend=false are enforced
+PASS active policy binds current verified config and check revision; stale proof fails while pause and disable remain available
+PASS workflow event failure rolls back the message, sequence, request record and queue atomically
+PASS parallel consumers claim one persisted lease and generate one private draft without auto sending
+PASS human reply approval retries publish one AI-labelled message and never reenqueue it
+PASS human task approval is atomic and deduplicated; source employee and human reviewer are fixed
+PASS workflow task follows employee acceptance, own evidence, return, resubmission and explicit human criteria review
+PASS queued pause consumes nothing; pause during provider work blocks the result and later publication
+PASS provider uncertainty retains billing risk and never auto retries; a new attempt requires explicit human acknowledgement
+PASS P2-1 all attempt billing survives explicit retry, pre-transport failure and later success in jobs and Chinese export
+PASS P2-2 paused and disabled expired leases reconcile pending billing without model calls, including read-only projections
+PASS pre-transport rate failure backs off durably and retries only when due without a duplicate charge
+PASS expired in-flight lease stops uncertain; later saved output can be reconciled manually without another model call
+PASS revoked operator, changed audience and changed model settings fail closed before provider transmission
+PASS recovery blocked by changed config still exposes the in-flight provider reservation as possible billing
+PASS failed final approval audit rolls back both the reused message service and the job decision
+PASS attachment-only messages need manual review; financial exceptions never create tasks; event cursors expose state without secrets
+PASS human pause remains available when an employee becomes inactive or AI is disabled
+PASS invalid structured output is withheld and uncertain attempts cannot exceed the explicit three-attempt limit
+PASS job, event and Chinese export cursors recover every record beyond one page and enforce the current membership floor
+PASS rate and length limits apply transactionally, and invalid requests do not allocate sequence numbers
+PASS reserved storage cannot be read or overwritten using ordinary configuration routes
+PASS archive retains history, and inactive employees or revoked old tokens cannot read it
+RESULT {"passed":67,"failed":0}
+Owned temporary PostgreSQL instance cleaned
+[docker-test] cleaned bt-test-a48938a9a407

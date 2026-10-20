@@ -1,4 +1,5 @@
 {
+  "noticeObjectSupported": true,
   "beyondLatest100": true,
   "mergedAndDeduplicated": true,
   "nativeListAvoidsDetail": true,
