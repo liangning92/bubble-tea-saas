@@ -31,13 +31,14 @@ try{
    const request=route.request(),u=new URL(request.url()),pathname=u.pathname.replace(/^\/api/,'');requests.push({method:request.method(),pathname});
    const send=data=>route.fulfill({json:{code:200,data}});
    if(pathname==='/staff-work/my/inbox'){
+    assert.equal(request.headers()['x-client-app'],app==='client-staff'?'employee':'admin','Personal inbox uses the actual app channel');
     if(malformed)return send([]);
     const second=request.headers().authorization?.includes('fixture-session-2');
     const data=second?{items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}}:{items:structuredClone(items),chats:[{id:'room-1',title:'Morning shift group',unread:3,url:'/team?channel=room-1',preview:{text:'<img src=x onerror="window.fixtureXss=1"> Please check the stock.',authorName:'Maya',createdAt:fixtureTime}}],counts:{unread:items.filter(i=>!i.read).length,chatUnread:3,trainingUnread:1,approvalPending:1}};
     if(hold&&!second){held.push(()=>send(data));return;}
     return send(data);
    }
-   if(pathname.match(/^\/staff-work\/my\/inbox\/[^/]+\/read$/)) {const id=decodeURIComponent(pathname.split('/').at(-2));posts.push(id);items=items.map(i=>i.id===id?{...i,read:true}:i);return send({read:true});}
+   if(pathname.match(/^\/staff-work\/my\/inbox\/[^/]+\/read$/)) {assert.equal(request.headers()['x-client-app'],app==='client-staff'?'employee':'admin','Personal read uses the actual app channel');const id=decodeURIComponent(pathname.split('/').at(-2));posts.push(id);items=items.map(i=>i.id===id?{...i,read:true}:i);return send({read:true});}
    if(pathname==='/staff-permissions/approvals')return send([{id:'request-1',action:'orders.refund',targetId:'order-1',payload:JSON.stringify({amount:10000,note:'Incorrect drink'}),status:'pending',applicantId:'other-user',createdAt:fixtureTime}]);
    if(pathname==='/staff-permissions/stores')return send([{id:'fixture-store',name:'Fixture store'}]);
    if(pathname==='/team/channels'||pathname==='/team/admin/channels')return send([{id:'room-1',title:'Morning shift group',kind:'group',ownerId:'fixture-staff',lastSeq:1,version:1,archived:false,members:[{staffId:'fixture-staff',fromSeq:0}],member:true,canEdit:true,canAudit:false,unread:3,round:null,preview:{text:'<script>window.fixtureXss=1</script> Hello from Maya',authorName:'Maya',createdAt:fixtureTime}}]);
