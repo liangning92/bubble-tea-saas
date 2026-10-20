@@ -61,7 +61,11 @@ async function run() {
   assert(!has(await project(db, actor('alice')), 'shiftSwap', 'swap'));
   assert(!has(await project(db, { id: 'u-outsider', storeId: 'a' }), 'shiftSwap', 'swap'));
   assert(!JSON.stringify([...manager, ...owner]).includes('PRIVATE')); assert(!JSON.stringify(manager).includes('987654321'));
-  assert.deepEqual(Object.keys(manager[0]).sort(), ['createdAt', 'domain', 'event', 'id', 'kind', 'objectId', 'pending', 'status', 'title', 'url'].sort());
+  assert.deepEqual(Object.keys(manager[0]).sort(), ['adminUrl', 'createdAt', 'domain', 'event', 'id', 'kind', 'objectId', 'pending', 'status', 'title', 'url'].sort());
+  const managedOvertime = manager.find(r => r.domain === 'overtimeRequest');
+  assert.equal(managedOvertime.url, '/inbox?notice=' + managedOvertime.id, 'staff push must never point at an admin-only route');
+  assert.equal(managedOvertime.adminUrl, '/staff/attendance/overtime?noticeObject=ot');
+  assert.equal(bobPeer[0].adminUrl, '/inbox?notice=' + bobPeer[0].id, 'nonmanager peer cannot acquire an admin destination');
   await collect(db, 'a'); const first = await listWork('a', 'reminder.', db); assert(first.length > 0);
   assert(!first.some(r => r.objectId === 'historic-result'), 'first collection must not push old completed results');
   assert(has(await project(db, actor('alice')), 'leave', 'historic-result', 'approval_result'), 'historical result projection stays read-only');
@@ -71,6 +75,11 @@ async function run() {
   await collect(db, 'a'); assert.equal((await listWork('a', 'reminder.', db)).length, first.length);
   assert.equal((await readWork('a', `reminder.${notice.staffId}.${notice.id}`, db)).read, true);
   assert(has(await project(db, actor('manager')), 'overtimeRequest', 'ot', 'approval_request')); assert(await relevant(db, 'a', notice));
+  const focused = new Proxy(db, { get(target, key) { if (['leave', 'shiftSwap', 'staffActionApproval', 'refundRequest', 'hygieneTask', 'inventoryCount', 'financeAuditLog'].includes(key)) throw new Error('Unrelated approval table scanned during focused relevance'); return Reflect.get(target, key); } });
+  assert(await relevant(focused, 'a', notice), 'delivery only queries its business object and current identity/access');
+  assert.equal(await relevant(db, 'a', { ...notice, url: '/wrong-object' }), false);
+  assert.equal(await relevant(db, 'a', { ...notice, adminUrl: '/wrong-object' }), false);
+  assert.equal(await relevant(db, 'a', { ...notice, title: 'PRIVATE REPLACEMENT' }), false);
   assert.equal(await relevant(db, 'b', notice), false); assert.equal(await relevant(db, 'a', notice, 's-bob'), false);
   assert.equal(await relevant(db, 'a', { ...notice, userId: 'u-bob' }), false);
   policy.assignments[0].overrides['attendance.write'] = 'deny'; await savePolicy();
@@ -89,6 +98,7 @@ async function run() {
   assert.equal(await relevant(db, 'a', notice), false); assert(!has(await project(db, actor('manager')), 'overtimeRequest', 'ot'));
   const result = (await project(db, { ...actor('alice'), employeeApp: true })).find(r => r.domain === 'overtimeRequest' && r.objectId === 'ot');
   assert(result && !result.pending && result.kind === 'approval_result' && result.status === 'approved'); assert.equal(result.url, '/overtime?noticeObject=ot');
+  assert.equal(result.adminUrl, '/inbox?notice=' + result.id, 'personal result does not grant a management page');
   await db.refundRequest.update({ where: { id: 'refund' }, data: { status: 'rejected' } });
   const refundResult = (await project(db, { ...actor('alice'), employeeApp: true })).find(r => r.domain === 'refundRequest' && r.objectId === 'refund');
   assert(refundResult && !refundResult.pending && refundResult.url === '/inbox?notice=' + refundResult.id);
