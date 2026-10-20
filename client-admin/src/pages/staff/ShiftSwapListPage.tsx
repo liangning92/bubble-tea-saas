@@ -77,7 +77,6 @@ export function ShiftSwapListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        notifyAdmin(t('staff.shiftSwapApproved'))
         loadData()
       } else {
         notifyAdmin(data.message || t('staff.approveFailed'))
@@ -104,7 +103,6 @@ export function ShiftSwapListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        notifyAdmin(t('staff.shiftSwapRejected'))
         loadData()
       } else {
         notifyAdmin(data.message || t('staff.rejectFailed'))
