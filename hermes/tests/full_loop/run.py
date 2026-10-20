@@ -113,7 +113,8 @@ def main():
         private(profile/'pdca-launch.json',json.dumps({'endpoints':spec['endpoints'],'pilot':spec['pilot'],'private_client_file':spec['private_client_file'],'profile_home':str(profile)}))
         env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8','HOME':str(userhome),'HERMES_HOME':str(profile),
              'API_SERVER_HOST':'127.0.0.1','API_SERVER_PORT':str(spec['port']),'API_SERVER_KEY':bearer,
-             'HERMES_GATEWAY_NO_SUPERVISE':'1','HERMES_ENABLE_PROJECT_PLUGINS':'0','PYTHONNOUSERSITE':'1'}
+             'HERMES_GATEWAY_NO_SUPERVISE':'1','HERMES_ENABLE_PROJECT_PLUGINS':'0','PYTHONNOUSERSITE':'1',
+             'HERMES_DISABLE_LAZY_INSTALLS':'1','TIRITH_ENABLED':'0'}
         child=spawn([str(Path(args.sdk_python)),'-m','hermes_cli.main','--profile','stock-ro-001','gateway','run'],cwd=str(profile),env=env,start_new_session=True)
         # urllib proxy support disabled; only fixture loopback HTTP is reachable here.
         import urllib.request
