@@ -102,6 +102,15 @@ try{
   assert.equal(held.length,1);
   await page.evaluate(()=>{window.dispatchEvent(new Event('focus'));window.dispatchEvent(new Event('employee-inbox-updated'));});
   await page.waitForTimeout(100); assert.equal(held.length,1,'Concurrent focus/events cannot overlap inbox requests');
+  // Exercise the real Axios deadline: a hung request must release single-flight
+  // and allow a subsequent focus refresh on both clients.
+  await page.locator('.awareness-error').waitFor({timeout:18000});
+  const timedOutCount=requests.filter(r=>r.pathname==='/staff-work/my/inbox').length;
+  hold=false;await Promise.all(held.map(fn=>fn().catch(()=>{})));held=[];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await page.waitForFunction(()=>!document.querySelector('.awareness-error')&&document.querySelectorAll('.awareness-item').length===5);
+  assert(requests.filter(r=>r.pathname==='/staff-work/my/inbox').length>timedOutCount,'Timed-out single-flight must resume');
+  hold=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.waitForTimeout(150);assert.equal(held.length,1);
   await page.evaluate(async()=>{const {useAuthStore}=await import('/src/stores/auth.ts');const old=useAuthStore.getState().user;useAuthStore.getState().login('fixture-session-2',{...old,id:'fixture-user-2',storeId:'fixture-store-2'});});
   await page.waitForFunction(()=>document.querySelectorAll('.awareness-item').length===0);
   await Promise.all(held.map(fn=>fn().catch(()=>{}))); held=[];
@@ -109,7 +118,7 @@ try{
   assert.equal(await page.locator('.awareness-item').count(),0);
   await page.screenshot({path:path.join(output,`${app}-store-switch-empty.png`),fullPage:true});
   assert.equal(errors.length,0,errors.join('\n'));
-  report.push({app,widths:[390,768,1365],openingInboxDoesNotRead:true,approvalReadRemainsPending:true,trainingNotReadByInbox:true,chatListDoesNotRead:true,chatReadAfterMessages:true,inboxResultStatus:true,foregroundPollWithoutPush:added,crossIdentityAbortAndClear:true,safePlainTextPreview:true,hiddenPollPaused:true,focusResumes:true,inFlightProtected:true,browserErrors:errors,posts,requestCount:requests.length});
+  report.push({app,widths:[390,768,1365],openingInboxDoesNotRead:true,approvalReadRemainsPending:true,trainingNotReadByInbox:true,chatListDoesNotRead:true,chatReadAfterMessages:true,inboxResultStatus:true,foregroundPollWithoutPush:added,crossIdentityAbortAndClear:true,safePlainTextPreview:true,hiddenPollPaused:true,focusResumes:true,inFlightProtected:true,hungRequestTimesOutAndRecovers:true,browserErrors:errors,posts,requestCount:requests.length});
   await context.close();
  }
  fs.writeFileSync(path.join(output,'browser-report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

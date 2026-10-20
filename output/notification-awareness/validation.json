@@ -23,12 +23,9 @@
     "failed": 0
   },
   "audits": {
-    "initialPassed": 299,
-    "initialFailed": 1,
-    "failure": "catalogue fixture did not define staff.findMany after publication notifications were added",
-    "correctedFixture": "explicit empty synthetic staff list",
-    "targetedRetestPassed": 2,
-    "remainingSuitesPassed": 38
+    "passed": 300,
+    "failed": 0,
+    "verifiedBy": "fixed-source CI39383263838 unit/audit step; original empty-staff fixture correction retained"
   },
   "scopeUnit": {
     "passed": 27,
@@ -56,5 +53,34 @@
     "real model call",
     "production worker"
   ],
-  "ci": "pending fixed-SHA scoped run"
+  "ci": "pending fixed-SHA scoped run",
+  "networkRecovery": {
+    "adminRequestDeadlineMs": 15000,
+    "realAxiosTimeoutThenFocusRecovery": true,
+    "clients": [
+      "admin",
+      "staff"
+    ],
+    "browserErrors": []
+  },
+  "firstCandidateCi": {
+    "runId": 39383263838,
+    "headSha": "6e802c1c9538fae1a5f20199692344e7e262cd38",
+    "conclusion": "failure",
+    "step": "HTTP",
+    "reason": "old employee workspace fixture expected automatic push key generation; no-key delivery correctly remained in_app",
+    "fix": "assert missing-key in_app and zero key creation; seed two fake strings for mocked existing-key delivery; retain original dedup/expiry/logout assertions",
+    "newExactCiRequired": true
+  },
+  "employeeWorkspaceProviderRetest": {
+    "providers": [
+      "sqlite",
+      "postgresql"
+    ],
+    "passed": true,
+    "generatedPushKeys": 0,
+    "batch": "bt-test-1567228eb771",
+    "ownedDatabasesAndRuntimeRemoved": true,
+    "evidence": "employee-workspace-providers-summary.json"
+  }
 }

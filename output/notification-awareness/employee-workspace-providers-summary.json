@@ -1,0 +1,38 @@
+{
+  "batch": "bt-test-1567228eb771",
+  "runs": [
+    {
+      "provider": "sqlite",
+      "exitCode": 0,
+      "directories": [
+        "/tmp/employee-workspace-test-p44siF"
+      ]
+    },
+    {
+      "provider": "postgresql",
+      "exitCode": 0,
+      "directories": [
+        "/tmp/employee-workspace-test-vynyGg"
+      ]
+    }
+  ],
+  "runtime": "/tmp/pos-idempotency-runtime-purkTd",
+  "runtimeCleaned": true,
+  "stdoutConfirmedDirectoriesCleaned": [
+    "/tmp/employee-workspace-test-p44siF",
+    "/tmp/employee-workspace-test-vynyGg"
+  ],
+  "productionAccess": false,
+  "realPushCalls": 0,
+  "keyGenerationExpected": 0,
+  "otherHistoricalHttpFilesExecuted": false,
+  "wrapperCleaned": true,
+  "allOwnedPathsAbsent": true,
+  "postgresStopBoundary": "test finally awaits pg_ctl stop; cleanup runner checks postmaster.pid and would stop/refuse deletion before cleanup",
+  "notExecuted": [
+    "other five historical HTTP files",
+    "production worker/API",
+    "real Push or device delivery",
+    "real model"
+  ]
+}

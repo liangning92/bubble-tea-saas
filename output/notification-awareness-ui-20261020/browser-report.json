@@ -18,13 +18,14 @@
     "hiddenPollPaused": true,
     "focusResumes": true,
     "inFlightProtected": true,
+    "hungRequestTimesOutAndRecovers": true,
     "browserErrors": [],
     "posts": [
       "approval-1",
       "team-read",
       "result-1"
     ],
-    "requestCount": 55
+    "requestCount": 62
   },
   {
     "app": "client-admin",
@@ -45,12 +46,13 @@
     "hiddenPollPaused": true,
     "focusResumes": true,
     "inFlightProtected": true,
+    "hungRequestTimesOutAndRecovers": true,
     "browserErrors": [],
     "posts": [
       "approval-1",
       "team-read",
       "result-1"
     ],
-    "requestCount": 45
+    "requestCount": 47
   }
 ]
