@@ -18,6 +18,8 @@ app.all('/api/*',(req,res)=>{
  if(req.path==='/api/auth/me')return ok({...user,role});
  if(req.path==='/api/staff-work/my/inbox')return ok({items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}});
  if(req.path==='/api/team/ai/settings')return ok(settings);
+ if(req.method==='GET'&&req.path==='/api/team/workflow/defaults')return ok({version:0,enabled:false,ownerStaffId:null});
+ if(req.method==='GET'&&req.path==='/api/team/channels/'+channelId+'/management/actions')return ok({actions:[]});
  if(req.path==='/api/ai/permissions')return ok({executionEnabled:false});
  if(['/api/team/admin/channels','/api/team/channels'].includes(req.path))return ok([channel,{...channel,id:otherId,title:'Other channel',member:false}]);
  if(req.path==='/api/team/directory')return ok(directory);
