@@ -33,3 +33,27 @@ test('all languages and both paper sizes remain within printable width and retai
 });
 
 test('selected drawer expense amount and details describe the actual cash deduction',()=>{const out=scope.print({...data,receiptItems:{expenseAmount:true,expenses:true}});assert.match(out,/Drawer expenses\s+Rp 30/);assert.ok(out.includes('Cups x2'));assert.ok(out.replace(/\s+/g,'').includes('deductedfromhandovercash'));assert.ok(!out.includes('cash payout separate'));});
+
+const component = {exports:{}};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('client-pos/src/components/ShiftHandoverPreview.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.ReactJSX}}).outputText,{
+  exports:component.exports,module:component,require:id=>id==='react-i18next'?{useTranslation:()=>({t:key=>key,i18n:{language:'en'}})}:id.endsWith('/handoverReceipt')?exportsObject:id.endsWith('/shiftCashReconciliation')?{formatShiftCash:amount=>'Rp '+amount}:require(id)
+});
+const renderPreview = settings => require('react-dom/server').renderToStaticMarkup(require('react').createElement(component.exports.ShiftHandoverPreview,{settings,data:{shift:{openedAt:'2026-10-20T11:30:00Z',openFloat:600000},cashReconciliation:{revenue:449000,expenses:35000},summaryEvidence:{orderCount:38,cupCount:41},purchaseExpenses:{total:35000,items:[{category:'Cups',amount:35000}]}},actualCash:969000,receipts:{qris:78000,shopeefood:144930,gofood:179755},cashierName:'Staff marker',shiftName:'Evening marker'}));
+test('confirmation respects the same saved field switches as the receipt, including revenue off',()=>{
+ const mapping={revenue:'revenue',cashReceived:'cash',openFloat:'openFloat',closeCash:'drawerTotal',expenseAmount:'expenses',qrisReceipts:'qris',shopeefoodReceipts:'shopeefood',gofoodReceipts:'gofood',orderCount:'orderCount',cupCount:'cupCount'};
+ for(const [field,key] of Object.entries(mapping)){
+   const items=Object.fromEntries(fields.map(k=>[k,false]));items[field]=true;
+   assert.ok(renderPreview({receiptItems:items}).includes('data-testid="handover-'+key+'"'),field);
+   items[field]=false;
+   assert.ok(!renderPreview({receiptItems:items}).includes('data-testid="handover-'+key+'"'),field);
+ }
+ const html=renderPreview({receiptItems:{revenue:false,sessionId:false,orderCount:false,expenses:false}});
+ assert.ok(!html.includes('handover-revenue'));assert.ok(html.includes('Rp 369000'));assert.ok(html.includes('Rp 969000'));assert.ok(html.includes('handover-cupCount'));assert.ok(!html.includes('handover-expense-details'));
+ assert.equal(resolve({receiptItems:{revenue:false}}).revenue,false);
+});
+test('confirmation metadata and expense details respect switches and selected amounts retain print formulas',()=>{
+ const hidden=renderPreview({receiptItems:{cashierName:false,openedAt:false,shiftType:false,expenses:false}});
+ assert.ok(!hidden.includes('Staff marker'));assert.ok(!hidden.includes('Evening marker'));assert.ok(!hidden.includes('handover-expense-details'));
+ const shown=renderPreview({receiptItems:{expenses:true}});
+ assert.ok(shown.includes('Cups'));assert.ok(shown.includes('Rp 773685'));assert.ok(shown.includes('Rp 35000'));
+});
