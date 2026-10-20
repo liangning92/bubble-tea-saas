@@ -1,0 +1,24 @@
+"""Private dedicated factory. Loaded only by the explicitly enabled plugin."""
+def build_bridge(ctx):
+    import json
+    import os
+    from pathlib import Path
+    from pdca_bridge import ProfilePolicy, TOOLS, SCOPES
+    from pdca_launcher import private_file, live_runtime_projector
+    from pdca_runtime import EndpointPolicy, load_private_config, build_runtime
+    home = Path(os.environ['HERMES_HOME'])
+    if home.name != 'stock-ro-001' or ctx.profile_name != 'stock-ro-001':
+        raise RuntimeError('DEDICATED_PROFILE_REQUIRED')
+    config = json.loads(private_file(home / 'pdca-launch.json'))
+    pins = config['endpoints']
+    endpoints = EndpointPolicy.production()
+    if pins != vars(endpoints):
+        raise RuntimeError('ENDPOINT_PINS_REQUIRED')
+    policy = ProfilePolicy('stock-ro-001', pins['api_origin'], pins['api_origin'].rstrip('/') + '/agent-model/v1',
+        'pdca-raw-provider-denied', (), TOOLS, SCOPES, config['pilot'])
+    private = load_private_config(config['private_client_file'], endpoints=endpoints, policy=policy)
+    handle = build_runtime(private, policy=policy, journal_directory=home / 'transport-journal',
+        runtime_settings=lambda: live_runtime_projector(home))
+    ctx.on_unload(handle.close)
+    handle.start()  # Explicit activation by this dedicated plugin registration, never import.
+    return handle.bridge
