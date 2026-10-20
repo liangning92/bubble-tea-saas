@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import type { TeamClient } from '../../../../shared/TeamCommunication'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
-import { AiPermissionsPage } from './AiPermissionsPage'
 import { TeamAiSettings } from './TeamAiSettings'
 import { aiSettingsCopy } from './aiSettingsCopy'
 import { TeamWorkflowSettings } from './TeamWorkflowSettings'
@@ -20,8 +19,8 @@ export function AiSettingsPage() {
   }, [user?.id, user?.storeId, user?.role])
   if (user?.role !== 'admin' || !user.storeId) return <div className="card max-w-4xl" role="alert">{c.denied}</div>
   return <div className="max-w-5xl space-y-5" data-testid="ai-settings-page">
-    <header className="space-y-1"><h2 className="text-xl font-semibold">{c.title}</h2><p className="text-sm text-gray-600">{c.introduction}</p></header>
-    <TeamAiSettings key={`${user.id}:${user.storeId}`} client={client} identity={{userId:user.id,storeId:user.storeId}} language={i18n.language}><AiPermissionsPage /></TeamAiSettings>
+    <header><h2 className="text-xl font-semibold">{c.title}</h2></header>
+    <TeamAiSettings key={`${user.id}:${user.storeId}`} client={client} identity={{userId:user.id,storeId:user.storeId}} language={i18n.language} />
     <TeamWorkflowSettings key={`workflow:${user.id}:${user.storeId}`} client={client} scope={`${user.id}:${user.storeId}`} staffId={user.staff?.id || ''} language={i18n.language} />
   </div>
 }
