@@ -1,0 +1,113 @@
+/* Read projections only. Never execute approval/refund/payroll or push services. */
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+const root = path.resolve(__dirname, '../..');
+const url = new URL(process.env.DATABASE_URL);
+assert.equal(url.hostname, '127.0.0.1'); assert.equal(url.pathname, '/approval_notices_test');
+assert(process.env.BT_TEST_RUN?.startsWith('bt-test-'));
+assert(process.env.UPLOADS_PATH?.includes(process.env.BT_TEST_RUN));
+const build = process.env.APPROVAL_TEST_BUILD || path.join(root, 'server/dist');
+const { prisma: db } = require(path.join(build, 'config/database'));
+const { projectApprovalAwareness: project, collectApprovalNotices: collect, approvalNoticeRelevant: relevant } = require(path.join(build, 'services/NotificationApprovalService'));
+const { writeWork, listWork, readWork } = require(path.join(build, 'services/EmployeeWorkspaceStore'));
+const { defaultRolesV2 } = require(path.join(build, 'services/StaffPermissionV2Core'));
+const at = new Date();
+const actor = id => ({ id: 'u-' + id, storeId: 'a' });
+const has = (rows, domain, id, kind) => rows.some(r => r.domain === domain && r.objectId === id && (!kind || r.kind === kind));
+let policy;
+async function savePolicy() { await db.config.upsert({ where: { storeId_key: { storeId: 'a', key: 'staff.access.policy.v2' } }, create: { storeId: 'a', key: 'staff.access.policy.v2', category: 'staff', value: JSON.stringify(policy) }, update: { value: JSON.stringify(policy) } }); }
+async function run() {
+  await db.tenant.create({ data: { id: 't', name: 'Synthetic' } });
+  for (const id of ['a', 'b']) await db.store.create({ data: { id, tenantId: 't', name: 'Synthetic ' + id } });
+  for (const [id, role, storeId] of [['alice', 'staff', 'a'], ['bob', 'staff', 'a'], ['manager', 'manager', 'a'], ['fake-manager', 'manager', 'a'], ['outsider', 'staff', 'b'], ['owner', 'admin', 'a']]) {
+    await db.user.create({ data: { id: 'u-' + id, phone: id, password: 'disabled-synthetic', role, storeId, staff: { create: { id: 's-' + id, storeId, employeeNumber: id, name: 'Synthetic ' + id } } } });
+  }
+  await db.user.create({ data: { id: 'u-no-staff', phone: 'no-staff', password: 'disabled-synthetic', role: 'admin' } });
+  policy = { version: 2, active: true, revision: 1, roles: JSON.parse(JSON.stringify(defaultRolesV2)), assignments: [{ staffId: 's-manager', roleId: 'manager', overrides: { 'finance.read': 'allow', 'finance.write': 'allow' } }, { staffId: 's-fake-manager', roleId: 'basic', overrides: { 'attendance.read': 'allow', 'attendance.write': 'allow', 'approvals.approve': 'allow', 'orders.discount': 'allow', 'orders.create': 'allow' } }, { staffId: 's-alice', roleId: 'cashier', overrides: {} }] };
+  await savePolicy();
+  await db.leave.createMany({ data: Array.from({ length: 121 }, (_, i) => ({ id: 'leave-' + i, storeId: 'a', staffId: 's-alice', leaveType: 'sick', startDate: at, endDate: at, totalDays: 1, reason: 'PRIVATE BODY', createdAt: new Date('2024-01-01'), status: 'pending' })) });
+  await db.leave.create({ data: { id: 'foreign', storeId: 'b', staffId: 's-outsider', leaveType: 'sick', startDate: at, endDate: at, totalDays: 1 } });
+  await db.leave.create({ data: { id: 'historic-result', storeId: 'a', staffId: 's-alice', leaveType: 'sick', startDate: at, endDate: at, totalDays: 1, status: 'approved', createdAt: new Date('2020-01-01'), updatedAt: new Date('2020-01-02') } });
+  await db.overtimeRequest.create({ data: { id: 'ot', storeId: 'a', staffId: 's-alice', date: at, startTime: '09:00', endTime: '10:00', reason: 'PRIVATE BODY', hours: 1 } });
+  await db.attendanceCorrection.create({ data: { id: 'correction', storeId: 'a', staffId: 's-alice', date: at, reason: 'PRIVATE BODY' } });
+  await db.reimbursement.create({ data: { id: 'expense', storeId: 'a', staffId: 's-alice', type: 'other', amount: 987654321, description: 'PRIVATE BODY' } });
+  await db.shiftSwap.create({ data: { id: 'swap', storeId: 'a', staffId: 's-alice', targetStaffId: 's-bob', originalDate: at, originalShift: 'a', targetDate: at, targetShift: 'b' } });
+  await db.hygieneTask.create({ data: { id: 'task', storeId: 'a', staffId: 's-alice', completedBy: 's-alice', areaCode: 'a', name: 'PRIVATE BODY', date: '2026-10-20', time: '09:00', status: 'pending_approval' } });
+  await db.inventoryCount.create({ data: { id: 'count', storeId: 'a', period: 'ad_hoc', startDate: at, endDate: at, status: 'pending_review' } });
+  const profile = randomUUID(), appeal = randomUUID();
+  await writeWork('a', 'profile.' + profile, { id: profile, staffId: 's-alice', kind: 'ktp', data: { number: 'PRIVATE IDENTITY' }, status: 'pending', createdAt: at.toISOString() }, db);
+  await writeWork('a', 'appeal.' + appeal, { id: appeal, staffId: 's-alice', attendanceId: 'attendance', reason: 'PRIVATE BODY', status: 'pending', createdAt: at.toISOString() }, db);
+  for (const [id, applicantId, status, expiresAt] of [['action', 'u-alice', 'pending', new Date(Date.now() + 3600000)], ['self', 'u-manager', 'pending', new Date(Date.now() + 3600000)], ['expired', 'u-alice', 'pending', new Date('2020-01-01')]]) {
+    await db.staffActionApproval.create({ data: { id, storeId: 'a', applicantId, action: 'orders.discount', targetId: 'basket', requestId: randomUUID(), fingerprint: id, payload: '{"amount":987654321,"note":"PRIVATE BODY"}', status, expiresAt } });
+  }
+  await db.order.create({ data: { id: 'order', storeId: 'a', staffId: 's-alice', orderNumber: 'SYNTHETIC-1', totalAmount: 1, finalAmount: 1, paymentMethod: 'cash', status: 'completed' } });
+  for (const [id, requestedBy] of [['refund', 's-alice'], ['refund-manager', 's-manager'], ['refund-owner', 's-owner']]) await db.refundRequest.create({ data: { id, orderId: 'order', requestedBy, reason: 'PRIVATE BODY', amount: 1 } });
+  const businessBefore = JSON.stringify(await business());
+  let manager = await project(db, actor('manager'));
+  assert.equal(manager.filter(r => r.domain === 'leave' && r.pending).length, 121, 'old pending cannot be hidden by latest-100 limit');
+  for (const domain of ['overtimeRequest', 'attendanceCorrection', 'reimbursement', 'hygiene', 'inventoryCount', 'staffActionApproval', 'refundRequest']) assert(manager.some(r => r.domain === domain && r.pending), domain);
+  assert(!has(manager, 'leave', 'foreign')); assert(!has(manager, 'shiftSwap', 'swap')); assert(!has(manager, 'staffActionApproval', 'self')); assert(!has(manager, 'staffActionApproval', 'expired'));
+  assert(!has(manager, 'profile', profile)); assert(!has(manager, 'appeal', appeal)); assert(!has(manager, 'refundRequest', 'refund-manager'));
+  assert(has(await project(db, actor('owner')), 'refundRequest', 'refund-owner'), 'preserve native owner self-refund exception');
+  assert.deepEqual(await project(db, { id: 'u-owner', storeId: 'b' }), [], 'bound owner cannot cross current inbox store context');
+  const owner = await project(db, { id: 'u-no-staff', storeId: 'a' });
+  assert(has(owner, 'profile', profile)); assert(has(owner, 'appeal', appeal));
+  assert.equal((await project(db, { ...actor('alice'), role: 'admin', accessRole: { id: 'manager', version: 2, modes: { 'attendance.write': 'allow' } } })).filter(r => r.pending).length, 0);
+  assert.equal((await project(db, actor('fake-manager'))).filter(r => r.pending).length, 0, 'V2 role binding controls management access');
+  assert.equal((await project(db, { ...actor('manager'), employeeApp: true })).filter(r => r.pending).length, 0, 'employee app header cannot grant management');
+  const bobPeer = await project(db, { ...actor('bob'), employeeApp: true });
+  assert(has(bobPeer, 'shiftSwap', 'swap', 'approval_request')); assert.equal(bobPeer[0].url, '/shift-swap?noticeObject=swap');
+  assert(!has(await project(db, actor('alice')), 'shiftSwap', 'swap'));
+  assert(!has(await project(db, { id: 'u-outsider', storeId: 'a' }), 'shiftSwap', 'swap'));
+  assert(!JSON.stringify([...manager, ...owner]).includes('PRIVATE')); assert(!JSON.stringify(manager).includes('987654321'));
+  assert.deepEqual(Object.keys(manager[0]).sort(), ['createdAt', 'domain', 'event', 'id', 'kind', 'objectId', 'pending', 'status', 'title', 'url'].sort());
+  await collect(db, 'a'); const first = await listWork('a', 'reminder.', db); assert(first.length > 0);
+  assert(!first.some(r => r.objectId === 'historic-result'), 'first collection must not push old completed results');
+  assert(has(await project(db, actor('alice')), 'leave', 'historic-result', 'approval_result'), 'historical result projection stays read-only');
+  assert(!first.some(r => r.userId === 'u-no-staff')); assert(first.every(r => r.userId && r.staffId && r.businessStatus && r.status === 'pending'));
+  const notice = first.find(r => r.userId === 'u-manager' && r.objectId === 'ot'); assert(notice);
+  await writeWork('a', `reminder.${notice.staffId}.${notice.id}`, { ...notice, read: true, status: 'in_app' }, db);
+  await collect(db, 'a'); assert.equal((await listWork('a', 'reminder.', db)).length, first.length);
+  assert.equal((await readWork('a', `reminder.${notice.staffId}.${notice.id}`, db)).read, true);
+  assert(has(await project(db, actor('manager')), 'overtimeRequest', 'ot', 'approval_request')); assert(await relevant(db, 'a', notice));
+  assert.equal(await relevant(db, 'b', notice), false); assert.equal(await relevant(db, 'a', notice, 's-bob'), false);
+  assert.equal(await relevant(db, 'a', { ...notice, userId: 'u-bob' }), false);
+  policy.assignments[0].overrides['attendance.write'] = 'deny'; await savePolicy();
+  assert.equal(await relevant(db, 'a', notice), false); assert(!has(await project(db, actor('manager')), 'overtimeRequest', 'ot'));
+  const countBefore = (await listWork('a', 'reminder.', db)).length; await collect(db, 'a'); assert.equal((await listWork('a', 'reminder.', db)).length, countBefore);
+  policy.assignments[0].overrides['attendance.write'] = 'allow'; await savePolicy();
+  const peerNotice = first.find(r => r.userId === 'u-bob' && r.objectId === 'swap'); assert(await relevant(db, 'a', peerNotice));
+  await db.shiftSwap.update({ where: { id: 'swap' }, data: { targetConfirmed: true } });
+  assert.equal(await relevant(db, 'a', peerNotice), false); assert(has(await project(db, actor('manager')), 'shiftSwap', 'swap'));
+  assert(!has(await project(db, actor('bob')), 'shiftSwap', 'swap'));
+  // Assertions above only read business state; collector writes workspace configs.
+  const expected = JSON.parse(businessBefore); expected.shiftSwap[0].targetConfirmed = true;
+  const actual = await business(); expected.shiftSwap[0].updatedAt = actual.shiftSwap[0].updatedAt.toISOString();
+  assert.deepEqual(JSON.parse(JSON.stringify(actual)), expected);
+  await db.overtimeRequest.update({ where: { id: 'ot' }, data: { status: 'approved', processedAt: at } });
+  assert.equal(await relevant(db, 'a', notice), false); assert(!has(await project(db, actor('manager')), 'overtimeRequest', 'ot'));
+  const result = (await project(db, { ...actor('alice'), employeeApp: true })).find(r => r.domain === 'overtimeRequest' && r.objectId === 'ot');
+  assert(result && !result.pending && result.kind === 'approval_result' && result.status === 'approved'); assert.equal(result.url, '/overtime?noticeObject=ot');
+  await db.refundRequest.update({ where: { id: 'refund' }, data: { status: 'rejected' } });
+  const refundResult = (await project(db, { ...actor('alice'), employeeApp: true })).find(r => r.domain === 'refundRequest' && r.objectId === 'refund');
+  assert(refundResult && !refundResult.pending && refundResult.url === '/inbox?notice=' + refundResult.id);
+  await collect(db, 'a'); const resultNotice = (await listWork('a', 'reminder.', db)).find(r => r.userId === 'u-alice' && r.id === result.id); assert(resultNotice && resultNotice.businessStatus === 'approved' && resultNotice.status === 'pending'); assert(await relevant(db, 'a', resultNotice));
+  await db.staff.update({ where: { id: 's-alice' }, data: { status: 'inactive' } });
+  assert.deepEqual(await project(db, actor('alice')), []); assert.equal(await relevant(db, 'a', resultNotice), false);
+  assert(!has(await project(db, actor('manager')), 'staffActionApproval', 'action'), 'inactive action applicant closes actionable capability');
+  await db.user.create({ data: { id: 'u-legacy', phone: 'legacy', password: 'disabled-synthetic', role: 'manager', storeId: 'b', staff: { create: { id: 's-legacy', storeId: 'b', employeeNumber: 'legacy', name: 'Synthetic legacy' } } } });
+  const legacy = { revision: 1, roles: [{ id: randomUUID(), name: 'Restricted manager', description: '', baseRole: 'manager', permissions: ['attendance.read'] }], assignments: [] };
+  legacy.assignments.push({ staffId: 's-legacy', roleId: legacy.roles[0].id, originalRole: 'manager' });
+  await db.config.create({ data: { storeId: 'b', key: 'staff.access.policy', category: 'staff', value: JSON.stringify(legacy) } });
+  const legacyActor = { id: 'u-legacy', storeId: 'b', accessRole: { permissions: ['attendance.write'] } };
+  assert(!has(await project(db, legacyActor), 'leave', 'foreign'), 'fresh legacy restriction defeats stale supplied grants');
+  legacy.roles[0].permissions.push('attendance.write');
+  await db.config.update({ where: { storeId_key: { storeId: 'b', key: 'staff.access.policy' } }, data: { value: JSON.stringify(legacy) } });
+  assert(has(await project(db, legacyActor), 'leave', 'foreign'), 'fresh legacy grant restores actual route capability');
+  await db.user.update({ where: { id: 'u-legacy' }, data: { role: 'staff' } });
+  assert.deepEqual(await project(db, legacyActor), [], 'invalid legacy binding and fresh role demotion fail closed');
+  console.log('PASS approval awareness PostgreSQL: all pending, fresh V2/native grants, legacy spoof isolation, peer/current nodes, owner-only profile/appeal, native refund self exception, no private fields/business writes, exact id dedup, read-independent pending, revoke/close/inactive/delivery rechecks and applicant results');
+}
+async function business() { const result = {}; for (const name of ['leave', 'overtimeRequest', 'attendanceCorrection', 'reimbursement', 'shiftSwap', 'hygieneTask', 'inventoryCount', 'staffActionApproval', 'refundRequest', 'order', 'financeAuditLog']) result[name] = await db[name].findMany({ orderBy: { id: 'asc' } }); return result; }
+run().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => db.$disconnect());
