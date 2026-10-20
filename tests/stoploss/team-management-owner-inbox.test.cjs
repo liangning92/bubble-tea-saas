@@ -15,6 +15,7 @@ function fixture(){
   if(name.includes('config/database'))return {default:db};
   if(name.includes('TeamCommunicationService'))return {TEAM_PREFIX:'team.communication.',TeamError:class extends Error{constructor(status,msg){super(msg);this.status=status}},readTeam:async(_db,store,key)=>{assert.equal(store,'store-a');return key.startsWith('workflow.policy.')?policy:channel},teamCommunication:()=>({channels:async()=>[]})};
   if(name.includes('EmployeeWorkspaceStore'))return{readWork:async(_store,key)=>marks.get(key)||null,writeWork:async(_store,key,value)=>marks.set(key,value),listWork:async()=>[],workLock:async()=>{}};
+  if(name.includes('EmployeePushDeviceService'))return{reminderDeliveryView:r=>({inApp:true,push:'not_confirmed',device:'unknown',read:r.read===true})};
   if(name.includes('EmployeeReminderService'))return{reminderStillRelevant:async()=>true};
   if(name.includes('StaffPermission'))return{};
   throw Error(name);

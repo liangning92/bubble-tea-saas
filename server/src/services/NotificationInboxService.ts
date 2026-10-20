@@ -3,13 +3,14 @@ import prisma from '../config/database'
 import { TeamError, teamCommunication, readTeam, TEAM_PREFIX } from './TeamCommunicationService'
 import { readWork, writeWork, listWork, workLock } from './EmployeeWorkspaceStore'
 import { reminderStillRelevant } from './EmployeeReminderService'
+import { reminderDeliveryView } from './EmployeePushDeviceService'
 import { userAccessV2 } from './StaffPermissionV2Service'
 import { readStaffAccess } from './StaffPermissionService'
 
 export interface InboxActor { id: string; storeId: string; staffId?: string; role?: string; employeeApp?: boolean }
 export interface InboxItem {
   id: string; event: string; kind: string; title: string; url: string; adminUrl?: string
-  read: boolean; pending: boolean; createdAt: string; status?: string; domain?: string; objectId?: string; trainingUpdate?: any
+  read: boolean; pending: boolean; createdAt: string; status?: string; domain?: string; objectId?: string; trainingUpdate?: any; delivery?: ReturnType<typeof reminderDeliveryView>
 }
 // Injected adapters also allow the real database/HTTP contract to be tested without a push transport.
 export interface InboxSources {
@@ -103,7 +104,7 @@ export function notificationInbox(db: any = prisma, sources?: InboxSources) {
       const destination = new URL(r.url, 'https://inbox.invalid')
       items.set(r.id, { id: r.id, event: r.event,
         kind: r.event.startsWith('team-chat:') ? 'chat' : r.event.startsWith('training-content:') ? 'training_update' : 'business_reminder',
-        title: r.title, url: r.url, read: !!marker || r.read === true, pending: false, createdAt: r.createdAt,
+        title: r.title, url: r.url, read: !!marker || r.read === true, pending: false, createdAt: r.createdAt, delivery: reminderDeliveryView({...r,read:!!marker||r.read===true}),
         ...(r.chat ? { domain: 'chat', objectId: r.chat.channelId, adminUrl: `/staff/communication?channel=${encodeURIComponent(r.chat.channelId)}` } : {}),
         ...(r.trainingUpdate ? { adminUrl: '/staff/training' + destination.search } : {}),
         ...(r.trainingUpdate ? { trainingUpdate: r.trainingUpdate } : {}) })

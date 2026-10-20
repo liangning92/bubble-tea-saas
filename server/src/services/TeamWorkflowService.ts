@@ -6,7 +6,7 @@ import { teamAi, readAiConnection } from './TeamAiService'
 import { ensureAction, followupDue, beginFollowup, settleFollowup, listActions } from './TeamManagementActions'
 import { readWork, writeWork } from './EmployeeWorkspaceStore'
 import { managementConsentSchema, assertManagementAudience, assertManagementFresh, managementPrivateText, managementContext } from './TeamManagementContext'
-import { managementResultSchema, managementHash, ManagementAuthorization } from './TeamManagementPolicy'
+import { managementResultSchema, managementHash, ManagementAuthorization, assertManagementReplyBoundary } from './TeamManagementPolicy'
 import { routineConsentSchema, assertRoutineAudience, assertRoutineFresh, routineContext, routineReplySchema, ROUTINE_REPLIES, RoutineAuthorization } from './TeamRoutinePolicy'
 import { operationContent, teamOperations } from './TeamOperationsService'
 import { WorkflowPolicy, WorkflowJob, WorkflowBillingAttempt, workflowHash as hash, workflowPad as pad, workflowJobKey, workflowEvent } from './TeamWorkflowQueue'
@@ -363,6 +363,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
               result.replyText += '\nUntuk tindak lanjut ini, kapan batas waktunya (tanggal dan jam), dan bukti apa yang akan diberikan?'
               parsed.replyText=result.replyText
             }
+            assertManagementReplyBoundary(result.replyText)
             const draftId = replyRequestId(j), original = await readTeam(tx, storeId, `aiDraft.${a.staffId}.${j.aiRequestId}`)
             const authorization: ManagementAuthorization = { jobId: j.id, sourceSeq: j.sourceSeq, policyHash: p.hash, policyVersion: p.version, epoch: p.epoch,
               textHash: managementHash(result.replyText), factsFingerprint: d.managementFactsFingerprint, contextLastSeq: context.lastSeq,
