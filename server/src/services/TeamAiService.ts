@@ -81,7 +81,14 @@ const settingsSchema = z.object({ expectedVersion: z.number().int().nonnegative(
   monthlyBudgetUsd: z.number().positive().max(100000).nullable(), inputPerMillionUsd: z.number().positive().max(1000),
   outputPerMillionUsd: z.number().positive().max(1000), apiKey: z.string().min(10).max(8192).regex(/^[\x21-\x7e]+$/).optional(), removeKey: z.boolean().default(false) }).strict()
 type Connection = { requestId: string; configVersion: number; region: MiniMaxRegion; model: string; checkedAt: string;
-  status: 'checking' | 'ready' | 'failed' | 'uncertain'; error?: string; providerHttpStatus?: number }
+  status: 'checking' | 'ready' | 'failed' | 'uncertain'; error?: string; providerHttpStatus?: number; ownerStaffId?: string; checkRevision?: number }
+async function checkRevision(db: any, storeId: string) {
+  const saved = await readTeam(db, storeId, 'ai.check.revision')
+  if (!saved) return 0
+  const result = z.object({ revision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER - 1) }).strict().safeParse(saved)
+  if (!result.success) return denied('TEAM_AI_STATE_INVALID', 503)
+  return result.data.revision
+}
 function explicitRejection(value: Pick<Connection, 'providerHttpStatus' | 'error'>) {
   return value.providerHttpStatus === 401 && value.error === 'TEAM_AI_CREDENTIAL_REJECTED' ||
     value.providerHttpStatus === 429 && value.error === 'TEAM_AI_PROVIDER_RATE_LIMIT'
@@ -89,18 +96,18 @@ function explicitRejection(value: Pick<Connection, 'providerHttpStatus' | 'error
 function connectionMatches(value: Connection, config: Pick<Settings, 'version' | 'region' | 'model'>) {
   return value.configVersion === config.version && value.region === config.region && value.model === config.model
 }
-function visibleConnection(value: Connection) {
-  const { requestId: _, ...visible } = value, checkedAt = Date.parse(value.checkedAt)
+function visibleConnection(value: Connection, includeRequestId = false) {
+  const { requestId, ownerStaffId: _, ...body } = value, visible = { ...body, ...(includeRequestId ? { requestId } : {}) }, checkedAt = Date.parse(value.checkedAt)
   // Old generic failures carry no proof of rejection. Keep their billing risk.
   if (value.status === 'failed' && !explicitRejection(value)) return { ...visible, status: 'uncertain' as const }
   return value.status === 'checking' && (!Number.isFinite(checkedAt) || Date.now() - checkedAt > 60000)
     ? { ...visible, status: 'uncertain' as const, error: 'TEAM_AI_PROVIDER_UNAVAILABLE' } : visible
 }
 // Read-only projection: a previous configuration can never verify the current one.
-export async function readAiConnection(db: any, storeId: string, config: Pick<Settings, 'version' | 'region' | 'model'>) {
+export async function readAiConnection(db: any, storeId: string, config: Pick<Settings, 'version' | 'region' | 'model'>, staffId?: string) {
   const value: Connection | null = await readTeam(db, storeId, 'ai.connection')
   if (!value || !connectionMatches(value, config)) return null
-  return visibleConnection(value)
+  return visibleConnection(value, !!staffId && value.ownerStaffId === staffId)
 }
 async function reserveUsage(tx: any, storeId: string, config: Settings, text: string, outputLimit = 4096) {
   endpoint(config.region); assertCredentialRegion(config.secret, config.region)
@@ -153,7 +160,7 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
       const { secret, ...value } = await settings(a.storeId)
       const month = new Date().toISOString().slice(0, 7), usage = await readTeam(db, a.storeId, `aiBudget.${month}`)
       return { ...value, endpoint: endpoint(value.region), protocol: 'openai', keyConfigured: !!secret, month, estimatedMonthUsd: ((usage?.spentMicros || 0) + (usage?.reservedMicros || 0)) / 1000000,
-        connection: secret ? await readAiConnection(db, a.storeId, value) : null }
+        checkRevision: await checkRevision(db, a.storeId), connection: secret ? await readAiConnection(db, a.storeId, value, a.staffId) : null }
     },
     async saveSettings(a: TeamActor, input: unknown) {
       admin(a); const v = settingsSchema.parse(input)
@@ -181,7 +188,7 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
     draft: readDraft,
     async checkConnection(a: TeamActor, input: unknown) {
       admin(a)
-      const v = z.object({ expectedVersion: z.number().int().nonnegative(), requestId: uuid, consent: z.literal(true) }).strict().parse(input)
+      const v = z.object({ expectedVersion: z.number().int().nonnegative(), expectedCheckRevision: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER - 1), requestId: uuid, consent: z.literal(true) }).strict().parse(input)
       const key = `aiConnectionRequest.${a.staffId}.${v.requestId}`, text = 'Reply OK.', outputLimit = 32
       const prepared = await db.$transaction(async tx => {
         await lockTeam(tx, a.storeId, 'ai-budget'); await currentAdmin(tx, a)
@@ -193,16 +200,19 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
           if (previous.configVersion !== v.expectedVersion) denied('TEAM_REQUEST_CONFLICT', 409)
           return { previous }
         }
+        const revision = await checkRevision(tx, a.storeId)
+        if (revision !== v.expectedCheckRevision) denied('TEAM_AI_CHECK_CONFLICT', 409)
         const latest: Connection | null = await readTeam(tx, a.storeId, 'ai.connection')
         const latestStatus = latest ? visibleConnection(latest).status : null
         if (latest?.configVersion === config.version && (latestStatus === 'checking' || latestStatus === 'uncertain')) denied(latestStatus === 'checking' ? 'TEAM_AI_PENDING' : 'TEAM_AI_NEW_REQUEST_REQUIRED', 409)
         const reservation = await reserveUsage(tx, a.storeId, config, text, outputLimit)
-        const pending: Connection = { requestId: v.requestId, configVersion: config.version, model: config.model, region: config.region, status: 'checking', checkedAt: new Date().toISOString() }
+        const pending: Connection = { requestId: v.requestId, ownerStaffId: a.staffId, checkRevision: revision + 1, configVersion: config.version, model: config.model, region: config.region, status: 'checking', checkedAt: new Date().toISOString() }
+        await writeTeam(tx, a.storeId, 'ai.check.revision', { revision: revision + 1 })
         await writeTeam(tx, a.storeId, key, pending); await writeTeam(tx, a.storeId, 'ai.connection', pending)
         await auditTeam(tx, a, a.storeId, 'create', { action: 'ai_connection_check', requestId: v.requestId, configVersion: config.version, region: config.region, model: config.model })
         return { config, ...reservation, pending }
       })
-      if (prepared.previous) return visibleConnection(prepared.previous)
+      if (prepared.previous) return visibleConnection(prepared.previous, true)
       let outcome: TeamAiResult | undefined, failure: string | undefined, providerHttpStatus: number | undefined
       try {
         outcome = await transport(await decrypt(a.storeId, prepared.config.secret, prepared.config.region), prepared.config.model,
@@ -222,13 +232,13 @@ export function teamAi(db: any = prisma, transport: Transport = minimax) {
           ...(failure ? { error: failure } : {}), ...(providerHttpStatus ? { providerHttpStatus } : {}) }
         await writeTeam(tx, a.storeId, key, final)
         const latest: Connection | null = await readTeam(tx, a.storeId, 'ai.connection')
-        if (latest?.requestId === v.requestId && connectionMatches(latest, prepared.config)) await writeTeam(tx, a.storeId, 'ai.connection', final)
+        if (latest?.requestId === v.requestId && latest.checkRevision === prepared.pending.checkRevision && connectionMatches(latest, prepared.config)) await writeTeam(tx, a.storeId, 'ai.connection', final)
         const config: Settings = { ...defaults(), ...await readTeam(tx, a.storeId, 'ai.settings') }
         return { final, changed: config.version !== v.expectedVersion }
       })
       await currentAdmin(db, a)
       if (result.changed) denied('TEAM_AI_CONFIG_CHANGED', 409)
-      return visibleConnection(result.final)
+      return visibleConnection(result.final, true)
     },
     async generate(a: TeamActor, id: string, input: unknown, guard?: (tx: any) => Promise<void>) {
       admin(a); const v = generationSchema.parse(input), source = [...new Set(v.sourceSeq)].sort((a, b) => a - b)

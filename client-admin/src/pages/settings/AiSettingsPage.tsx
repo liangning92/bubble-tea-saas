@@ -20,6 +20,6 @@ export function AiSettingsPage() {
   if (user?.role !== 'admin' || !user.storeId) return <div className="card max-w-4xl" role="alert">{c.denied}</div>
   return <div className="max-w-5xl space-y-5" data-testid="ai-settings-page">
     <header className="space-y-1"><h2 className="text-xl font-semibold">{c.title}</h2><p className="text-sm text-gray-600">{c.introduction}</p></header>
-    <TeamAiSettings key={`${user.id}:${user.storeId}`} client={client} language={i18n.language}><AiPermissionsPage /></TeamAiSettings>
+    <TeamAiSettings key={`${user.id}:${user.storeId}`} client={client} identity={{userId:user.id,storeId:user.storeId}} language={i18n.language}><AiPermissionsPage /></TeamAiSettings>
   </div>
 }

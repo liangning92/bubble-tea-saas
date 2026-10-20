@@ -2,23 +2,25 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { TeamClient } from '../../../../shared/TeamCommunication'
 import { aiSettingsCopy, aiSettingsError } from './aiSettingsCopy'
 import { AdminDialog } from '../../components/AdminDialog'
+import { readCheckTicket, writeCheckTicket, finishCheckTicket, type CheckIdentity, type CheckTicket } from './aiSettingsCheckJournal'
 
 const button='rounded-lg border px-3 py-2 text-sm disabled:opacity-50'
 const field='mt-1 w-full min-w-0 rounded-lg border bg-white p-2.5 text-sm'
 type Region='global'|'cn'
-interface Connection { status:'ready'|'failed'|'checking'|'unverified'|'uncertain'; configVersion:number; region:Region; model:string; checkedAt?:string; error?:string }
+interface Connection { status:'ready'|'failed'|'checking'|'unverified'|'uncertain'; configVersion:number; region:Region; model:string; checkedAt?:string; error?:string; requestId?:string; checkRevision?:number }
 interface Settings {
- version:number; enabled:boolean; provider:'minimax'; model:string; region:Region; monthlyBudgetUsd:number|null
+ version:number; checkRevision:number; enabled:boolean; provider:'minimax'; model:string; region:Region; monthlyBudgetUsd:number|null
  inputPerMillionUsd:number; outputPerMillionUsd:number; keyConfigured:boolean; month:string; estimatedMonthUsd:number; connection?:Connection
 }
 const editable=(s:Settings)=>({enabled:s.enabled,provider:s.provider,model:s.model,region:s.region,monthlyBudgetUsd:s.monthlyBudgetUsd,inputPerMillionUsd:s.inputPerMillionUsd,outputPerMillionUsd:s.outputPerMillionUsd})
 const errorCode=(e:any)=>e?.response?.data?.message||''
 
-export function TeamAiSettings({client,language,children}:{client:Pick<TeamClient,'request'|'current'>;language:string;children?:ReactNode}) {
+export function TeamAiSettings({client,identity,language,children}:{client:Pick<TeamClient,'request'|'current'>;identity:CheckIdentity;language:string;children?:ReactNode}) {
  const c=aiSettingsCopy(language),[base,setBase]=useState<Settings|null>(null),[draft,setDraft]=useState<Settings|null>(null)
  const [apiKey,setApiKey]=useState(''),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true)
  const [error,setError]=useState(''),[errorField,setErrorField]=useState(''),[advanced,setAdvanced]=useState(false),[removeOpen,setRemoveOpen]=useState(false)
  const [checking,setChecking]=useState(false),[checkConsent,setCheckConsent]=useState(false),[connection,setConnection]=useState<Connection|null>(null)
+ const [pending,setPending]=useState<CheckTicket|null>(null),[journalBlocked,setJournalBlocked]=useState(false)
  const form=useRef<HTMLFormElement>(null),alive=useRef(true),epoch=useRef(0)
  const current=()=>alive.current&&client.current()
  const dirty=!!base&&!!draft&&(JSON.stringify(editable(base))!==JSON.stringify(editable(draft))||!!apiKey)
@@ -27,7 +29,20 @@ export function TeamAiSettings({client,language,children}:{client:Pick<TeamClien
  const regionName=(r:Region)=>r==='cn'?c.cn:c.global
  const validConnection=base&&connection?.configVersion===base.version&&connection.region===base.region&&connection.model===base.model?connection:null
  const connectionStatus=!dirty&&validConnection?.status||'unverified'
- function install(value:Settings){const normalized={...value,region:value.region||'global' as Region};setBase(normalized);setDraft(normalized);setConnection(value.connection||null);setApiKey('');setConsent(false);setCheckConsent(false);setRemoveOpen(false)}
+ const unknownConnection=(ticket:CheckTicket):Connection=>({requestId:ticket.requestId,configVersion:ticket.version,region:ticket.region,model:ticket.model,status:'uncertain',error:'TEAM_AI_PROVIDER_UNAVAILABLE'})
+ const sameScope=(ticket:CheckTicket,value:Settings)=>ticket.userId===identity.userId&&ticket.storeId===identity.storeId&&ticket.version===value.version&&ticket.region===value.region&&ticket.model===value.model
+ const linked=(result:Connection|undefined,ticket:CheckTicket)=>!!result&&result.requestId===ticket.requestId&&result.checkRevision===ticket.expectedCheckRevision+1&&result.configVersion===ticket.version&&result.region===ticket.region&&result.model===ticket.model
+ function observe(value:Settings,fallback:CheckTicket|null=pending):Connection|null {
+  try{
+   const ticket=readCheckTicket(identity,value)||(fallback&&sameScope(fallback,value)?fallback:null);setJournalBlocked(false)
+   if(!ticket){setPending(null);return value.connection||null}
+   if(linked(value.connection,ticket)&&['ready','failed'].includes(value.connection!.status)){
+    finishCheckTicket(ticket);const other=readCheckTicket(identity,value);setPending(other);return other?unknownConnection(other):value.connection!
+   }
+   setPending(ticket);return linked(value.connection,ticket)?value.connection!:unknownConnection(ticket)
+  }catch{setJournalBlocked(true);setError(c.journalUnavailable);return {configVersion:value.version,region:value.region,model:value.model,status:'uncertain'}}
+ }
+ function install(value:Settings){const normalized={...value,region:value.region||'global' as Region};setBase(normalized);setDraft(normalized);setConnection(observe(normalized));setApiKey('');setConsent(false);setCheckConsent(false);setRemoveOpen(false)}
  async function load(){
   const request=++epoch.current;setLoading(true);setError('')
   try{const value=await client.request('get','/team/ai/settings');if(current()&&request===epoch.current)install(value)}
@@ -56,21 +71,29 @@ export function TeamAiSettings({client,language,children}:{client:Pick<TeamClien
   }catch(e){if(current()&&request===epoch.current){const code=errorCode(e);if(code==='TEAM_AI_REGION_CONFIRM_REQUIRED')fail(c.consentRequired,'consent');else if(['TEAM_AI_REGION_KEY_REQUIRED','TEAM_AI_KEY_REQUIRED','TEAM_AI_CREDENTIAL_REGION_MISMATCH'].includes(code))fail(c.keyRequired,'key');else setError(code==='TEAM_VERSION_CONFLICT'?c.conflict:c.saveError)}}
   finally{if(current()&&request===epoch.current)setBusy(false)}
  }
- async function check(){
-  if(!base||dirty||busy||checking||!checkConsent)return
-  const snapshot=base,request=++epoch.current;setChecking(true);setError('')
+ async function check(resume=false){
+  if(!base||dirty||busy||checking||!checkConsent||journalBlocked)return
+  const snapshot=base;let ticket:CheckTicket
   try{
-   const result:Connection=await client.request('post','/team/ai/connection-check',{expectedVersion:snapshot.version,requestId:crypto.randomUUID(),consent:true})
+   const existing=readCheckTicket(identity,snapshot)||(pending&&sameScope(pending,snapshot)?pending:null)
+   if(resume&&!existing)return
+   if(!Number.isSafeInteger(snapshot.checkRevision)||snapshot.checkRevision<0){setError(c.resultChanged);return}
+   ticket=existing||{...identity,version:snapshot.version,region:snapshot.region,model:snapshot.model,requestId:crypto.randomUUID(),expectedCheckRevision:snapshot.checkRevision}
+   writeCheckTicket(ticket);setPending(ticket)
+  }catch{setJournalBlocked(true);setError(c.journalUnavailable);return}
+  const request=++epoch.current;setChecking(true);setError('')
+  try{
+   const result:Connection=await client.request('post','/team/ai/connection-check',{expectedVersion:ticket.version,expectedCheckRevision:ticket.expectedCheckRevision,requestId:ticket.requestId,consent:true})
    if(!current()||request!==epoch.current)return
-   if(result.configVersion!==snapshot.version||result.region!==snapshot.region||result.model!==snapshot.model){setConnection(null);setError(c.resultChanged);return}
-   setConnection(result)
-  }catch(e){if(current()&&request===epoch.current){const response=(e as any)?.response,unknown=!response||response.status>=500||response.status===408;setError(unknown?c.outcomeUnknown:aiSettingsError(language,errorCode(e)));if(unknown)setConnection({configVersion:snapshot.version,region:snapshot.region,model:snapshot.model,status:'uncertain',checkedAt:new Date().toISOString()})}}
+   if(!linked(result,ticket)){setConnection(unknownConnection(ticket));setError(c.resultChanged);return}
+   const next={...snapshot,checkRevision:Math.max(snapshot.checkRevision,result.checkRevision!),connection:result};setBase(next);setConnection(observe(next,ticket))
+  }catch(e){if(current()&&request===epoch.current){const code=errorCode(e);if(['TEAM_AI_CHECK_CONFLICT','TEAM_VERSION_CONFLICT','TEAM_AI_CONFIG_CHANGED'].includes(code)){try{finishCheckTicket(ticket);setPending(readCheckTicket(identity,snapshot))}catch{setJournalBlocked(true)}setError(c.resultChanged)}else setError(c.outcomeUnknown);setConnection(unknownConnection(ticket))}}
   finally{if(current()&&request===epoch.current){setChecking(false);setCheckConsent(false)}}
  }
  async function refreshStatus(){
   if(!base||busy||checking)return
   const request=++epoch.current
-  try{const value:Settings=await client.request('get','/team/ai/settings');if(!current()||request!==epoch.current)return;if(value.version!==base.version){setConnection(null);setError(c.conflict);return}setBase(value);setConnection(value.connection||null)}catch{if(current()&&request===epoch.current)setError(c.loadError)}
+  try{const value:Settings=await client.request('get','/team/ai/settings');if(!current()||request!==epoch.current)return;if(value.version!==base.version){setError(c.conflict);return}setError('');setBase(value);setConnection(observe(value))}catch{if(current()&&request===epoch.current)setError(c.loadError)}
  }
  const invalid=(name:string)=>errorField===name?true:undefined
  if(loading&&!draft)return <div role="status" className="rounded-xl border bg-white p-6">{c.loading}</div>
@@ -100,7 +123,7 @@ export function TeamAiSettings({client,language,children}:{client:Pick<TeamClien
      {!dirty&&validConnection?.error&&<p className="mt-2 text-sm text-red-700">{connectionStatus==='uncertain'?c.outcomeUnknown:aiSettingsError(language,validConnection.error)}</p>}
      {!dirty&&validConnection?.checkedAt&&<time className="mt-1 block text-xs text-gray-500">{new Date(validConnection.checkedAt).toLocaleString(language)}</time>}
      {dirty?<p className="mt-3 text-sm text-amber-800">{c.checkDirty}</p>:base.keyConfigured&&<label className="mt-3 flex items-start gap-2 text-xs text-gray-600"><input className="mt-0.5 shrink-0" type="checkbox" checked={checkConsent} disabled={busy||checking} data-testid="ai-check-consent" onChange={e=>setCheckConsent(e.target.checked)}/>{c.checkConsent}</label>}
-     <div className="mt-3 flex flex-wrap gap-2"><button type="button" className={button} disabled={busy||checking||dirty||!base.keyConfigured||!checkConsent||connectionStatus==='checking'||connectionStatus==='uncertain'} onClick={()=>void check()}>{c.check}</button><button type="button" className={button} disabled={busy||checking} onClick={()=>void refreshStatus()}>{c.refresh}</button></div>
+     <div className="mt-3 flex flex-wrap gap-2"><button type="button" className={button} disabled={busy||checking||dirty||journalBlocked||!!pending||!base.keyConfigured||!checkConsent||connectionStatus==='checking'||connectionStatus==='uncertain'} onClick={()=>void check()}>{c.check}</button>{pending&&<button type="button" className={button} disabled={busy||checking||dirty||journalBlocked||!base.keyConfigured||!checkConsent} onClick={()=>void check(true)}>{c.resume}</button>}<button type="button" className={button} disabled={busy||checking} onClick={()=>void refreshStatus()}>{c.refresh}</button></div>
     </div>
     <div className="rounded-lg bg-gray-50 p-4"><p className="text-sm font-medium">{c.cost}</p><p className="mt-2 text-xl font-semibold">${base.estimatedMonthUsd.toFixed(6)}</p><p className="mt-1 text-xs text-gray-500">{c.month}: {base.month}</p>
      <label className="mt-3 block text-sm">{c.budget}<input className={field} data-field="budget" aria-invalid={invalid('budget')} disabled={busy||checking} type="number" min="0.000001" max="100000" step="any" placeholder={c.noCap} value={draft.monthlyBudgetUsd??''} onChange={e=>change({monthlyBudgetUsd:e.target.value===''?null:Number(e.target.value)})}/></label>

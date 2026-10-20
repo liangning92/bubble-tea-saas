@@ -1,6 +1,6 @@
 // Runs only inside the labeled, synthetic PostgreSQL connection fixture.
 const assert=require('node:assert/strict'),fs=require('node:fs'),{randomUUID}=require('node:crypto');
-module.exports=async function outcomes({prisma,request,settings,save,check,clearRate,test,setMode,waitStarted,resume,calls,root}){
+module.exports=async function outcomes({prisma,request,settings,save,check,clearRate,test,setMode,waitStarted,resume,calls,root,origin,realFetch,tokens}){
  assert(process.env.BT_TEST_RUN?.startsWith('bt-test-'));assert.equal(new URL(process.env.DATABASE_URL).pathname,'/team_test');
  const observations=[],storeId='ai-store-a',prefix='team.communication.';
  const read=async key=>JSON.parse((await prisma.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:prefix+key}}})).value);
@@ -20,7 +20,7 @@ module.exports=async function outcomes({prisma,request,settings,save,check,clear
  });
  await test('strict request/version/consent input rejects before transport or reservation',async()=>{
   const config=await configure(),before=calls(),funds=await budget();
-  for(const body of [{expectedVersion:config.version,requestId:randomUUID()},{expectedVersion:config.version,requestId:randomUUID(),consent:false},{expectedVersion:config.version,requestId:'not-uuid',consent:true},{expectedVersion:config.version,requestId:randomUUID(),consent:true,storeId:'ai-store-b'}])await request('owner','POST','team/ai/connection-check',body,400);
+  for(const body of [{expectedVersion:config.version,expectedCheckRevision:config.checkRevision,requestId:randomUUID()},{expectedVersion:config.version,expectedCheckRevision:config.checkRevision,requestId:randomUUID(),consent:false},{expectedVersion:config.version,expectedCheckRevision:config.checkRevision,requestId:'not-uuid',consent:true},{expectedVersion:config.version,expectedCheckRevision:config.checkRevision,requestId:randomUUID(),consent:true,storeId:'ai-store-b'},{expectedVersion:config.version,requestId:randomUUID(),consent:true},{expectedVersion:config.version,expectedCheckRevision:-1,requestId:randomUUID(),consent:true}])await request('owner','POST','team/ai/connection-check',body,400);
   await check(config.version-1,randomUUID(),409);assert.equal(calls(),before);assert.deepEqual(await budget(),funds);
  });
  await test('legacy failed records without rejection evidence remain unknown and cannot bypass either guard',async()=>{
@@ -34,7 +34,7 @@ module.exports=async function outcomes({prisma,request,settings,save,check,clear
   try{
    assert.equal((await check(v1.version,id)).status,'checking');await check(v1.version,randomUUID(),409);
    const v2=await save(v1.version,{region:'global'});setMode('ok');
-   const result=collide?await request('backup','POST','team/ai/connection-check',{expectedVersion:v2.version,requestId:id,consent:true}):await check(v2.version);
+   const result=collide?await request('backup','POST','team/ai/connection-check',{expectedVersion:v2.version,expectedCheckRevision:v2.checkRevision,requestId:id,consent:true}):await check(v2.version);
    assert.equal(result.status,'ready');assert.equal(result.configVersion,v2.version);
    const during=await budget();assert(during.reservedMicros>before.reservedMicros);
    resume();await pending;const current=await settings(),after=await budget();
@@ -52,5 +52,6 @@ module.exports=async function outcomes({prisma,request,settings,save,check,clear
   config=await save(config.version,{region:'cn',apiKey:'synthetic-final-key'});setMode('ok');await clearRate();assert.equal((await check(config.version)).status,'ready');
   assert.equal((await budget()).reservedMicros,funds.reservedMicros);assert.deepEqual(await read(key),old);
  });
+ await require('./team-ai-settings-delay-gateway.cjs')({configure,settings,check,request,budget,calls,setMode,test,origin,realFetch,tokens,root});
  fs.mkdirSync(root+'/output/ai-settings/p2/after',{recursive:true});fs.writeFileSync(root+'/output/ai-settings/p2/after/outcome-matrix.json',JSON.stringify({run:process.env.BT_TEST_RUN,observations,allProviderRequestsMocked:true,productionWrites:false},null,2)+'\n');
 };

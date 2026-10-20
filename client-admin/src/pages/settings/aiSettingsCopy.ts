@@ -7,7 +7,7 @@ const en = {
  keyRegion:'Changing region requires a new key and destination confirmation.',
  unsaved:'Unsaved changes', saved:'Saved', saving:'Saving…', save:'Save settings', version:'Version', savedRegion:'Saved region',
  notSaved:'Not configured', unverified:'Connection not verified', ready:'Connection verified', failed:'Connection failed', uncertain:'Connection result unknown', checking:'Checking connection…', paused:'AI paused',
- check:'Check saved connection', checkConsent:'A short test sends no business data and may incur API charges.', checkDirty:'Save changes before checking the connection.',
+ check:'Check saved connection', resume:'Check original request', journalUnavailable:'Could not safely read or save the check record. Reopen the page to check the original request.', checkConsent:'A short test sends no business data and may incur API charges.', checkDirty:'Save changes before checking the connection.',
  refresh:'Refresh status', loading:'Loading…', remove:'Remove saved key', removeTitle:'Remove this store’s key?',
  removeWarning:'This also pauses communication AI. The key is removed only after saving succeeds.', removeConfirm:'Remove key and save', cancel:'Cancel',
  cost:'Estimated API usage', budget:'Monthly estimate cap (USD)', noCap:'No cap', month:'UTC month',
@@ -30,7 +30,7 @@ const en = {
  keyInvalid:'The key must contain 10–8192 printable characters without spaces.', modelInvalid:'Use a MiniMax model name.', ratesInvalid:'Enter positive estimate rates and a positive budget, or leave the budget blank.',
  rejected:'The provider rejected this key. Check its region and API entitlement.', budgetLimit:'The estimate cap has been reached.',
  rateLimit:'Too many requests. Wait before checking again.', unavailable:'Connection could not be verified. Review the region, key and model.', outcomeUnknown:'No reliable result. Check the original request before trying again.',
- resultChanged:'Configuration changed during the check. This result does not verify the current version.',
+ resultChanged:'The check state changed. This result cannot verify the current connection.',
  responseMismatch:'The save response did not match your changes. Entries are preserved; reload the saved version to verify.',
  checkVersion:'Connection result applies to saved version', denied:'Only this store’s authorized administrator can manage AI settings.'
 }
@@ -44,7 +44,7 @@ const zh: Copy = {
  keyRegion:'切换地区后，需重新输入该地区的密钥并确认目的地。',
  unsaved:'有未保存更改', saved:'已保存', saving:'保存中…', save:'保存设置', version:'版本', savedRegion:'已保存地区',
  notSaved:'尚未配置', unverified:'连接未验证', ready:'连接已验证', failed:'连接失败', uncertain:'连接结果待核实', checking:'正在验证连接…', paused:'AI 已暂停',
- check:'验证已保存连接', checkConsent:'验证仅发送简短测试文字，不含业务数据，可能产生 API 费用。', checkDirty:'请先保存更改，再验证连接。',
+ check:'验证已保存连接', resume:'核对原验证', journalUnavailable:'无法安全读取或保存验证记录。请重新打开页面核对原请求。', checkConsent:'验证仅发送简短测试文字，不含业务数据，可能产生 API 费用。', checkDirty:'请先保存更改，再验证连接。',
  refresh:'刷新状态', loading:'加载中…', remove:'移除已保存密钥', removeTitle:'移除本店密钥？',
  removeWarning:'同时暂停沟通 AI。只有保存成功后才会移除密钥。', removeConfirm:'移除密钥并保存', cancel:'取消',
  cost:'API 使用估算', budget:'每月估算上限（USD）', noCap:'不设上限', month:'UTC 月份',
@@ -67,7 +67,7 @@ const zh: Copy = {
  keyInvalid:'密钥须为 10–8192 个不含空格的可打印字符。', modelInvalid:'请输入 MiniMax 模型名称。', ratesInvalid:'请输入有效的正数单价和费用上限；不设上限请留空。',
  rejected:'供应商拒绝此密钥，请核对地区及 API 使用资格。', budgetLimit:'已达到估算费用上限。',
  rateLimit:'请求较频繁，请稍后再验证。', unavailable:'连接验证失败，请核对地区、密钥和模型。', outcomeUnknown:'未取得可靠结果，请先核对原请求，不要重复验证。',
- resultChanged:'验证期间配置已变更，此结果不能验证当前版本。',
+ resultChanged:'验证状态已变更，此结果不能验证当前连接。',
  responseMismatch:'保存结果与本次更改不一致。表单已保留，请重新载入已保存版本核对。',
  checkVersion:'连接结果对应已保存版本', denied:'仅本店有权限的管理员可管理 AI 设置。'
 }
@@ -80,7 +80,7 @@ const id: Copy = {
  keyRegion:'Ganti wilayah memerlukan kunci baru dan konfirmasi tujuan.',
  unsaved:'Perubahan belum disimpan', saved:'Tersimpan', saving:'Menyimpan…', save:'Simpan pengaturan', version:'Versi', savedRegion:'Wilayah tersimpan',
  notSaved:'Belum dikonfigurasi', unverified:'Koneksi belum diverifikasi', ready:'Koneksi terverifikasi', failed:'Koneksi gagal', uncertain:'Hasil koneksi belum pasti', checking:'Memeriksa koneksi…', paused:'AI dijeda',
- check:'Periksa koneksi tersimpan', checkConsent:'Uji singkat tidak mengirim data bisnis dan dapat dikenai biaya API.', checkDirty:'Simpan perubahan sebelum memeriksa koneksi.',
+ check:'Periksa koneksi tersimpan', resume:'Periksa permintaan awal', journalUnavailable:'Catatan pemeriksaan tidak dapat dibaca atau disimpan dengan aman. Buka ulang halaman untuk memeriksa permintaan awal.', checkConsent:'Uji singkat tidak mengirim data bisnis dan dapat dikenai biaya API.', checkDirty:'Simpan perubahan sebelum memeriksa koneksi.',
  refresh:'Muat ulang status', loading:'Memuat…', remove:'Hapus kunci tersimpan', removeTitle:'Hapus kunci toko ini?',
  removeWarning:'AI komunikasi juga dijeda. Kunci dihapus hanya setelah penyimpanan berhasil.', removeConfirm:'Hapus kunci dan simpan', cancel:'Batal',
  cost:'Perkiraan penggunaan API', budget:'Batas perkiraan bulanan (USD)', noCap:'Tanpa batas', month:'Bulan UTC',
@@ -103,7 +103,7 @@ const id: Copy = {
  keyInvalid:'Kunci harus berisi 10–8192 karakter cetak tanpa spasi.', modelInvalid:'Gunakan nama model MiniMax.', ratesInvalid:'Isi tarif dan batas biaya positif; kosongkan batas jika tidak dibatasi.',
  rejected:'Penyedia menolak kunci. Periksa wilayah dan hak akses API.', budgetLimit:'Batas perkiraan biaya tercapai.',
  rateLimit:'Terlalu banyak permintaan. Tunggu sebelum memeriksa lagi.', unavailable:'Koneksi gagal diverifikasi. Periksa wilayah, kunci dan model.', outcomeUnknown:'Hasil belum pasti. Periksa permintaan awal sebelum mencoba lagi.',
- resultChanged:'Konfigurasi berubah saat diperiksa. Hasil ini tidak memverifikasi versi saat ini.',
+ resultChanged:'Status pemeriksaan berubah. Hasil ini tidak dapat memverifikasi koneksi saat ini.',
  responseMismatch:'Hasil penyimpanan tidak sesuai perubahan. Isian dipertahankan; muat ulang versi tersimpan untuk memeriksa.',
  checkVersion:'Hasil koneksi berlaku untuk versi tersimpan', denied:'Hanya administrator berwenang toko ini dapat mengelola pengaturan AI.'
 }
