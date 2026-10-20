@@ -45,5 +45,56 @@ self.addEventListener('fetch', event => {
     })())
   }
 })
-self.addEventListener('push',event=>{let data;try{data=event.data.json()}catch{return}event.waitUntil(self.registration.showNotification(data.title||'YOUME',{tag:data.id,body:'Buka aplikasi untuk melihat detail.',data:{url:data.url}}))})
-self.addEventListener('notificationclick',event=>{event.notification.close();let path=event.notification.data?.url||'/';if(!path.startsWith('/')||path.startsWith('//'))path='/';const url=new URL(path,self.location.origin).href;event.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(async list=>{const existing=list.find(c=>new URL(c.url).origin===self.location.origin);if(existing){await existing.navigate(url);await existing.focus()}else await clients.openWindow(url)}))})
+
+// Only synthetic self-test receipt metadata is kept here, never tokens, message bodies or subscription keys.
+const TEST_RECEIPT_DB = 'employee-push-test-receipts-v1'
+function testReceipts(id, phase) {
+  return new Promise((resolve, reject) => {
+    const opening = indexedDB.open(TEST_RECEIPT_DB, 1)
+    opening.onupgradeneeded = () => opening.result.createObjectStore('receipts', { keyPath: 'id' })
+    opening.onerror = () => reject(opening.error)
+    opening.onsuccess = () => {
+      const db = opening.result, tx = db.transaction('receipts', phase ? 'readwrite' : 'readonly'), store = tx.objectStore('receipts')
+      let result = null
+      const read = store.get(id)
+      read.onsuccess = () => {
+        const previous = read.result
+        if (phase) {
+          result = { ...previous, id, updatedAt: new Date().toISOString(), [phase + 'At']: previous?.[phase + 'At'] || new Date().toISOString() }
+          store.put(result)
+          const all = store.getAll()
+          all.onsuccess = () => all.result.sort((a,b) => b.updatedAt.localeCompare(a.updatedAt)).forEach((r, index) => {
+            if (index >= 20 || Date.now() - Date.parse(r.updatedAt) > 86400000) store.delete(r.id)
+          })
+        } else if (previous && Date.now() - Date.parse(previous.updatedAt) <= 86400000) result = previous
+      }
+      tx.oncomplete = () => { db.close(); resolve(result) }
+      tx.onerror = tx.onabort = () => { db.close(); reject(tx.error) }
+    }
+  })
+}
+self.addEventListener('message', event => {
+  if (event.data?.type !== 'EMPLOYEE_PUSH_TEST_RECEIPT' || !/^[a-f0-9]{64}$/.test(event.data.id) || !event.ports[0]) return
+  if (!event.source?.url || new URL(event.source.url).origin !== self.location.origin) return
+  event.waitUntil(testReceipts(event.data.id).then(receipt => event.ports[0].postMessage(receipt)).catch(() => event.ports[0].postMessage(null)))
+})
+self.addEventListener('push', event => {
+  let data; try { data = event.data.json() } catch { return }
+  const testId = /^[a-f0-9]{64}$/.test(data.testId) ? data.testId : null
+  event.waitUntil((async () => {
+    await self.registration.showNotification(data.title || 'YOUME', { tag: data.id, body: 'Buka aplikasi untuk melihat detail.', data: { url: data.url, testId } })
+    if (testId) await testReceipts(testId, 'displayed').catch(() => {})
+  })())
+})
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  let path = event.notification.data?.url || '/'
+  if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || /[\\\u0000-\u001f]/.test(path)) path = '/'
+  const url = new URL(path, self.location.origin).href, testId = event.notification.data?.testId
+  event.waitUntil((async () => {
+    if (/^[a-f0-9]{64}$/.test(testId)) await testReceipts(testId, 'opened').catch(() => {})
+    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const existing = list.find(c => new URL(c.url).origin === self.location.origin)
+    if (existing) { await existing.navigate(url); await existing.focus() } else await self.clients.openWindow(url)
+  })())
+})

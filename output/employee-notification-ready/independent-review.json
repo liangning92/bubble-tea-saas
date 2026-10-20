@@ -1,0 +1,147 @@
+{
+  "reviewedAt": "2026-10-20T14:07:03.459Z",
+  "reviewer": "independent push device review",
+  "base": "a75e01e31de5b19a85d1a2358907462309fc1649",
+  "workspace": "/Users/liangning/Documents/Codex/2026-10-20/task/employee-notification-ready",
+  "readOnlyReview": true,
+  "codeFilesChangedByReviewer": [],
+  "currentFindings": [],
+  "resolvedFindings": [
+    {
+      "id": "push-device-identity-mutation-race",
+      "priority": "P2",
+      "title": "A previous identity can replace or unsubscribe a newly bound account subscription",
+      "initialLocations": [
+        {
+          "path": "client-staff/src/services/pushDevice.ts",
+          "lines": "44-50 (initial reviewed source)"
+        },
+        {
+          "path": "client-staff/src/components/PushSettings.tsx",
+          "lines": "99-103 (initial reviewed source)"
+        }
+      ],
+      "reproduction": [
+        "Pause account A enable while serviceWorker.register is unresolved.",
+        "Switch the mounted UI to account B in another store and complete B enable.",
+        "Resume A register; the original helper unsubscribes B and creates an A-key subscription before the outer current-identity guard runs."
+      ],
+      "initialObservedEvents": [
+        "subscribe key=B",
+        "unsubscribe key=B",
+        "subscribe key=A"
+      ],
+      "impact": "B loses the working device subscription. The old action cannot save under B, but its browser mutation has already damaged the binding.",
+      "status": "fixed and independently rechecked in current working tree",
+      "fix": "Shared browser mutation queue; identity guards between awaited stages; real subscribe/unsubscribe promises retain the queue after a UI timeout.",
+      "verification": [
+        "Controlled delayed-register and delayed-getRegistration interleavings only create B subscription.",
+        "Held real subscribe + simulated 10-second UI deadline keeps B queued until A actual mutation settles; then B removes the A-key result and establishes B."
+      ]
+    }
+  ],
+  "coverage": {
+    "server": [
+      "Current authenticated user/staff/store and issuedAt revalidation.",
+      "Owned subscription lookup; active/stale/not_registered distinctions.",
+      "Durable transaction, request-id deduplication, per-user cooldown and only-target-subscription test delivery.",
+      "Provider acceptance, authenticated browser reports and inbox read remain separate.",
+      "Receipt ownership, monotonic timestamps and 24-hour expiry.",
+      "Changed DELETE subscription deactivation uses user ownership plus full stored snapshot CAS; PUT cross-store deactivation remains the base protocol."
+    ],
+    "client": [
+      "Captured authorization headers, aborts and identity-aware state display.",
+      "Permission requested inside employee click gesture; denied/unsupported/offline/uninstalled-iOS help.",
+      "Actual browser subscription id and public application key contribute to readiness.",
+      "Inactive subscription reconnect renews the browser subscription.",
+      "Browser mutation serialization across component/account changes and timeout retention.",
+      "503 retains observed local device reasons; denied prompt updates Notification.permission immediately.",
+      "New explicit test id is not overwritten on rerender by the unchanged old pushTest query.",
+      "Existing test records use connected-with-test wording without claiming device arrival."
+    ],
+    "serviceWorker": [
+      "Only synthetic test metadata retained, no tokens or subscription key material.",
+      "Display report follows resolved showNotification; click report follows notificationclick.",
+      "Message receipt access restricted to same-origin source.",
+      "Notification navigation rejects external/protocol-relative/backslash/control-character paths."
+    ],
+    "managementFollowup": [
+      "Action id/channel/version/event/user/staff/store binding.",
+      "Four allowed nonterminal states, active staff and current channel membership/fromSeq.",
+      "Full current membership audience hash.",
+      "Mainline owner confirmed producer key/field/status contract matches this consumer."
+    ],
+    "drafts": [
+      "Report-difficulty control only prepares editable Chat text for an owned nonterminal task.",
+      "No task submit/complete operation is called by this new draft control."
+    ],
+    "deliveryUi": [
+      "Optional projection is backward compatible with inboxes lacking delivery.",
+      "Saved-in-app, push service acceptance and phone arrival unknown are distinct.",
+      "No business task or inbox read mutation is performed by the new status component."
+    ]
+  },
+  "executedChecks": [
+    {
+      "kind": "in-memory JavaScript probe using the actual TypeScript helper transpiled with installed TypeScript",
+      "case": "Original delayed-register account switch",
+      "result": "Defect reproduced before fix"
+    },
+    {
+      "kind": "in-memory JavaScript probe using updated helper",
+      "case": "Delayed register and delayed disconnect registration",
+      "result": "Passed; only B subscription created"
+    },
+    {
+      "kind": "in-memory JavaScript probe using updated helper with controlled deadline",
+      "case": "Actual subscribe remains pending after UI timeout",
+      "result": "Passed; B stayed queued until actual A settle, final B key"
+    },
+    {
+      "kind": "Actual TSX component transpiled and rendered through installed React SSR in memory",
+      "case": "NotificationDeliveryStatus, 3 languages by 6 push states plus omitted optional value",
+      "result": "18 states all say phone receipt unknown; omitted optional value renders empty"
+    }
+  ],
+  "limits": [
+    "No additional PostgreSQL instance, Docker container, worker, key generation, /my/push-key call, production mutation, real push or model call was started by this reviewer.",
+    "No real iPhone/Android notification delivery, permission prompt, operating-system display or notification tap was exercised by this reviewer.",
+    "No real authenticated Web UI or responsive screenshot QA was performed by this reviewer.",
+    "Existing real-PG/HTTP artifacts were inspected as background evidence; their runs belong to the main agent, not this independent review.",
+    "A concurrent valid account in a separate browser tab has separate JavaScript queue state; this review covers identity/component switches in one app runtime."
+  ],
+  "sourceFingerprints": {
+    "server/src/services/EmployeePushDeviceService.ts": "8d51e97040c776e6c75da6b81004ef1e5a3da56150d1dcd61ca3f647c3dd7b47",
+    "server/src/routes/employeePushDevice.ts": "e3b0ecd60df66d2199191ddc9764c0171ddcb1f896d5239e9f55377e55c0833f",
+    "server/src/services/ManagementFollowupReminder.ts": "c71591114ecdfbf05828efd8c3c8ea0a5c96d64babfc9ae4f347d281fc10b48f",
+    "server/src/services/EmployeeReminderService.ts": "7464eb5f4d38a4ee69722a112d23cd16e8186c54cda22bc5c0d1932e1e4f1c19",
+    "server/src/routes/employeeWorkspace.ts": "ad054cd3dbe704b5ce6790b44f4d449c5d0261b3dbbb37272587f8c2f5692a4e",
+    "client-staff/src/components/PushSettings.tsx": "29d205cfe5940498fd2bdc2a616d078824eacc78b57549d9081b98b610709f53",
+    "client-staff/src/services/pushDevice.ts": "2fc0ff69bfa4d04b2664cd27da6650b8a3ca252e502aeadf84e97ecab428f7b4",
+    "client-staff/public/employee-sw.js": "8ee90f7f3edc1bde6085ed6573b4868299bae339dbaa6843956feac41d82393f",
+    "shared/TeamTasks.tsx": "762b085dc97d715ee4588f0ccde798fba4eaaa179560c6add7684847156ef6e1",
+    "shared/TeamCommunication.tsx": "2acb9d8e110014348ae3f4deb7f5159bcb9d3e6672bd952c379200aea6ee1ef3",
+    "client-staff/src/components/pushDeviceCopy.ts": "4d9629a24e511355591d57a37958fd80d7234d3626a228cdad540c4f1d50c2a4",
+    "shared/NotificationDeliveryStatus.tsx": "902ccbbf410c5e77a2baac759e07d1133214cc48fa612d1be7e03bcde5d89586",
+    "shared/NotificationAwareness.tsx": "fc3bad4b64997a7924e87e1c32b0a8cc75ab73ba32a04cd43114fe7bcc3cdc55",
+    "shared/NotificationAwarenessInbox.tsx": "e3cd611364652e3564b105a81022bde6c8f6ffa25957ae00d838b89fd9259069"
+  },
+  "finalIncrementalReview": {
+    "result": "No new unresolved P1/P2 findings",
+    "scope": [
+      "PushSettings local device retention on server failure",
+      "Immediate local permission update after prompt denial",
+      "New explicit test target survives old unchanged pushTest URL query",
+      "Connected-with-test wording points to recorded test without claiming receipt",
+      "Optional AwarenessItem.delivery and shared NotificationDeliveryStatus",
+      "DELETE subscription user binding and full snapshot CAS; PUT cross-store behavior kept at base protocol"
+    ],
+    "notes": [
+      "Local failure details remain visible after a config/check 503, while readiness stays false.",
+      "The URL-param effect only resets the target when the actual param or current client changes.",
+      "NotificationDeliveryStatus always renders device receipt as unknown and never infers employee read or task completion.",
+      "The DELETE compare-and-swap only deactivates the exact persisted user/staff subscription snapshot read by that request.",
+      "The earlier report statement that all subscription deactivation uses CAS is narrowed: the changed DELETE uses CAS; PUT cross-store deactivation remains the original protocol."
+    ]
+  }
+}

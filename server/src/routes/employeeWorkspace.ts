@@ -11,6 +11,7 @@ import fs from "fs/promises";
 import { randomUUID, createHash } from "crypto";
 import prisma from "../config/database";
 import { notificationInbox } from "../services/NotificationInboxService";
+import employeePushDeviceRouter from './employeePushDevice';
 import { chatReminderRelevant } from "../services/TeamChatReminderService";
 import { isTeamAttachment, teamCommunication, TeamActor, TeamError } from "../services/TeamCommunicationService";
 import { authenticate, AuthRequest } from "../middlewares/auth";
@@ -28,6 +29,7 @@ import {
 } from "../services/EmployeeAttendanceService";
 const router = Router();
 router.use(authenticate);
+router.use(employeePushDeviceRouter);
 const privateRoot = path.resolve(
   process.env.UPLOADS_PATH || path.resolve(__dirname, "../../uploads"),
   ".employee-private",
@@ -818,10 +820,10 @@ router.delete(
   handle(async (req, res) => {
     const u = identity(req);
     for (const s of await listWork(u.storeId, "subscription."))
-      if (s.staffId === u.staffId && (!req.body?.id || req.body.id === s.id))
-        await writeWork(u.storeId, `subscription.${s.id}`, {
-          ...s,
-          active: false,
+      if (s.staffId === u.staffId && s.userId === u.id && (!req.body?.id || req.body.id === s.id))
+        await prisma.config.updateMany({
+          where: { storeId: u.storeId, key: `employee.workspace.subscription.${s.id}`, value: JSON.stringify(s) },
+          data: { value: JSON.stringify({ ...s, active: false }) },
         });
     res.json({ code: 200 });
   }),

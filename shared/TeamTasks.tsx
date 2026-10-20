@@ -12,15 +12,17 @@ export interface TeamTask {
 }
 type Action = 'accept' | 'submit' | 'return' | 'complete' | 'cancel'
 const button = 'rounded-lg border px-3 py-2 text-sm disabled:opacity-50'
-export function TeamTasks({ tasks, client, channelId, staffId, language, name, canManage, readOnly, messages, onChanged }: {
+export function TeamTasks({ tasks, client, channelId, staffId, language, name, canManage, readOnly, messages, onChanged, onReportIssue }: {
  tasks: TeamTask[]; client: TeamClient; channelId: string; staffId: string; language: string; name: (id: string) => string
- canManage: boolean; readOnly: boolean; messages: { seq: number; authorId: string; text: string; files: string[] }[]; onChanged: () => void
+ canManage: boolean; readOnly: boolean; messages: { seq: number; authorId: string; text: string; files: string[] }[]; onChanged: () => void; onReportIssue?: (task: TeamTask) => void
 }) {
  const w = teamWorkCopy(language), common = teamCopy(language), op = teamOperationCopy(language)
  const [command, setCommand] = useState<{ task: TeamTask; action: Action; requestId: string } | null>(null)
  const [note, setNote] = useState(''), [sourceSeq, setSourceSeq] = useState<number[]>([]), [error, setError] = useState(''), [busy, setBusy] = useState(false)
  const [criteriaConfirmed, setCriteriaConfirmed] = useState(false)
  const date = (s: string) => new Date(s).toLocaleString(language.startsWith('zh') ? 'zh-CN' : language.startsWith('en') ? 'en-GB' : 'id-ID')
+ const issueLabel = language.startsWith('zh') ? '报告困难' : language.startsWith('en') ? 'Report a difficulty' : 'Laporkan kendala'
+ const issueHelp = language.startsWith('zh') ? '先在聊天中说明困难与需要的帮助；此操作只准备草稿，不提交结果或完成任务。' : language.startsWith('en') ? 'Explain the difficulty and help needed in Chat. This only prepares a draft; it does not submit or complete the task.' : 'Jelaskan kendala dan bantuan yang dibutuhkan di Chat. Ini hanya menyiapkan draf, bukan menyerahkan hasil atau menyelesaikan tugas.'
  const label = (action: Action) => action === 'cancel' ? w.cancelTask : w[action]
  async function apply() {
   if (!command || busy) return
@@ -50,6 +52,7 @@ export function TeamTasks({ tasks, client, channelId, staffId, language, name, c
     if (action === 'cancel') return canManage && !['completed', 'cancelled'].includes(task.status)
     return canManage && task.status === 'submitted'
    }).map(action => <button className={button} key={action} disabled={busy} onClick={() => { setCommand({ task, action, requestId: crypto.randomUUID() }); setNote(''); setSourceSeq([]); setError(''); setCriteriaConfirmed(false) }}>{label(action)}</button>)}</div>
+   {!readOnly && task.ownerId === staffId && !['completed', 'cancelled'].includes(task.status) && onReportIssue && <div><button type="button" disabled={busy} className={button} onClick={() => onReportIssue(task)}>{issueLabel}</button><p className="mt-1 text-xs text-gray-500">{issueHelp}</p></div>}
    <details><summary className="cursor-pointer">{w.events}</summary>{task.events.map((event, i) => <div className="mt-2 border-t pt-2" key={i}>
     <p>{event.action === 'assign' ? w.assign : label(event.action as Action)} · {name(event.by)} · {new Date(event.at).toLocaleString(language)}</p>
     <p className="whitespace-pre-wrap break-words">{event.note}</p>{event.sourceSeq.map(n => <a className="mr-2 underline" href={`#team-message-${n}`} key={n}>#{n}</a>)}

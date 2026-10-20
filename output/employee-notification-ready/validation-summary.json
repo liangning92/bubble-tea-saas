@@ -1,0 +1,55 @@
+{
+  "recordedAt": "2026-10-20T14:07:36.902011+00:00",
+  "baseSha": "a75e01e31de5b19a85d1a2358907462309fc1649",
+  "localValidationOnly": true,
+  "sourceFilesSha256": {
+    "client-staff/public/employee-sw.js": "8ee90f7f3edc1bde6085ed6573b4868299bae339dbaa6843956feac41d82393f",
+    "client-staff/src/components/PushSettings.tsx": "29d205cfe5940498fd2bdc2a616d078824eacc78b57549d9081b98b610709f53",
+    "client-staff/src/components/pushDeviceCopy.ts": "4d9629a24e511355591d57a37958fd80d7234d3626a228cdad540c4f1d50c2a4",
+    "client-staff/src/services/pushDevice.ts": "2fc0ff69bfa4d04b2664cd27da6650b8a3ca252e502aeadf84e97ecab428f7b4",
+    "server/src/services/EmployeePushDeviceService.ts": "8d51e97040c776e6c75da6b81004ef1e5a3da56150d1dcd61ca3f647c3dd7b47",
+    "server/src/services/ManagementFollowupReminder.ts": "c71591114ecdfbf05828efd8c3c8ea0a5c96d64babfc9ae4f347d281fc10b48f",
+    "server/src/routes/employeePushDevice.ts": "e3b0ecd60df66d2199191ddc9764c0171ddcb1f896d5239e9f55377e55c0833f",
+    "server/src/routes/employeeWorkspace.ts": "ad054cd3dbe704b5ce6790b44f4d449c5d0261b3dbbb37272587f8c2f5692a4e",
+    "server/src/services/EmployeeReminderService.ts": "7464eb5f4d38a4ee69722a112d23cd16e8186c54cda22bc5c0d1932e1e4f1c19",
+    "server/src/services/StaffPermissionRouteManifest.ts": "25234ab91f92c8aee83a31a056257d16817bf3486410f2c9eb56ade4acbd67e7",
+    "shared/NotificationDeliveryStatus.tsx": "902ccbbf410c5e77a2baac759e07d1133214cc48fa612d1be7e03bcde5d89586",
+    "shared/NotificationAwareness.tsx": "fc3bad4b64997a7924e87e1c32b0a8cc75ab73ba32a04cd43114fe7bcc3cdc55",
+    "shared/NotificationAwarenessInbox.tsx": "e3cd611364652e3564b105a81022bde6c8f6ffa25957ae00d838b89fd9259069",
+    "shared/TeamTasks.tsx": "762b085dc97d715ee4588f0ccde798fba4eaaa179560c6add7684847156ef6e1",
+    "shared/TeamCommunication.tsx": "2acb9d8e110014348ae3f4deb7f5159bcb9d3e6672bd952c379200aea6ee1ef3"
+  },
+  "validation": {
+    "pushDeviceRealPgHttpGroups": 10,
+    "existingNotificationHttpGroups": 17,
+    "existingQueueRealPgRestartGroups": 7,
+    "temporaryPgBatch": "bt-test-324632601ec2",
+    "temporaryPgCleaned": true,
+    "actualReactDeviceGroups": 14,
+    "actualReactCommunicationGroups": 3,
+    "workerSourceRealIndexedDbGroups": 4,
+    "apiBuild": true,
+    "staffProductionBuild": true,
+    "adminTypecheck": true,
+    "posWebTypecheck": true,
+    "independentReviewP1": 0,
+    "independentReviewP2": 0,
+    "independentDeliveryRenderingCases": 18
+  },
+  "boundaries": {
+    "realPhoneReceiptValidated": false,
+    "realPushCalls": 0,
+    "keyGeneration": 0,
+    "productionWrites": 0,
+    "realBusinessTaskActions": 0,
+    "tutorialPublished": false,
+    "independentProductionDeployment": false
+  },
+  "integration": [
+    "Only main integration thread 01a157ff-5c0e-73ca-b424-f2a0f293c023 deploys.",
+    "NotificationInboxService is intentionally unchanged; integrator attaches reminderDeliveryView(r) optional delivery field.",
+    "New management followup helper reads authoritative management.action.id supplied by main action writer; no business mutation.",
+    "scripts/test-notification-awareness.py now includes new device HTTP suite. Add three browser/worker scripts to the integrated notificationAwareness selected CI block.",
+    "No CI/GitHub build or publication was started by this branch."
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "groups": 3,
+  "results": [
+    "notification-style channel deep link opens actual staff conversation without accepting task",
+    "difficulty action preserves draft and requires employee explicit send; no task completion or submission",
+    "employee explicitly accepts then submits own chat evidence; submission is not verification"
+  ],
+  "realReact": true,
+  "syntheticApi": true,
+  "realBusinessOperations": 0
+}

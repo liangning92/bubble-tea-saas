@@ -1,4 +1,5 @@
 import { chatReminderRelevant } from './TeamChatReminderService';
+import { managementFollowupRelevant } from './ManagementFollowupReminder';
 import { trainingUpdateRelevant } from './TrainingLibraryStore';
 import { collectApprovalNotices, approvalNoticeRelevant } from './NotificationApprovalService';
 import { assignedStaffAccess } from "./StaffPermissionService";
@@ -281,6 +282,7 @@ export async function reminderStillRelevant(
   db: any = prisma,
 ) {
   if (r.expiresAt && new Date(r.expiresAt) <= now) return false;
+  if (r.managementAction || r.event?.startsWith('management-followup:')) return managementFollowupRelevant(db, storeId, r);
   if (r.event?.startsWith('team-chat:')) return chatReminderRelevant(db, storeId, r);
   if (r.event?.startsWith('training-content:')) return trainingUpdateRelevant(db, storeId, r, r.staffId);
   if (r.event?.startsWith('approval-notice:')) return approvalNoticeRelevant(db, storeId, r, r.staffId);
@@ -374,7 +376,7 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
       continue;
     }
     const activeSubscriptions = subscriptions.filter(
-      (s) => s.staffId === r.staffId,
+      (s) => s.staffId === r.staffId && (!r.pushTest || s.id === r.pushTest.subscriptionId && s.userId === r.pushTest.userId),
     );
     if (!activeSubscriptions.length || !keys) {
       await updateReminder(storeId, r, { status: 'in_app' }, db, employee.userId);
@@ -468,7 +470,7 @@ export async function deliver(storeId: string, db: any = prisma, push: typeof we
           transportSubscription = liveSubscription;
           await push.sendNotification(
             liveSubscription.subscription,
-            JSON.stringify({ title: r.title, url: r.url, id: r.id }),
+            JSON.stringify({ title: r.title, url: r.url, id: r.id, ...(r.pushTest ? { testId: r.pushTest.testId } : {}) }),
             {
               TTL: 300,
               timeout: 10000,
