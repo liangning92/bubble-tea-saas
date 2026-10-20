@@ -1,0 +1,25 @@
+PASS employee pages and basic navigation: denied
+PASS employee pages and basic navigation: failed
+PASS employee pages and basic navigation: pending
+PASS staff UI: 29 routes at 375/768/1440, navigation, stock search/error recovery, count branding, receive/leave/expense/course dialogs, focus, Escape, overtime validation, official training and missing salary setup.
+PASS unified count statuses, record/submit/approve, adjustment history, stock-log deep links, refresh, legacy entries, permissions, mobile and three languages
+PASS atomic payload, blank vs zero, optional notes, unit conversion, search retention, invalid quantity, failed save retry, conflict refresh, submission guard, 3 languages × 3 viewports
+Re-optimizing dependencies because vite config has changed
+Re-optimizing dependencies because vite config has changed
+locator.click: Error: strict mode violation: getByRole('button', { name: '重试', exact: true }) resolved to 2 elements:
+    1) <button class="underline">重试</button> aka getByRole('status').getByRole('button', { name: '重试' })
+    2) <button class="underline">重试</button> aka getByRole('alert').getByRole('button', { name: '重试' })
+
+Call log:
+[2m  - waiting for getByRole('button', { name: '重试', exact: true })[22m
+
+    at /Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/training-management-page-check.cjs:45:248 {
+  log: [
+    "  - waiting for getByRole('button', { name: '重试', exact: true })"
+  ]
+}
+Error: tests/stoploss/training-management-page-check.cjs exit 1
+    at ChildProcess.<anonymous> (/private/tmp/notification-ci-browser-tail.cjs:3:195)
+    at Object.onceWrapper (node:events:634:26)
+    at ChildProcess.emit (node:events:519:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:293:12)

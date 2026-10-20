@@ -1,0 +1,70 @@
+verify	Run related browser regressions	2026-10-20T08:21:20.6530066Z PASS client-admin failed catalogue refresh keeps the newer reminder unread until matching content recovers
+verify	Run related browser regressions	2026-10-20T08:21:20.7574465Z PASS client-admin display normalization remains bound to the exact raw source item fingerprint
+verify	Run related browser regressions	2026-10-20T08:21:20.9969779Z PASS client-admin same-page item switch invalidates an in-flight content hash
+verify	Run related browser regressions	2026-10-20T08:21:21.4637647Z PASS client-admin missing proof, identity switch, and late replies never mark another item/account or complete learning
+verify	Run related browser regressions	2026-10-20T08:21:22.6449447Z PASS permissions stay in AI settings; unverified connection and missing consent block activation
+verify	Run related browser regressions	2026-10-20T08:21:22.8133554Z PASS saving a new unverified model above invalidates old ready consent before any activation PUT
+verify	Run related browser regressions	2026-10-20T08:21:23.2277510Z PASS uncertain policy save stays locked across reload until the saved state is explicitly read
+verify	Run related browser regressions	2026-10-20T08:21:24.0502376Z PASS review requires edited content, note and explicit approval; lost response replays only the original ID after reload
+verify	Run related browser regressions	2026-10-20T08:21:24.2284457Z PASS task approval fixes source employee and reviewer and collects dates and criteria; existing follow-up remains present
+verify	Run related browser regressions	2026-10-20T08:21:24.3368038Z PASS Chinese report paginates and keeps AI statements separate from human acceptance
+verify	Run related browser regressions	2026-10-20T08:21:24.5660624Z PASS unknown model billing stays visible and new attempt needs both explicit confirmations
+verify	Run related browser regressions	2026-10-20T08:21:24.7515485Z PASS concurrent version change retains form and prevents stale approval
+verify	Run related browser regressions	2026-10-20T08:21:24.8553133Z PASS browser receipt failure stops before API mutation
+verify	Run related browser regressions	2026-10-20T08:21:25.1592875Z PASS permission failure is visible and is never reported as an empty successful result
+verify	Run related browser regressions	2026-10-20T08:21:26.0344515Z PASS zh 390 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:26.7947582Z PASS zh 768 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:27.5433336Z PASS zh 1440 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:28.2498282Z PASS id 390 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:28.9260196Z PASS id 768 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:29.6760304Z PASS id 1440 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:30.3529448Z PASS en 390 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:31.0454888Z PASS en 768 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:31.8279921Z PASS en 1440 responsive review and policy controls
+verify	Run related browser regressions	2026-10-20T08:21:32.1588808Z PASS manager does not receive AI review controls or workflow reads
+verify	Run related browser regressions	2026-10-20T08:21:36.4559196Z PASS production UI: full-width mobile drawer, dialog focus/Escape, TV search/drafts, media preview, price zero/empty/failure/bulk review, explicit store save, inventory grouping.
+verify	Run related browser regressions	2026-10-20T08:21:44.8739641Z PASS: same-origin valid session reuse, deep route, login redirect, API revocation, expiry, account isolation and logout
+verify	Run related browser regressions	2026-10-20T08:21:51.4567080Z PASS timezone/date-format save and reload, scoped store payload, Yesterday query, formatted time, unified presets and non-Jakarta purchase analysis
+verify	Run related browser regressions	2026-10-20T08:21:51.6771774Z   [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5191[22m/[39m
+verify	Run related browser regressions	2026-10-20T08:21:52.7497929Z PASS real admin order filters: combined search/shift/payment/WIB/pagination, full 125-order export via actual export-data endpoint, quantity column, invalid range and no runtime errors
+verify	Run related browser regressions	2026-10-20T08:21:58.2655100Z PASS actual POS UI zh nonempty default/custom categories and exact Rp 53000 payload
+verify	Run related browser regressions	2026-10-20T08:22:00.2427105Z PASS actual POS UI en nonempty default/custom categories and exact Rp 53000 payload
+verify	Run related browser regressions	2026-10-20T08:22:02.1951495Z PASS actual POS UI id nonempty default/custom categories and exact Rp 53000 payload
+verify	Run related browser regressions	2026-10-20T08:22:08.0238633Z PASS revenue grouped query, layout, combined dates/channel, pagination, detail return, data types, reset and live refresh en
+verify	Run related browser regressions	2026-10-20T08:22:10.2884413Z PASS revenue grouped query, layout, combined dates/channel, pagination, detail return, data types, reset and live refresh zh
+verify	Run related browser regressions	2026-10-20T08:22:12.6019391Z PASS revenue grouped query, layout, combined dates/channel, pagination, detail return, data types, reset and live refresh id
+verify	Run related browser regressions	2026-10-20T08:22:17.1906000Z PASS payroll expense, pending wages and finance report breakdown render in the real admin UI
+verify	Run related browser regressions	2026-10-20T08:22:17.8012334Z Re-optimizing dependencies because vite config has changed
+verify	Run related browser regressions	2026-10-20T08:22:17.8296553Z Re-optimizing dependencies because vite config has changed
+verify	Run related browser regressions	2026-10-20T08:22:25.2803569Z PASS admin/staff desktop/mobile: estimate without payables, half days, minutes and manual deductions, rule guard, import preview, repeated save, payment gate, downloaded payslip; evidence /tmp/payroll-estimate-evidence
+verify	Run related browser regressions	2026-10-20T08:22:29.3250539Z PASS calendar salary, three unpaid days, late starter capped deposit, paid payslip view/download; /tmp/payroll-settlement-evidence
+verify	Run related browser regressions	2026-10-20T08:22:29.5358463Z   [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5179[22m/[39m
+verify	Run related browser regressions	2026-10-20T08:22:30.2496936Z node:internal/process/promises:394
+verify	Run related browser regressions	2026-10-20T08:22:30.2497947Z     triggerUncaughtException(err, true /* fromPromise */);
+verify	Run related browser regressions	2026-10-20T08:22:30.2500675Z     ^
+verify	Run related browser regressions	2026-10-20T08:22:30.2501246Z
+verify	Run related browser regressions	2026-10-20T08:22:30.2501776Z AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+verify	Run related browser regressions	2026-10-20T08:22:30.2502281Z
+verify	Run related browser regressions	2026-10-20T08:22:30.2502531Z 'pos' !== 'employee'
+verify	Run related browser regressions	2026-10-20T08:22:30.2502814Z
+verify	Run related browser regressions	2026-10-20T08:22:30.2503470Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/tests/stoploss/staff-basic-access-page-check.cjs:18:16
+verify	Run related browser regressions	2026-10-20T08:22:30.2504873Z     at RouteHandler._handleInternal (/home/runner/work/bubble-tea-saas/bubble-tea-saas/node_modules/playwright-core/lib/coreBundle.js:58640:11)
+verify	Run related browser regressions	2026-10-20T08:22:30.2506301Z     at RouteHandler._handleImpl (/home/runner/work/bubble-tea-saas/bubble-tea-saas/node_modules/playwright-core/lib/coreBundle.js:58607:29)
+verify	Run related browser regressions	2026-10-20T08:22:30.2507965Z     at /home/runner/work/bubble-tea-saas/bubble-tea-saas/node_modules/playwright-core/lib/coreBundle.js:58601:59
+verify	Run related browser regressions	2026-10-20T08:22:30.2509197Z     at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+verify	Run related browser regressions	2026-10-20T08:22:30.2510466Z     at _Zone.run (/home/runner/work/bubble-tea-saas/bubble-tea-saas/node_modules/playwright-core/lib/coreBundle.js:8572:40)
+verify	Run related browser regressions	2026-10-20T08:22:30.2511791Z     at _NodeZone.run (/home/runner/work/bubble-tea-saas/bubble-tea-saas/node_modules/playwright-core/lib/coreBundle.js:8612:27)
+verify	Run related browser regressions	2026-10-20T08:22:30.2513190Z     at RouteHandler.handle (/home/runner/work/bubble-tea-saas/bubble-tea-saas/node_modules/playwright-core/lib/coreBundle.js:58601:38)
+verify	Run related browser regressions	2026-10-20T08:22:30.2514681Z     at _BrowserContext._onRoute (/home/runner/work/bubble-tea-saas/bubble-tea-saas/node_modules/playwright-core/lib/coreBundle.js:60722:46)
+verify	Run related browser regressions	2026-10-20T08:22:30.2516150Z     at Proxy.<anonymous> (/home/runner/work/bubble-tea-saas/bubble-tea-saas/node_modules/playwright-core/lib/coreBundle.js:60590:63) {
+verify	Run related browser regressions	2026-10-20T08:22:30.2517079Z   generatedMessage: true,
+verify	Run related browser regressions	2026-10-20T08:22:30.2517499Z   code: 'ERR_ASSERTION',
+verify	Run related browser regressions	2026-10-20T08:22:30.2517895Z   actual: 'pos',
+verify	Run related browser regressions	2026-10-20T08:22:30.2518297Z   expected: 'employee',
+verify	Run related browser regressions	2026-10-20T08:22:30.2518684Z   operator: 'strictEqual',
+verify	Run related browser regressions	2026-10-20T08:22:30.2519233Z   diff: 'simple'
+verify	Run related browser regressions	2026-10-20T08:22:30.2519577Z }
+verify	Run related browser regressions	2026-10-20T08:22:30.2519821Z
+verify	Run related browser regressions	2026-10-20T08:22:30.2520227Z Node.js v22.23.3
+verify	Run related browser regressions	2026-10-20T08:22:30.2733031Z Failed /opt/hostedtoolcache/node/22.23.3/x64/bin/node tests/stoploss/staff-basic-access-page-check.cjs
+verify	Run related browser regressions	2026-10-20T08:22:30.2905993Z ##[error]Process completed with exit code 1.

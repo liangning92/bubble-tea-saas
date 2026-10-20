@@ -1,7 +1,7 @@
 {
-  "status": "combined_12c790_and_directorysnapshot_candidate_final_ci_review_pending",
+  "status": "combined_1bab_and_directorysnapshot_candidate_final_ci_review_pending",
   "aiSha": "fd0e8de8f8b7603d73beea564f14c0fee3864b5f",
-  "notificationCandidateSha": "12c790b76e4f7b383a47af104899068969ef1a4d",
+  "notificationCandidateSha": "1bab5a94da1b9be2145c3a631cbe4760fd6b9194",
   "integrationRoutineGroups": 31,
   "scopeUnits": 30,
   "clientBuilds": [
@@ -24,5 +24,6 @@
   ],
   "actualIndependentRoutineWorkerAndApi500msScanner": true,
   "directorySnapshotChecks": "full/lowercase exactsnapshot,rename block,cashier no elevate,lookalikes rejected",
-  "subscriptionCas": "3 stale invalidation paths compare observed/actualtransport snapshot"
+  "subscriptionCas": "3 stale invalidation paths compare observed/actualtransport snapshot",
+  "employeeNotificationHeader": "employee GET/readPOST; admin remainsadmin; approvalposclient unchanged"
 }

@@ -30,8 +30,12 @@
     "new82fcP2": 1,
     "finding": "subscription renewal overwritten by stale invalidation snapshot",
     "fixedInContainingCommit": true,
-    "fixedHeadIndependentRereview": "pending",
-    "report": "../notification-p2-review/independent-increment-82fc2f67.md"
+    "fixedHeadIndependentRereview": "new employee client delta pending; runtime backend unchanged",
+    "report": "../notification-p2-review/independent-increment-82fc2f67.md",
+    "subscriptionCasReviewedHead": "12c790b76e4f7b383a47af104899068969ef1a4d",
+    "subscriptionCasP1": 0,
+    "subscriptionCasP2": 0,
+    "independentRealHttpInterleavings": 11
   },
   "queue": {
     "apiFinishDelayMs": 25,
@@ -112,5 +116,23 @@
     "runId": 39390919449,
     "status": "cancelled request after new P2 required runtime source change",
     "notPassingProof": true
+  },
+  "lastCandidateCi": {
+    "runId": 39391996522,
+    "head": "12c790b76e4f7b383a47af104899068969ef1a4d",
+    "conclusion": "failure",
+    "allTypesUnitAuditHttpBuildPassed": true,
+    "failure": "staff-basic original employee app header assertion received pos from new notification client",
+    "fix": "employee client uses existing http, fresh auth and employee channel; approval pos client unchanged",
+    "evidence": "../notification-employee-channel-fix"
+  },
+  "employeeClientDelta": {
+    "actualInboxAndReadHeadersVerified": true,
+    "staffTypesAndBuild": true,
+    "twoAppNotificationBrowser": true,
+    "originalStaffBasicAnd29RoutesPassed": true,
+    "selectedBrowserTailInventory2Passed": true,
+    "selectedBrowserTailTrainingPassed": true,
+    "backendSourceUnchangedFromIndependentlyReviewed12c": true
   }
 }
