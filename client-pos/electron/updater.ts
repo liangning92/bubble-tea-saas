@@ -19,6 +19,7 @@ let downloadedInfo: {version: string; currentVersion: string} | null = null
 let updateTimer: ReturnType<typeof setInterval> | null = null
 let installerSha512 = ''
 let installing = false
+let installRequested = false
 let stageInFlight: Promise<void> | null = null
 let stageReady = false
 let verifiedInstaller: {path:string; size:number; mtimeMs:number} | null = null
@@ -202,6 +203,9 @@ function sendToRenderer(channel: string, ...args: any[]) {
   // Persist state even when the renderer is hidden, reloading or not yet listening.
   if (channel === 'update-status') {
     const status = args[0]
+    if (args[1] || status === 'downloaded' || status === 'preparing') {
+      args[1] = {...(args[1] || updateState.info), installRequested}
+    }
     updateState = {...updateState, status, info:args[1] || updateState.info,
       error:status === 'error' ? updateState.error : undefined}
   } else if (channel === 'update-progress') updateState = {...updateState, progress:args[0]?.percent || 0}
@@ -259,7 +263,13 @@ function setupIpcHandlers() {
 
   // Download update
   ipcMain.handle('download-update', async () => {
-    if (downloadInProgress || updateDownloaded) return true
+    // A cashier's Download and install request must survive renderer reloads
+    // and a download that was already started automatically in the background.
+    installRequested = true
+    if (downloadInProgress || updateDownloaded) {
+      sendToRenderer('update-status', updateState.status, updateState.info)
+      return {...updateState, currentVersion:app.getVersion()}
+    }
     try {
       downloadInProgress = true
       log('info', 'Starting download...')
