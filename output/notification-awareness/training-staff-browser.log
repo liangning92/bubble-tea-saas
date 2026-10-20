@@ -1,0 +1,8 @@
+PASS list view preserves unread; opening one module reads only its event without completing learning
+PASS deep module link displays the item; failed read stays unread and accessible retry succeeds
+PASS checklist deep link targets only the published checklist and does not tick completion
+PASS focus resume synchronizes a second device read receipt
+PASS published catalogue refreshes without reload; failed read hides stale content and retries
+PASS withdrawn material link stays on current catalogue and cannot acknowledge nonexistent content
+PASS account switch hides earlier personal updates; desktop/tablet/mobile retain modules and no overflow
+PASS real TrainingPage synthetic notification browser checks

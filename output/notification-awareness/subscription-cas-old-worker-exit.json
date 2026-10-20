@@ -1,0 +1,5 @@
+{
+  "testExitCode": 1,
+  "expectedFailure": true,
+  "onlyOldWorkerModuleOverridden": true
+}

@@ -1,0 +1,30 @@
+{
+  "batch": "bt-test-3f3f8b484291",
+  "runs": [
+    {
+      "provider": "sqlite",
+      "exitCode": 0,
+      "directories": [
+        "/tmp/employee-workspace-test-qoYx3k"
+      ]
+    },
+    {
+      "provider": "postgresql",
+      "exitCode": 0,
+      "directories": [
+        "/tmp/employee-workspace-test-zB871K"
+      ]
+    }
+  ],
+  "runtime": "/tmp/pos-idempotency-runtime-dbrWMk",
+  "runtimeCleaned": true,
+  "stdoutConfirmedDirectoriesCleaned": [
+    "/tmp/employee-workspace-test-qoYx3k",
+    "/tmp/employee-workspace-test-zB871K"
+  ],
+  "productionAccess": false,
+  "realPushCalls": 0,
+  "otherHistoricalHttpFilesExecuted": false,
+  "wrapperCleaned": true,
+  "allOwnedPathsAbsent": true
+}

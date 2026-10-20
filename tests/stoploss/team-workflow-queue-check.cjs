@@ -211,7 +211,8 @@ module.exports = async ({prisma, good, request, create, send, test, dropResponse
         assert.equal(await slow.process(owner.storeId,c.id,m.seq),null);assert.equal(count,1);
         const reconciled=await readTeam(prisma,owner.storeId,workflowJobKey(c.id,m.seq));assert.equal(reconciled.billingStatus,'possible');
         assert.equal(reconciled.billingAttempts[0].requestId,reconciled.aiRequestId);
-        assert.equal(reconciled.leaseToken,persisted.leaseToken);assert.equal(reconciled.attempt,1);
+        assert.equal(reconciled.status,'blocked');assert.equal(reconciled.error,'TEAM_WORKFLOW_PAUSED');
+        assert.equal(reconciled.leaseToken,undefined);assert.equal(reconciled.leaseUntil,undefined);assert.equal(reconciled.attempt,1);
         assert.equal(await slow.process(owner.storeId,c.id,m.seq),null);assert.equal(count,1);
         assert.equal((await readTeam(prisma,owner.storeId,workflowJobKey(c.id,m.seq))).version,reconciled.version);
       }finally{release();await pending}

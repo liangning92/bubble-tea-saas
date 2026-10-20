@@ -1,0 +1,20 @@
+PASS permissions stay in AI settings; unverified connection and missing consent block activation
+PASS saving a new unverified model above invalidates old ready consent before any activation PUT
+PASS uncertain policy save stays locked across reload until the saved state is explicitly read
+PASS review requires edited content, note and explicit approval; lost response replays only the original ID after reload
+PASS task approval fixes source employee and reviewer and collects dates and criteria; existing follow-up remains present
+PASS Chinese report paginates and keeps AI statements separate from human acceptance
+PASS unknown model billing stays visible and new attempt needs both explicit confirmations
+PASS concurrent version change retains form and prevents stale approval
+PASS browser receipt failure stops before API mutation
+PASS permission failure is visible and is never reported as an empty successful result
+PASS zh 390 responsive review and policy controls
+PASS zh 768 responsive review and policy controls
+PASS zh 1440 responsive review and policy controls
+PASS id 390 responsive review and policy controls
+PASS id 768 responsive review and policy controls
+PASS id 1440 responsive review and policy controls
+PASS en 390 responsive review and policy controls
+PASS en 768 responsive review and policy controls
+PASS en 1440 responsive review and policy controls
+PASS manager does not receive AI review controls or workflow reads

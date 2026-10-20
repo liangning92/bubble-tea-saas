@@ -1,0 +1,72 @@
+
+> bubble-tea-staff@1.0.0 build
+> tsc && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 1686 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                     0.71 kB │ gzip:   0.39 kB
+dist/employee-shell.json                            1.93 kB │ gzip:   0.87 kB
+dist/employee-sw.js                                 3.71 kB
+dist/assets/LocalizedDateTimeInput-sEWya5AL.css     2.67 kB │ gzip:   0.98 kB
+dist/assets/TeamCommunicationPage-Bzq5Zn2Y.css     13.41 kB │ gzip:   3.30 kB
+dist/assets/index-BehqmSf0.css                     60.60 kB │ gzip:  12.08 kB
+dist/assets/TrainingLibraryPage-DDQNEgVE.js         0.14 kB │ gzip:   0.14 kB
+dist/assets/chevron-left-Bk8iGWRz.js                0.30 kB │ gzip:   0.25 kB
+dist/assets/chevron-right-DdIDhlSG.js               0.30 kB │ gzip:   0.25 kB
+dist/assets/loader-2-5ezBuLRr.js                    0.31 kB │ gzip:   0.26 kB
+dist/assets/businessDate-DnUGQ05a.js                0.32 kB │ gzip:   0.20 kB
+dist/assets/x-BgYMzXKX.js                           0.32 kB │ gzip:   0.26 kB
+dist/assets/arrow-up-right-CJXxRBVT.js              0.33 kB │ gzip:   0.26 kB
+dist/assets/send-BDGiIjZ3.js                        0.34 kB │ gzip:   0.27 kB
+dist/assets/arrow-down-right-nHUAUwwm.js            0.34 kB │ gzip:   0.27 kB
+dist/assets/check-circle-BlF3PRTY.js                0.36 kB │ gzip:   0.29 kB
+dist/assets/award-j3YFb9x-.js                       0.36 kB │ gzip:   0.29 kB
+dist/assets/rotate-ccw-CQEUT6uk.js                  0.37 kB │ gzip:   0.29 kB
+dist/assets/map-pin-ZS8ndk1j.js                     0.37 kB │ gzip:   0.30 kB
+dist/assets/lock-pdGgCru4.js                        0.38 kB │ gzip:   0.29 kB
+dist/assets/x-circle-C5p_Rae-.js                    0.38 kB │ gzip:   0.28 kB
+dist/assets/LoadFailure-B6iPsG-o.js                 0.38 kB │ gzip:   0.28 kB
+dist/assets/camera-BNTzi8yN.js                      0.42 kB │ gzip:   0.31 kB
+dist/assets/wallet-BHgl8IXg.js                      0.42 kB │ gzip:   0.30 kB
+dist/assets/download-OcHv2puD.js                    0.43 kB │ gzip:   0.32 kB
+dist/assets/receipt-DYn0jYCc.js                     0.46 kB │ gzip:   0.31 kB
+dist/assets/calendar-CtInArX-.js                    0.49 kB │ gzip:   0.32 kB
+dist/assets/upload-jPz7WmGv.js                      0.70 kB │ gzip:   0.36 kB
+dist/assets/sparkles-BeSR-rfe.js                    0.89 kB │ gzip:   0.41 kB
+dist/assets/repeat-2-DkzqQtER.js                    1.42 kB │ gzip:   0.55 kB
+dist/assets/ModuleLinks-BFuNeeSu.js                 3.73 kB │ gzip:   1.36 kB
+dist/assets/inventoryFlow-g6cn5_FT.js               3.76 kB │ gzip:   1.87 kB
+dist/assets/AnnouncementsPage-HHoXva5C.js           3.88 kB │ gzip:   1.72 kB
+dist/assets/DepositRulesPage-DrOfuO7t.js            4.66 kB │ gzip:   1.54 kB
+dist/assets/AttendanceRulesPage-D38hSiPc.js         4.99 kB │ gzip:   1.34 kB
+dist/assets/DepositPage-C_wKE11Y.js                 5.27 kB │ gzip:   1.54 kB
+dist/assets/OvertimeRequestPage-CE9dmSk-.js         6.26 kB │ gzip:   2.05 kB
+dist/assets/SchedulePage-BbJc6EhO.js                6.72 kB │ gzip:   2.40 kB
+dist/assets/teamCopy-Dn0VscDQ.js                    7.32 kB │ gzip:   3.81 kB
+dist/assets/StaffPointsPage-wNmuKXbz.js             7.60 kB │ gzip:   2.55 kB
+dist/assets/AttendanceCorrectionPage-D_2mLWwo.js    7.71 kB │ gzip:   2.16 kB
+dist/assets/ProfilePage-DwHvWpGp.js                 7.87 kB │ gzip:   2.66 kB
+dist/assets/HygienePage-C1zdcnqC.js                 8.28 kB │ gzip:   2.68 kB
+dist/assets/LoginPage-BEdrN6kS.js                   9.18 kB │ gzip:   3.16 kB
+dist/assets/LocalizedDateTimeInput-B1xxwqGx.js      9.27 kB │ gzip:   3.75 kB
+dist/assets/ReimbursementPage-K_X9r6ws.js          10.02 kB │ gzip:   3.38 kB
+dist/assets/AttendancePage-DAMl2QQP.js             10.58 kB │ gzip:   3.32 kB
+dist/assets/HomePage-C4aKhDxd.js                   10.63 kB │ gzip:   3.61 kB
+dist/assets/ShiftSwapPage-D-h_RceV.js              11.35 kB │ gzip:   3.32 kB
+dist/assets/SalaryPage-CqJClfGY.js                 19.77 kB │ gzip:   7.72 kB
+dist/assets/LeavePage-C76aK0n6.js                  23.26 kB │ gzip:   8.20 kB
+dist/assets/InventoryCountPage-DKx2YhYV.js         26.37 kB │ gzip:   9.41 kB
+dist/assets/InventoryPage-DxAqFLNS.js              31.76 kB │ gzip:   8.65 kB
+dist/assets/TrainingPage-D847I-34.js               49.08 kB │ gzip:  16.80 kB
+dist/assets/TeamCommunicationPage-DcubqQoA.js      78.85 kB │ gzip:  26.47 kB
+dist/assets/QRCameraScannerModal-fdoxmCvr.js      143.11 kB │ gzip:  51.69 kB
+dist/assets/index-CMbRp3lj.js                     505.05 kB │ gzip: 172.97 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 4.71s

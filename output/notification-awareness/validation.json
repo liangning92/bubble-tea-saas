@@ -1,0 +1,138 @@
+{
+  "recordedAt": "2026-10-20T08:13:10.034180+00:00",
+  "baseSha": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "source": "commit containing this record",
+  "previousValidation": {
+    "posTypesAndBuild": "passed earlier candidate; shared POS source unchanged in this increment; final exact CI must recheck",
+    "trainingPostgresGroups": 11,
+    "teamCommunicationGroups": 67,
+    "unitPassed": 241,
+    "auditPassed": 300,
+    "scope": "these prior runs do not substitute for fixed-head CI"
+  },
+  "firstCandidateCi": {
+    "runId": 39383263838,
+    "headSha": "6e802c1c9538fae1a5f20199692344e7e262cd38",
+    "conclusion": "failure",
+    "reason": "old employee-workspace fixture expected automatic push key generation; corrected to missing-key in_app and existing synthetic key mock transport; zero generation"
+  },
+  "secondCandidateCi": {
+    "runId": 39384205439,
+    "headSha": "acaf93275b3272c93711f6b2fd0ee80362fea39e",
+    "conclusion": "failure",
+    "step": "browser",
+    "reason": "store-date fixture configFile:false omitted automatic JSX; actual React error boundary React is not defined. Prior workflow inbox fixture issue was already fixed and passed.",
+    "evidence": "../notification-store-date-ci-fix",
+    "fix": "two selected admin fixture transforms now match project automatic JSX; original assertions and timeouts pass unchanged"
+  },
+  "independentReview": {
+    "original3P2ClosedAt82fc": true,
+    "new82fcP2": 1,
+    "finding": "subscription renewal overwritten by stale invalidation snapshot",
+    "fixedInContainingCommit": true,
+    "fixedHeadIndependentRereview": "new employee client delta pending; runtime backend unchanged",
+    "report": "../notification-p2-review/independent-increment-82fc2f67.md",
+    "subscriptionCasReviewedHead": "12c790b76e4f7b383a47af104899068969ef1a4d",
+    "subscriptionCasP1": 0,
+    "subscriptionCasP2": 0,
+    "independentRealHttpInterleavings": 11
+  },
+  "queue": {
+    "apiFinishDelayMs": 25,
+    "crossProcessPollMs": 500,
+    "scheme": "fixed per-store employee.workspace.notification.chat.pending marker in same transaction as message/reminders",
+    "collectionAndPayrollIntervalMs": 60000,
+    "newProcess": false,
+    "newDatabasePermission": false,
+    "newCredentials": false,
+    "sameProcessOnlyClaim": false,
+    "realDeviceDeliveryProven": false
+  },
+  "componentScope": [
+    "api",
+    "admin",
+    "pos",
+    "staff"
+  ],
+  "windowsInstaller": false,
+  "networkRecovery": {
+    "requestDeadlineMs": 15000,
+    "actualAxiosTimeoutAndRecovery": [
+      "admin",
+      "staff"
+    ],
+    "malformedSuccessfulResponseContainedAndRecovery": [
+      "admin",
+      "staff"
+    ]
+  },
+  "ci": "pending exact new CAS fixed-head scoped run",
+  "temporaryServicesCleaned": true,
+  "notExecuted": [
+    "production deployment",
+    "real business UI acceptance",
+    "physical device push delivery",
+    "real model call",
+    "production worker"
+  ],
+  "prior82fcValidation": {
+    "apiBuild": true,
+    "adminTypeAndBuild": true,
+    "staffTypeAndBuild": true,
+    "scopeUnitPassed": 27,
+    "notificationHttp": 14,
+    "crossProcessAndQueue": 7,
+    "chat": 5,
+    "employeeProviders": [
+      "sqlite",
+      "postgresql"
+    ],
+    "groupsPassedTotal": 28,
+    "summary": "../notification-queue-wake/current-final-regression-summary.json",
+    "awarenessActualReact": [
+      "client-admin",
+      "client-staff"
+    ],
+    "adminApprovalBeforeAfterActualReact": true,
+    "trainingContentRaceGroups": 16,
+    "workflowOriginalAssertions": 20,
+    "workflowGuardWithOriginalMalformedFixturePassed": true,
+    "workflowExplicitContractFixturePassed": true
+  },
+  "currentValidation": {
+    "apiBuild": true,
+    "notificationHttpGroups": 17,
+    "queueProcessGroups": 7,
+    "totalTargetedGroups": 24,
+    "batch": "bt-test-b0f131178e6b",
+    "wrapperCleaned": true,
+    "oldWorkerRenewalOverwriteReproduced": true,
+    "oldWorkerCommit": "108e4b0638f6392051ac355b97f17f655d0135c5",
+    "beforeProof": "subscription-cas-old-worker-proof.json",
+    "currentLog": "subscription-cas-after-fix.log",
+    "scope": "subscription CAS delta plus existing notification/queue tests; prior frontend source unchanged"
+  },
+  "intermediate108eCi": {
+    "runId": 39390919449,
+    "status": "cancelled request after new P2 required runtime source change",
+    "notPassingProof": true
+  },
+  "lastCandidateCi": {
+    "runId": 39391996522,
+    "head": "12c790b76e4f7b383a47af104899068969ef1a4d",
+    "conclusion": "failure",
+    "allTypesUnitAuditHttpBuildPassed": true,
+    "failure": "staff-basic original employee app header assertion received pos from new notification client",
+    "fix": "employee client uses existing http, fresh auth and employee channel; approval pos client unchanged",
+    "evidence": "../notification-employee-channel-fix"
+  },
+  "employeeClientDelta": {
+    "actualInboxAndReadHeadersVerified": true,
+    "staffTypesAndBuild": true,
+    "twoAppNotificationBrowser": true,
+    "originalStaffBasicAnd29RoutesPassed": true,
+    "selectedBrowserTailInventory2Passed": true,
+    "selectedBrowserTailTrainingPassed": true,
+    "backendSourceUnchangedFromIndependentlyReviewed12c": true
+  }
+}

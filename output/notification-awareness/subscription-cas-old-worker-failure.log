@@ -1,0 +1,72 @@
+[docker-test] batch bt-test-680db50e068b
+Prisma schema loaded from server/prisma/schema.prisma
+Datasource "db": PostgreSQL database "notification_awareness_test", schema "public" at "127.0.0.1:53917"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 612ms
+
+OLD_WORKER_PROOF {"oldWorkerCommit":"108e4b0638f6392051ac355b97f17f655d0135c5","oldWorkerSourceSha256":"3c983649718f3a79367628b69fa3f54ce76ee0b7a2697430997b2b3ec00ff348","newWorkerSourceSha256":"4d2568b3b425c40ab0247a4b5c9d0882c8a94a83d60cc4858da7a47b309a77ad","newWorkerCompiledSha256":"2dbae468fdd3b61d18bddb6d0f7f0abe1d35662f8f2b7602a17bb7c3b9224513","oldWorkerTranspiledSha256":"7063cce7dcb74acffe4dc7a6cd551f718a3f64efdbbb4841f79d18793bf18db5","bootstrapSha256":"cd926d1f07454365a3dd0d45eddc338d13162b852c08fbeb332f12f3d18bcbaa","targetModule":"/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/server/dist/services/EmployeeReminderService.js","overlay":"require.cache only; repository TS and dist unmodified","scope":"Only old EmployeeReminderService; remaining runtime current, not a whole-tree old-SHA test","batch":"bt-test-680db50e068b"}
+PASS inbox opening preserves both conversation cursors; successful selected fetch plus ack clears only that conversation across sessions
+PASS nonmembers and cross-store/forged identity cannot expose preview or use notification deep links/read IDs
+PASS backend business deny preserves existing employee APP inbox/chat/training while forged manager grants fail
+PASS real training draft stays silent; published content emits deduplicated personal updates and shared read does not complete learning
+prisma:error
+Invalid `prisma.config.upsert()` invocation:
+
+
+Error occurred during query execution:
+ConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "23514", message: "new row for relation \"Config\" violates check constraint \"notification_publish_failure\"", severity: "ERROR", detail: Some("Failing row contains (cmvgemiph006e13y4hoksgn4e, notice-store-6, employee.workspace.reminder.notice-staff-6-owner.7c530b1a6205bd9..., {\"id\":\"7c530b1a6205bd9e8998b9ead94d03151dd1e2dc22b964727999d0dea..., staff, 2026-10-20 08:11:26.645, 2026-10-20 08:11:26.645)."), column: None, hint: None }), transient: false })
+PASS training newer published revision replaces old relevance; reminder failure rolls back actual HTTP publication/version
+PASS current authorized handler pending survives read across devices; revocation removes inbox and queued-push relevance without altering source
+PASS fixture node completion removes pending and queued push; only applicant gets result including no-staff administrator in-app
+PASS read committed after delivery lease suppresses transport and cannot be restored to unread
+PASS read committed during an already-started mocked transport survives final delivery status merge
+PASS logout or session revocation committed after the lease prevents transport without marking the notice read
+AssertionError [ERR_ASSERTION]: Old invalidation must not overwrite an HTTP200 renewal
++ actual - expected
+
+  {
++   active: false,
+-   active: true,
+    id: '384035b2947ccdbaf15e3ab83539460d70b1cf56bbe64d557e2d908061a0b9ee',
++   issuedAtMs: 1792483887621,
+-   issuedAtMs: 1792483888721,
+    staffId: 'notice-staff-13-employee',
+    subscription: {
+      endpoint: 'https://fcm.googleapis.com/send/synthetic-notice-store-13-renew-1',
+      keys: {
++       auth: 'synthetic-original-auth',
++       p256dh: 'synthetic-original-public'
+-       auth: 'synthetic-renewed-auth-1',
+-       p256dh: 'synthetic-renewed-public-1'
+      }
+    },
++   updatedAt: '2026-10-20T08:11:27.527Z',
+-   updatedAt: '2026-10-20T08:11:27.561Z',
+    userId: 'notice-user-13-employee'
+  }
+
+    at /Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/notification-awareness-http-check.cjs:204:106
+    at async test (/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/notification-awareness-http-check.cjs:23:30)
+    at async main (/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/notification-awareness-http-check.cjs:196:2) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [Object],
+  expected: [Object],
+  operator: 'deepStrictEqual',
+  diff: 'simple'
+}
+Owned notification PostgreSQL instance cleaned
+Traceback (most recent call last):
+  File "/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/scripts/test-notification-awareness.py", line 55, in <module>
+    command(['node', 'tests/stoploss/notification-awareness-http-check.cjs'], env=env)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/scripts/test-notification-awareness.py", line 37, in command
+    return subprocess.run(args, cwd=root, check=True, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/Cellar/python@3.14/3.14.4/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['node', 'tests/stoploss/notification-awareness-http-check.cjs']' returned non-zero exit status 1.
+
+Owned old-worker bootstrap directory cleaned /tmp/bt-test-680db50e068b-subscription-proof-kq49e2a6
+[docker-test] cleaned bt-test-680db50e068b

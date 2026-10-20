@@ -186,7 +186,7 @@ export function EmployeeAppealsPage() {
         </form>
       )}
       {data?.appeals?.map((r: any) => (
-        <section key={r.id} className="bg-white p-4 rounded-xl">
+        <section key={r.id} data-notice-object={r.id} className="bg-white p-4 rounded-xl">
           <p>{r.reason}</p>
           <RecordStatus
             record={{
@@ -346,7 +346,7 @@ export function EmployeeDocumentsPage() {
         </fieldset>
       </form>
       {records?.submissions?.map((r: any) => (
-        <section key={r.id} className="bg-white rounded-xl p-4">
+        <section key={r.id} data-notice-object={r.id} className="bg-white rounded-xl p-4">
           <h2>{t(`workspace.${r.kind}`)}</h2>
           <RecordStatus record={r} />
         </section>

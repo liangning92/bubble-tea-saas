@@ -28,6 +28,9 @@ async function browserCheck(check){
   break;
  case 'media':if(plan.media)node('scripts/test-media-insights.cjs');break;
  case 'http':
+  if(plan.routineAuto){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--routine-auto'])}
+  if(plan.notificationAwareness){run(npm,['run','build:server']);for(const script of ['scripts/test-notification-awareness.py','scripts/test-training-update-notices.py','scripts/test-approval-notices.py'])run('python3',['scripts/with-docker-test.py','--','python3',script])}
+  if(plan.chatNotification){if(!plan.notificationAwareness)run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--chat-notify'])}
   if(plan.teamCommunication){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py'])}
   if(plan.aiSettings){if(!plan.teamCommunication)run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--ai-settings'])}
   if(plan.http.length){

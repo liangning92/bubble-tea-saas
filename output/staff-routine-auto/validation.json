@@ -1,0 +1,30 @@
+{
+  "base": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "inheritedRoutine": "87cf27a53524bd2080572878365adf3dfc7938b5",
+  "notificationCommitExcluded": "91305bf9d140538770effbce4f506071f8f8747a",
+  "productionEnabled": false,
+  "realModelCalls": 0,
+  "productionMessages": 0,
+  "newCredentials": false,
+  "httpIsolatedGroups": 20,
+  "existingTeamHttpGroups": 67,
+  "aiSettingsHttpRegression": "passed (see ai-settings-http.log)",
+  "unitGroups": 27,
+  "mockBrowserCases": 23,
+  "builds": {
+    "api": "passed",
+    "admin": "passed",
+    "staff": "passed"
+  },
+  "i18n": {
+    "admin": "passed with existing advisory warnings",
+    "staff": "passed with existing advisory warnings"
+  },
+  "realBrowserProductionVerification": "not performed: production access intentionally excluded",
+  "ui": "synthetic actual built app, zh/id/en 390/768/1440, no horizontal overflow; screenshots inspected at zh390 and automatic-mode-disabled1440; all controls retained",
+  "sourceReview": "original ordering/staleness, scheduler starvation and human-approved draft takeover P2s fixed; final fixed-SHA independent review pending",
+  "ci": "fixed-SHA CI pending",
+  "testCleanup": "all owned temporary PostgreSQL and labelled wrapper batches cleaned; no production resource mutation",
+  "businessBoundary": "22 exact routine phrases and 5 safe reply/question codes. Unknown text/attachments block before model. No arbitrary natural-language ongoing communication or proactive tasks/reminders.",
+  "humanTakeover": "same-transaction pause and source-version guard; local stale text retained for explicit review"
+}

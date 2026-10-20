@@ -1,0 +1,29 @@
+{
+  "status": "combined_1bab_and_directorysnapshot_candidate_final_ci_review_pending",
+  "aiSha": "fd0e8de8f8b7603d73beea564f14c0fee3864b5f",
+  "notificationCandidateSha": "1bab5a94da1b9be2145c3a631cbe4760fd6b9194",
+  "integrationRoutineGroups": 31,
+  "scopeUnits": 30,
+  "clientBuilds": [
+    "admin",
+    "staff"
+  ],
+  "notificationApps": [
+    "admin",
+    "staff"
+  ],
+  "newRealModelCalls": 0,
+  "checks": "three rollback paths, confirmed-uncommitted ready reuse, commit acknowledgement receipt reconciliation, retry cap, human/AI opposite winners, paused expired state closure, preserved original lease/TTL expiry -> human, messages/inbox/read visibility, both React AI body+identity",
+  "notificationHttpGroups": 17,
+  "queueCrossProcessPgGroups": 7,
+  "signalRollbackPaths": [
+    "source",
+    "human takeover",
+    "approved AI draft",
+    "routine"
+  ],
+  "actualIndependentRoutineWorkerAndApi500msScanner": true,
+  "directorySnapshotChecks": "full/lowercase exactsnapshot,rename block,cashier no elevate,lookalikes rejected",
+  "subscriptionCas": "3 stale invalidation paths compare observed/actualtransport snapshot",
+  "employeeNotificationHeader": "employee GET/readPOST; admin remainsadmin; approvalposclient unchanged"
+}

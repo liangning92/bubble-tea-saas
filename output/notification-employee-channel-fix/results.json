@@ -1,0 +1,35 @@
+{
+  "recordedAt": "2026-10-20T08:30:04.850886+00:00",
+  "previousHead": "12c790b76e4f7b383a47af104899068969ef1a4d",
+  "previousCi": 39391996522,
+  "previousCiConclusion": "failure",
+  "rootCause": "staff notification client reused the approval client with pos header",
+  "newAppChannel": {
+    "staffInbox": "employee",
+    "staffRead": "employee",
+    "adminInbox": "admin",
+    "adminRead": "admin"
+  },
+  "approvalClientUnchanged": true,
+  "backendSourceUnchanged": true,
+  "originalStaffAccessAssertionsUnchanged": true,
+  "staffBasicScenarios": [
+    "denied",
+    "failed",
+    "pending"
+  ],
+  "staffUiRoutes": 29,
+  "staffUiWidths": [
+    375,
+    768,
+    1440
+  ],
+  "inventoryOriginalBrowserScriptsPassed": 2,
+  "trainingOriginalBrowserScriptPassedAfterScopedContentRetry": true,
+  "timeoutsChanged": false,
+  "realBusinessWrites": 0,
+  "realModelCalls": 0,
+  "realPushCalls": 0,
+  "temporaryBrowserServersClosed": true,
+  "fixedHeadReviewAndCi": "pending"
+}

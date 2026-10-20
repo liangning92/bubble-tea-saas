@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { confirmAdmin, notifyAdmin } from '../../components/AdminFeedback'
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -21,6 +22,9 @@ interface CorrectionRequest {
 }
 
 export function AttendanceCorrectionListPage() {
+  const [noticeParams] = useSearchParams()
+  const noticeObject = noticeParams.get('noticeObject') || ''
+  useEffect(() => { if (noticeObject) setFilter('') }, [noticeObject])
   const { t } = useTranslation()
   const { token, user } = useAuthStore()
   const [requests, setRequests] = useState<CorrectionRequest[]>([])
@@ -188,7 +192,7 @@ export function AttendanceCorrectionListPage() {
       ) : (
         <div className="space-y-4">
           {filteredRequests.map((request) => (
-            <div key={request.id} className="bg-white rounded-xl shadow-sm p-4">
+            <div key={request.id} data-notice-object={request.id} className="bg-white rounded-xl shadow-sm p-4">
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">

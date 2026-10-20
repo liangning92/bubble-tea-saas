@@ -1,3 +1,6 @@
+import { chatReminderRelevant } from './TeamChatReminderService';
+import { trainingUpdateRelevant } from './TrainingLibraryStore';
+import { collectApprovalNotices, approvalNoticeRelevant } from './NotificationApprovalService';
 import { assignedStaffAccess } from "./StaffPermissionService";
 import webpush from "web-push";
 import { createHash } from "crypto";
@@ -7,10 +10,87 @@ import {
   writeWork,
   listWork,
   workLock,
+  WORK_PREFIX,
 } from "./EmployeeWorkspaceStore";
 import { processLatePayroll, wibDate } from "./EmployeeAttendanceService";
 let timer: NodeJS.Timeout | undefined,
   running = false;
+
+/** Coalesce post-commit wakes in this API process; no polling or payroll work. */
+export function notificationDeliveryWake(deliverStore: (storeId: string) => Promise<void>, delayMs = 25) {
+  const scheduled = new Map<string, NodeJS.Timeout>(), active = new Map<string, Promise<void>>(), again = new Set<string>();
+  let closed = false;
+  const wake = (storeId: string, waitMs = delayMs) => {
+    if (closed || !storeId) return;
+    if (active.has(storeId)) { again.add(storeId); return; }
+    if (scheduled.has(storeId)) return;
+    const handle = setTimeout(() => {
+      scheduled.delete(storeId);
+      let failed = false;
+      const task = Promise.resolve().then(() => deliverStore(storeId)).catch(() => {
+        failed = true;
+        console.error('[EmployeeReminders] post-commit delivery failed');
+      }).finally(() => {
+        active.delete(storeId);
+        const pending = again.delete(storeId);
+        if (failed || pending) wake(storeId, failed ? Math.max(delayMs, 500) : delayMs);
+      });
+      active.set(storeId, task);
+    }, waitMs);
+    handle.unref();
+    scheduled.set(storeId, handle);
+  };
+  return { wake, async close() {
+    closed = true;
+    for (const handle of scheduled.values()) clearTimeout(handle);
+    scheduled.clear(); again.clear(); await Promise.all(active.values());
+  } };
+}
+const immediateDelivery = notificationDeliveryWake(storeId => deliver(storeId));
+
+/** The durable outbox is also the cross-process signal. Scan only committed
+ * pending chat deliveries, without collecting business work or running payroll. */
+export function notificationQueueScanner(db: any, wake: (storeId: string) => void, pollMs = 500) {
+  let closed = false, started = false, failures = 0, handle: NodeJS.Timeout | undefined, active: Promise<void> | undefined;
+  const seen = new Map<string, string>();
+  const scanOnce = (): Promise<void> => {
+    if (closed) return Promise.resolve();
+    if (active) return active;
+    active = Promise.resolve().then(async () => {
+      const stores = await db.store.findMany({ select: { id: true } });
+      if (!stores.length || closed) return;
+      // Exact storeId/key lookups use the existing unique index instead of
+      // repeatedly scanning all historical messages or reminder JSON bodies.
+      const signals = await db.config.findMany({ where: {
+        storeId: { in: stores.map((store: any) => store.id) }, key: 'employee.workspace.notification.chat.pending',
+      }, select: { storeId: true, value: true } });
+      if (!closed) for (const signal of signals) {
+        if (seen.get(signal.storeId) === signal.value) continue;
+        wake(signal.storeId);
+        seen.set(signal.storeId, signal.value);
+      }
+    }).finally(() => { active = undefined; });
+    return active;
+  };
+  const tick = async () => {
+    if (closed) return;
+    try { await scanOnce(); failures = 0; }
+    catch { failures++; console.error('[EmployeeReminders] pending chat scan failed'); }
+    if (!closed) {
+      handle = setTimeout(() => void tick(), Math.min(5000, pollMs * 2 ** Math.min(failures, 4)));
+      handle.unref();
+    }
+  };
+  return { scanOnce, start() { if (!started && !closed) { started = true; void tick(); } }, async close() {
+    closed = true; if (handle) clearTimeout(handle); await active?.catch(() => {});
+  } };
+}
+const pendingChatScan = notificationQueueScanner(prisma, storeId => immediateDelivery.wake(storeId));
+export function wakeEmployeeDelivery(storeId: string) {
+  // Reuse only the existing API worker. Tests and standalone tools do not
+  // enable a background sender merely by importing routes or this module.
+  if (timer) immediateDelivery.wake(storeId);
+}
 export async function pushKeys(storeId: string) {
   return prisma.$transaction(async (db) => {
     await workLock(storeId, "push-keys", db);
@@ -101,8 +181,6 @@ export async function collectReminders(storeId: string, now = new Date()) {
       checkInTime: { gte: new Date(now.getTime() - 24 * 3600000), lte: now },
     },
   });
-  const profiles = await listWork(storeId, "profile."),
-    appeals = await listWork(storeId, "appeal.");
   const trainings = await prisma.training.findMany({
     where: { storeId, status: { in: ["scheduled", "in_progress"] } },
   });
@@ -162,29 +240,8 @@ export async function collectReminders(storeId: string, now = new Date()) {
           "Tugas kebersihan baru / 新卫生任务",
           "/hygiene",
         );
-      if (
-        task.staffId &&
-        ["approved", "rejected"].includes(task.status) &&
-        task.updatedAt.toISOString() >= baseline.at
-      )
-        await enqueueReminder(
-          storeId,
-          id,
-          `hygiene-review:${task.id}:${task.updatedAt.toISOString()}`,
-          "Hasil pemeriksaan tugas / 任务审核结果",
-          "/hygiene",
-        );
     }
   }
-  for (const r of [...profiles, ...appeals])
-    if (r.reviewedAt >= baseline.at)
-      await enqueueReminder(
-        storeId,
-        r.staffId,
-        `review:${r.id}:${r.reviewedAt}`,
-        "Hasil pengajuan tersedia / 申请审核结果已更新",
-        r.attendanceId ? "/attendance/appeals" : "/profile/documents",
-      );
   for (const t of trainings)
     if (t.createdAt.toISOString() >= baseline.at)
       await enqueueReminder(
@@ -194,47 +251,13 @@ export async function collectReminders(storeId: string, now = new Date()) {
         "Pelatihan baru / 新培训任务",
         "/training",
       );
-  for (const [model, url] of [
-    ["leave", "/leave"],
-    ["reimbursement", "/reimbursement"],
-    ["overtimeRequest", "/overtime"],
-    ["shiftSwap", "/shift-swap"],
-    ["attendanceCorrection", "/attendance/correction"],
-  ] as const) {
-    const records = await (prisma[model] as any).findMany({
-      where: { storeId, updatedAt: { gte: new Date(baseline.at) } },
-    });
-    for (const r of records) {
-      if (["approved", "rejected"].includes(r.status))
-        await enqueueReminder(
-          storeId,
-          r.staffId,
-          `${model}-review:${r.id}:${r.updatedAt.toISOString()}`,
-          "Hasil pengajuan tersedia / 申请审核结果已更新",
-          url,
-        );
-      if (model === "shiftSwap" && r.targetStaffId) {
-        if (["approved", "rejected", "peer_rejected", "cancelled"].includes(r.status))
-          for (const staffId of [r.staffId, r.targetStaffId])
-            await enqueueReminder(storeId, staffId, `swap-result:${r.id}:${r.updatedAt.toISOString()}`, "Status tukar shift diperbarui / 调班流程已更新", url);
-        if (r.status === "pending" && r.targetConfirmed)
-          await enqueueReminder(storeId, r.staffId, `swap-agreed:${r.id}:${r.updatedAt.toISOString()}`, "Rekan setuju, menunggu admin / 对方已同意，等待审批", url);
-      }
-      if (
-        model === "shiftSwap" &&
-        r.status === "pending" &&
-        r.targetStaffId &&
-        !r.targetConfirmed
-      )
-        await enqueueReminder(
-          storeId,
-          r.targetStaffId,
-          `swap-confirm:${r.id}:${r.updatedAt.toISOString()}`,
-          "Konfirmasi pertukaran shift / 请确认换班",
-          "/shift-swap",
-        );
-    }
-  }
+  // Approval node/result events replace the old per-model notifications. Reads
+  // remain separate from the business pending state, and historic results do not replay.
+  await collectApprovalNotices(prisma, storeId);
+  const agreed = await prisma.shiftSwap.findMany({ where: { storeId, status: 'pending', targetConfirmed: true,
+    updatedAt: { gte: new Date(baseline.at) } } });
+  for (const r of agreed) await enqueueReminder(storeId, r.staffId, `swap-agreed:${r.id}:${r.updatedAt.toISOString()}`,
+    "Rekan setuju, menunggu admin / 对方已同意，等待审批", '/shift-swap');
   const reminders = await listWork(storeId, "reminder.");
   for (const reminder of reminders)
     if (
@@ -255,18 +278,27 @@ export async function reminderStillRelevant(
   storeId: string,
   r: any,
   now = new Date(),
+  db: any = prisma,
 ) {
   if (r.expiresAt && new Date(r.expiresAt) <= now) return false;
+  if (r.event?.startsWith('team-chat:')) return chatReminderRelevant(db, storeId, r);
+  if (r.event?.startsWith('training-content:')) return trainingUpdateRelevant(db, storeId, r, r.staffId);
+  if (r.event?.startsWith('approval-notice:')) return approvalNoticeRelevant(db, storeId, r, r.staffId);
+  if (/^(?:hygiene-review:|review:|leave-review:|reimbursement-review:|overtimeRequest-review:|shiftSwap-review:|attendanceCorrection-review:|swap-confirm:|swap-result:)/.test(r.event)) return false;
   const [kind, id] = r.event.split(":");
+  if (kind === 'swap-agreed') {
+    const item = await db.shiftSwap.findFirst({ where: { id, storeId, staffId: r.staffId, status: 'pending', targetConfirmed: true } });
+    return !!item && r.event === `swap-agreed:${id}:${item.updatedAt.toISOString()}`;
+  }
   if (kind.startsWith("hygiene-")) {
-    const task = await prisma.hygieneTask.findFirst({ where: { id, storeId } });
+    const task = await db.hygieneTask.findFirst({ where: { id, storeId } });
     if (!task || (task.staffId && task.staffId !== r.staffId)) return false;
     if (kind === "hygiene-review")
       return ["approved", "rejected"].includes(task.status);
     if (!["pending", "in_progress", "overdue"].includes(task.status))
       return false;
     if (!task.staffId) {
-      const active = await prisma.attendance.findFirst({
+      const active = await db.attendance.findFirst({
         where: {
           staffId: r.staffId,
           checkOutTime: null,
@@ -282,51 +314,74 @@ export async function reminderStillRelevant(
       return !!task.dueTime && r.event.endsWith(task.dueTime.toISOString());
   }
   if (kind === "training") {
-    const item = await prisma.training.findFirst({
+    const item = await db.training.findFirst({
       where: { id, storeId, staffId: r.staffId },
     });
     return !!item && ["scheduled", "in_progress"].includes(item.status);
   }
   if (kind === "swap-confirm") {
-    const item = await prisma.shiftSwap.findFirst({
+    const item = await db.shiftSwap.findFirst({
       where: { id, storeId, targetStaffId: r.staffId },
     });
     return !!item && item.status === "pending" && !item.targetConfirmed;
   }
   return true;
 }
-export async function deliver(storeId: string) {
-  const reminders = (await listWork(storeId, "reminder.")).filter(
+// Serialize reminder status changes with personal read acknowledgements. A
+// delivery snapshot must never restore an earlier unread value.
+async function updateReminder(storeId: string, reminder: any, patch: any, db: any, userId?: string) {
+  const key = `reminder.${reminder.staffId}.${reminder.id}`;
+  await db.$transaction(async (tx: any) => {
+    await workLock(storeId, key, tx);
+    const current = await readWork(storeId, key, tx);
+    if (!current) return;
+    const person = current.userId || userId;
+    const receipt = person && await readWork(storeId, `inbox.read.${person}.${current.id}`, tx);
+    const read = current.read === true || patch.read === true || !!receipt;
+    const status = current.status === 'cancelled' || patch.status === 'cancelled' ? 'cancelled'
+      : read ? 'in_app' : patch.status;
+    await writeWork(storeId, key, { ...current, ...patch, read, status }, tx);
+  });
+}
+// A session lookup or transport can overlap an HTTP renewal/logout. Invalidate
+// only the exact persisted snapshot we checked/sent; never restore old fields.
+async function invalidateSubscription(storeId: string, snapshot: any, db: any) {
+  await db.config.updateMany({
+    where: { storeId, key: WORK_PREFIX + `subscription.${snapshot.id}`, value: JSON.stringify(snapshot) },
+    data: { value: JSON.stringify({ ...snapshot, active: false }) },
+  });
+}
+export async function deliver(storeId: string, db: any = prisma, push: typeof webpush = webpush) {
+  const reminders = (await listWork(storeId, "reminder.", db)).filter(
       (r) => r && r.status === "pending",
     ),
-    subscriptions = (await listWork(storeId, "subscription.")).filter(
+    subscriptions = (await listWork(storeId, "subscription.", db)).filter(
       (s) => s.active,
     );
-  const keys = await pushKeys(storeId);
+  const keys = await readWork(storeId, "push-keys", db); // Existing keys only; delivery never creates credentials.
   for (const r of reminders) {
-    const employee = await prisma.staff.findFirst({
+    const employee = await db.staff.findFirst({
       where: { id: r.staffId, storeId, status: "active" },
     });
-    if (!employee) continue;
-    if (!(await reminderStillRelevant(storeId, r))) {
-      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
-        ...r,
-        status: "cancelled",
-      });
+    if (!employee) { await updateReminder(storeId, r, { status: 'cancelled' }, db); continue; }
+    if (!(await reminderStillRelevant(storeId, r, new Date(), db))) {
+      await updateReminder(storeId, r, { status: 'cancelled' }, db, employee.userId);
+      continue;
+    }
+    const readReceipt = await readWork(storeId, `inbox.read.${r.userId || employee.userId}.${r.id}`, db);
+    if (r.read || readReceipt) {
+      await updateReminder(storeId, r, { read: true, status: 'in_app' }, db, employee.userId);
       continue;
     }
     const activeSubscriptions = subscriptions.filter(
       (s) => s.staffId === r.staffId,
     );
-    if (!activeSubscriptions.length) {
-      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
-        ...r,
-        status: "in_app",
-      });
+    if (!activeSubscriptions.length || !keys) {
+      await updateReminder(storeId, r, { status: 'in_app' }, db, employee.userId);
       continue;
     }
     for (const sub of activeSubscriptions) {
-      const user = await prisma.user.findUnique({
+      const user = await db.user.findUnique({
         where: { id: employee.userId },
       });
       if (
@@ -334,14 +389,11 @@ export async function deliver(storeId: string) {
         sub.userId !== user.id ||
         sub.issuedAtMs < user.updatedAt.getTime()
       ) {
-        await writeWork(storeId, `subscription.${sub.id}`, {
-          ...sub,
-          active: false,
-        });
+        await invalidateSubscription(storeId, sub, db);
         continue;
       }
       const key = `delivery.${r.id}.${sub.id}`;
-      const claimed = await prisma.$transaction(async (db) => {
+      const claimed = await db.$transaction(async (db) => {
         await workLock(storeId, key, db);
         let attempt = (await readWork(storeId, key, db)) || {
           attempts: 0,
@@ -370,7 +422,7 @@ export async function deliver(storeId: string) {
       });
       if (!claimed) continue;
       {
-        const attempt = await readWork(storeId, key);
+        const attempt = await readWork(storeId, key, db);
         if (
           attempt?.status === "sent" ||
           attempt?.attempts >= 3 ||
@@ -379,11 +431,43 @@ export async function deliver(storeId: string) {
         )
           continue;
         // Send ownership is finalized below with a delivery lock; subscriptions never expose secrets to clients.
+        let transportSubscription: any;
         try {
           if (!validPushEndpoint(sub.subscription.endpoint))
             throw new Error("INVALID_PUSH_ENDPOINT");
-          await webpush.sendNotification(
-            sub.subscription,
+          const latest = await readWork(storeId, `reminder.${r.staffId}.${r.id}`, db);
+          if (!latest || latest.status === 'cancelled' || !await reminderStillRelevant(storeId, latest, new Date(), db)) {
+            await updateReminder(storeId, r, { status: 'cancelled' }, db, employee.userId);
+            continue;
+          }
+          // A read may commit while this worker is waiting for its delivery
+          // lease or relevance queries. Recheck immediately before transport.
+          const [beforeSend, receipt, liveSubscription, liveStaff, liveUser] = await Promise.all([
+            readWork(storeId, `reminder.${r.staffId}.${r.id}`, db),
+            readWork(storeId, `inbox.read.${r.userId || employee.userId}.${r.id}`, db),
+            readWork(storeId, `subscription.${sub.id}`, db),
+            db.staff.findFirst({ where: { id: r.staffId, storeId, status: 'active' } }),
+            db.user.findUnique({ where: { id: employee.userId } }),
+          ]);
+          if (!beforeSend || beforeSend.status === 'cancelled') continue;
+          if (!liveStaff || liveStaff.userId !== employee.userId || !liveUser ||
+              liveUser.storeId && liveUser.storeId !== storeId || !liveSubscription?.active ||
+              liveSubscription.staffId !== r.staffId || liveSubscription.userId !== employee.userId ||
+              liveSubscription.issuedAtMs < liveUser.updatedAt.getTime()) {
+            if (liveSubscription?.userId === employee.userId)
+              await invalidateSubscription(storeId, liveSubscription, db);
+            await writeWork(storeId, key, { ...attempt, status: 'skipped_subscription', leaseUntil: undefined }, db);
+            continue;
+          }
+          if (beforeSend.read === true || receipt) {
+            await updateReminder(storeId, r, { read: true, status: 'in_app' }, db, employee.userId);
+            await writeWork(storeId, key, { ...attempt, status: 'skipped_read', leaseUntil: undefined }, db);
+            continue;
+          }
+          if (!validPushEndpoint(liveSubscription.subscription?.endpoint)) throw new Error('INVALID_PUSH_ENDPOINT');
+          transportSubscription = liveSubscription;
+          await push.sendNotification(
+            liveSubscription.subscription,
             JSON.stringify({ title: r.title, url: r.url, id: r.id }),
             {
               TTL: 300,
@@ -399,7 +483,7 @@ export async function deliver(storeId: string) {
             status: "sent",
             attempts: attempt.attempts + 1,
             sentAt: new Date().toISOString(),
-          });
+          }, db);
         } catch (e: any) {
           await writeWork(storeId, key, {
             status: "failed",
@@ -408,18 +492,15 @@ export async function deliver(storeId: string) {
               Date.now() + 60000 * 2 ** attempt.attempts,
             ).toISOString(),
             error: e.statusCode ? String(e.statusCode) : "PUSH_DELIVERY_FAILED",
-          });
-          if ([404, 410].includes(e.statusCode))
-            await writeWork(storeId, `subscription.${sub.id}`, {
-              ...sub,
-              active: false,
-            });
+          }, db);
+          if (transportSubscription && [404, 410].includes(e.statusCode))
+            await invalidateSubscription(storeId, transportSubscription, db);
         }
       }
     }
     const deliveryStates = await Promise.all(
       activeSubscriptions.map((sub) =>
-        readWork(storeId, `delivery.${r.id}.${sub.id}`),
+        readWork(storeId, `delivery.${r.id}.${sub.id}`, db),
       ),
     );
     if (
@@ -427,10 +508,10 @@ export async function deliver(storeId: string) {
         (state) => state?.status === "sent" || state?.attempts >= 3,
       )
     )
-      await writeWork(storeId, `reminder.${r.staffId}.${r.id}`, {
-        ...r,
-        status: "sent",
-      });
+      await updateReminder(storeId, r, {
+        status: deliveryStates.every(state => state?.status === 'sent') ? 'sent'
+          : deliveryStates.some(state => state?.status === 'sent') ? 'partially_sent' : 'delivery_failed',
+      }, db, employee.userId);
   }
 }
 export function startEmployeeWorker() {
@@ -464,4 +545,5 @@ export function startEmployeeWorker() {
   void run();
   timer = setInterval(run, 60000);
   timer.unref();
+  pendingChatScan.start();
 }

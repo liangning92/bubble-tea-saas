@@ -14,16 +14,35 @@ export function useTrainingCatalogue(token: string | null, storeId?: string | nu
   const [loading,setLoading] = useState(true), [error,setError] = useState(false), [nonce,setNonce] = useState(0)
   const refresh = useCallback(()=>setNonce(n=>n+1),[])
   useEffect(()=>{
-    const controller=new AbortController();setLoading(true);setError(false);setState({modules:[],checklists:[],revision:''})
-    fetch('/api/training/library',{headers:{Authorization:`Bearer ${token || ''}`, ...(clientApp ? {'X-Client-App':clientApp} : {})},signal:controller.signal})
-      .then(async response=>{if(!response.ok)throw Error('TRAINING_READ_FAILED');return response.json()})
-      .then(body=>{
-        const value=body.data
+    let active = true, inFlight = false, controller: AbortController | undefined
+    setLoading(true);setError(false);setState({modules:[],checklists:[],revision:''})
+    async function load(background = false) {
+      if (!active || inFlight || background && document.visibilityState !== 'visible') return
+      inFlight = true
+      controller = new AbortController()
+      const timeout = window.setTimeout(()=>controller?.abort(),12000)
+      try {
+        const response = await fetch('/api/training/library',{headers:{Authorization:`Bearer ${token || ''}`, ...(clientApp ? {'X-Client-App':clientApp} : {})},signal:controller.signal})
+        if(!response.ok)throw Error('TRAINING_READ_FAILED')
+        const value=(await response.json()).data
         if(!value || !Array.isArray(value.modules) || !Array.isArray(value.checklists))throw Error('TRAINING_READ_INVALID')
         const modules=value.modules.map((module: any)=>{const [icon,color]=visuals[module.key]||['📖','from-sky-500 to-indigo-500'];return {...module,icon,color}})
-        if(!controller.signal.aborted)setState({modules,checklists:value.checklists,revision:value.revision || 'default'})
-      }).catch(()=>{if(!controller.signal.aborted)setError(true)}).finally(()=>{if(!controller.signal.aborted)setLoading(false)})
-    return ()=>controller.abort()
+        if(active){
+          setState(previous=>previous.revision===(value.revision || 'default') ? previous : {modules,checklists:value.checklists,revision:value.revision || 'default'})
+          setError(false)
+        }
+      } catch {
+        if(active){setError(true);setState({modules:[],checklists:[],revision:''})}
+      } finally {
+        window.clearTimeout(timeout);inFlight=false
+        if(active)setLoading(false)
+      }
+    }
+    void load()
+    const resume=()=>{if(document.visibilityState==='visible')void load(true)}
+    const timer=window.setInterval(()=>void load(true),30000)
+    window.addEventListener('focus',resume);window.addEventListener('online',resume);document.addEventListener('visibilitychange',resume)
+    return ()=>{active=false;controller?.abort();window.clearInterval(timer);window.removeEventListener('focus',resume);window.removeEventListener('online',resume);document.removeEventListener('visibilitychange',resume)}
   },[token,storeId,nonce,clientApp])
   return {...state,loading,error,refresh}
 }

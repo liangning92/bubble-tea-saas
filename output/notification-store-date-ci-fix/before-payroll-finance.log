@@ -1,0 +1,48 @@
+ExpectError: expect(locator).toBeVisible() failed
+
+Locator: getByText('待发工资: Rp 2.450.000')
+Expected: visible
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "to.be.visible" with timeout 5000ms
+  - waiting for getByText('待发工资: Rp 2.450.000')
+
+    at captureRawStack (/Users/liangning/Documents/ChatGPT/奶茶门店管理系统/inventory-alert-refresh-20261018/node_modules/playwright-core/lib/coreBundle.js:3172:17)
+    at callMatcherAsStep (/Users/liangning/Documents/ChatGPT/奶茶门店管理系统/inventory-alert-refresh-20261018/node_modules/playwright/lib/matchers/expect.js:12877:57)
+    at Object.toBeVisible (/Users/liangning/Documents/ChatGPT/奶茶门店管理系统/inventory-alert-refresh-20261018/node_modules/playwright/lib/matchers/expect.js:12867:23)
+    at /Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/payroll-finance-page-check.cjs:41:56 {
+  matcherResult: {
+    message: 'expect(locator).toBeVisible() failed\n' +
+      '\n' +
+      "Locator: getByText('待发工资: Rp 2.450.000')\n" +
+      'Expected: visible\n' +
+      'Timeout: 5000ms\n' +
+      'Error: element(s) not found\n' +
+      '\n' +
+      'Call log:\n' +
+      '  - Expect "to.be.visible" with timeout 5000ms\n' +
+      "  - waiting for getByText('待发工资: Rp 2.450.000')\n",
+    pass: false,
+    actual: undefined,
+    name: 'toBeVisible',
+    expected: 'visible',
+    log: [
+      '  - Expect "to.be.visible" with timeout 5000ms',
+      "  - waiting for getByText('待发工资: Rp 2.450.000')"
+    ],
+    timeout: 5000,
+    ariaSnapshot: '- img\n' +
+      '- heading "页面出错了" [level=2]\n' +
+      '- paragraph: 错误\n' +
+      '- paragraph: React is not defined\n' +
+      '- button "返回":\n' +
+      '  - img\n' +
+      '  - text: 返回\n' +
+      '- button "刷新页面":\n' +
+      '  - img\n' +
+      '  - text: 刷新页面\n' +
+      '- group: Stack Trace (Dev Only)'
+  }
+}

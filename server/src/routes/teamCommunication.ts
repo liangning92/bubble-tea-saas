@@ -6,6 +6,7 @@ import { canTeam, teamCommunication, TeamActor, TeamError } from '../services/Te
 import { teamAi } from '../services/TeamAiService'
 import { teamOperations } from '../services/TeamOperationsService'
 import { teamWorkflow } from '../services/TeamWorkflowService'
+import { wakeEmployeeDelivery } from '../services/EmployeeReminderService'
 
 export const teamCommunicationRouter = Router()
 const router = teamCommunicationRouter, service = teamCommunication()
@@ -20,6 +21,13 @@ const run = (fn: (req: AuthRequest, res: any) => Promise<unknown>) => async (req
   }
 }
 const ok = (res: any, data: unknown) => res.json({ code: 200, data })
+// Called only after the awaited service's outer HTTP transaction has committed.
+// A dropped response still leaves the durable reminder for the normal sweep.
+const messageCommitted = (req: AuthRequest, res: any, data: unknown) => {
+  const storeId = actor(req).storeId
+  res.once('finish', () => wakeEmployeeDelivery(storeId))
+  return ok(res, data)
+}
 const ai = teamAi()
 const operations = teamOperations()
 const workflow = teamWorkflow()
@@ -28,8 +36,11 @@ router.get('/channels/:id/workflow/policy', run(async (req, res) => ok(res, awai
 router.put('/channels/:id/workflow/policy', run(async (req, res) => ok(res, await workflow.savePolicy(actor(req), req.params.id, req.body))))
 router.get('/channels/:id/workflow/jobs', run(async (req, res) => ok(res, await workflow.jobs(actor(req), req.params.id, workflowAfter(req)))))
 router.get('/channels/:id/workflow/events', run(async (req, res) => ok(res, await workflow.events(actor(req), req.params.id, workflowAfter(req)))))
-router.post('/channels/:id/workflow/jobs/:seq/actions', run(async (req, res) => ok(res, await workflow.action(actor(req), req.params.id,
-  z.coerce.number().int().positive().max(999999999999).parse(req.params.seq), req.body))))
+router.post('/channels/:id/workflow/jobs/:seq/actions', run(async (req, res) => {
+  const result = await workflow.action(actor(req), req.params.id,
+    z.coerce.number().int().positive().max(999999999999).parse(req.params.seq), req.body)
+  return req.body.action === 'approve_reply' ? messageCommitted(req, res, result) : ok(res, result)
+}))
 router.get('/channels/:id/workflow/export', run(async (req, res) => ok(res, await workflow.export(actor(req), req.params.id, workflowAfter(req)))))
 router.get('/channels/:id/operations', run(async (req, res) => ok(res, await operations.list(actor(req), req.params.id))))
 router.post('/channels/:id/operations/import', run(async (req, res) => ok(res, await operations.import(actor(req), req.params.id, req.body))))
@@ -43,7 +54,7 @@ router.post('/channels/:id/ai/drafts', run(async (req, res) => ok(res, await ai.
 router.get('/channels/:id/ai/drafts/:draftId', run(async (req, res) => ok(res, await ai.draft(actor(req), req.params.id, req.params.draftId))))
 router.post('/channels/:id/ai/drafts/:draftId/publish', run(async (req, res) => {
   const { text } = z.object({ text: z.string().trim().min(1).max(3800) }).strict().parse(req.body)
-  return ok(res, await service.send(actor(req), req.params.id, { requestId: z.string().uuid().parse(req.params.draftId), text, files: [] }, req.params.draftId))
+  return messageCommitted(req, res, await service.send(actor(req), req.params.id, { requestId: z.string().uuid().parse(req.params.draftId), text, files: [] }, req.params.draftId))
 }))
 router.get('/directory', run(async (req, res) => ok(res, await service.directory(actor(req)))))
 router.get('/capabilities', run(async (req, res) => { await service.directory(actor(req)); return ok(res, { manage: canTeam(actor(req), 'team.manage'), audit: canTeam(actor(req), 'team.audit') }) }))
@@ -56,7 +67,7 @@ router.get('/channels/:id/messages', run(async (req, res) => {
   const after = z.coerce.number().int().min(0).max(999999999999).parse(req.query.after ?? 0)
   return ok(res, await service.messages(actor(req), req.params.id, after, reason(req)))
 }))
-router.post('/channels/:id/messages', run(async (req, res) => ok(res, await service.send(actor(req), req.params.id, req.body))))
+router.post('/channels/:id/messages', run(async (req, res) => messageCommitted(req, res, await service.send(actor(req), req.params.id, req.body))))
 router.put('/channels/:id/read', run(async (req, res) => {
   const { seq } = z.object({ seq: z.number().int().nonnegative() }).strict().parse(req.body)
   return ok(res, await service.markRead(actor(req), req.params.id, seq))

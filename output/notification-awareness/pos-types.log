@@ -1,0 +1,4 @@
+
+> bubble-tea-saas@2026.10.02.1748 typecheck:pos
+> cd client-pos && npx tsc --noEmit
+

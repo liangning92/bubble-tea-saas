@@ -15,7 +15,7 @@ const zh = {
  translate:'翻译成中文', draft:'拟写印尼语消息', report:'生成中文汇报', instruction:'中文工作要求或追问目标', sources:'选择来源消息（最多20条）',
  consent:'我确认将所选工作文字及上述要求发送给 MiniMax，不含私人资料。', generate:'生成草稿（可能计费）', generating:'正在生成，请勿重复提交',
  privateDraft:'AI 草稿，仅本人可见，请核对原文、数量和日期。', approve:'已核对内容与频道成员，批准发送', publish:'批准并发送到当前频道', sent:'已发送', pending:'处理中', uncertain:'结果待核对，请先查询；重新生成可能再次计费。',
- lookup:'查询上次调用结果', aiApproved:'AI 辅助 · 发送人已确认', blocked:'配置已变化，结果未发布', requestFailed:'AI 不可用，仍可手动沟通。',
+ lookup:'查询上次调用结果', aiApproved:'AI 辅助 · 发送人已确认', aiRoutine:'AI 辅助 · 持续授权自动发送', blocked:'配置已变化，结果未发布', requestFailed:'AI 不可用，仍可手动沟通。',
 }
 const id: typeof zh = {
  tasks:'Tindak lanjut tugas',taskHelp:'Tugas dibuat dari notulen yang dikonfirmasi atau rencana yang disetujui. Dibaca bukan berarti diterima; hasil diperiksa manusia.',noTasks:'Belum ada tugas tindak lanjut',promote:'Buat tugas tindak lanjut',snapshot:'Versi notulen sumber',
@@ -34,7 +34,7 @@ const id: typeof zh = {
  translate:'Terjemahkan ke Mandarin',draft:'Susun pesan bahasa Indonesia',report:'Buat laporan Mandarin',instruction:'Tujuan kerja atau pertanyaan dalam Mandarin',sources:'Pilih pesan sumber (maksimal 20)',
  consent:'Saya menyetujui pengiriman teks kerja yang dipilih dan instruksi ke MiniMax, tanpa data pribadi.',generate:'Buat draf (dapat dikenai biaya)',generating:'Sedang membuat; jangan kirim ulang',
  privateDraft:'Draf AI privat. Periksa sumber, jumlah, dan tanggal.',approve:'Isi dan anggota kanal sudah diperiksa; setujui pengiriman',publish:'Setujui dan kirim ke kanal ini',sent:'Terkirim',pending:'Diproses',uncertain:'Hasil perlu diperiksa. Periksa dahulu; pembuatan ulang dapat dikenai biaya lagi.',
- lookup:'Periksa permintaan terakhir',aiApproved:'Dibantu AI · dikonfirmasi pengirim',blocked:'Konfigurasi berubah; hasil tidak diterbitkan',requestFailed:'AI tidak tersedia. Komunikasi manual tetap dapat digunakan.',
+ lookup:'Periksa permintaan terakhir',aiApproved:'Dibantu AI · dikonfirmasi pengirim',aiRoutine:'Dibantu AI · terkirim otomatis dengan izin berkelanjutan',blocked:'Konfigurasi berubah; hasil tidak diterbitkan',requestFailed:'AI tidak tersedia. Komunikasi manual tetap dapat digunakan.',
 }
 const en: typeof zh = {
  tasks:'Action follow-up',taskHelp:'Tasks come from confirmed minutes or approved plans. Read is not accepted; a person reviews completion.',noTasks:'No follow-up tasks',promote:'Create follow-up task',snapshot:'Source minutes version',
@@ -53,7 +53,7 @@ const en: typeof zh = {
  translate:'Translate to Chinese',draft:'Draft an Indonesian message',report:'Create Chinese report',instruction:'Work instruction or follow-up goal in Chinese',sources:'Select source messages (up to 20)',
  consent:'I approve sending the selected work text and instruction to MiniMax, excluding private information.',generate:'Generate draft (may incur charges)',generating:'Generating; do not resubmit',
  privateDraft:'Private AI draft. Verify sources, quantities and dates.',approve:'I checked the text and channel members and approve sending',publish:'Approve and send to this channel',sent:'Sent',pending:'Processing',uncertain:'Outcome needs verification. Check first; generating again may incur another charge.',
- lookup:'Check last request',aiApproved:'AI assisted · approved by sender',blocked:'Configuration changed; result was not published',requestFailed:'AI unavailable. Manual communication remains available.',
+ lookup:'Check last request',aiApproved:'AI assisted · approved by sender',aiRoutine:'AI assisted · automatically sent under ongoing consent',blocked:'Configuration changed; result was not published',requestFailed:'AI unavailable. Manual communication remains available.',
 }
 export const teamWorkCopy = (language: string) => language.startsWith('zh') ? zh : language.startsWith('en') ? en : id
 export function teamWorkError(language: string, code: string) {

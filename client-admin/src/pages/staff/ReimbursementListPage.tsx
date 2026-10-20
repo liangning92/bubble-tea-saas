@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { notifyAdmin } from '../../components/AdminFeedback'
 import { AdminDialog } from '../../components/AdminDialog'
 import { useState, useEffect } from 'react'
@@ -31,6 +32,9 @@ interface Reimbursement {
 }
 
 export function ReimbursementListPage() {
+  const [noticeParams] = useSearchParams()
+  const noticeObject = noticeParams.get('noticeObject') || ''
+  useEffect(() => { if (noticeObject) setFilterStatus('') }, [noticeObject])
   const { t } = useTranslation()
   const { user } = useAuthStore()
 
@@ -231,7 +235,7 @@ export function ReimbursementListPage() {
           reimbursements.map((item) => {
             const receipts = parseReceiptUrls(item.receiptUrls)
             return (
-              <div key={item.id} className="bg-white rounded-2xl shadow-sm p-4">
+              <div key={item.id} data-notice-object={item.id} className="bg-white rounded-2xl shadow-sm p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <p className="font-bold text-gray-900">

@@ -1,0 +1,65 @@
+{
+  "recordedAt": "2026-10-20T07:48:12.994835+00:00",
+  "masterSha": "ceb25d4aa590b716822d6bacae8b92797953fe70",
+  "checkedVia": "GitHub contents API on immutable master SHA before fixed notification candidate push",
+  "workflows": [
+    {
+      "file": "build-tv-apk.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    },
+    {
+      "file": "build-windows.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    },
+    {
+      "file": "ci.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    },
+    {
+      "file": "docker-publish.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    },
+    {
+      "file": "lumba-site.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    },
+    {
+      "file": "release-docker.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    },
+    {
+      "file": "release-windows.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    },
+    {
+      "file": "test-exe.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    },
+    {
+      "file": "test-windows.yml",
+      "triggers": [
+        "workflow_dispatch"
+      ]
+    }
+  ],
+  "allTriggers": [
+    "workflow_dispatch"
+  ],
+  "automaticPushDeployment": false
+}

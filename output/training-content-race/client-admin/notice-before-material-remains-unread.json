@@ -1,0 +1,8 @@
+{
+  "scenario": "new notice before matching material",
+  "renderedText": "延迟课程甲\n📖\n\n旧版正文\n\n课程章节与标准流程（SOP）\n1\n测试章节\n旧版正文\n考核测验题库与参考答案 (0 题)\n关闭",
+  "renderedFingerprint": "c2fe221169ae8fa01ab29c126811bd8c7dc24962d5ebe12d939e40b10084de07",
+  "noticeFingerprint": "0da689ac9e55e14a26b5aa9a5d992152f8b12aea2d808560ffecf5ef6e3b64c3",
+  "noticeRead": false,
+  "readRequests": []
+}

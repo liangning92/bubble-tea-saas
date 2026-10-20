@@ -1,0 +1,9 @@
+PASS server/audit-tests/training-management.test.ts (8.222 s)
+  ✓ legacy saved catalogues receive standards; an explicit empty standards list remains empty (43 ms)
+  ✓ draft changes and deletion publish to the same store only, with history and conflict protection (61 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        8.538 s
+Ran all test suites within paths "server/audit-tests/training-management.test.ts".

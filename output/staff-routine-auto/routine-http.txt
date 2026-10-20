@@ -1,0 +1,29 @@
+[docker-test] batch bt-test-49d9d727b823
+postgres (PostgreSQL) 15.17 (Homebrew)
+Prisma schema loaded from server/prisma/schema.prisma
+Datasource "db": PostgreSQL database "team_test", schema "public" at "127.0.0.1:49825"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 572ms
+
+PASS default off; exact six-name identity, real administrator, one employee direct channel and verified CN connection required
+PASS conservative complete-phrase grammar blocks sensitive, financial, private, ambiguous and injected text before provider admission
+PASS HTTP employee event produces one automatic routine reply atomically with explicit sustained-consent provenance and no loop
+PASS missing work detail can produce only the reviewed same-channel clarification question
+PASS explicitly allowlisted recipient may already be an administrator; existing role is preserved and operator/AI still cannot loop
+PASS default credential resolver with a missing master key fails without creating a key or calling provider
+PASS bounded canonical context is same-person same-channel after consent floor; unknown/private text is never forwarded
+PASS attachments are local-only and mixed routine-plus-attachment messages go to human before model
+PASS pause, employee disablement, CN receipt/config change and audience change stop in-flight automatic publication
+PASS unknown billing, malformed/extra provider output and injected reply text never auto-repeat or send
+PASS send persistence failure rolls back message/job/provenance; ready result recovery sends once without new model call
+PASS routine twelve-per-channel limit and shared budget ceilings hold without capping provider output
+PASS durable heartbeat and deduplicated alert transitions expose backlog, blocked work and automatic send latency without message text
+PASS real isolated child worker runs without pages, survives SIGTERM/restart and never duplicates admitted model or reply
+PASS newer employee correction and human intervention supersede old replies; only one in-flight call per channel
+PASS human takeover uses the visible source version, pauses atomically and rejects stale UI after AI wins
+PASS human-approved AI draft publication also takes over atomically; stale or legacy drafts cannot bypass source version
+PASS future retries and paused old channels cannot consume result budget or starve a new channel
+PASS expired backlog is blocked before admission; expiry during transport also blocks publication
+PASS six same-store channels use the actual worker default interval and parallel pool; 24 complete synthetic stage samples
+Owned temporary PostgreSQL instance cleaned
+[docker-test] cleaned bt-test-49d9d727b823

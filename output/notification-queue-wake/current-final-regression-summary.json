@@ -1,0 +1,72 @@
+{
+  "recordedAt": "2026-10-20T07:40:06.693533+00:00",
+  "runs": [
+    {
+      "suite": "notification-http-and-queue",
+      "batch": "bt-test-79c00f204050",
+      "groupsPassed": 21,
+      "exitCode": 0,
+      "wrapperCleaned": true,
+      "log": "current-wrapper.log"
+    },
+    {
+      "suite": "chat-notification",
+      "batch": "bt-test-f671379113c8",
+      "groupsPassed": 5,
+      "exitCode": 0,
+      "wrapperCleaned": true,
+      "log": "current-chat-wrapper.log"
+    },
+    {
+      "suite": "employee-workspace-sqlite-postgresql",
+      "batch": "bt-test-3f3f8b484291",
+      "groupsPassed": 2,
+      "exitCode": 0,
+      "wrapperCleaned": true,
+      "log": "current-employee-wrapper.log"
+    }
+  ],
+  "totalGroupsPassed": 28,
+  "queueScheme": "exact storeId + employee.workspace.notification.chat.pending key; no reminder JSON polling",
+  "observations": [
+    {
+      "path": "api-http-finish",
+      "httpStartToMockMs": 134,
+      "independentSamples": 1
+    },
+    {
+      "path": "independent-child-commit-poll",
+      "commitAcknowledgedToMockMs": 62,
+      "pollMs": 500,
+      "independentSamples": 1
+    },
+    {
+      "path": "real-postgresql-stop-start",
+      "reconnected": true,
+      "mockedDatabaseFailure": false
+    },
+    {
+      "path": "cached-signal-dispatcher-retry",
+      "attempts": 2,
+      "wakes": 1,
+      "controlledDeliveryRejection": true,
+      "newSignalRequired": false
+    }
+  ],
+  "first19AndMiddle20Preserved": true,
+  "runtimeAndSyntheticDatabasePathsCleaned": true,
+  "productionWorkerStarted": false,
+  "realModelCalls": 0,
+  "realPushCalls": 0,
+  "newCredentialsCreated": false,
+  "notExecuted": [
+    "team67 (reserved for exact CI)",
+    "other historical HTTP files",
+    "production API/worker",
+    "real device receipt or user browser acceptance"
+  ],
+  "businessSourceModifiedByThisAgent": false,
+  "committedByThisAgent": false,
+  "scope": "Previous pre-CAS 28-group run; does not verify the subscription CAS fix",
+  "supersededForCurrentCasSourceBy": "../notification-awareness/subscription-cas-results.json"
+}

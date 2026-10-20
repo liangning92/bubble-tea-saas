@@ -1,0 +1,109 @@
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+[
+  {
+    "mode": "before",
+    "reproduced": true,
+    "url": "/approvals?noticeObject=B",
+    "lateAVisible": true,
+    "BMissing": true,
+    "staleApprovalButtonVisible": true,
+    "approvalWrites": [],
+    "browserErrors": []
+  },
+  {
+    "mode": "after",
+    "lateARejected": true,
+    "BRemainsAtURLB": true,
+    "beyondLatest100": true,
+    "deduplicated": true,
+    "nativeTargetNoExtraGET": true,
+    "samePageQueryClearsImmediately": true,
+    "identitySwitchRejectsOldResponse": true,
+    "selectedStoreSwitchRejectsOldResponse": true,
+    "sessionChangeRejectsOldResponse": true,
+    "lateOldResponseCannotRestoreAfterError": true,
+    "forbidden403Clears": true,
+    "missing404Clears": true,
+    "unauthorized401Clears": true,
+    "pendingRetained": true,
+    "noApprovalWrites": true,
+    "browserErrors": [],
+    "detailRequests": [
+      {
+        "id": "A",
+        "tag": "session-one",
+        "store": "store-one"
+      },
+      {
+        "id": "B",
+        "tag": "session-one",
+        "store": "store-one"
+      },
+      {
+        "id": "C",
+        "tag": "session-one",
+        "store": "store-one"
+      },
+      {
+        "id": "identity-target",
+        "tag": "session-one",
+        "store": "store-one"
+      },
+      {
+        "id": "identity-target",
+        "tag": "session-two",
+        "store": "store-two"
+      },
+      {
+        "id": "store-target",
+        "tag": "session-two",
+        "store": "store-two"
+      },
+      {
+        "id": "store-target",
+        "tag": "session-two",
+        "store": "store-one"
+      },
+      {
+        "id": "session-target",
+        "tag": "session-two",
+        "store": "store-one"
+      },
+      {
+        "id": "session-target",
+        "tag": "session-three",
+        "store": "store-two"
+      },
+      {
+        "id": "late-before-error",
+        "tag": "session-three",
+        "store": "store-two"
+      },
+      {
+        "id": "forbidden",
+        "tag": "session-three",
+        "store": "store-two"
+      },
+      {
+        "id": "recovery",
+        "tag": "session-three",
+        "store": "store-two"
+      },
+      {
+        "id": "missing",
+        "tag": "session-three",
+        "store": "store-two"
+      },
+      {
+        "id": "recovery",
+        "tag": "session-three",
+        "store": "store-two"
+      },
+      {
+        "id": "unauthorized",
+        "tag": "session-three",
+        "store": "store-two"
+      }
+    ]
+  }
+]

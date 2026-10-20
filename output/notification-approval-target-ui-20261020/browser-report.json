@@ -1,0 +1,27 @@
+{
+  "noticeObjectSupported": true,
+  "beyondLatest100": true,
+  "mergedAndDeduplicated": true,
+  "nativeListAvoidsDetail": true,
+  "samePageRequestIdSwitch": true,
+  "clearedWhileNewTargetLoading": true,
+  "latePriorResponseIgnored": true,
+  "forbidden403Clears": true,
+  "missing404Clears": true,
+  "unauthorized401Clears": true,
+  "pendingRetained": true,
+  "noApprovalMutation": true,
+  "sameDocumentNavigation": true,
+  "browserErrors": [],
+  "detailRequests": [
+    "target-a",
+    "target-b",
+    "late-old",
+    "target-c",
+    "forbidden",
+    "target-c",
+    "not-found",
+    "target-c",
+    "unauthorized"
+  ]
+}

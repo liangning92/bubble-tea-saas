@@ -1,0 +1,9 @@
+{
+  "oldSyncReturnedWithPendingAxios": 1,
+  "focusWhilePendingWasDropped": true,
+  "countBeforeDroppedFocus": 9,
+  "countAfterExplicitCompletionAndFocus": 10,
+  "runtimeChanged": false,
+  "timeSleepAdded": false,
+  "timeoutChanged": false
+}

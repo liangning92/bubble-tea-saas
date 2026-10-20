@@ -8,7 +8,7 @@ const { pathToFileURL } = require('node:url')
   const tailwind = (await import(pathToFileURL(path.resolve('client-admin/tailwind.config.js')).href)).default
   tailwind.content = [path.resolve('client-admin/src/**/*.{js,ts,jsx,tsx}')]
   const origin = 'http://127.0.0.1:6321'
-  const server = await createServer({ configFile: false, root: path.resolve('client-admin'), cacheDir: '/tmp/admin-payroll-vite', css: { postcss: { plugins: [require('tailwindcss')(tailwind), require('autoprefixer')()] } }, server: { host: '127.0.0.1', port: 6321, strictPort: true } })
+  const server = await createServer({ configFile: false, esbuild: { jsx: 'automatic' }, root: path.resolve('client-admin'), cacheDir: '/tmp/admin-payroll-vite', css: { postcss: { plugins: [require('tailwindcss')(tailwind), require('autoprefixer')()] } }, server: { host: '127.0.0.1', port: 6321, strictPort: true } })
   let browser
   try {
     await server.listen()

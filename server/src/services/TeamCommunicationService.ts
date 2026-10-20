@@ -2,7 +2,9 @@ import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
-import { enqueueTeamWorkflow } from './TeamWorkflowQueue'
+import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
+import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
+import { enqueueChatReminders } from './TeamChatReminderService'
 
 export const TEAM_PREFIX = 'team.communication.'
 export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
@@ -42,7 +44,7 @@ export const createChannelSchema = z.object({
   kind: z.enum(['direct', 'group', 'public', 'meeting']), members: z.array(staffId).min(1).max(100)
 }).strict()
 export const messageSchema = z.object({
-  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([])
+  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional()
 }).strict().refine(v => v.text.length > 0 || v.files.length > 0, 'EMPTY_MESSAGE')
 export const minutesSchema = z.object({
   requestId: uuid, expectedVersion: z.number().int().positive(), title: z.string().trim().min(1).max(120),
@@ -155,7 +157,15 @@ export function teamCommunication(db: DB = prisma) {
       return Promise.all(visible.map(async c => {
         const membership = c.members.find(m => m.staffId === a.staffId)
         const readSeq = (await read(db, a.storeId, `read.${c.id}.${a.staffId}`))?.seq || 0
-        return { ...c, unread: membership ? Math.max(0, c.lastSeq - Math.max(readSeq, membership.fromSeq - 1)) : 0,
+        const prefix = TEAM_PREFIX + `message.${c.id}.`
+        const [unread, latest] = membership ? await Promise.all([
+          db.config.count({ where: { storeId: a.storeId, key: { startsWith: prefix, gt: prefix + pad(Math.max(readSeq, membership.fromSeq - 1)) },
+            value: { not: { contains: `"authorId":${JSON.stringify(a.staffId)}` } } } }),
+          db.config.findFirst({ where: { storeId: a.storeId, key: { startsWith: prefix, gte: prefix + pad(membership.fromSeq) } }, orderBy: { key: 'desc' } })
+        ]) : [0, null]
+        const message = latest ? JSON.parse(latest.value) : null
+        return { ...c, unread, preview: message ? { text: [...message.text].slice(0, 120).join(''), authorName: message.authorName,
+          createdAt: message.createdAt, hasFiles: message.files?.length > 0 } : null,
           member: !!membership, canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), canAudit: canTeam(a, 'team.audit') }
       }))
     },
@@ -195,7 +205,7 @@ export function teamCommunication(db: DB = prisma) {
       return { channel: c, messages, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
         canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), audit: auditReason !== undefined }
     },
-    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string) {
+    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization) {
       const v = messageSchema.parse(input)
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
@@ -203,7 +213,10 @@ export function teamCommunication(db: DB = prisma) {
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
-        let ai: { provider: string; model: string; draftId: string; approvedBy: string } | undefined
+        const policy = await read(tx, a.storeId, `workflow.policy.${id}`)
+        const humanTakeover = !routineAuthorization && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
+        if (humanTakeover && !aiDraftId && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
+        let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; authorizedBy?: string } | undefined
         if (aiDraftId) {
           uuid.parse(aiDraftId)
           if (a.role !== 'admin' || a.employeeApp || v.requestId !== aiDraftId || v.files.length) fail(403, 'TEAM_AI_ADMIN_REQUIRED')
@@ -211,10 +224,17 @@ export function teamCommunication(db: DB = prisma) {
           const draft = await read(tx, a.storeId, `aiDraft.${a.staffId}.${aiDraftId}`)
           const settings = await read(tx, a.storeId, 'ai.settings')
           if (!draft || draft.channelId !== id || draft.status !== 'ready' || draft.kind !== 'draft') fail(409, 'TEAM_AI_DRAFT_NOT_READY')
+          if (humanTakeover && draft.contextLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
           if (!settings?.enabled || settings.version !== draft.configVersion) fail(409, 'TEAM_AI_CONFIG_CHANGED')
           if (c.members.some(member => member.fromSeq > draft.sourceFloor) || digest(c.members) !== draft.audienceHash) fail(403, 'TEAM_AI_AUDIENCE_CHANGED')
           if (draft.operation) await assertOperationScope(tx, a, c, draft.operation)
-          ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, approvedBy: a.staffId }
+          if (routineAuthorization) {
+            await assertRoutineSend(tx, a, c, draft, routineAuthorization, v.text)
+            ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, routineAuthorization, authorizedBy: a.staffId }
+          } else {
+            if (draft.routineAuthorization) fail(403, 'TEAM_ROUTINE_INTERNAL_SEND_REQUIRED')
+            ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, approvedBy: a.staffId }
+          }
         }
         if (c.archived || c.kind === 'meeting' && !c.round) fail(409, 'TEAM_CHANNEL_CLOSED')
         await lock(tx, a.storeId, 'rate.' + a.staffId)
@@ -232,16 +252,25 @@ export function teamCommunication(db: DB = prisma) {
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
           authorId: a.staffId, authorName: employee.name, text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
+        const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
         await write(tx, a.storeId, channelKey(id), c)
         await write(tx, a.storeId, requestKey, { hash, message })
         await write(tx, a.storeId, rateKey, [...recent, now])
         if (ai) {
           const key = `aiDraft.${a.staffId}.${aiDraftId}`, draft = await read(tx, a.storeId, key)
-          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, approvedAt: new Date(now).toISOString() })
-          await audit(tx, a, id, 'update', { action: 'ai_publish', draftId: aiDraftId, messageId: message.id })
+          await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, ...(routineAuthorization ? { automaticallySentAt: new Date(now).toISOString() } : { approvedAt: new Date(now).toISOString() }) })
+          await audit(tx, a, id, 'update', { action: routineAuthorization ? 'routine_authorized_send' : 'ai_publish', draftId: aiDraftId, messageId: message.id, ...(routineAuthorization ? { authorization: routineAuthorization } : {}) })
         }
-        await enqueueTeamWorkflow(tx, a, c, message, { read, write })
+        if (humanTakeover) {
+          const takeover = { byStaffId: a.staffId, at: new Date().toISOString(), sourceSeq: message.seq, reason: 'human_message' }
+          const paused = { ...policy, paused: true, version: policy.version + 1, epoch: policy.epoch + 1, takeover }
+          await write(tx, a.storeId, `workflow.policy.${id}`, paused)
+          await workflowEvent(tx, a.storeId, id, { policyVersion: paused.version, paused: true, takeover }, { read, write })
+          await audit(tx, a, id, 'update', { action: 'workflow_human_takeover', takeover, policyVersion: paused.version })
+        }
+        await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
+        await enqueueChatReminders(tx, a.storeId, c, message)
         return message
       })
     },
