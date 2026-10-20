@@ -3,7 +3,7 @@ import { z } from 'zod'
 import prisma from '../config/database'
 import { readWork } from './EmployeeWorkspaceStore'
 import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
-import { enqueueTeamWorkflow } from './TeamWorkflowQueue'
+import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 
 export const TEAM_PREFIX = 'team.communication.'
 export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
@@ -43,7 +43,7 @@ export const createChannelSchema = z.object({
   kind: z.enum(['direct', 'group', 'public', 'meeting']), members: z.array(staffId).min(1).max(100)
 }).strict()
 export const messageSchema = z.object({
-  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([])
+  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional()
 }).strict().refine(v => v.text.length > 0 || v.files.length > 0, 'EMPTY_MESSAGE')
 export const minutesSchema = z.object({
   requestId: uuid, expectedVersion: z.number().int().positive(), title: z.string().trim().min(1).max(120),
@@ -204,6 +204,9 @@ export function teamCommunication(db: DB = prisma) {
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
+        const policy = await read(tx, a.storeId, `workflow.policy.${id}`)
+        const humanTakeover = !aiDraftId && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
+        if (humanTakeover && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
         let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; authorizedBy?: string } | undefined
         if (aiDraftId) {
           uuid.parse(aiDraftId)
@@ -248,6 +251,13 @@ export function teamCommunication(db: DB = prisma) {
           const key = `aiDraft.${a.staffId}.${aiDraftId}`, draft = await read(tx, a.storeId, key)
           await write(tx, a.storeId, key, { ...draft, status: 'sent', sentMessageId: message.id, ...(routineAuthorization ? { automaticallySentAt: new Date(now).toISOString() } : { approvedAt: new Date(now).toISOString() }) })
           await audit(tx, a, id, 'update', { action: routineAuthorization ? 'routine_authorized_send' : 'ai_publish', draftId: aiDraftId, messageId: message.id, ...(routineAuthorization ? { authorization: routineAuthorization } : {}) })
+        }
+        if (humanTakeover) {
+          const takeover = { byStaffId: a.staffId, at: new Date().toISOString(), sourceSeq: message.seq, reason: 'human_message' }
+          const paused = { ...policy, paused: true, version: policy.version + 1, epoch: policy.epoch + 1, takeover }
+          await write(tx, a.storeId, `workflow.policy.${id}`, paused)
+          await workflowEvent(tx, a.storeId, id, { policyVersion: paused.version, paused: true, takeover }, { read, write })
+          await audit(tx, a, id, 'update', { action: 'workflow_human_takeover', takeover, policyVersion: paused.version })
         }
         await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
         return message

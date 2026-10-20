@@ -20,6 +20,8 @@
     "en 390 responsive review and policy controls",
     "en 768 responsive review and policy controls",
     "en 1440 responsive review and policy controls",
+    "automatic handler and explicit human takeover state remain distinct from individual human approval",
+    "stale human composer keeps its source version, does not retry automatically and can be reviewed without losing text",
     "manager does not receive AI review controls or workflow reads"
   ],
   "pageErrors": [],

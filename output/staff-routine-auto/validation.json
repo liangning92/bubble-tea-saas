@@ -6,11 +6,11 @@
   "realModelCalls": 0,
   "productionMessages": 0,
   "newCredentials": false,
-  "httpIsolatedGroups": 17,
+  "httpIsolatedGroups": 19,
   "existingTeamHttpGroups": 67,
   "aiSettingsHttpRegression": "passed (see ai-settings-http.log)",
   "unitGroups": 27,
-  "mockBrowserCases": 21,
+  "mockBrowserCases": 23,
   "builds": {
     "api": "passed",
     "admin": "passed",
@@ -22,8 +22,9 @@
   },
   "realBrowserProductionVerification": "not performed: production access intentionally excluded",
   "ui": "synthetic actual built app, zh/id/en 390/768/1440, no horizontal overflow; screenshots inspected at zh390 and automatic-mode-disabled1440; all controls retained",
-  "sourceReview": "initial independent review reproduced 2 P2 (ordering and stale replies), fixed in current changes; final fixed-SHA review pending",
+  "sourceReview": "initial two P2 fixed, second independent review found one scheduler starvation P2 fixed in current wave scheduler; final fixed-SHA review pending",
   "ci": "fixed-SHA CI pending",
   "testCleanup": "all owned temporary PostgreSQL and labelled wrapper batches cleaned; no production resource mutation",
-  "businessBoundary": "22 exact routine phrases and 5 safe reply/question codes. Unknown text/attachments block before model. No arbitrary natural-language ongoing communication or proactive tasks/reminders."
+  "businessBoundary": "22 exact routine phrases and 5 safe reply/question codes. Unknown text/attachments block before model. No arbitrary natural-language ongoing communication or proactive tasks/reminders.",
+  "humanTakeover": "same-transaction pause and source-version guard; local stale text retained for explicit review"
 }

@@ -10,6 +10,7 @@ const initialJob=()=>({id:'00000000-0000-4000-8000-000000000101',sourceSeq:1,sou
 let job=initialJob(),tasks=[],policy={version:0,enabled:false,paused:true,employeeIds:[],automaticSend:false};
 let settings={version:4,checkRevision:0,enabled:true,keyConfigured:true,provider:'minimax',region:'cn',model:'MiniMax-M3',monthlyBudgetUsd:null,inputPerMillionUsd:.3,outputPerMillionUsd:1.2,month:'2026-10',estimatedMonthUsd:0,connection:null};
 let loseResponse=false,losePolicyResponse=false,gatewayFail=false,failRead=false,secondPage=false,postCount=0,replyCount=0,taskCount=0;
+let takeover=null,messageContextConflict=false;const manualMessagePosts=[];
 const passed=[],pageErrors=[],requests=[],external=[],receipts=new Map(),policyWrites=[];
 const app=express();app.use(express.json());
 app.all('/api/*',(req,res)=>{
@@ -20,6 +21,7 @@ app.all('/api/*',(req,res)=>{
  if(['/api/team/admin/channels','/api/team/channels'].includes(req.path))return ok([channel,{...channel,id:otherId,title:'Other channel',member:false}]);
  if(req.path==='/api/team/directory')return ok(directory);
  if(req.path==='/api/team/capabilities')return ok({manage:true,audit:false});
+ if(req.path.endsWith('/messages')&&req.method==='POST'){manualMessagePosts.push(req.body);return messageContextConflict?res.status(409).json({message:'TEAM_MESSAGE_CONTEXT_CHANGED'}):ok({id:'synthetic-manual-message'})}
  if(req.path.endsWith('/messages'))return ok({channel,canEdit:true,messages:[{id:'source',requestId:'source',seq:1,authorId:'s-alice',authorName:'Synthetic Alice',text:'Saya perlu pelatihan.',files:[],createdAt:new Date().toISOString()}],cursor:1,hasMore:false,receipts:[]});
  if(req.path.endsWith('/tasks'))return ok(tasks);
  if(req.path.endsWith('/minutes')||req.path.endsWith('/operations'))return ok([]);
@@ -33,7 +35,7 @@ app.all('/api/*',(req,res)=>{
   if(role!=='admin')return res.status(403).json({message:'TEAM_WORKFLOW_ADMIN_REQUIRED'});
   if(req.path.endsWith('/jobs')){
    if(failRead)return res.status(403).json({message:'TEAM_WORKFLOW_ADMIN_REQUIRED'});
-   return ok({jobs:Number(req.query.after)>0?[{...job,id:'later',sourceSeq:101}]:[job],cursor:Number(req.query.after)>0?101:1,hasMore:secondPage&&Number(req.query.after)===0,automaticSend:false});
+   return ok({takeover,jobs:Number(req.query.after)>0?[{...job,id:'later',sourceSeq:101}]:[job],cursor:Number(req.query.after)>0?101:1,hasMore:secondPage&&Number(req.query.after)===0,automaticSend:false});
   }
   if(req.path.endsWith('/export'))return ok({textZh:Number(req.query.after)?'后续消息 #101：任务尚待主管验收':'消息 #1：AI 草稿（员工陈述，未核实）；回复已人工批准；任务待主管验收',cursor:Number(req.query.after)?101:1,hasMore:!Number(req.query.after)});
   if(req.path.endsWith('/actions')){
@@ -118,6 +120,12 @@ async function reviewReply(page){await page.getByRole('button',{name:'审阅回�
  for(const language of ['zh','id','en'])for(const width of [390,768,1440])await pass(language+' '+width+' responsive review and policy controls',async()=>{
   job=initialJob();const {page,context}=await open(language,width);await page.goto(origin+'/settings/ai');const permission=page.getByTestId('workflow-settings');await permission.getByRole('combobox').selectOption(channelId);await permission.locator('fieldset').waitFor();await permission.scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:out+'/'+language+'-'+width+'-policy.png'});
   await page.goto(origin+'/staff/communication');await page.getByRole('button',{name:'Synthetic pilot channel',exact:false}).click();await page.locator('.team-tabs button').nth(1).click();await page.getByTestId('team-workflow').locator('summary').click();await page.getByTestId('workflow-job-1').waitFor();await page.getByTestId('team-workflow').scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:out+'/'+language+'-'+width+'-review.png'});if(language==='zh'&&width===390){await page.getByRole('button',{name:'审阅任务',exact:true}).click();const form=page.getByTestId('workflow-review-form');await form.getByLabel('最晚接收时间').fill('2026-10-22T08:00');await form.getByLabel('完成期限').fill('2026-10-22T10:00');await form.scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:out+'/zh-390-task-form.png'});}await context.close();
+ });
+ await pass('automatic handler and explicit human takeover state remain distinct from individual human approval',async()=>{
+  job={...initialJob(),status:'reviewed',automaticReply:true,replyMessageId:'synthetic-automatic'};takeover={byStaffId:'s-admin',reason:'human_message'};const {page,context}=await open('zh',390);await work(page);await page.getByText('AI 已依持续授权回复',{exact:true}).waitFor();await page.getByText('人工已接管，自动回复已暂停',{exact:false}).waitFor();assert.equal(await page.getByRole('button',{name:'审阅回复',exact:true}).count(),0);await page.getByTestId('team-workflow').scrollIntoViewIfNeeded();await page.screenshot({path:out+'/zh-390-human-takeover.png'});await context.close();takeover=null;
+ });
+ await pass('stale human composer keeps its source version, does not retry automatically and can be reviewed without losing text',async()=>{
+  const {page,context}=await open('zh',390);await page.goto(origin+'/staff/communication');await page.getByRole('button',{name:'Synthetic pilot channel',exact:false}).click();const input=page.locator('.team-composer textarea');await input.waitFor();await input.fill('Synthetic human reply');messageContextConflict=true;const before=manualMessagePosts.length;await page.locator('.team-composer').getByRole('button',{name:'发送',exact:true}).click();await page.getByRole('button',{name:'重新审阅此消息',exact:true}).waitFor();assert.equal(manualMessagePosts.length,before+1);assert.equal(manualMessagePosts.at(-1).expectedLastSeq,1);await page.getByRole('button',{name:'重新审阅此消息',exact:true}).click();assert.equal(await input.inputValue(),'Synthetic human reply');assert.equal(manualMessagePosts.length,before+1);await context.close();messageContextConflict=false;
  });
  await pass('manager does not receive AI review controls or workflow reads',async()=>{const {page,context}=await open('zh',390,'manager');let count=0;page.on('request',r=>{if(r.url().includes('/workflow/'))count++});await page.goto(origin+'/staff/communication');await page.getByRole('button',{name:'Synthetic pilot channel',exact:false}).click();await page.locator('.team-tabs button').nth(1).click();assert.equal(await page.getByTestId('team-workflow').count(),0);assert.equal(count,0);await context.close()});
  assert.deepEqual(pageErrors,[]);assert.deepEqual(external,[]);fs.writeFileSync(out+'/results.json',JSON.stringify({passed,pageErrors,externalRequests:external,allApiRequestsMocked:true,realModelCalls:0,productionWrites:0,replyCount,taskCount},null,2)+'\n');

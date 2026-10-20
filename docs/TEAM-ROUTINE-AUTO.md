@@ -55,3 +55,11 @@
 每条 job.timing 持久保存 sourceWrittenAt、enqueuedAt、claimedAt、modelStartedAt、modelCompletedAt、replyWrittenAt。消息和入队在同一事务提交，因而不会出现“消息已提交但未入队”的中间状态。sourceWrittenAt 是事务内消息写完成，enqueuedAt 是队列写入准备时刻；replyWrittenAt 是回复内部服务写完，均不能冒称独立事务提交瞬间。modelStartedAt 是调用前持久登记时刻（区间包含登记写耗时），modelCompletedAt 是 transport 返回时刻；重启复用 ready 结果仍保留原调用时间。
 
 测试另记录HTTP返回确认源事务已提交的sourceCommitObservedAt，以及独立DB轮询看到回复的replyCommitObservedAt（25ms观察粒度）。报告分别列出事务内写入区间和两个提交观察点区间，并保留请求开始时刻。24样本才计算nearest-rank经验P50/P95；样本小，非容量/设备/生产SLA。模型明确标为受控30ms mock且外网被测试进程拒绝。真实MiniMax完整往返本轮尚未执行；若后续做无个人资料测试，仅复用服务端现存cn凭据，先报告具体调用和持久记录边界，不读取/打印/复制secret。
+
+## 人工接管与生产缺口
+
+显式自动策略有效时，负责管理员的普通聊天消息须携带其看到的 expectedLastSeq。AI 若先落库，旧页面返回409且不保存业务消息；本地待发原文保留，须查看最新消息后点击“重新审阅此消息”，不会自动改版本重发。管理员若先落库，同一事务将策略 paused=true、version/epoch增加，并保存 takeover.byStaffId/at/sourceSeq/reason、游标事件和审计；在途AI最终校验失败。重新启用仍须显式新许可，不从历史消息自动恢复。后台记录区区分“AI依持续授权回复”和人工接管，审批等待仍为持久业务状态。
+
+runBatch按频道分组，每波最多六个不同频道且不超过剩余结果额度；未来重试/暂停/有效租约返回null不占结果额度。防止十个旧退避频道饿死新来信，limit=1仍精确返回最多一个结果。
+
+当前后端业务链独立于父聊天、Dot在线状态、浏览器与MCP；没有父聊天的自动事件回调。生产尚缺实际持续运行的部署与进程监护、停机恢复/告警接收方的运维验收、真实六人ID及频道许可绑定、已有订阅推送与发送触达验收、真实MiniMax端到端计时和负载验收。浏览器关闭不影响已启动worker；Mac关机/休眠会停止。未开生产worker、未写生产策略/员工消息、未新增跨服务凭据、未合并或部署，不宣称生产级无缝已完成。

@@ -2,163 +2,163 @@ TAP version 13
 # Subtest: team communication selects its isolated HTTP regression without unrelated POS suites
 ok 1 - team communication selects its isolated HTTP regression without unrelated POS suites
   ---
-  duration_ms: 16.61689
+  duration_ms: 12.83119
   type: 'test'
   ...
 # Subtest: workflow queue, service, worker and fixture changes retain the isolated communication regression
 ok 2 - workflow queue, service, worker and fixture changes retain the isolated communication regression
   ---
-  duration_ms: 9.574987
+  duration_ms: 8.65653
   type: 'test'
   ...
 # Subtest: workflow review controls and their admin consumers select the built mocked browser contract without POS
 ok 3 - workflow review controls and their admin consumers select the built mocked browser contract without POS
   ---
-  duration_ms: 5.174609
+  duration_ms: 5.724337
   type: 'test'
   ...
 # Subtest: operations plans and shared copy select protected communication checks for their actual clients
 ok 4 - operations plans and shared copy select protected communication checks for their actual clients
   ---
-  duration_ms: 6.626549
+  duration_ms: 5.494813
   type: 'test'
   ...
 # Subtest: product upload and analysis select API/admin and media checks, without cashier/printing
 ok 5 - product upload and analysis select API/admin and media checks, without cashier/printing
   ---
-  duration_ms: 6.432939
+  duration_ms: 5.776458
   type: 'test'
   ...
 # Subtest: metadata-only CI changes do not build business components or select business tests
 ok 6 - metadata-only CI changes do not build business components or select business tests
   ---
-  duration_ms: 2.924424
+  duration_ms: 2.804549
   type: 'test'
   ...
 # Subtest: shared module changes select importing consumers and dependent unit tests, including cycles and aliases
 ok 7 - shared module changes select importing consumers and dependent unit tests, including cycles and aliases
   ---
-  duration_ms: 5.546505
+  duration_ms: 5.623331
   type: 'test'
   ...
 # Subtest: deleted shared modules still trace existing importers
 ok 8 - deleted shared modules still trace existing importers
   ---
-  duration_ms: 1.663286
+  duration_ms: 1.6515
   type: 'test'
   ...
 # Subtest: frontend-only and API-only changes do not force all service images
 ok 9 - frontend-only and API-only changes do not force all service images
   ---
-  duration_ms: 2.037442
+  duration_ms: 1.131559
   type: 'test'
   ...
 # Subtest: core dependencies and explicit full regression include all genuinely affected components
 ok 10 - core dependencies and explicit full regression include all genuinely affected components
   ---
-  duration_ms: 2.233035
+  duration_ms: 1.157922
   type: 'test'
   ...
 # Subtest: unmapped code keeps component type checking without silently running unrelated historical suites
 ok 11 - unmapped code keeps component type checking without silently running unrelated historical suites
   ---
-  duration_ms: 1.1235
+  duration_ms: 0.636782
   type: 'test'
   ...
 # Subtest: range selection includes every commit, rejects unpinned/reversed/empty baselines and mismatched checkout
 ok 12 - range selection includes every commit, rejects unpinned/reversed/empty baselines and mismatched checkout
   ---
-  duration_ms: 356.875685
+  duration_ms: 314.4826
   type: 'test'
   ...
 # Subtest: workflow wiring keeps full suites opt-in and image publication uses the selected matrix
 ok 13 - workflow wiring keeps full suites opt-in and image publication uses the selected matrix
   ---
-  duration_ms: 39.729722
+  duration_ms: 36.738815
   type: 'test'
   ...
 # Subtest: different live component baselines retain pending API/admin/staff changes without replaying deployed POS changes
 ok 14 - different live component baselines retain pending API/admin/staff changes without replaying deployed POS changes
   ---
-  duration_ms: 744.667509
+  duration_ms: 757.756039
   type: 'test'
   ...
 # Subtest: root dependency updates retain component type checks without selecting every historical business domain
 ok 15 - root dependency updates retain component type checks without selecting every historical business domain
   ---
-  duration_ms: 0.665725
+  duration_ms: 0.56542
   type: 'test'
   ...
 # Subtest: scoped runner executes selected unit checks and leaves unrelated tests untouched
 ok 16 - scoped runner executes selected unit checks and leaves unrelated tests untouched
   ---
-  duration_ms: 399.728151
+  duration_ms: 406.95127
   type: 'test'
   ...
 # Subtest: image encoder edits keep image regressions in scope without cashier or print suites
 ok 17 - image encoder edits keep image regressions in scope without cashier or print suites
   ---
-  duration_ms: 0.792252
+  duration_ms: 0.855114
   type: 'test'
   ...
 # Subtest: reading server entrypoint text does not make every API edit affect unrelated audits
 ok 18 - reading server entrypoint text does not make every API edit affect unrelated audits
   ---
-  duration_ms: 4.507043
+  duration_ms: 4.123434
   type: 'test'
   ...
 # Subtest: additive TV models do not select unrelated sales/payroll checks, existing schema changes still do
 ok 19 - additive TV models do not select unrelated sales/payroll checks, existing schema changes still do
   ---
-  duration_ms: 308.439258
+  duration_ms: 285.712199
   type: 'test'
   ...
 # Subtest: employee offline login selects its own browser check without POS offline regressions
 ok 20 - employee offline login selects its own browser check without POS offline regressions
   ---
-  duration_ms: 3.82436
+  duration_ms: 2.218682
   type: 'test'
   ...
 # Subtest: employee attendance camera is separate from POS product barcode camera
 ok 21 - employee attendance camera is separate from POS product barcode camera
   ---
-  duration_ms: 3.933089
+  duration_ms: 3.684816
   type: 'test'
   ...
 # Subtest: native TV activities and updater names do not select Windows or marketing regressions
 ok 22 - native TV activities and updater names do not select Windows or marketing regressions
   ---
-  duration_ms: 2.085213
+  duration_ms: 2.093964
   type: 'test'
   ...
 # Subtest: TV public player assets select API image and TV browser checks
 ok 23 - TV public player assets select API image and TV browser checks
   ---
-  duration_ms: 0.563347
+  duration_ms: 0.549765
   type: 'test'
   ...
 # Subtest: refund approval authorization changes select permission HTTP regressions
 ok 24 - refund approval authorization changes select permission HTTP regressions
   ---
-  duration_ms: 1.020368
+  duration_ms: 0.660359
   type: 'test'
   ...
 # Subtest: AI settings page and API changes select their mocked browser and disposable HTTP contract
 ok 25 - AI settings page and API changes select their mocked browser and disposable HTTP contract
   ---
-  duration_ms: 460.823713
+  duration_ms: 400.757783
   type: 'test'
   ...
 # Subtest: routine communication follows actual service consumers and retains its disposable regression
 ok 26 - routine communication follows actual service consumers and retains its disposable regression
   ---
-  duration_ms: 4.582617
+  duration_ms: 5.17855
   type: 'test'
   ...
 # Subtest: real chat component distinguishes ongoing automatic authorization from human approval in three languages
 ok 27 - real chat component distinguishes ongoing automatic authorization from human approval in three languages
   ---
-  duration_ms: 169.489084
+  duration_ms: 149.143751
   type: 'test'
   ...
 1..27
@@ -169,4 +169,4 @@ ok 27 - real chat component distinguishes ongoing automatic authorization from h
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 2599.464882
+# duration_ms 2457.08621

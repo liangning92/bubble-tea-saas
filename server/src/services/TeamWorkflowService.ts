@@ -159,7 +159,8 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
       const page: WorkflowJob[] = await rows(db, a.storeId, `workflow.job.${id}.`, pad(Math.max(after, fromSeq - 1)), 101)
       const visible = page.slice(0, 100).filter(j => j.operatorUserId === a.id && j.operatorStaffId === a.staffId)
       await Promise.all(visible.map(j => refreshBilling(db, a.storeId, j)))
-      return { jobs: visible, worker: await readTeam(db, a.storeId, 'workflow.worker'), cursor: page.slice(0, 100).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 100, automaticSend: !!(await readTeam(db, a.storeId, `workflow.policy.${id}`))?.automaticSend }
+      const currentPolicy = await readTeam(db, a.storeId, `workflow.policy.${id}`)
+      return { jobs: visible, takeover: currentPolicy?.takeover || null, worker: await readTeam(db, a.storeId, 'workflow.worker'), cursor: page.slice(0, 100).at(-1)?.sourceSeq || Math.max(after, fromSeq - 1), hasMore: page.length > 100, automaticSend: !!(await readTeam(db, a.storeId, `workflow.policy.${id}`))?.automaticSend }
     },
     async events(a: TeamActor, id: string, after = 0) {
       const { fromSeq } = await admin(db, a, id)
@@ -331,19 +332,24 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         OR: ['queued', 'retry_wait', 'processing'].map(status => ({ value: { contains: `"status":"${status}"` } })) },
         orderBy: [{ updatedAt: 'asc' }, { key: 'asc' }] })).map((r: any) => JSON.parse(r.value))
       const output = []
-      const channels = [...new Set(candidates.map(j => j.channelId))]
-      let next = 0, remaining = limit
-      await Promise.all(Array.from({ length: Math.min(6, channels.length) }, async () => {
-        while (next < channels.length) {
-          const channelId = channels[next++]
-          for (const j of candidates.filter(candidate => candidate.channelId === channelId).sort((a, b) => a.sourceSeq - b.sourceSeq)) {
-            if (remaining <= 0) break
-            remaining--
-            const processed = await this.process(storeId, j.channelId, j.sourceSeq)
-            if (processed) output.push({ id: processed.id, status: processed.status })
-          }
-        }
+      const groups = [...new Set(candidates.map(j => j.channelId))].map(channelId => ({
+        jobs: candidates.filter(j => j.channelId === channelId).sort((a, b) => a.sourceSeq - b.sourceSeq)
       }))
+      // Only actual results consume the batch budget. Future retries, paused
+      // policies and live leases must not starve a newly arrived conversation.
+      while (groups.length && output.length < limit) {
+        const wave = groups.splice(0, Math.min(6, limit - output.length))
+        const results = await Promise.all(wave.map(async group => {
+          while (group.jobs.length) {
+            const j = group.jobs.shift()!
+            const processed = await this.process(storeId, j.channelId, j.sourceSeq)
+            if (processed) return { id: processed.id, status: processed.status }
+          }
+          return null
+        }))
+        output.push(...results.filter(Boolean))
+        groups.push(...wave.filter(group => group.jobs.length))
+      }
       const currentRows = await db.config.findMany({ where: { storeId, key: { startsWith: TEAM_PREFIX + 'workflow.job.' },
         OR: ['queued', 'retry_wait', 'processing', 'awaiting_approval', 'blocked', 'uncertain'].map(status => ({ value: { contains: `\"status\":\"${status}\"` } })) } })
       const terminalRows = await db.config.findMany({ where: { storeId, key: { startsWith: TEAM_PREFIX + 'workflow.job.' },

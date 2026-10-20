@@ -8,6 +8,7 @@ export interface WorkflowPolicy {
   channelId: string; version: number; epoch: number; enabled: boolean; paused: boolean
   automaticSend: boolean; routine?: RoutineConsent; consent: true; employeeIds: string[]; operatorUserId: string; operatorStaffId: string
   audienceHash: string; aiConfigVersion: number; hash: string
+  takeover?: { byStaffId: string; at: string; sourceSeq: number; reason: 'human_message' }
 }
 export interface WorkflowBillingAttempt {
   attempt: number; requestId: string; status: string

@@ -1,9 +1,9 @@
-[docker-test] batch bt-test-f54dec1b7791
+[docker-test] batch bt-test-0f66b365fdb8
 postgres (PostgreSQL) 15.17 (Homebrew)
 Prisma schema loaded from server/prisma/schema.prisma
-Datasource "db": PostgreSQL database "team_test", schema "public" at "127.0.0.1:65105"
+Datasource "db": PostgreSQL database "team_test", schema "public" at "127.0.0.1:49282"
 
-🚀  Your database is now in sync with your Prisma schema. Done in 610ms
+🚀  Your database is now in sync with your Prisma schema. Done in 536ms
 
 PASS identity, store-scoped directory, separate management and audit capabilities
 PASS direct creation deduplication, request retry and payload-conflict rejection
@@ -74,4 +74,4 @@ PASS reserved storage cannot be read or overwritten using ordinary configuration
 PASS archive retains history, and inactive employees or revoked old tokens cannot read it
 RESULT {"passed":67,"failed":0}
 Owned temporary PostgreSQL instance cleaned
-[docker-test] cleaned bt-test-f54dec1b7791
+[docker-test] cleaned bt-test-0f66b365fdb8

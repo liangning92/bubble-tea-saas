@@ -11,6 +11,7 @@ export function TeamWorkflowPanel({ client, channelId, scope, staffId, language,
 }) {
   const c = workflowCopy(language), base = workflowBase(channelId), storage = `team-workflow:${scope}:${channelId}`
   const [open, setOpen] = useState(false), [jobs, setJobs] = useState<WorkflowJobView[]>([]), [pages, setPages] = useState(1), [more, setMore] = useState(false)
+  const [takeover,setTakeover] = useState<{byStaffId:string}|null>(null)
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState(''), [journalBlocked, setJournalBlocked] = useState(false)
   const [pending, setPending] = useState<WorkflowCommand | null>(null), [editing, setEditing] = useState<{ job: WorkflowJobView; action: WorkflowAction } | null>(null)
   const [note, setNote] = useState(''), [approved, setApproved] = useState(false), [charge, setCharge] = useState(false), [reply, setReply] = useState('')
@@ -35,6 +36,7 @@ export function TeamWorkflowPanel({ client, channelId, scope, staffId, language,
       for (let page = 0; page < count; page++) {
         const result = await client.request('get', `${base}/jobs?after=${cursor}`)
         if (!current() || token !== epoch.current) return
+        if(page===0)setTakeover(result.takeover||null)
         records.push(...result.jobs); hasMore = result.hasMore
         if (!hasMore) break
         if (!Number.isSafeInteger(result.cursor) || result.cursor <= cursor) throw Error('INVALID_CURSOR')
@@ -104,11 +106,12 @@ export function TeamWorkflowPanel({ client, channelId, scope, staffId, language,
     <summary className="cursor-pointer font-semibold">{c.title}</summary>
     {open && <><p className="text-xs text-gray-600">{c.help}</p><a href="/settings/ai#ai-workflow-permissions" className="text-sm text-red-700 underline">{c.settings}</a>
       <div className="flex flex-wrap gap-2"><button type="button" className={button} disabled={busy} onClick={() => { setError(''); void load() }}>{c.refresh}</button><button type="button" className={button} disabled={busy} onClick={() => void exportReport()}>{c.report}</button></div>
+      {takeover && <p role="status" className="rounded-lg bg-amber-50 p-2 text-sm">{c.humanTakeover} · {name(takeover.byStaffId)}</p>}
       {error && <p role="alert" className="break-words text-sm text-red-700">{error}</p>}{notice && <p role="status" className="text-sm text-green-800">{notice}</p>}
       {pending && <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm"><p>{c.pending}</p><p className="break-all">{pending.data.requestId}</p><button type="button" className={button} disabled={busy || journalBlocked} onClick={() => void submit(pending)}>{c.replay}</button></div>}
       {!jobs.length && <p className="text-sm text-gray-500">{c.empty}</p>}
       {jobs.map(job => <article key={job.id} className="min-w-0 space-y-2 rounded-lg border p-3 text-sm" data-testid={`workflow-job-${job.sourceSeq}`}>
-        <div className="flex flex-wrap justify-between gap-2"><a href={`#team-message-${job.sourceSeq}`} className="underline">{c.source} #{job.sourceSeq} · {name(job.sourceAuthorId)}</a><strong>{label(job.status)}</strong></div>
+        <div className="flex flex-wrap justify-between gap-2"><a href={`#team-message-${job.sourceSeq}`} className="underline">{c.source} #{job.sourceSeq} · {name(job.sourceAuthorId)}</a><strong>{job.automaticReply ? c.autoReplied : label(job.status)}</strong></div>
         <p>{c.attempts}: {job.attempt}/3 · {date(job.updatedAt)}</p><p className={job.billingStatus === 'possible' ? 'text-amber-800' : 'text-gray-600'}>{label(job.billingStatus || 'not_started')}</p>
         {job.billingAttempts?.map(a => <p key={a.requestId} className="break-all text-xs text-gray-500">{a.attempt}: {label(a.billingStatus)} · {a.requestId}</p>)}
         {job.error && <p className="break-words text-red-700">{workflowError(language, { message: job.error })} <span className="font-mono text-xs">{job.error}</span></p>}

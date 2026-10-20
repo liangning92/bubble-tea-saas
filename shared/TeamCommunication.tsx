@@ -130,7 +130,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
             message.uploaded.push(id); await savePending(message)
             if (!client.current()) return
           }
-          await client.request('post', `/team/channels/${message.channelId}/messages`, { requestId: message.id, text: message.text, files: message.uploaded })
+          await client.request('post', `/team/channels/${message.channelId}/messages`, { requestId: message.id, text: message.text, files: message.uploaded, ...(message.expectedLastSeq !== undefined ? {expectedLastSeq:message.expectedLastSeq} : {}) })
           await removePending(message.id)
           await pollRef.current?.()
         } catch (e: any) {
@@ -204,7 +204,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       const preparedFiles = sendOriginal ? files : await prepareTeamPhotos(files)
       setPreparing(false)
       if (!client.current()) return
-      const value: TeamPending = { id: crypto.randomUUID(), scope, channelId: selectedId, text: text.trim(), files: preparedFiles, uploaded: [], createdAt: new Date().toISOString() }
+      const value: TeamPending = { id: crypto.randomUUID(), scope, channelId: selectedId, text: text.trim(), files: preparedFiles, uploaded: [], expectedLastSeq: meta?.lastSeq, createdAt: new Date().toISOString() }
       await savePending(value); setOutbox(await pendingMessages(scope)); drafts.current.delete(selectedId)
       if (selectedRef.current === selectedId) { setText(''); setFiles([]); if (compact) setSendOriginal(false) }
       void flush()
@@ -251,7 +251,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
             {auditReason && <p className="rounded-lg bg-purple-50 p-3 text-sm">{w.audit} · {w.readOnly}</p>}
             <section className="team-chat-panel" hidden={panel !== 'chat'} aria-label={chat.chat}>
               <TeamChatMessages key={selectedId} historyFailed={!!error} historyReady={!compact || messageChannelId === selectedId && historyReady} scrollPositions={compact ? scrollPositions.current : undefined} messages={messageChannelId === selectedId ? messages : []} client={client} staffId={staffId} channelId={selectedId} query={query} language={language}>
-              {outbox.filter(m => m.channelId === selectedId && !messages.some(message => message.requestId === m.id)).map(m => <article key={m.id} className="team-bubble team-bubble-own team-pending"><p className="team-message-text">{m.text}</p><p className="team-pending-label">{m.files.length ? `${w.attachment}: ${m.files.length} · ` : ''}{m.error ? w.failed : w.pending}</p>{m.error && <button className="team-control" onClick={() => { void savePending({ ...m, retryable: true, nextRetryAt: 0 }).then(() => flush()) }}>{w.retry}</button>}</article>)}
+              {outbox.filter(m => m.channelId === selectedId && !messages.some(message => message.requestId === m.id)).map(m => <article key={m.id} className="team-bubble team-bubble-own team-pending"><p className="team-message-text">{m.text}</p><p className="team-pending-label">{m.files.length ? `${w.attachment}: ${m.files.length} · ` : ''}{m.error === 'TEAM_MESSAGE_CONTEXT_CHANGED' ? w.messageChanged : m.error ? w.failed : w.pending}</p>{m.error === 'TEAM_MESSAGE_CONTEXT_CHANGED' ? <button className="team-control" disabled={busy||!!text.trim()||!!files.length} onClick={() => { setText(m.text); setFiles(m.files); void removePending(m.id).then(async()=>{setOutbox(await pendingMessages(scope));void pollRef.current?.()}) }}>{w.reviewMessage}</button> : m.error && <button className="team-control" onClick={() => { void savePending({ ...m, retryable: true, nextRetryAt: 0 }).then(() => flush()) }}>{w.retry}</button>}</article>)}
               </TeamChatMessages>
               {currentChannel?.member && !meta?.archived && !currentChannel.archived && <>{meta?.kind === 'meeting' && !meta.round ? <p className="mt-4 text-sm">{w.ended}</p> : <form className="team-composer" onSubmit={send}>
                 {files.length > 0 && <div className="team-selected-files">{files.map((file, index) => <span key={index}>▧ {file.name}<button type="button" aria-label={`${chat.removeFile}: ${file.name}`} onClick={() => updateDraft({ files: files.filter((_, i) => i !== index) })}>×</button></span>)}</div>}

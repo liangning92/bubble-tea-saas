@@ -74,7 +74,7 @@ async function main(){
   });
   await test('explicitly allowlisted recipient may already be an administrator; existing role is preserved and operator/AI still cannot loop',async()=>{
    const f=await fixture({name:'Sekar',consentName:'Sekar',role:'admin'});const {m,j}=await seedAndProcess(f);assert.equal(j.status,'reviewed');assert.equal(f.calls(),1);assert.equal((await prisma.user.findUnique({where:{id:f.employee.id}})).role,'admin');assert.equal((await messages(f)).messages.length,2);
-   const own=await good(f.owner,'POST',`/channels/${f.channel.id}/messages`,{requestId:randomUUID(),text:'siap',files:[]});assert.equal(await readJob(f,own),null);
+   const own=await good(f.owner,'POST',`/channels/${f.channel.id}/messages`,{requestId:randomUUID(),text:'siap',files:[],expectedLastSeq:2});assert.equal(await readJob(f,own),null);
   });
   await test('default credential resolver with a missing master key fails without creating a key or calling provider',async()=>{
    const f=await fixture();await enable(f);const m=await send(f),key=path.join(process.env.UPLOADS_PATH,'.employee-private','.team-ai-master.key');assert.equal(fs.existsSync(key),false);let providerCalls=0;
@@ -139,11 +139,18 @@ async function main(){
    for(const who of ['employee','owner']){
     let release,entered;const gate=new Promise(r=>release=r),started=new Promise(r=>entered=r);
     const f=await fixture({transport:async()=>{entered();await gate;return response()}});await enable(f);const first=await send(f);const pending=f.workflow.process(f.storeId,f.channel.id,first.seq);await started;
-    const second=who==='employee'?await send(f,'belum selesai'):await good(f.owner,'POST',`/channels/${f.channel.id}/messages`,{requestId:randomUUID(),text:'Human intervention',files:[]});
+    const second=who==='employee'?await send(f,'belum selesai'):await good(f.owner,'POST',`/channels/${f.channel.id}/messages`,{requestId:randomUUID(),text:'Human intervention',files:[],expectedLastSeq:first.seq});
     if(who==='employee'){assert.equal(await f.workflow.process(f.storeId,f.channel.id,second.seq),null);assert.equal(f.calls(),1)}
-    release();await pending;const old=await readJob(f,first);assert.equal(old.status,'blocked');assert.equal(old.error,'TEAM_ROUTINE_SOURCE_SUPERSEDED');assert.equal((await messages(f)).messages.length,2);
+    release();await pending;const old=await readJob(f,first);assert.equal(old.status,'blocked');assert.equal(old.error,who==='employee'?'TEAM_ROUTINE_SOURCE_SUPERSEDED':'TEAM_WORKFLOW_PAUSED');assert.equal((await messages(f)).messages.length,2);
     if(who==='employee'){await f.workflow.process(f.storeId,f.channel.id,second.seq);assert.equal(f.calls(),2);assert.equal((await readJob(f,second)).status,'reviewed');assert.equal((await messages(f)).messages.length,3)}
    }
+  });
+  await test('human takeover uses the visible source version, pauses atomically and rejects stale UI after AI wins',async()=>{
+   const f=await fixture();await enable(f);const source=await send(f);const data={requestId:randomUUID(),text:'Human takes over',files:[],expectedLastSeq:source.seq};const human=await good(f.owner,'POST',`/channels/${f.channel.id}/messages`,data);assert.equal((await good(f.owner,'POST',`/channels/${f.channel.id}/messages`,data)).id,human.id);let p=await f.workflow.policy(f.owner,f.channel.id);assert(p.paused);assert.equal(p.takeover.byStaffId,f.owner.staffId);assert.equal(p.takeover.sourceSeq,human.seq);assert.equal(p.epoch,2);await f.workflow.runBatch(f.storeId);assert.equal(f.calls(),0);const next=await send(f);await f.workflow.runBatch(f.storeId);assert.equal(f.calls(),0);
+   const g=await fixture();await enable(g);const m=await send(g);await g.workflow.process(g.storeId,g.channel.id,m.seq);const stale={requestId:randomUUID(),text:'Old human reply',files:[],expectedLastSeq:m.seq};assert.equal((await request(g.owner,'POST',`/channels/${g.channel.id}/messages`,stale)).status,409);assert.equal((await messages(g)).messages.length,2);assert.equal((await g.workflow.policy(g.owner,g.channel.id)).paused,false);assert.equal((await request(g.owner,'POST',`/channels/${g.channel.id}/messages`,{requestId:randomUUID(),text:'Missing source version',files:[]})).status,409);assert.equal((await messages(g)).messages.length,2);
+  });
+  await test('future retries and paused old channels cannot consume result budget or starve a new channel',async()=>{
+   const f=await fixture();await enable(f);const m=await send(f),j=await readJob(f,m);await prisma.config.createMany({data:Array.from({length:10},(_,i)=>{const channelId=randomUUID();return {storeId:f.storeId,key:'team.communication.'+workflowJobKey(channelId,1),category:'staff',createdAt:new Date('2000-01-01'),updatedAt:new Date('2000-01-01'),value:JSON.stringify({...j,id:randomUUID(),channelId,createdAt:'2000-01-01T00:00:00.000Z',status:'retry_wait',nextAttemptAt:Date.now()+60000,billingStatus:'not_started',billingAttempts:[]})}})});const processed=await f.workflow.runBatch(f.storeId,1);assert.equal(processed.length,1);assert.equal((await readJob(f,m)).status,'reviewed');assert.equal(f.calls(),1);
   });
   await test('expired backlog is blocked before admission; expiry during transport also blocks publication',async()=>{
    const f=await fixture();await enable(f);const m=await send(f);let job=await readJob(f,m);job.createdAt=new Date(Date.now()-120001).toISOString();await writeTeam(prisma,f.storeId,workflowJobKey(f.channel.id,m.seq),job);await f.workflow.process(f.storeId,f.channel.id,m.seq);assert.equal(f.calls(),0);assert.equal((await readJob(f,m)).error,'TEAM_ROUTINE_SOURCE_EXPIRED');
