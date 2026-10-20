@@ -23,7 +23,7 @@ try{
   const server=await createServer({root:path.join(workspace,app),configFile:path.join(workspace,app,'vite.config.ts'),css:{postcss:{plugins:[require('tailwindcss')(config),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:0,strictPort:false},logLevel:'error'}); await server.listen();servers.push(server);
   const url=`http://127.0.0.1:${server.httpServer.address().port}`;
   const context=await browser.newContext({viewport:{width:390,height:844},locale:'en-GB'});
-  const errors=[], posts=[], requests=[];let items=structuredClone(baseItems),added=false,hold=false, held=[];
+  const errors=[], posts=[], requests=[];let items=structuredClone(baseItems),added=false,hold=false, held=[],malformed=true;
   context.on('page',page=>page.on('pageerror',e=>errors.push(e.message)));
   const user=app==='client-staff'?{id:'fixture-user',phone:'0000',name:'Fixture member',role:'admin',storeId:'fixture-store',staffId:'fixture-staff',position:'Manager'}:{id:'fixture-user',phone:'0000',role:'admin',managementAccess:true,storeId:'fixture-store',staff:{id:'fixture-staff',name:'Fixture manager',position:'Manager'}};
   await context.addInitScript(({user})=>{try{sessionStorage.setItem(user.staffId?'staff-auth-storage':'auth-storage',JSON.stringify({state:{user,token:'fixture-session',isAuthenticated:true},version:0}));localStorage.setItem('bubble-tea-language','en');localStorage.setItem('employee-language','en');}catch{}},{user});
@@ -31,6 +31,7 @@ try{
    const request=route.request(),u=new URL(request.url()),pathname=u.pathname.replace(/^\/api/,'');requests.push({method:request.method(),pathname});
    const send=data=>route.fulfill({json:{code:200,data}});
    if(pathname==='/staff-work/my/inbox'){
+    if(malformed)return send([]);
     const second=request.headers().authorization?.includes('fixture-session-2');
     const data=second?{items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}}:{items:structuredClone(items),chats:[{id:'room-1',title:'Morning shift group',unread:3,url:'/team?channel=room-1',preview:{text:'<img src=x onerror="window.fixtureXss=1"> Please check the stock.',authorName:'Maya',createdAt:fixtureTime}}],counts:{unread:items.filter(i=>!i.read).length,chatUnread:3,trainingUnread:1,approvalPending:1}};
     if(hold&&!second){held.push(()=>send(data));return;}
@@ -50,11 +51,19 @@ try{
    return send([]);
   });
   const page=await context.newPage();await page.goto(url+'/inbox');
+  await page.locator('.awareness-error').waitFor();
+  assert.equal(await page.locator('.awareness-inbox').count(),1,'Malformed successful response cannot crash the app shell');
+  assert.equal(await page.locator('.awareness-item').count(),0);
+  await page.screenshot({path:path.join(output,`${app}-malformed-response.png`),fullPage:true});
+  malformed=false;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
   await page.locator('.awareness-item').first().waitFor();
   assert.equal(await page.locator('.awareness-item').count(),4);
   assert.equal(await page.evaluate(()=>window.fixtureXss),undefined);
   assert.equal(await page.locator('.awareness-preview img').count(),0);
   assert.equal(posts.length,0,'Opening inbox must not mark any item read');
+  malformed=true;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.locator('.awareness-error').waitFor();
+  assert.equal(await page.locator('.awareness-item').count(),4,'Malformed refresh preserves the last valid personal response');
+  malformed=false;await page.evaluate(()=>window.dispatchEvent(new Event('focus')));await page.waitForFunction(()=>!document.querySelector('.awareness-error'));
   for(const width of [390,768,1365]){
    await page.setViewportSize({width,height:width===390?844:1000});
    await page.waitForTimeout(400);
@@ -121,7 +130,7 @@ try{
   assert.equal(await page.locator('.awareness-item').count(),0);
   await page.screenshot({path:path.join(output,`${app}-store-switch-empty.png`),fullPage:true});
   assert.equal(errors.length,0,errors.join('\n'));
-  report.push({app,widths:[390,768,1365],openingInboxDoesNotRead:true,approvalReadRemainsPending:true,trainingNotReadByInbox:true,chatListDoesNotRead:true,chatReadAfterMessages:true,integratedAutomaticReplyBodyAndProvenanceVisible:true,inboxResultStatus:true,foregroundPollWithoutPush:added,crossIdentityAbortAndClear:true,safePlainTextPreview:true,hiddenPollPaused:true,focusResumes:true,inFlightProtected:true,hungRequestTimesOutAndRecovers:true,browserErrors:errors,posts,requestCount:requests.length});
+report.push({app,widths:[390,768,1365],malformedResponseContainedAndRecovers:true,malformedRefreshPreservesValidData:true,openingInboxDoesNotRead:true,approvalReadRemainsPending:true,trainingNotReadByInbox:true,chatListDoesNotRead:true,chatReadAfterMessages:true,integratedAutomaticReplyBodyAndProvenanceVisible:true,inboxResultStatus:true,foregroundPollWithoutPush:added,crossIdentityAbortAndClear:true,safePlainTextPreview:true,hiddenPollPaused:true,focusResumes:true,inFlightProtected:true,hungRequestTimesOutAndRecovers:true,browserErrors:errors,posts,requestCount:requests.length});
   await context.close();
  }
  fs.writeFileSync(path.join(output,'browser-report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

@@ -1,0 +1,24 @@
+{
+  "head": "6e802c1c9538fae1a5f20199692344e7e262cd38",
+  "actualReactPages": true,
+  "syntheticApi": true,
+  "productionAccess": false,
+  "realPushCalls": 0,
+  "observations": [
+    {
+      "case": "admin_approval_late_detail",
+      "currentUrl": "?noticeObject=current-target-b",
+      "oldTargetVisible": true,
+      "currentTargetVisible": false
+    },
+    {
+      "case": "training_notice_ahead_of_catalogue",
+      "catalogueRevisionActuallyRendered": "review-r1",
+      "noticeRevision": "review-r2",
+      "catalogueResponseStillHeld": true,
+      "newNoticeReadPost": true,
+      "oldContentStillDisplayed": true
+    }
+  ],
+  "pageErrors": []
+}

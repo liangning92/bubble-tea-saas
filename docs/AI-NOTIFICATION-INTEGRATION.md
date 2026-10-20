@@ -1,12 +1,12 @@
 # AI 回复与聊天提醒的事务整合
 
-本地整合以 PR268 `fd0e8de8` 为 AI 基线。通知 PR269 当前只是 `acaf9327` 临时候选，已知修复及最终独立复审/CI尚待负责人交接；本文件不构成上线验收。PR267、PR270不在整合范围。本轮没有新增真实模型调用、生产策略、员工消息或常驻进程。
+本地整合以 PR268 `fd0e8de8` 为 AI 基线。通知 PR269 候选已更新到 `82fc2f67`，其精确CI `39389217963` 与最终独立复审仍在进行；本文件不构成上线验收。PR267、PR270不在整合范围。本轮没有新增真实模型调用、生产策略、员工消息或常驻进程。
 
 ## 共同提交边界
 
 `TeamCommunication.send` 保留完整授权、`expectedLastSeq`、服务端草稿 `contextLastSeq`、内部 routine proof、人工接管 pause/version/epoch、审计和幂等回执。在同一事务中依次 await `enqueueTeamWorkflow` 与 `enqueueChatReminders`。提醒失败会一起回滚消息、频道序号、请求回执、草稿发送状态、接管策略和 workflow 事件；不能在 hook 内独立提交或吞错。
 
-独立 AI worker 与 API 是不同进程。同进程 `wakeEmployeeDelivery` 无法唤醒另一个进程。统一契约是提交后的 `pending` 聊天提醒 outbox：通知分支负责在既有 API 进程内每500ms只扫描这类已提交记录，按门店合并后调用既有 deliver；保留60s补漏，不提高 collect/payroll 频率，不新建进程、凭据、数据库权限或端点。HTTP成功后的25ms唤醒只优化同进程路径。此段待通知最终实现与真实双进程隔离验收，不把设计当已通过。
+独立 AI worker 与 API 是不同进程。同进程 `wakeEmployeeDelivery` 无法唤醒另一个进程。统一契约是提交后的 `pending` 聊天提醒 outbox：通知分支在 enqueueChatReminders 同事务末尾写单店固定 key `employee.workspace.notification.chat.pending={eventId:message.id}`（不含正文/secret）；既有 API 每500ms读门店ID后按 `(storeId,key)` 唯一索引精确读取该 signal，值变化合并唤醒既有 deliver，避免扫描历史消息/JSON。重启 seen 为空从持久队列补漏，投递数据库错误在500ms重试；保留60s补漏，不提高 collect/payroll 频率，不新建进程、凭据、数据库权限或端点。HTTP成功后的25ms唤醒只优化同进程路径。该实现已在组合树用真实独立 routine worker 与另一 API 进程的默认500ms扫描验证：只有提交后的回复 signal 和 pending reminder 可见，投递为mock。通知自身21组HTTP/跨进程/真实PG停启恢复同样通过；不等于真实手机送达。
 
 ## 发布失败的恢复
 
@@ -16,8 +16,8 @@
 
 ## 临时候选验证
 
-29组隔离 PostgreSQL/真实 HTTP routine 测试覆盖原20组及9组融合场景：人工消息与人工AI稿发布回滚、自动回复回滚后重用同一模型结果、成功提交应答丢失、三次发布失败上限、失败后人工/AI相反胜出、暂停后租约终结、数据库不可用时原租约/真实TTL保留，以及员工消息列表/收件箱/已读可见性。模型全为受控 mock，禁止非回环网络。
+30组隔离 PostgreSQL/真实 HTTP routine 测试覆盖原20组及10组融合场景：人工消息与人工AI稿发布回滚、自动回复回滚后重用同一模型结果、成功提交应答丢失、三次发布失败上限、失败后人工/AI相反胜出、暂停后租约终结、数据库不可用时原租约/真实TTL保留，以及员工消息列表/收件箱/已读可见性。源消息、普通人工接管、人工AI稿批准及routine四种路径均在事务内真实写完signal后抛错，验证失败不新增/改写signal，成功重试提交对应message.id。模型全为受控 mock，禁止非回环网络。
 
-另通过30项scope/routine/chat单测、API/Admin/Staff构建、chat5组、inbox10组、原workflow23项浏览器检查。Admin与Staff实际React界面均验证AI回复正文和完整来源标记可见。最终通知源变更后须重新锁定整合提交、运行适用检查和独立复审。
+另通过30项scope/routine/chat单测、API/Admin/Staff构建、旧聊天67组、chat5组、通知HTTP14组与队列跨进程7组、原workflow23项浏览器检查。Admin与Staff实际React界面均验证AI回复正文和完整来源标记可见。最终通知源变更后须重新锁定整合提交、运行适用检查和独立复审。
 
 原 PR268 单次真实 MiniMax 验收独立存档：源提交观察到回复提交观察7331ms，transport区间6806ms（含Docker/stdio及已部署kind=draft包装）。只有一个真实样本，不计算P50/P95或承诺1–2秒；24个mock样本的423/475ms经验P50/P95不能代替真实模型性能。没有额外真实调用。

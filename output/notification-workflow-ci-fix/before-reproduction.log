@@ -1,0 +1,12 @@
+locator.selectOption: Timeout 10000ms exceeded.
+Call log:
+[2m  - waiting for getByTestId('workflow-settings').getByRole('combobox')[22m
+
+    at /Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/team-workflow-browser-check.cjs:74:124
+    at async pass (/Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/team-workflow-browser-check.cjs:60:29)
+    at async /Users/liangning/Documents/Codex/2026-10-20/task/notification-awareness/tests/stoploss/team-workflow-browser-check.cjs:73:2 {
+  log: [
+    "  - waiting for getByTestId('workflow-settings').getByRole('combobox')"
+  ],
+  name: 'TimeoutError'
+}

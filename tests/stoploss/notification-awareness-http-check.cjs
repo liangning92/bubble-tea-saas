@@ -16,9 +16,10 @@ const {teamCommunication,readTeam,writeTeam}=require(build+'/services/TeamCommun
 const {readWork,writeWork,listWork}=require(build+'/services/EmployeeWorkspaceStore');
 const {notificationInbox}=require(build+'/services/NotificationInboxService');
 const {collectApprovalNotices,approvalNoticeRelevant}=require(build+'/services/NotificationApprovalService');
-const {deliver}=require(build+'/services/EmployeeReminderService');
+const reminderDelivery=require(build+'/services/EmployeeReminderService');
+const {deliver,notificationDeliveryWake}=reminderDelivery;
 const {defaultRolesV2}=require(build+'/services/StaffPermissionV2Core');
-const clone=value=>JSON.parse(JSON.stringify(value)),results=[];let serial=0,server,base,tenant;
+const clone=value=>JSON.parse(JSON.stringify(value)),results=[];let serial=0,server,base,tenant,fastWakeObservation;
 async function test(name,fn){await fn();results.push(name);console.log('PASS',name)}
 async function request(actor,method,target,body,options={}){
  const jwt=require(root+'/server/node_modules/jsonwebtoken');
@@ -128,6 +129,57 @@ async function main(){
   const action=await db.staffActionApproval.create({data:{storeId:f.storeId,applicantId:id,action:'orders.discount',targetId:'synthetic-basket',requestId:randomUUID(),fingerprint:'synthetic',payload:'{}',status:'rejected',expiresAt:new Date(Date.now()+3600000)}});
   const ownerResult=has((await inbox(actor)).items,'staffActionApproval',action.id,'approval_result');assert(ownerResult);await acknowledge(actor,ownerResult.id);assert.equal(has((await inbox(actor)).items,'staffActionApproval',action.id).read,true);assert(!has((await inbox(f.other)).items,'staffActionApproval',action.id));
  });
+ await test('read committed after delivery lease suppresses transport and cannot be restored to unread',async()=>{
+  const f=await fixture();await writeWork(f.storeId,'approval.notice.baseline',{at:'2000-01-01T00:00:00.000Z'},db);
+  const leave=await pendingLeave(f);await db.leave.update({where:{id:leave.id},data:{status:'approved'}});await collectApprovalNotices(db,f.storeId);
+  const sub=await subscription(f),notice=(await reminders(f)).find(r=>r.objectId===leave.id);assert(notice);
+  const key='delivery.'+notice.id+'.'+sub;let entered,release,paused=false;
+  const claimed=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve);
+  const delayed=new Proxy(db,{get(target,name){if(name==='$transaction')return async(...args)=>{
+    const value=await target.$transaction(...args),lease=await readWork(f.storeId,key,db);
+    if(!paused&&lease?.leaseUntil){paused=true;entered();await gate}return value;
+   };const value=target[name];return typeof value==='function'?value.bind(target):value}});
+  const mock=pushMock(),sending=deliver(f.storeId,delayed,mock);let timeout;
+  try{
+   await Promise.race([claimed,new Promise((_,reject)=>timeout=setTimeout(()=>reject(Error('LEASE_BARRIER_NOT_REACHED')),5000))]);
+   await acknowledge(f.employee,notice.id);assert.equal((await readWork(f.storeId,'reminder.'+f.employee.staffId+'.'+notice.id,db)).read,true);
+  }finally{clearTimeout(timeout);release()}
+  await sending;assert.equal(mock.sent.length,0);
+  const saved=await readWork(f.storeId,'reminder.'+f.employee.staffId+'.'+notice.id,db);
+  assert.equal(saved.read,true);assert.equal(saved.status,'in_app');assert.equal((await readWork(f.storeId,key,db)).status,'skipped_read');
+  assert.equal((await db.leave.findUnique({where:{id:leave.id}})).status,'approved');assert.equal((await inbox(f.employee)).items.find(r=>r.id===notice.id).read,true);
+ });
+ await test('read committed during an already-started mocked transport survives final delivery status merge',async()=>{
+  const f=await fixture();await writeWork(f.storeId,'approval.notice.baseline',{at:'2000-01-01T00:00:00.000Z'},db);
+  const leave=await pendingLeave(f);await db.leave.update({where:{id:leave.id},data:{status:'approved'}});await collectApprovalNotices(db,f.storeId);
+  const sub=await subscription(f),notice=(await reminders(f)).find(r=>r.objectId===leave.id);assert(notice);let calls=0;
+  const mock={sendNotification:async()=>{calls++;await acknowledge(f.employee,notice.id);return{statusCode:201}}};
+  await deliver(f.storeId,db,mock);assert.equal(calls,1,'An already-started transport cannot be recalled');
+  const saved=await readWork(f.storeId,'reminder.'+f.employee.staffId+'.'+notice.id,db);
+  assert.equal(saved.read,true);assert.equal(saved.status,'in_app');assert.equal((await readWork(f.storeId,'delivery.'+notice.id+'.'+sub,db)).status,'sent');
+  await deliver(f.storeId,db,mock);assert.equal(calls,1);assert.equal((await db.leave.findUnique({where:{id:leave.id}})).status,'approved');
+ });
+ await test('logout or session revocation committed after the lease prevents transport without marking the notice read',async()=>{
+  for(const mode of ['logout','stale-session']){
+   const f=await fixture();await writeWork(f.storeId,'approval.notice.baseline',{at:'2000-01-01T00:00:00.000Z'},db);
+   const leave=await pendingLeave(f);await db.leave.update({where:{id:leave.id},data:{status:'approved'}});await collectApprovalNotices(db,f.storeId);
+   const sub=await subscription(f),notice=(await reminders(f)).find(r=>r.objectId===leave.id),key='delivery.'+notice.id+'.'+sub;let entered,release,paused=false;
+   const claimed=new Promise(resolve=>entered=resolve),gate=new Promise(resolve=>release=resolve);
+   const delayed=new Proxy(db,{get(target,name){if(name==='$transaction')return async(...args)=>{
+    const value=await target.$transaction(...args);if(!paused&&(await readWork(f.storeId,key,db))?.leaseUntil){paused=true;entered();await gate}return value;
+   };const value=target[name];return typeof value==='function'?value.bind(target):value}});
+   const mock=pushMock(),sending=deliver(f.storeId,delayed,mock);let timeout;
+   try{
+    await Promise.race([claimed,new Promise((_,reject)=>timeout=setTimeout(()=>reject(Error('LEASE_BARRIER_NOT_REACHED')),5000))]);
+    if(mode==='logout')await good(f.employee,'DELETE','/staff-work/my/subscription',{id:sub});
+    else{const row=await readWork(f.storeId,'subscription.'+sub,db);await db.user.update({where:{id:f.employee.id},data:{updatedAt:new Date(row.issuedAtMs+1000)}})}
+   }finally{clearTimeout(timeout);release()}
+   await sending;assert.equal(mock.sent.length,0);assert.equal((await readWork(f.storeId,'subscription.'+sub,db)).active,false);
+   await deliver(f.storeId,db,mock);const saved=await readWork(f.storeId,'reminder.'+f.employee.staffId+'.'+notice.id,db);
+   assert.equal(saved.read,false);assert.equal(saved.status,'in_app');assert.equal(mock.sent.length,0);
+   assert.equal(await readWork(f.storeId,'inbox.read.'+f.employee.id+'.'+notice.id,db),null);assert.equal((await db.leave.findUnique({where:{id:leave.id}})).status,'approved');
+  }
+ });
  await test('chat outbox persistence failure atomically rolls back message, reminder and workflow event',async()=>{
   const f=await fixture();const failing={...db,$transaction:fn=>db.$transaction(tx=>fn({...tx,config:new Proxy(tx.config,{get(target,key){if(key==='upsert')return args=>{if(args.create?.key.startsWith('employee.workspace.reminder.'))throw Error('SYNTHETIC_NOTIFICATION_OUTBOX_FAIL');return target.upsert(args)};const value=target[key];return typeof value==='function'?value.bind(target):value}})}))};
   await assert.rejects(()=>teamCommunication(failing).send(f.owner,f.channel.id,{requestId:randomUUID(),text:'Rollback only',files:[]}),/SYNTHETIC_NOTIFICATION_OUTBOX_FAIL/);
@@ -136,6 +188,35 @@ async function main(){
  await test('no subscription preserves in-app item; mocked push uses generic existing-key deep link and deterministic concurrent dedup',async()=>{
   const f=await fixture();await message(f.owner,f.channel,'BODY MUST NOT REACH PUSH');let mock=pushMock();await deliver(f.storeId,db,mock);assert.equal(mock.sent.length,0);assert.equal((await reminders(f))[0].status,'in_app');assert.equal((await inbox(f.employee)).counts.chatUnread,1);assert.equal(await readWork(f.storeId,'push-keys',db),null);
   const g=await fixture();await subscription(g);await message(g.owner,g.channel,'BODY MUST NOT REACH PUSH');mock=pushMock();await Promise.all([deliver(g.storeId,db,mock),deliver(g.storeId,db,mock)]);await deliver(g.storeId,db,mock);assert.equal(mock.sent.length,1);assert.equal(mock.sent[0].url,'/team?channel='+encodeURIComponent(g.channel.id));assert(!JSON.stringify(mock.sent).includes('BODY MUST NOT REACH PUSH'));assert.equal((await reminders(g))[0].status,'sent');
+ });
+ await test('successful HTTP commit wakes only notification delivery; in-flight messages coalesce without loss and failed sends never wake',async()=>{
+  const f=await fixture();await subscription(f);const firstBody={requestId:randomUUID(),text:'Wake after commit',files:[]};
+  const secondBody={requestId:randomUUID(),text:'Arrives during transport',files:[]};let started,release;
+  const transportStarted=new Promise(resolve=>started=resolve),gate=new Promise(resolve=>release=resolve);
+  let calls=0,wakes=0,active=0,maxActive=0;const sent=[];const begin=Date.now();
+  const mock={sendNotification:async(_sub,payload)=>{
+    const notice=JSON.parse(payload),r=await readWork(f.storeId,'reminder.'+f.employee.staffId+'.'+notice.id,db);
+    assert(r?.chat,'Only a committed outbox item can reach transport');
+    assert.equal((await readTeam(db,f.storeId,'message.'+r.chat.channelId+'.'+String(r.chat.seq).padStart(12,'0'))).id,r.chat.messageId);
+    sent.push(r.chat.messageId);if(++calls===1){fastWakeObservation={httpToMockTransportMs:Date.now()-begin,coalescingDelayMs:25,realPush:false,deviceArrivalMeasured:false};started();await gate}
+    return{statusCode:201};
+  }};
+  const dispatcher=notificationDeliveryWake(async storeId=>{assert.equal(storeId,f.storeId);active++;maxActive=Math.max(maxActive,active);try{await deliver(storeId,db,mock)}finally{active--}},25);
+  const originalWake=reminderDelivery.wakeEmployeeDelivery;reminderDelivery.wakeEmployeeDelivery=storeId=>{wakes++;dispatcher.wake(storeId)};
+  const wait=async predicate=>{const until=Date.now()+5000;while(!await predicate()){if(Date.now()>until)throw Error('POST_COMMIT_WAKE_TIMEOUT');await new Promise(resolve=>setTimeout(resolve,15))}};
+  try{
+    const first=await good(f.owner,'POST',`/team/channels/${f.channel.id}/messages`,firstBody);
+    await Promise.race([transportStarted,new Promise((_,reject)=>{const t=setTimeout(()=>reject(Error('TRANSPORT_NOT_STARTED')),5000);t.unref()})]);
+    const second=await good(f.owner,'POST',`/team/channels/${f.channel.id}/messages`,secondBody);
+    await good(f.owner,'POST',`/team/channels/${f.channel.id}/messages`,secondBody);release();await wait(()=>calls===2&&active===0);
+    assert.deepEqual(new Set(sent),new Set([first.id,second.id]));assert.equal(calls,2);assert.equal(maxActive,1);
+    const before=wakes;assert.equal((await request(f.owner,'POST',`/team/channels/${f.channel.id}/messages`,{requestId:randomUUID(),text:'',files:[]})).status,400);assert.equal(wakes,before);
+    await db.$executeRawUnsafe(`ALTER TABLE "Config" ADD CONSTRAINT notification_message_failure CHECK ("key" NOT LIKE 'employee.workspace.reminder.%') NOT VALID`);
+    try{assert.equal((await request(f.owner,'POST',`/team/channels/${f.channel.id}/messages`,{requestId:randomUUID(),text:'Must roll back before wake',files:[]})).status,500)}finally{await db.$executeRawUnsafe('ALTER TABLE "Config" DROP CONSTRAINT notification_message_failure')}
+    assert.equal(wakes,before);assert.equal((await good(f.employee,'GET',`/team/channels/${f.channel.id}/messages?after=0`)).messages.length,2);
+  }finally{release();reminderDelivery.wakeEmployeeDelivery=originalWake;await dispatcher.close()}
+  // No existing employee worker was started by this fixture or route import.
+  originalWake(f.storeId);assert.equal(realPushCalls,0);
  });
  await test('queued chat rechecks member/floor/archive/active identity; disabled/stale/404/410 subscriptions never repeat transport',async()=>{
   for(const mode of ['removed','floor','archived','inactive','read','disabled','stale',404,410]){
@@ -150,6 +231,6 @@ async function main(){
   }
  });
  assert.equal(generatedKeys,0);assert.equal(realPushCalls,0);
- const out=root+'/output/notification-awareness';fs.mkdirSync(out,{recursive:true});fs.writeFileSync(out+'/http-results.json',JSON.stringify({passed:results.length,tests:results,productionAccess:false,externalNetwork:false,realModelCalls:0,realPushCalls,credentialsCreated:false,mockedWebPush:true,deviceDeliveryTested:false,businessTransitions:'synthetic lifecycle fixtures; no approval/refund execution',frontendClickOrderingTested:false},null,2));
+ const out=root+'/output/notification-awareness';fs.mkdirSync(out,{recursive:true});fs.writeFileSync(out+'/http-results.json',JSON.stringify({passed:results.length,tests:results,fastWakeObservation,productionAccess:false,externalNetwork:false,realModelCalls:0,realPushCalls,credentialsCreated:false,mockedWebPush:true,deviceDeliveryTested:false,businessTransitions:'synthetic lifecycle fixtures; no approval/refund execution',frontendClickOrderingTested:false},null,2));
 }
 main().catch(error=>{console.error(error);process.exitCode=1}).finally(async()=>{webpush.generateVAPIDKeys=originalGenerate;webpush.sendNotification=originalSend;global.fetch=localFetch;if(server)await new Promise(resolve=>server.close(resolve));await db.$disconnect()});

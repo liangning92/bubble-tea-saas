@@ -105,6 +105,29 @@ export function TrainingListPage() {
   const [categoryForm, setCategoryForm] = useState<TrainingCategory[]>([])
   const [selectedCourse, setSelectedCourse] = useState<TrainingModule | null>(null)
 
+  const displayRef = useRef<any>(null)
+  displayRef.current = {scope:noticeScope,selectedCourse,catalogue,activeTab,editingLibrary,location:params.toString()}
+  const readModuleNotice = () => {
+    const displayed=displayRef.current,source=displayed.selectedCourse
+    if(!source)return
+    return notices.markRead('module',source.key,source,()=>{
+      const now=displayRef.current
+      return now.scope===displayed.scope&&now.selectedCourse===source&&now.editingLibrary===null
+        &&now.location===displayed.location&&!now.catalogue.loading&&!now.catalogue.error
+        &&!!document.querySelector('[data-training-open-module="'+source.key+'"]')
+    })
+  }
+  const readChecklistNotice = (key:string) => {
+    const displayed=displayRef.current,source=displayed.catalogue.checklists.find((item:any)=>item.key===key)
+    if(!source)return
+    return notices.markRead('checklist',key,source,()=>{
+      const now=displayRef.current
+      return now.scope===displayed.scope&&now.activeTab==='checklists'&&now.editingLibrary===null
+        &&now.location===displayed.location&&!now.catalogue.loading&&!now.catalogue.error
+        &&now.catalogue.checklists.find((item:any)=>item.key===key)===source&&!!document.getElementById('admin-training-checklist-'+key)
+    })
+  }
+
   useEffect(() => {
     // A global inbox can navigate to another item without remounting this page.
     // Keep an open editor intact; consume the latest location after it closes.
@@ -127,11 +150,11 @@ export function TrainingListPage() {
     const itemKey = params.get('item')
     if (activeTab !== 'checklists' || !itemKey || document.visibilityState !== 'visible') return
     const element = document.getElementById('admin-training-checklist-' + itemKey)
-    if (element) {element.scrollIntoView({block:'center'});void notices.markRead('checklist',itemKey)}
+    if (element) {element.scrollIntoView({block:'center'});void readChecklistNotice(itemKey)}
   }, [activeTab, catalogue.revision, catalogue.loading, catalogue.error, editingLibrary, params, notices.items])
   useEffect(() => {
-    if (selectedCourse && editingLibrary === null && !catalogue.loading && !catalogue.error && document.visibilityState === 'visible') void notices.markRead('module', selectedCourse.key)
-  }, [selectedCourse?.key, editingLibrary, catalogue.loading, catalogue.error, notices.items])
+    if (selectedCourse && editingLibrary === null && !catalogue.loading && !catalogue.error && document.visibilityState === 'visible') void readModuleNotice()
+  }, [selectedCourse, editingLibrary, catalogue.loading, catalogue.error, notices.items])
   useEffect(() => {
     // Hide any previously opened content immediately after account/store changes or a failed catalogue read.
     if (catalogue.loading || catalogue.error) setSelectedCourse(null)
@@ -355,7 +378,7 @@ export function TrainingListPage() {
 
       {(notices.failed || notices.readFailed || missingUpdate) && <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
         {missingUpdate ? updateWords.missing : notices.readFailed ? updateWords.readFailed : updateWords.failed}{' '}
-        {!missingUpdate && <button className="underline" onClick={() => {notices.refresh();if(selectedCourse)void notices.markRead('module', selectedCourse.key)}}>{updateWords.retry}</button>}
+        {!missingUpdate && <button className="underline" onClick={() => {notices.refresh();if(selectedCourse)void readModuleNotice()}}>{updateWords.retry}</button>}
       </div>}
       {/* Tabs */}
       <div className="border-b border-gray-200">
@@ -660,7 +683,7 @@ export function TrainingListPage() {
                 </h3>
                 {notices.unread('checklist',list.key).length > 0 && <button className="rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700" onClick={() => {
                   document.getElementById('admin-training-checklist-'+list.key)?.focus({preventScroll:true})
-                  void notices.markRead('checklist',list.key)
+                  void readChecklistNotice(list.key)
                 }}>{updateWords.open}</button>}
                 {user?.role === 'admin' && <button className="text-sm text-primary" aria-label={`${w.edit} ${tr(list.title,i18n.language)}`} onClick={() => setEditingLibrary('checklist:'+list.key)}>{w.edit}</button>}
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
@@ -691,7 +714,7 @@ export function TrainingListPage() {
       {/* Course Detail Modal for Admin */}
       {selectedCourse && (
         <AdminDialog title={tr(selectedCourse.title, i18n.language)} onClose={() => setSelectedCourse(null)} className="max-w-2xl" busy={false} trackChanges chrome>
-            <div className={`p-5 text-white bg-gradient-to-r ${selectedCourse.color} flex items-center justify-between shrink-0`}>
+            <div data-training-open-module={selectedCourse.key} className={`p-5 text-white bg-gradient-to-r ${selectedCourse.color} flex items-center justify-between shrink-0`}>
               <div className="flex items-center gap-3">
                 <span className="text-3xl">{selectedCourse.icon}</span>
                 <div>
@@ -709,7 +732,7 @@ export function TrainingListPage() {
               </button>
             </div>
 
-            {notices.readFailed && <p role="status" className="bg-amber-50 p-3 text-sm text-amber-900">{updateWords.readFailed}{' '}<button className="underline" onClick={()=>void notices.markRead('module',selectedCourse.key)}>{updateWords.retry}</button></p>}
+            {notices.readFailed && <p role="status" className="bg-amber-50 p-3 text-sm text-amber-900">{updateWords.readFailed}{' '}<button className="underline" onClick={()=>void readModuleNotice()}>{updateWords.retry}</button></p>}
             <div className="p-6 overflow-y-auto space-y-6">
               {/* Sections */}
               <div>

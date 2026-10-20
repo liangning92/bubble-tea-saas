@@ -1,8 +1,8 @@
 {
-  "status": "provisional_notify_acaf_has_known_review_fixes_pending",
+  "status": "integrated_82fc_source_exact_integration_review_ci_pending",
   "aiSha": "fd0e8de8f8b7603d73beea564f14c0fee3864b5f",
-  "notificationCandidateSha": "acaf93275b3272c93711f6b2fd0ee80362fea39e",
-  "integrationRoutineGroups": 29,
+  "notificationCandidateSha": "82fc2f67939f63c5a3c9a259925309a4c1784d95",
+  "integrationRoutineGroups": 30,
   "scopeUnits": 30,
   "clientBuilds": [
     "admin",
@@ -13,5 +13,15 @@
     "staff"
   ],
   "newRealModelCalls": 0,
-  "checks": "three rollback paths, confirmed-uncommitted ready reuse, commit acknowledgement receipt reconciliation, retry cap, human/AI opposite winners, paused expired state closure, preserved original lease/TTL expiry -> human, messages/inbox/read visibility, both React AI body+identity"
+  "checks": "three rollback paths, confirmed-uncommitted ready reuse, commit acknowledgement receipt reconciliation, retry cap, human/AI opposite winners, paused expired state closure, preserved original lease/TTL expiry -> human, messages/inbox/read visibility, both React AI body+identity",
+  "notificationCi": "39389217963",
+  "notificationHttpGroups": 14,
+  "queueCrossProcessPgGroups": 7,
+  "signalRollbackPaths": [
+    "source",
+    "human takeover",
+    "approved AI draft",
+    "routine"
+  ],
+  "actualIndependentRoutineWorkerAndApi500msScanner": true
 }

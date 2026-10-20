@@ -1,0 +1,4 @@
+OWNED_EMPLOYEE_TEST_DIRECTORY=/tmp/employee-workspace-test-zB871K
+[env] CORS_ORIGIN not set, using localhost fallback (safe for local desktop app)
+PASS employee workspace: real HTTP/auth/SQLite, minute and midnight snapshots, duplicate clock-in, tiers, idempotent deductions, private evidence isolation, appeal rollback and paid refund, profile review, cross-device progress and reminder deduplication
+Provider: postgresql; evidence directory: /tmp/employee-workspace-test-zB871K

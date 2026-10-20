@@ -1,0 +1,47 @@
+{
+  "head": "6e802c1c9538fae1a5f20199692344e7e262cd38",
+  "observations": [
+    {
+      "case": "employee_awareness_without_management",
+      "pendingVisible": true,
+      "executeHttp": 403,
+      "sourceStatus": "pending"
+    },
+    {
+      "case": "integrated_107_pending",
+      "pending": 107,
+      "readRetainsPending": true,
+      "spoofBodyHttp": 403,
+      "privateFieldsExcluded": true
+    },
+    {
+      "case": "baseline_and_personal_result",
+      "oldRead": true,
+      "oldQueued": false,
+      "freshUnread": true,
+      "otherCannotSee": true
+    },
+    {
+      "case": "staff_transfer",
+      "oldGetHttp": 401,
+      "oldReadHttp": 401,
+      "noReceiptWritten": true
+    },
+    {
+      "case": "read_during_delivery_claim",
+      "readCommittedBeforeTransport": true,
+      "mockSendsAfterRead": 1,
+      "finalRead": false,
+      "finalStatus": "sent",
+      "sourceStatus": "approved"
+    },
+    {
+      "case": "terminal_delivery_failure",
+      "reminderStatus": "delivery_failed",
+      "mockAttempts": 1
+    }
+  ],
+  "productionAccess": false,
+  "realPushCalls": 0,
+  "realModelCalls": 0
+}

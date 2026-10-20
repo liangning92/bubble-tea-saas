@@ -103,7 +103,9 @@ export function notificationInbox(db: any = prisma, sources?: InboxSources) {
         await writeWork(a.storeId, readKey(a.id, id), { userId: a.id, event: item.event, readAt: new Date().toISOString() }, tx)
         // Delivery read state is independent of business pending/approval status.
         if (a.staffId) {
-          const key = `reminder.${a.staffId}.${id}`, r = await readWork(a.storeId, key, tx)
+          const key = `reminder.${a.staffId}.${id}`
+          await workLock(a.storeId, key, tx)
+          const r = await readWork(a.storeId, key, tx)
           if (r && (!r.userId || r.userId === a.id)) await writeWork(a.storeId, key, { ...r, read: true }, tx)
         }
         return { read: true, pending: item.pending }

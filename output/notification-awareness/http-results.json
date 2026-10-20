@@ -1,5 +1,5 @@
 {
-  "passed": 10,
+  "passed": 14,
   "tests": [
     "inbox opening preserves both conversation cursors; successful selected fetch plus ack clears only that conversation across sessions",
     "nonmembers and cross-store/forged identity cannot expose preview or use notification deep links/read IDs",
@@ -8,10 +8,20 @@
     "training newer published revision replaces old relevance; reminder failure rolls back actual HTTP publication/version",
     "current authorized handler pending survives read across devices; revocation removes inbox and queued-push relevance without altering source",
     "fixture node completion removes pending and queued push; only applicant gets result including no-staff administrator in-app",
+    "read committed after delivery lease suppresses transport and cannot be restored to unread",
+    "read committed during an already-started mocked transport survives final delivery status merge",
+    "logout or session revocation committed after the lease prevents transport without marking the notice read",
     "chat outbox persistence failure atomically rolls back message, reminder and workflow event",
     "no subscription preserves in-app item; mocked push uses generic existing-key deep link and deterministic concurrent dedup",
+    "successful HTTP commit wakes only notification delivery; in-flight messages coalesce without loss and failed sends never wake",
     "queued chat rechecks member/floor/archive/active identity; disabled/stale/404/410 subscriptions never repeat transport"
   ],
+  "fastWakeObservation": {
+    "httpToMockTransportMs": 53,
+    "coalescingDelayMs": 25,
+    "realPush": false,
+    "deviceArrivalMeasured": false
+  },
   "productionAccess": false,
   "externalNetwork": false,
   "realModelCalls": 0,

@@ -211,7 +211,7 @@ test('chat notification checks follow actual message, reminder delivery and inbo
 
 test('notification inbox, publish events and approval sources retain isolated contracts and actual admin/staff browser consumers',()=>{
  const f=fixture();try{
-  for(const file of ['server/src/services/NotificationInboxService.ts','server/src/services/NotificationApprovalService.ts','shared/NotificationAwareness.tsx','server/src/services/TrainingLibraryStore.ts','tests/stoploss/notification-awareness-http-check.cjs']){
+  for(const file of ['server/src/services/NotificationInboxService.ts','server/src/services/NotificationApprovalService.ts','server/src/services/EmployeeReminderService.ts','server/src/routes/teamCommunication.ts','shared/NotificationAwareness.tsx','server/src/services/TrainingLibraryStore.ts','tests/stoploss/notification-awareness-http-check.cjs','tests/stoploss/notification-queue-wake-check.cjs']){
    f.write(file);const p=selectScope([file],f);assert.equal(p.notificationAwareness,true,file);assert.equal(p.needsServer,true);assert(!p.electronTypes);
    assert.equal(p.browser.some(x=>x.domain==='notificationAwareness'),file.startsWith('shared/'),file);
   }

@@ -98,6 +98,30 @@ export function TrainingPage() {
   const [selectedModule, setSelectedModule] = useState<TrainingModule | null>(
     null,
   );
+  const [selectedSourceModule, setSelectedSourceModule] = useState<TrainingModule | null>(null);
+  const displayRef = useRef<any>(null);
+  displayRef.current = {scope:noticeScope,selectedModule,source:selectedSourceModule,catalogue,sourceCatalogue,activeTab,location:searchParams.toString()};
+  const readModuleNotice = () => {
+    const displayed=displayRef.current, source=displayed.source;
+    if(!displayed.selectedModule||!source)return;
+    return notices.markRead('module',source.key,source,()=>{
+      const now=displayRef.current;
+      return now.scope===displayed.scope&&now.selectedModule===displayed.selectedModule&&now.source===source
+        &&now.location===displayed.location&&!now.catalogue.loading&&!now.catalogue.error
+        &&!!document.querySelector('[data-training-open-module="'+source.key+'"]');
+    });
+  };
+  const readChecklistNotice = (key:string) => {
+    const displayed=displayRef.current,source=displayed.sourceCatalogue.checklists.find((item:any)=>item.key===key);
+    const presented=displayed.catalogue.checklists.find((item:any)=>item.key===key);
+    if(!source||!presented)return;
+    return notices.markRead('checklist',key,source,()=>{
+      const now=displayRef.current;
+      return now.scope===displayed.scope&&now.activeTab==='checklists'&&!now.catalogue.loading&&!now.catalogue.error
+        &&now.location===displayed.location&&now.catalogue.checklists.find((item:any)=>item.key===key)===presented
+        &&!!document.getElementById('training-checklist-'+key);
+    });
+  };
   const [completedModules, setCompletedModules] = useState<
     Record<string, boolean>
   >({});
@@ -248,6 +272,7 @@ export function TrainingPage() {
   // Open course detail modal
   const handleOpenModule = (mod: TrainingModule) => {
     setSelectedModule(mod);
+    setSelectedSourceModule(sourceCatalogue.modules.find(item=>item.key===mod.key)||null);
     setShowQuiz(false);
     setSelectedAnswers({});
     setQuizSubmitted(false);
@@ -275,13 +300,13 @@ export function TrainingPage() {
     const element = document.getElementById('training-checklist-' + itemKey);
     if (element && document.visibilityState === 'visible') {
       element.scrollIntoView({block:'center'});
-      void notices.markRead('checklist', itemKey);
+      void readChecklistNotice(itemKey);
     }
   }, [activeTab, catalogue.revision, catalogue.loading, searchParams, notices.items]);
 
   useEffect(() => {
-    if (selectedModule && document.visibilityState === 'visible') void notices.markRead('module', selectedModule.key);
-  }, [selectedModule?.key, notices.items]);
+    if (selectedModule && document.visibilityState === 'visible') void readModuleNotice();
+  }, [selectedModule, selectedSourceModule, catalogue.loading, catalogue.error, notices.items]);
 
   // Submit Quiz
   const handleSubmitQuiz = async () => {
@@ -405,7 +430,7 @@ export function TrainingPage() {
 
       {(notices.failed || notices.readFailed || missingUpdate) && <div role="status" className="mx-4 my-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
         {missingUpdate ? updateWords.missing : notices.readFailed ? updateWords.readFailed : updateWords.failed}{' '}
-        {!missingUpdate && <button className="underline" onClick={() => {notices.refresh();if(selectedModule)void notices.markRead('module', selectedModule.key)}}>{updateWords.retry}</button>}
+        {!missingUpdate && <button className="underline" onClick={() => {notices.refresh();if(selectedModule)void readModuleNotice()}}>{updateWords.retry}</button>}
       </div>}
       {/* Tabs Bar - Consistent with LeavePage / ProfilePage */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-10 shadow-xs">
@@ -595,7 +620,7 @@ export function TrainingPage() {
                     </h3>
                     {notices.unread('checklist',list.key).length > 0 && <button className="shrink-0 rounded-full bg-red-50 px-2 py-1 text-xs font-medium text-red-700" onClick={() => {
                       document.getElementById('training-checklist-'+list.key)?.focus({preventScroll:true});
-                      void notices.markRead('checklist',list.key);
+                      void readChecklistNotice(list.key);
                     }}>{updateWords.open}</button>}
                   </div>
                   <span
@@ -840,7 +865,7 @@ export function TrainingPage() {
       {/* Course Detail Modal */}
       {selectedModule && (
         <Modal className="fixed inset-0 bg-black/60 z-50 flex flex-col justify-end sm:justify-center sm:items-center sm:p-4 animate-fade-in" label={tr(selectedModule.title, i18n.language)} onClose={() => setSelectedModule(null)}>
-          <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up">
+          <div data-training-open-module={selectedModule.key} className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up">
             {/* Modal Header */}
             <div
               className="p-5 text-white bg-primary relative shrink-0"
@@ -879,7 +904,7 @@ export function TrainingPage() {
               </div>
             </div>
 
-            {notices.readFailed && <p role="status" className="bg-amber-50 p-3 text-sm text-amber-900">{updateWords.readFailed}{' '}<button className="underline" onClick={()=>void notices.markRead('module',selectedModule.key)}>{updateWords.retry}</button></p>}
+            {notices.readFailed && <p role="status" className="bg-amber-50 p-3 text-sm text-amber-900">{updateWords.readFailed}{' '}<button className="underline" onClick={()=>void readModuleNotice()}>{updateWords.retry}</button></p>}
             {/* Modal Content - Scrollable */}
             <div className="p-5 overflow-y-auto flex-1 space-y-5">
               {!showQuiz ? (

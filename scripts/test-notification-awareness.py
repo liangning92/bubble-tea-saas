@@ -48,9 +48,12 @@ try:
     started = True
     command([tool('createdb'), '-h', '127.0.0.1', '-p', str(port), '-U', 'notification_test', 'notification_awareness_test'])
     env = dict(os.environ, NODE_ENV='production', DATABASE_URL='postgresql://notification_test@127.0.0.1:' + str(port) + '/notification_awareness_test',
-               JWT_SECRET='synthetic-notification-test-only-32-bytes', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'))
+               JWT_SECRET='synthetic-notification-test-only-32-bytes', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'),
+               BT_NOTIFICATION_PG_DIR=str(base / 'pg'), BT_NOTIFICATION_PG_LOG=str(base / 'pg.log'),
+               BT_NOTIFICATION_PG_OPTIONS='-h 127.0.0.1 -p ' + str(port) + ' -k ' + str(base))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
     command(['node', 'tests/stoploss/notification-awareness-http-check.cjs'], env=env)
+    command(['node', 'tests/stoploss/notification-queue-wake-check.cjs'], env=env)
 finally:
     try:
         if started:

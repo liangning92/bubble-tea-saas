@@ -2,10 +2,12 @@
 const {chromium,expect}=require('@playwright/test'),fs=require('node:fs'),path=require('node:path'),net=require('node:net'),{pathToFileURL}=require('node:url');
 const root=path.resolve(__dirname,'../..'),entry=path.join(root,'client-staff/.training-notices-check.tsx');
 const output=path.join(root,'output/training-update-notices');fs.mkdirSync(output,{recursive:true});
+require(require.resolve('tsx/cjs',{paths:[path.join(root,'server')]}));
+const {trainingContentFingerprint}=require(path.join(root,'server/src/services/TrainingLibraryStore.ts'));
 const text=value=>({zh:value,id:value,en:value});
 const fixtureModule=(key,title)=>({key,reviewed:true,title:text(title),subtitle:text('Synthetic summary'),minutes:4,sections:[{title:text('Synthetic chapter'),points:[text('Synthetic instruction')]}],quiz:[],practical:[],sources:[]});
 let catalogue={version:1,revision:'synthetic-r1',modules:[fixtureModule('first','测试课程甲'),fixtureModule('second','测试课程乙')],checklists:[{key:'opening',title:text('测试开店标准'),items:[text('测试检查项')]}]};
-const notice=(id,kind,key)=>({id,event:'training-content:'+id,read:false,trainingUpdate:{kind,moduleKey:key,...(kind==='checklist'?{itemKey:key}:{}),fingerprint:id,revision:catalogue.revision,generation:catalogue.revision}});
+const notice=(id,kind,key)=>{const item=catalogue[kind==='module'?'modules':'checklists'].find(item=>item.key===key),fingerprint=trainingContentFingerprint(kind,item);return{id,event:'training-content:'+fingerprint,read:false,trainingUpdate:{kind,moduleKey:key,...(kind==='checklist'?{itemKey:key}:{}),fingerprint,revision:catalogue.revision,generation:catalogue.revision}}};
 let notices=[notice('first-event','module','first'),notice('second-event','module','second'),notice('check-event','checklist','opening')],failRead=false,failCatalogue=false,readRequests=[],progressWrites=[],catalogueReads=0;
 let server,browser;
 (async()=>{
