@@ -6,6 +6,9 @@ const id = (value: unknown): value is string => typeof value === 'string' && /^[
 const profileValid = (value: unknown): value is string => typeof value === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(value) && value !== 'default';
 const statuses = new Set<HermesRunStatus>(['queued', 'running', 'waiting_for_approval', 'completed', 'failed', 'cancelled', 'interrupted']);
 const referenceKeys = ['taskCode', 'taskId', 'backendRunId', 'eventId', 'executorId', 'round', 'taskVersion', 'leaseVersion'];
+class BindingMismatch extends Error {
+  constructor(readonly reason: 'auth_scope_changed' | 'binding_conflict') { super(reason); }
+}
 
 export function prepareDispatchEvent(profile: string, event: BackendTaskEvent, envelope: BackendDispatchEnvelope): PreparedDispatch {
   if (!event || !envelope || event.type !== 'task.dispatch_ready' || event.id !== envelope.eventId
@@ -57,6 +60,7 @@ export class HermesRunsClient {
       throw new Error('Hermes origin must be HTTPS or loopback HTTP, with no path or credentials');
     }
     if (!profileValid(options.profile)) throw new Error('A dedicated non-default Hermes profile is required');
+    if (!options.admissionBindings?.bindOnce || !options.admissionBindings?.load) throw new Error('Durable backend-run admission bindings are required');
     const timeout = options.timeoutMs ?? 10_000;
     if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 60_000) throw new Error('Invalid transport timeout');
     this.origin = url.origin;
@@ -72,7 +76,7 @@ export class HermesRunsClient {
       || dispatch.sessionId !== expected.sessionId) throw new Error('Dispatch does not match its immutable references/profile');
   }
 
-  private async request(method: 'GET' | 'POST', path: string, dispatch?: PreparedDispatch): Promise<{ status: number; data: any }> {
+  private async request(method: 'GET' | 'POST', path: string, dispatch: PreparedDispatch): Promise<{ status: number; data: any }> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     try {
@@ -81,10 +85,21 @@ export class HermesRunsClient {
           const token = await this.options.bearerToken();
           if (controller.signal.aborted) throw new Error('Transport timeout');
           if (!token || /[\s\r\n]/.test(token)) throw new Error('Invalid transport credential');
+          // Match Hermes _run_idempotency_scope: SHA256(profile + NUL + expected API key).
+          // Freeze the scope AND bytes on the existing backend run before network I/O.
+          const candidate = { dispatch, origin: this.origin, authScopeHash: sha(`${this.profile}\0${token}`) };
+          const binding = method === 'POST'
+            ? await this.options.admissionBindings.bindOnce(dispatch.references.backendRunId, candidate)
+            : await this.options.admissionBindings.load(dispatch.references.backendRunId);
+          if (!binding) throw new BindingMismatch('binding_conflict');
+          if (binding.origin !== candidate.origin || binding.authScopeHash !== candidate.authScopeHash) throw new BindingMismatch('auth_scope_changed');
+          try { this.assertDispatch(binding.dispatch); } catch { throw new BindingMismatch('binding_conflict'); }
+          if (binding.dispatch.body !== dispatch.body || binding.dispatch.idempotencyKey !== dispatch.idempotencyKey) throw new BindingMismatch('binding_conflict');
+          if (controller.signal.aborted) throw new Error('Transport timeout');
           const headers: Record<string, string> = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
-          if (dispatch) { headers['Content-Type'] = 'application/json'; headers['Idempotency-Key'] = dispatch.idempotencyKey; }
+          if (method === 'POST') { headers['Content-Type'] = 'application/json'; headers['Idempotency-Key'] = dispatch.idempotencyKey; }
           const init: HttpRequest = { method, headers, redirect: 'error', signal: controller.signal };
-          if (dispatch) init.body = dispatch.body;
+          if (method === 'POST') init.body = dispatch.body;
           const response: HttpResponse = await this.options.fetch(`${this.origin}/p/${this.profile}/v1/runs${path}`, init);
           // Error bodies may contain credentials/model output: never read, propagate or log them.
           if (response.status < 200 || response.status >= 300) return { status: response.status, data: null };
@@ -103,10 +118,10 @@ export class HermesRunsClient {
     this.assertDispatch(dispatch);
     let response: { status: number; data: any };
     try { response = await this.request('POST', '', dispatch); }
-    catch { return { kind: 'admission_unknown', reason: 'network_or_timeout', dispatch }; }
+    catch (error) { return { kind: 'admission_unknown', reason: error instanceof BindingMismatch ? error.reason : 'network_or_timeout', dispatch }; }
     const { status, data } = response;
     if (status === 202 && data && id(data.run_id) && data.run_id.startsWith('run_')
-      && statuses.has(data.status) && typeof data.replayed === 'boolean') {
+      && (data.status === 'started' || statuses.has(data.status)) && typeof data.replayed === 'boolean') {
       return { kind: 'accepted', mapping: Object.freeze({ dispatch, hermesRunId: data.run_id }), replayed: data.replayed };
     }
     if (status >= 400 && status < 500 && status !== 408) return { kind: 'rejected', httpStatus: status, dispatch,
@@ -118,8 +133,8 @@ export class HermesRunsClient {
     this.assertDispatch(mapping.dispatch);
     if (!id(mapping.hermesRunId) || !mapping.hermesRunId.startsWith('run_')) throw new Error('Invalid Hermes run mapping');
     let response: { status: number; data: any };
-    try { response = await this.request('GET', `/${encodeURIComponent(mapping.hermesRunId)}`); }
-    catch { return { kind: 'status_unknown', mapping, reason: 'network_or_timeout' }; }
+    try { response = await this.request('GET', `/${encodeURIComponent(mapping.hermesRunId)}`, mapping.dispatch); }
+    catch (error) { return { kind: 'status_unknown', mapping, reason: error instanceof BindingMismatch ? error.reason : 'network_or_timeout' }; }
     const { status, data } = response;
     if (status !== 200) return { kind: 'status_unknown', mapping,
       reason: status === 404 ? 'not_found' : status === 401 || status === 403 ? 'authentication' : 'upstream_error' };
