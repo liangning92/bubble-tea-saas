@@ -24,7 +24,7 @@ interface Channel {
   preview?: { text: string; authorName: string; createdAt: string } | null
   round: { id: string; title: string } | null
 }
-interface Message { channelId?: string; aiHandling?: import('./TeamChatMessages').TeamAiHandling; id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: import('./TeamChatMessages').TeamMessageAi }
+interface Message { agent?: import('./TeamChatMessages').TeamMessageAgent; channelId?: string; aiHandling?: import('./TeamChatMessages').TeamAiHandling; id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: import('./TeamChatMessages').TeamMessageAi }
 interface Minute {
   id: string; title: string; participants: string[]; fromSeq: number; toSeq: number; startedAt: string; endedAt: string
   version: number; status: 'draft' | 'confirmed'; decisions: string[]; pending: string[]; sourceSeq: number[]

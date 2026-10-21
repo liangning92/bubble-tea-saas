@@ -4,8 +4,9 @@ import { teamWorkCopy } from './teamWorkCopy'
 import { teamChatCopy } from './teamChatCopy'
 import type { TeamClient } from './TeamCommunication'
 export interface TeamMessageAi { provider?: string; model: string; approvedBy?: string; authorizedBy?: string; managementAuthorization?: { jobId: string; sourceSeq: number }; routineAuthorization?: { jobId: string; sourceSeq: number; policyHash: string; policyVersion: number; epoch: number; replyCode: string } }
+export interface TeamMessageAgent { agentId: string; grantVersion: number; clientRevision: number; task?: { taskId: string; version: number }; replyToSeq?: number }
 export interface TeamAiHandling { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused'; updatedAt: string }
-interface ChatMessage { id: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: TeamMessageAi; aiHandling?: TeamAiHandling }
+interface ChatMessage { id: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: TeamMessageAi; agent?: TeamMessageAgent; aiHandling?: TeamAiHandling }
 export type TeamScrollPositions = Map<string, { top: number; bottom: boolean }>
 export function TeamChatMessages({ messages, client, staffId, channelId, query, language, children, scrollPositions, historyReady = true, historyFailed = false }: {
  messages: ChatMessage[]; client: TeamClient; staffId: string; channelId: string; query: string; language: string; children: ReactNode; scrollPositions?: TeamScrollPositions; historyReady?: boolean; historyFailed?: boolean
@@ -67,6 +68,7 @@ export function TeamChatMessages({ messages, client, staffId, channelId, query, 
     <article id={`team-message-${message.seq}`} className={`team-bubble ${message.authorId === staffId ? 'team-bubble-own' : 'team-bubble-other'}`}>
      <p className="team-message-author">{message.authorName}</p>
      {message.text && <p className="team-message-text">{message.text}</p>}
+     {message.agent && <p className="team-ai-label" data-testid="team-agent-source">{language.startsWith('zh') ? '运营智能体' : language.startsWith('en') ? 'Operations agent' : 'Agen operasional'}</p>}
      {message.ai && <p className="team-ai-label">{(message.ai.routineAuthorization || message.ai.managementAuthorization) ? work.aiRoutine : work.aiApproved} · {message.ai.model}</p>}
      {message.authorId === staffId && !message.ai && message.aiHandling && handlingLabels[message.aiHandling.state] && <p className="team-ai-label" data-testid="team-ai-handling" data-state={message.aiHandling.state}>{handlingLabels[message.aiHandling.state]}</p>}
      {message.files.map(id => <TeamAttachment key={id} client={client} language={language} url={`/team/channels/${channelId}/files/${id}${query}`} />)}

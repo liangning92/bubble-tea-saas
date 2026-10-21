@@ -265,3 +265,11 @@ test('agent task and Hermes changes select isolated task checks without unrelate
   const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');assert.match(runner,/if\(plan\.agentTasks\).*test-agent-tasks\.py/);assert.match(runner,/--import.*hermesTransport\.test\.ts/);
  }finally{f.close()}
 });
+
+test('team agent bridge selects the synthetic MCP and PostgreSQL checks without unrelated POS',()=>{
+ const f=fixture();try{
+  for(const file of ['server/src/services/teamAgentBridge/service.ts','server/src/services/teamAgentBridge/events.ts','server/src/services/externalMcp/teamCommunicationTools.ts','tests/stoploss/team-agent-bridge-check.cjs']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.teamAgentBridge,true,file);assert.equal(p.electronTypes,false);assert.equal(p.browser.length,0);assert(!p.components.includes('pos'));assert.deepEqual(p.unmappedCode,[]);
+  }
+ }finally{f.close()}
+});

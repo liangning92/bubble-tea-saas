@@ -6,6 +6,8 @@ import { assertManagementSend, ManagementAuthorization } from './TeamManagementP
 import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
+import { recordTeamAgentReply } from './teamAgentBridge/events'
+import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated } from './teamAgentBridge/identity'
 
 export const TEAM_PREFIX = 'team.communication.'
 export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
@@ -81,6 +83,8 @@ async function list(db: DB, storeId: string, prefix: string, take = 500) {
   return rows.map((r: any) => JSON.parse(r.value))
 }
 async function identity(db: DB, actor: TeamActor) {
+  const agent = await teamAgentIdentity(db, actor)
+  if (agent) return agent
   if (!actor.id || !actor.storeId || !actor.staffId) fail(403, 'TEAM_IDENTITY_REQUIRED')
   const employee = await db.staff.findFirst({ where: { id: actor.staffId, userId: actor.id, storeId: actor.storeId, status: 'active' },
     select: { id: true, name: true } })
@@ -94,7 +98,7 @@ async function activeMembers(db: DB, storeId: string, ids: string[]) {
 }
 async function audit(db: DB, a: TeamActor, id: string, action: string, detail: unknown) {
   await db.financeAuditLog.create({ data: { storeId: a.storeId, userId: a.id, action,
-    entityType: 'team_communication', entityId: id, description: 'Team communication access/change', newValue: JSON.stringify(detail) } })
+    entityType: 'team_communication', entityId: id, description: 'Team communication access/change', newValue: JSON.stringify(teamAgentProvenance(a) ? { ...(detail as object), agent: teamAgentProvenance(a) } : detail) } })
 }
 async function channel(db: DB, a: TeamActor, id: string, auditReason?: string) {
   uuid.parse(id); await identity(db, a)
@@ -209,21 +213,23 @@ export function teamCommunication(db: DB = prisma) {
       if (ids.length > 100) fail(400, 'TEAM_MEMBER_LIMIT')
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'create')
-        const requestKey = `create.${a.staffId}.${v.requestId}`
+        await identity(tx, a)
+        const requestKey = `create.${a.staffId}.${v.requestId}`, creationHash = digest({ ...v, ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) })
         const existing = await read(tx, a.storeId, requestKey)
-        if (existing) { if (existing.hash !== digest(v)) fail(409, 'TEAM_REQUEST_CONFLICT'); return (await channel(tx, a, existing.channel.id)).c }
-        await activeMembers(tx, a.storeId, ids)
+        if (existing) { if (existing.hash !== creationHash) fail(409, 'TEAM_REQUEST_CONFLICT'); return (await channel(tx, a, existing.channel.id)).c }
+        await activeMembers(tx, a.storeId, ids.filter(id => !teamAgentProvenance(a) || id !== a.staffId))
         if ((await list(tx, a.storeId, 'channel.', 501)).length >= 500) fail(409, 'TEAM_CHANNEL_LIMIT')
         if (v.kind === 'direct') {
           const found = (await list(tx, a.storeId, 'channel.')).find((c: TeamChannel) => c.kind === 'direct' && !c.archived && c.members.map(m => m.staffId).sort().join('|') === ids.join('|'))
-          if (found) { await write(tx, a.storeId, requestKey, { hash: digest(v), channel: found }); return found }
+          if (found) { await write(tx, a.storeId, requestKey, { hash: creationHash, channel: found }); return found }
         }
         const now = new Date().toISOString()
         const c: TeamChannel = { id: randomUUID(), title: v.title, kind: v.kind, ownerId: a.staffId,
           members: ids.map(id => ({ staffId: id, fromSeq: 1 })), lastSeq: 0, version: 1, archived: false, createdAt: now,
           round: v.kind === 'meeting' ? { id: randomUUID(), title: v.title, fromSeq: 1, startedAt: now, participants: ids } : null }
         await write(tx, a.storeId, channelKey(c.id), c)
-        await write(tx, a.storeId, requestKey, { hash: digest(v), channel: c })
+        await write(tx, a.storeId, requestKey, { hash: creationHash, channel: c })
+        await teamAgentChannelCreated(tx, a, c)
         await audit(tx, a, c.id, 'create', { kind: c.kind, members: ids })
         return c
       })
@@ -251,8 +257,9 @@ export function teamCommunication(db: DB = prisma) {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c } = await channel(tx, a, id)
         const requestKey = `request.${a.staffId}.${v.requestId}`
-        const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v })
+        const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v, ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
+        if (teamAgentProvenance(a) && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
         // Serialize the final automatic effect with store revocation, before
         // acquiring ai-budget (defaults saves use defaults -> ai-budget).
         if (routineAuthorization || managementAuthorization) {
@@ -301,7 +308,7 @@ export function teamCommunication(db: DB = prisma) {
         if (!c.round.participants.includes(a.staffId)) c.round.participants.push(a.staffId)
         const employee = await identity(tx, a)
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
-          authorId: a.staffId, authorName: employee.name, text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}) }
+          authorId: a.staffId, authorName: employee.name, text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
         const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
@@ -320,7 +327,9 @@ export function teamCommunication(db: DB = prisma) {
           await workflowEvent(tx, a.storeId, id, { policyVersion: paused.version, paused: true, takeover }, { read, write })
           await audit(tx, a, id, 'update', { action: 'workflow_human_takeover', takeover, policyVersion: paused.version })
         }
-        await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
+        if (!teamAgentProvenance(a)) await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
+        if (teamAgentProvenance(a)) await audit(tx, a, id, 'create', { action: 'agent_message', messageId: message.id, seq: message.seq })
+        await recordTeamAgentReply(tx, a.storeId, c, message)
         await enqueueChatReminders(tx, a.storeId, c, message)
         return message
       })
