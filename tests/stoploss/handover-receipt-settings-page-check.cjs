@@ -28,7 +28,7 @@ createRoot(document.getElementById('root')).render(<MemoryRouter><CashManagement
   }
   const admin=pages['client-admin'],pos=pages['client-pos'],card=admin.getByTestId('handover-receipt-settings');
   await expect(card.getByRole('checkbox')).toHaveCount(21);
-  await card.getByRole('checkbox',{name:'现金收款',exact:true}).uncheck();await expect.poll(()=>writes).toBe(1);assert.equal(configs.shiftSettings.receiptItems.cashReceipts,false);assert.equal(configs.shiftSettings.summaryItems.cashReceipts,true,'print settings do not alter reconciliation UI');
+  await card.getByRole('checkbox',{name:'现金收款',exact:true}).uncheck();await expect.poll(()=>writes).toBe(1);assert.equal(configs.shiftSettings.receiptItems.cashReceipts,false);assert.equal(configs.shiftSettings.summaryItems,undefined,'legacy duplicate settings are replaced by the shared choices');assert.equal(configs.shiftSettings.receiptItems.revenue,true);assert.equal(await admin.getByRole('heading',{name:'对账汇总项',exact:true}).count(),0);assert.equal(await admin.getByText('显示汇总',{exact:true}).count(),0);
   const before=reads;await pos.getByRole('button',{name:'补打',exact:true}).click();await expect.poll(()=>pos.evaluate(()=>window.calls.length)).toBe(1);assert.ok(reads>before);assert.equal((await pos.evaluate(()=>window.calls[0])).receiptItems.cashReceipts,false,'latest config overrides historical summary');
   await admin.reload();await expect(card.getByRole('checkbox',{name:'现金收款',exact:true})).not.toBeChecked();
   await card.getByRole('checkbox',{name:'现金收款',exact:true}).check();await expect.poll(()=>writes).toBe(2);

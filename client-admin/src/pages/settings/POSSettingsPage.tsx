@@ -6,6 +6,7 @@ import { DisplayProductMedia } from '../../../../shared/components/DisplayProduc
 import { resolveDisplayProducts, ProductDisplayMedia } from '../../../../shared/utils/customerDisplayProducts'
 import { MediaPicker } from '../../components/MediaLibrary'
 import { LogoSettingsDialog, LogoColor, LogoSources } from '../../components/LogoSettingsDialog'
+import { normalizeHandoverSettings } from '../../utils/handoverSettings'
 import { HandoverReceiptSettings } from '../../components/HandoverReceiptSettings'
 import { CustomerDisplayCanvas } from '../../../../shared/components/CustomerDisplayCanvas'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../../shared/utils/customerDisplayAppearance'
@@ -658,25 +659,8 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
   const [shiftSettings, setShiftSettings] = useState({
     requireReconciliation: false,
     requireSupervisorConfirm: false,
-    showSummary: true,
     cashDifferenceLimit: 0,
     receiptItems: {} as Record<string, boolean>,
-    summaryItems: {
-      orderCount: true,
-      customerCount: true,
-      cashSales: true,
-      qrisSales: true,
-      cashIn: true,
-      cashOut: true,
-      openFloat: true,
-      closeCash: true,
-      dineInCount: true,
-      gofoodCount: true,
-      grabCount: true,
-      shopeeCount: true,
-      suspendedOrders: true,
-      pendingSync: true,
-    }
   })
 
   // 支付方式设置
@@ -1010,7 +994,7 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
       }
       // Load shift settings
       if (configs.shiftSettings) {
-        setShiftSettings(prev => ({ ...prev, ...configs.shiftSettings }))
+        setShiftSettings(prev => ({ ...prev, ...normalizeHandoverSettings(configs.shiftSettings) }))
       }
       // Load payment methods
       if (configs.paymentMethods) {
@@ -2222,20 +2206,6 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
                   }}
                 />
               </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <span className="font-medium">{t('posSettings.showSummary')}</span>
-                  <p className="text-sm text-gray-500">{t('posSettings.showSummaryHint')}</p>
-                </div>
-                <Toggle
-                  enabled={shiftSettings.showSummary}
-                  onChange={() => {
-                    const newVal = !shiftSettings.showSummary
-                    setShiftSettings({ ...shiftSettings, showSummary: newVal })
-                    handleSave('shiftSettings', { ...shiftSettings, showSummary: newVal })
-                  }}
-                />
-              </div>
               <div className="p-3 bg-gray-50 rounded-lg">
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('posSettings.cashDifferenceLimit')}</label>
                 <div className="flex items-center gap-3">
@@ -2254,45 +2224,8 @@ export function POSSettingsPage({ initialTab = 'layout' }: { initialTab?: POSSub
             </div>
           </div>
 
-          <div className="card">
-            <h3 className="text-lg font-semibold mb-4">{t('posSettings.summaryItems')}</h3>
-            <p className="text-sm text-gray-500 mb-4">{t('posSettings.summaryItemsHint')}</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: 'orderCount', label: t('posSettings.orderCount') },
-                { key: 'customerCount', label: t('posSettings.customerCount') },
-                { key: 'cashSales', label: t('posSettings.cashSales') },
-                { key: 'qrisSales', label: t('posSettings.qrisSales') },
-                { key: 'cashIn', label: t('posSettings.cashIn') },
-                { key: 'cashOut', label: t('posSettings.cashOut') },
-                { key: 'openFloat', label: t('posSettings.openFloat') },
-                { key: 'closeCash', label: t('posSettings.closeCash') },
-                { key: 'dineInCount', label: t('posSettings.dineInCount') },
-                { key: 'gofoodCount', label: t('posSettings.gofoodCount') },
-                { key: 'grabCount', label: t('posSettings.grabCount') },
-                { key: 'shopeeCount', label: t('posSettings.shopeeCount') },
-                { key: 'suspendedOrders', label: t('posSettings.suspendedOrders') },
-                { key: 'pendingSync', label: t('posSettings.pendingSync') },
-              ].map((item) => (
-                <div key={item.key} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm">{item.label}</span>
-                  <Toggle
-                                       enabled={shiftSettings.summaryItems[item.key as keyof typeof shiftSettings.summaryItems] as boolean}
-                    onChange={() => {
-                      const newSummaryItems = {
-                        ...shiftSettings.summaryItems,
-                        [item.key]: !shiftSettings.summaryItems[item.key as keyof typeof shiftSettings.summaryItems]
-                      }
-                      setShiftSettings({ ...shiftSettings, summaryItems: newSummaryItems })
-                      handleSave('shiftSettings', { ...shiftSettings, summaryItems: newSummaryItems })
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
           <HandoverReceiptSettings settings={shiftSettings} disabled={saveConfigMutation.isPending || isLoading} onChange={receiptItems => {
-            const updated = { ...shiftSettings, receiptItems }
+            const updated = normalizeHandoverSettings({ ...shiftSettings, receiptItems })
             setShiftSettings(updated)
             handleSave('shiftSettings', updated)
           }} />

@@ -346,7 +346,7 @@ const resources = {
 },
 
       handoverReceipt: {
-        "title": "Isi konfirmasi dan struk serah terima",
+        "title": "Data serah terima yang ditampilkan",
         "hint": "Centang untuk tampil, hapus centang untuk sembunyi. Konfirmasi shift, struk, dan cetak ulang memakai pengaturan yang sama. Pendapatan adalah pendapatan shift ini; tanda tangan dan waktu cetak hanya pada struk. Tersimpan otomatis.",
         "storeName": "Nama toko",
         "sessionId": "Referensi shift",
@@ -4779,7 +4779,7 @@ const resources = {
 },
 
       handoverReceipt: {
-        "title": "Handover confirmation and receipt contents",
+        "title": "Shift display items",
         "hint": "Check to show, uncheck to hide. Shift confirmation, receipts and reprints share these settings. Revenue is for this shift; signatures and print time appear only on receipts. Saved automatically.",
         "storeName": "Store name",
         "sessionId": "Session reference",
@@ -9149,7 +9149,7 @@ const resources = {
 },
 
       handoverReceipt: {
-        "title": "交接班确认与小票内容",
+        "title": "交班数据显示项目",
         "hint": "勾选显示，取消勾选隐藏。交班确认页、小票与补打共用此设置；营收为本班营收，签字和打印时间等仅用于小票。自动保存。",
         "storeName": "门店名称",
         "sessionId": "班次凭据",
