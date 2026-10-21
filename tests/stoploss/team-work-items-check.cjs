@@ -11,10 +11,18 @@ const db=new PrismaClient(),storeId='work-items-synthetic',agentId=randomUUID(),
 const employee={id:'wi-employee-user',staffId:'wi-employee',storeId,role:'staff',employeeApp:true},owner={id:'wi-owner-user',staffId:'wi-owner',storeId,role:'admin'};
 let grant={agentId,displayName:'Synthetic Hermes',storeId,sponsorUserId:owner.id,version:1,clientRevision:1,expiresAt:new Date(Date.now()+3600000).toISOString(),revoked:false,actions:[...actions],staffIds:[owner.staffId,employee.staffId],channelIds:[]};
 const grantKey='fixture.work-items.grant',saveGrant=()=>db.config.upsert({where:{storeId_key:{storeId,key:grantKey}},create:{storeId,key:grantKey,category:'test',value:JSON.stringify(grant)},update:{value:JSON.stringify(grant)}});
-const bridgeDeps={enabled:true,resolveGrant:async tx=>JSON.parse((await tx.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:grantKey}}})).value),tasks:{assert:async(tx,g,ref)=>{assert.equal(g.storeId,storeId);const row=await tx.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:'fixture.task'}}});assert.deepEqual(ref,JSON.parse(row.value));}},readAttachment:async()=>{throw Error('not used')}};
+// Synthetic runtime/source evidence only. No production profile, memory or data ACL is implied.
+let contextChecks=0;
+const fixtureSource={kind:'public_sop',id:'synthetic-work-item-source',version:1};
+const communication={
+ assertContext:async(tx,g,scope)=>{contextChecks++;assert.equal(g.storeId,storeId);assert.deepEqual(scope.task,task);assert(scope.audienceStaffIds.every(id=>[owner.staffId,employee.staffId].includes(id)));assert.match(scope.compartmentKey,/^[a-f0-9]{64}$/);return{purpose:'employee_work',compartmentKey:scope.compartmentKey,memoryNamespace:scope.compartmentKey,executionId:'synthetic-work-item-execution'}},
+ admitOutput:async(tx,g,scope,input)=>{assert.equal(scope.executionId,'synthetic-work-item-execution');assert.match(input.textHash,/^[a-f0-9]{64}$/);return{decision:'allow',executionId:scope.executionId,compartmentKey:scope.compartmentKey,audienceHash:scope.audienceHash,textHash:input.textHash,requestId:input.requestId,dataClasses:['operational'],sources:[fixtureSource]}},
+ authorizeSource:async(tx,g,scope,source)=>{assert.deepEqual(source,fixtureSource);assert.equal(g.storeId,storeId);return{dataClasses:['operational']}}
+};
+const bridgeDeps={enabled:true,communication,resolveGrant:async tx=>JSON.parse((await tx.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:grantKey}}})).value),tasks:{assert:async(tx,g,ref)=>{assert.equal(g.storeId,storeId);const row=await tx.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:'fixture.task'}}});assert.deepEqual(ref,JSON.parse(row.value));}},readAttachment:async()=>{throw Error('not used')}};
 let approvalAllowed=true;
 const deps={enabled:true,withActor:(tx,action,ctx,operation)=>createTeamAgentBridge(tx,bridgeDeps).withActor(action,ctx.task,ctx.channelId,operation),assertApprovalTarget:async(tx,actor,ctx,target)=>{assert.equal(actor.role,'agent');if(!approvalAllowed||target.domain!=='leave'||target.objectId!=='wi-leave')throw Error('OBJECT_SCOPE_REQUIRED')},now:()=>new Date('2030-01-01T00:00:00Z')};
-let service=createWorkItemService(db,deps),channel,assigned,sent,client,server,sdk,ctx;
+let service=createWorkItemService(db,deps),channel,assigned,sent,client,server,sdk,ctx,lastReviewInput;
 const native=()=>teamCommunication(db),req=()=>randomUUID(),pad=n=>String(n).padStart(12,'0');
 function faultDatabase(){let seen=false;return{seen:()=>seen,db:{$transaction:fn=>db.$transaction(tx=>fn(new Proxy(tx,{get(target,key){if(key==='config')return new Proxy(target.config,{get(model,method){if(method==='upsert')return async args=>{const result=await model.upsert(args);if(args.where.storeId_key.key==='employee.workspace.notification.chat.pending'){seen=true;throw Error('after durable signal')}return result};return typeof model[method]==='function'?model[method].bind(model):model[method]}});return typeof target[key]==='function'?target[key].bind(target):target[key]}}))),user:db.user,staff:db.staff,config:db.config}}}
 function heldReceiptDatabase(requestId){let enter,release,held=false;const entered=new Promise(r=>enter=r),gate=new Promise(r=>release=r);const key='team.communication.taskRequest.agent:'+agentId+'.'+requestId;return{entered,release,db:{$transaction:fn=>db.$transaction(tx=>fn(new Proxy(tx,{get(target,name){if(name==='config')return new Proxy(target.config,{get(model,method){if(method==='findUnique')return async args=>{const result=await model.findUnique(args);if(!held&&args.where.storeId_key?.key===key){held=true;enter();await gate}return result};return typeof model[method]==='function'?model[method].bind(model):model[method]}});return typeof target[name]==='function'?target[name].bind(target):target[name]}})),{timeout:15000}),user:db.user,staff:db.staff,config:db.config}}}
@@ -106,7 +114,7 @@ async function main(){
   const view=await service.get({...ctx,employeeTaskId:assigned.id});assert.equal(view.overdue,true);assert.equal(view.deadlinePrecision,'instant');
   const fault=faultDatabase(),beforeReminders=(await reminders()).length,marker=await readWork(storeId,'notification.chat.pending',db);
   await assert.rejects(()=>createWorkItemService(fault.db,deps).review({...args,requestId:req()}));assert(fault.seen());assert.equal((await service.get({...ctx,employeeTaskId:assigned.id})).status,'submitted');assert.equal((await reminders()).length,beforeReminders);assert.deepEqual(await readWork(storeId,'notification.chat.pending',db),marker);
-  assert.equal((await call('team_task_review',{...args,requestId:req()})).status,'completed');
+  lastReviewInput={...args,requestId:req()};assert.equal((await call('team_task_review',lastReviewInput)).status,'completed');
  });
  await check('completed task reminder rechecks live assignee identity and plan audience',async()=>{
   const r=(await reminders()).find(r=>r.teamTask?.taskId===assigned.id&&r.teamTask.status==='completed');assert(r);assert(await teamTaskReminderRelevant(db,storeId,r));
@@ -120,6 +128,45 @@ async function main(){
   const r=await call('approval_awareness_get',{...ctx,domain:'leave',objectId:'wi-leave'});assert.equal(r.executionGranted,false);assert.equal(r.notices.length,1);assert.equal(r.notices[0].pending,true);assert(r.notices[0].adminUrl.includes('noticeObject=wi-leave'));assert(!JSON.stringify(r).includes('PRIVATE_'));
   assert.deepEqual(await db.leave.findUnique({where:{id:'wi-leave'}}),before);assert.equal(await db.financeAuditLog.count({where:{storeId}}),count);
   approvalAllowed=false;await call('approval_awareness_get',{...ctx,domain:'leave',objectId:'wi-leave'},false);approvalAllowed=true;await call('approval_awareness_get',{...ctx,domain:'reimbursement',objectId:'other'},false);
+ });
+ const protectedCalls=()=>[
+  ['team_delivery_get',{...ctx,messageId:sent.id,messageSeq:sent.seq,recipientStaffId:employee.staffId}],
+  ['team_task_get',{...ctx,employeeTaskId:assigned.id}],
+  ['team_task_assign',assign],
+  ['team_task_review',lastReviewInput],
+  ['approval_awareness_get',{...ctx,domain:'leave',objectId:'wi-leave'}]
+ ];
+ const persistedState=async()=>({config:await db.config.findMany({where:{storeId},select:{key:true,value:true},orderBy:{key:'asc'}}),audit:await db.financeAuditLog.count({where:{storeId}})});
+ await check('all five work-item tools fail closed without a trusted communication context port',async()=>{
+  for(const[name,args]of protectedCalls())await call(name,args);
+  const before=await persistedState();bridgeDeps.communication=undefined;
+  try{for(const[name,args]of protectedCalls())await call(name,args,false)}finally{bridgeDeps.communication=communication}
+  assert.deepEqual(await persistedState(),before);
+ });
+ await check('all five work-item tools reject manager or shared-memory context proofs with zero writes',async()=>{
+  const before=await persistedState();
+  try{for(const patch of [{purpose:'manager_work'},{memoryNamespace:'synthetic-shared-manager-memory'},{executionId:''}]){
+   bridgeDeps.communication={...communication,assertContext:async(...args)=>({...await communication.assertContext(...args),...patch})};
+   for(const[name,args]of protectedCalls())await call(name,args,false);
+  }}finally{bridgeDeps.communication=communication}
+  assert.deepEqual(await persistedState(),before);
+ });
+ await check('tool bodies cannot supply runtime proof, source manifest or compartment identity',async()=>{
+  const before=await persistedState(),checks=contextChecks;
+  for(const[name,args]of protectedCalls())await call(name,{...args,executionId:'forged',compartmentKey:'forged',sources:[fixtureSource]},false);
+  assert.equal(contextChecks,checks);assert.deepEqual(await persistedState(),before);
+ });
+ await check('native task read, assign and review recheck context after trusted actor admission',async()=>{
+  const before=await persistedState();
+  for(const[action,operation]of[
+   ['tasks.read',actor=>native().tasks(actor,channel.id)],
+   ['tasks.assign',actor=>native().createTask(actor,channel.id,{requestId:assign.requestId,roundId,minuteVersion:1,actionIndex:0})],
+   ['tasks.review',actor=>native().taskAction(actor,channel.id,assigned.id,{requestId:lastReviewInput.requestId,expectedVersion:lastReviewInput.expectedVersion,action:lastReviewInput.action,note:lastReviewInput.note,criteriaConfirmed:lastReviewInput.criteriaConfirmed})]
+  ])await createTeamAgentBridge(db,bridgeDeps).withActor(action,task,channel.id,async actor=>{
+   bridgeDeps.communication=undefined;
+   try{await assert.rejects(()=>operation(actor),/TEAM_COMMUNICATION_DATA_POLICY_DENIED/)}finally{bridgeDeps.communication=communication}
+  });
+  assert.deepEqual(await persistedState(),before);
  });
  await check('revocation, client revision and execution task version are rechecked for logged-in client',async()=>{
   grant.revoked=true;await saveGrant();await call('team_task_get',{...ctx,employeeTaskId:assigned.id},false);grant.revoked=false;await saveGrant();

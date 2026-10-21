@@ -7,7 +7,14 @@ const {createTeamAgentBridge}=built('teamAgentBridge/service'),{actions}=built('
 const db=new PrismaClient(),storeId='wi-replay-store',agentId=randomUUID(),task={taskId:randomUUID(),version:1},owner={id:'wi-replay-owner',staffId:'wi-replay-owner-staff',storeId,role:'admin'},employee={id:'wi-replay-employee',staffId:'wi-replay-employee-staff',storeId,role:'staff',employeeApp:true};
 let grant={agentId,displayName:'Synthetic replay agent',storeId,sponsorUserId:owner.id,version:1,clientRevision:1,expiresAt:new Date(Date.now()+3600000).toISOString(),revoked:false,actions:[...actions],staffIds:[owner.staffId,employee.staffId],channelIds:[]};
 const saveGrant=()=>db.config.upsert({where:{storeId_key:{storeId,key:'fixture.replay.grant'}},create:{storeId,key:'fixture.replay.grant',category:'test',value:JSON.stringify(grant)},update:{value:JSON.stringify(grant)}});
-const bridgeDeps={enabled:true,resolveGrant:async tx=>JSON.parse((await tx.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:'fixture.replay.grant'}}})).value),tasks:{assert:async(tx,g,ref)=>assert.deepEqual(ref,task)},readAttachment:async()=>{throw Error('unused')}};
+// Test-only runtime/source proof; these synthetic ports must never be production host defaults.
+const fixtureSource={kind:'public_sop',id:'synthetic-replay-source',version:1};
+const communication={
+ assertContext:async(tx,g,scope)=>{assert.equal(g.storeId,storeId);assert.deepEqual(scope.task,task);assert(scope.audienceStaffIds.every(id=>[owner.staffId,employee.staffId].includes(id)));return{purpose:'employee_work',compartmentKey:scope.compartmentKey,memoryNamespace:scope.compartmentKey,executionId:'synthetic-replay-execution'}},
+ admitOutput:async(tx,g,scope,input)=>({decision:'allow',executionId:scope.executionId,compartmentKey:scope.compartmentKey,audienceHash:scope.audienceHash,textHash:input.textHash,requestId:input.requestId,dataClasses:['operational'],sources:[fixtureSource]}),
+ authorizeSource:async(tx,g,scope,source)=>{assert.deepEqual(source,fixtureSource);return{dataClasses:['operational']}}
+};
+const bridgeDeps={enabled:true,communication,resolveGrant:async tx=>JSON.parse((await tx.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:'fixture.replay.grant'}}})).value),tasks:{assert:async(tx,g,ref)=>assert.deepEqual(ref,task)},readAttachment:async()=>{throw Error('unused')}};
 const service=createWorkItemService(db,{enabled:true,withActor:(tx,action,ctx,operation)=>createTeamAgentBridge(tx,bridgeDeps).withActor(action,ctx.task,ctx.channelId,operation),assertApprovalTarget:async()=>{throw Error('not authorized')}});
 let server,sdk,client,channel,ctx,t,assignInput,reviewInput,firstReview;const passed=[],req=()=>randomUUID(),native=()=>teamCommunication(db);
 async function check(name,fn){await fn();passed.push(name);console.log('PASS '+name)}
