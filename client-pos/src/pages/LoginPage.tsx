@@ -16,7 +16,7 @@ const LANGUAGES = [
   { code: 'id', labelKey: 'Bahasa Indonesia', flag: '🇮🇩' }
 ]
 
-export function LoginPage() {
+export function LoginPage({desktopStarting = false}: {desktopStarting?: boolean} = {}) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
   const { login, loginOffline } = useAuthStore()
@@ -43,6 +43,11 @@ export function LoginPage() {
 
   useEffect(() => {
     setMounted(true)
+    const frame=requestAnimationFrame(()=>requestAnimationFrame(()=>window.electronAPI?.notifyLoginReady?.()))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  useEffect(() => {
     // Load saved phone number only (never store password)
     const savedPhone = localStorage.getItem('remembered_phone')
     const savedRemember = localStorage.getItem('remember_me')
@@ -146,6 +151,7 @@ export function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if(desktopStarting)return
     setLoading(true)
     setError('')
     try {
@@ -358,11 +364,11 @@ export function LoginPage() {
               {/* Submit button */}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || desktopStarting}
                 className="w-full mt-6 flex items-center justify-center gap-2 py-3.5 bg-primary hover:bg-primary-hover text-white font-medium rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? (
-                  <Loader2 size={18} className="animate-spin" />
+                {loading || desktopStarting ? (
+                  <><Loader2 size={18} className="animate-spin" /><span>{t('auth.login')}</span></>
                 ) : (
                   <>
                     <span>{t('auth.login')}</span>
@@ -370,6 +376,7 @@ export function LoginPage() {
                   </>
                 )}
               </button>
+              {desktopStarting && <p role="status" className="text-sm text-gray-600 mt-3 text-center">{t('auth.startingLocalServer')}</p>}
             </form>
           </div>
 

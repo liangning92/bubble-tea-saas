@@ -262,3 +262,19 @@ html, body {
   filter: brightness(0.94);
 }
 .pos-toolbar button { flex-shrink: 0; }
+
+/* Cashier desktops retain one header row at typical Windows display scaling.
+   Narrow toolbars scroll horizontally instead of moving onto a second row. */
+@media (max-width: 1279px) {
+  .pos-header { gap: 8px; padding: 8px 12px; }
+  .pos-header-brand { gap: 8px; }
+  .pos-header-brand img { max-width: 88px; height: 28px; }
+  .pos-header-brand > div, .pos-header-brand > div > div { max-width: 88px; }
+  .pos-header-brand > div > span { max-width: 88px; }
+  .pos-header-brand > button { padding: 4px 6px; gap: 4px; white-space: nowrap; }
+  .pos-header-languages { gap: 3px; }
+  .pos-header-languages button { padding: 4px 6px; }
+  .pos-header .pos-toolbar { gap: 4px; }
+  .pos-header .pos-toolbar > button { min-width: 56px; min-height: 56px; padding: 6px 8px; }
+  .pos-header .pos-toolbar > button > span { font-size: 14px; }
+}

@@ -3395,9 +3395,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         <OfflineOperationsStatus />
         </div>}
         {/* Header - 品牌底色，舒展舒适无缝贴顶 */}
-        <header className="bg-primary px-4 py-3 min-h-[56px] shrink-0 flex flex-wrap items-center justify-between gap-3 select-none">
+        <header data-testid="pos-header" className="pos-header bg-primary px-4 py-3 min-h-[56px] shrink-0 flex flex-wrap md:flex-nowrap items-center justify-between gap-3 select-none">
           {/* 左侧：Logo (下方紧贴收银员) + Online指示器 */}
-          <div className="flex items-center gap-4 shrink-0">
+          <div className="pos-header-brand flex items-center gap-4 shrink-0">
             {/* Logo 区域：上面是 Logo，下面紧贴收银员姓名 */}
             <div className="flex flex-col items-start justify-center shrink-0">
               <div className="h-8 min-w-[36px] max-w-[120px] flex items-center">
@@ -3437,7 +3437,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           </div>
 
           {/* 中间：语言切换 */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="pos-header-languages flex items-center gap-1.5 shrink-0">
             {LANGS.map(l => (
               <button
                 key={l.code}
@@ -3456,7 +3456,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           </div>
 
           {/* 右侧：工具栏 + 窗口控制按钮 */}
-          <div className="flex flex-wrap max-w-full items-center gap-1.5 shrink-0">
+          <div className="flex w-full md:w-auto md:flex-1 min-w-0 items-center gap-1.5">
             {selectedChannel && (() => {
               // 构建工具栏按钮数组
               const toolbarButtons: Array<{
@@ -3555,12 +3555,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               }
 
               return (
-                <div className="pos-toolbar flex flex-wrap items-center gap-2">
+                <div className="pos-toolbar flex flex-nowrap flex-1 min-w-0 overflow-x-auto items-center gap-2">
                   {toolbarButtons.map(btn => (
                     <button
                       key={btn.id}
                       onClick={btn.onClick}
-                      className="min-h-16 min-w-[68px] max-w-[160px] flex flex-col items-center justify-center py-2 px-3 text-white hover:bg-white/20 rounded-xl touch-feedback relative transition-colors touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+                      className="shrink-0 min-h-16 min-w-[68px] max-w-[160px] flex flex-col items-center justify-center py-2 px-3 text-white hover:bg-white/20 rounded-xl touch-feedback relative transition-colors touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
                     >
                       <div className="relative">
                         {btn.icon}
@@ -3607,7 +3607,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             })()}
 
             {/* 窗口控制按钮 (最小化、最大化、关闭) */}
-            <div className="border-l border-white/25 pl-1.5 ml-1">
+            <div className="shrink-0 border-l border-white/25 pl-1.5 ml-1">
               <WindowControls variant="header" />
             </div>
           </div>
