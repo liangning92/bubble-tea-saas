@@ -41,9 +41,13 @@ class PollTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError,'READ_ONLY'):
             fixture.poll_run_status(None,Request('http://localhost/run',data=b'{}'),float('inf'))
     def test_owned_profile_tick_socket_fits_darwin_boundary(self):
-        base=fixture.short_owned_base()
+        run='bt-test-abcdef123456'
+        base=fixture.short_owned_base(run)
         try:
-            path=base/'hermes-root/profiles/stock-ro-001/state/gateway.loop-tick.9999999999.sock'
+            self.assertIn(run,str(base))
+            profile=fixture.fixture_profile(base)
+            self.assertEqual(profile.name,'stock-ro-001')
+            path=profile/'state/gateway.loop-tick.9999999999.sock'
             self.assertLess(len(str(path).encode()),104)
             path.parent.mkdir(parents=True)
             with socket.socket(socket.AF_UNIX) as server:server.bind(str(path))

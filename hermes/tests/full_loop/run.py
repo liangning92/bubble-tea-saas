@@ -34,11 +34,15 @@ def wait_file(p,process,timeout=40):
         if process.poll() is not None: raise RuntimeError('OWNED_CHILD_EXITED_BEFORE_READY')
         time.sleep(.1)
     raise RuntimeError('OWNED_CHILD_START_TIMEOUT')
-def short_owned_base():
-    # Darwin AF_UNIX is limited to 104 bytes including the terminating NUL.
-    # Batch attribution stays in evidence/env; avoid embedding it in HERMES_HOME.
-    base=Path(tempfile.mkdtemp(prefix='hf-',dir='/tmp')).resolve();base.chmod(0o700)
+def short_owned_base(run):
+    # Preserve the backend batch-owner guard and leave room for Darwin AF_UNIX.
+    assert run.startswith('bt-test-') and len(run)==20 and all(c in '0123456789abcdef' for c in run[8:]),'TEST_BATCH_REQUIRED'
+    base=Path(tempfile.mkdtemp(prefix=run+'-h-',dir='/tmp')).resolve();base.chmod(0o700)
     return base
+
+def fixture_profile(base):
+    # Keep the bootstrap's exact profile identity without the extra parent chain.
+    return base/'stock-ro-001'
 
 def poll_run_status(opener, request, deadline, *, now=time.monotonic, pause=time.sleep):
     """Retry only read timeouts inside the original absolute loop deadline."""
@@ -77,7 +81,7 @@ def main():
     assert len(sdk_sites)==1,'FRESH_FULL_GATEWAY_PYTHON311_DEPENDENCIES_REQUIRED'
     assert not sdk_venv.resolve().is_relative_to(REAL.resolve()),'DEFAULT_HERMES_VENV_FORBIDDEN'
     assert command(['/usr/bin/git','-C',str(REAL),'rev-parse','HEAD'],capture_output=True,text=True).stdout.strip()==PIN
-    base=short_owned_base()
+    base=short_owned_base(run)
     isolated_env={'PATH':os.environ.get('PATH','/usr/bin:/bin'),'LANG':'en_US.UTF-8','HOME':str(base/'user-home'),'BT_TEST_RUN':run,'BT_TEST_LABEL':os.environ.get('BT_TEST_LABEL','')}
     (base/'user-home').mkdir(mode=0o700)
     backend=child=None;started=False;cleanup=False;status='not_run';reason=None;handles=[]
@@ -109,7 +113,7 @@ def main():
         blog=(OUT/(run+'-backend.log')).open('w');handles.append(blog)
         backend=subprocess.Popen(['node',str(Path(__file__).with_name('backend.cjs'))],cwd=ROOT,env=backendenv,stdin=subprocess.PIPE,stdout=blog,stderr=subprocess.STDOUT,text=True,start_new_session=True)
         fixture=wait_file(base/'backend-ready.json',backend)
-        profile=base/'hermes-root/profiles/stock-ro-001';bearer='synthetic-only-'+os.urandom(32).hex();private(base/'gateway.key',bearer)
+        profile=fixture_profile(base);bearer='synthetic-only-'+os.urandom(32).hex();private(base/'gateway.key',bearer)
         private(base/'client.json',json.dumps({**fixture['endpoints'],'client_id':'synthetic-executor','client_secret':'synthetic-secret','scopes':['executor.claim','executor.evidence','executor.report']}))
         spec={**{k:fixture[k] for k in ('endpoints','pilot')},'profile_home':str(profile),'hermes_source':str(source),'python_executable':str(Path(args.sdk_python)),'gateway_bearer_file':str(base/'gateway.key'),'private_client_file':str(base/'client.json'),'port':port()}
         sys.path.insert(0,str(ROOT/'hermes'));import pdca_launcher

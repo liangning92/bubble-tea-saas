@@ -51,8 +51,8 @@ expanding this scoped test. Every owned process/database/file was removed.
 
 Fixture recovery delta: status GET timeouts are retried only inside the same
 45-second absolute deadline; the dispatch POST remains outside that loop and is
-sent once. Non-timeout errors still fail immediately. A short owned `hf-*` base
-keeps the real a719 loop-tick UNIX socket below Darwin's 104-byte boundary.
+sent once. Non-timeout errors still fail immediately. A short owned `{BT_TEST_RUN}-h-*` base with direct `stock-ro-001` profile
+preserves the batch-owner and exact profile-name guards and keeps the real a719 loop-tick UNIX socket below Darwin's 104-byte boundary.
 `test_full_loop_fixture.py` passed all five targeted tests, including an actual
 owned UNIX socket bind and cleanup. This does not replace the pending full loop
 rerun or change its deadline.
