@@ -1,3 +1,4 @@
+import { TeamWorkTargetStatus, type TeamWorkTarget } from './teamWorkTarget'
 import './teamChat.css'
 import { prepareTeamPhotos } from './teamPhoto'
 import type { AttachmentOptions } from './teamAttachmentResource'
@@ -24,7 +25,7 @@ interface Channel {
   preview?: { text: string; authorName: string; createdAt: string } | null
   round: { id: string; title: string } | null
 }
-interface Message { channelId?: string; aiHandling?: import('./TeamChatMessages').TeamAiHandling; id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: import('./TeamChatMessages').TeamMessageAi }
+interface Message { agent?: import('./TeamChatMessages').TeamMessageAgent; channelId?: string; aiHandling?: import('./TeamChatMessages').TeamAiHandling; id: string; requestId: string; seq: number; authorId: string; authorName: string; text: string; files: string[]; createdAt: string; ai?: import('./TeamChatMessages').TeamMessageAi }
 interface Minute {
   id: string; title: string; participants: string[]; fromSeq: number; toSeq: number; startedAt: string; endedAt: string
   version: number; status: 'draft' | 'confirmed'; decisions: string[]; pending: string[]; sourceSeq: number[]
@@ -38,7 +39,7 @@ const lines = (value: string) => value.split('\n').map(v => v.trim()).filter(Boo
 const errorCode = (e: any) => e?.response?.data?.message || e?.message || 'TEAM_OPERATION_FAILED'
 export function TeamCommunication({ client, scope, staffId, language, administration = false, aiAdmin = false, compact = false, navigation, workflowPanel }: {
   client: TeamClient; scope: string; staffId: string; language: string; administration?: boolean; aiAdmin?: boolean; compact?: boolean
-  navigation?: { channelId: string; select: (id: string) => void }
+  navigation?: { channelId: string; select: (id: string) => void; target?: TeamWorkTarget; work?: boolean }
   workflowPanel?: (context: { channelId: string; directory: { id: string; name: string }[]; tasks: TeamTask[]; onChanged: () => void }) => ReactNode
 }) {
   const w = teamCopy(language), work = teamWorkCopy(language), chat = teamChatCopy(language)
@@ -52,10 +53,11 @@ export function TeamCommunication({ client, scope, staffId, language, administra
   const [internalId, setInternalId] = useState(''), [meta, setMeta] = useState<Channel | null>(null)
   const selectedId = navigation?.channelId ?? internalId
   const setSelectedId = (id: string) => navigation ? navigation.select(id) : setInternalId(id)
+  const target = navigation?.target, targetKey = target ? `${target.kind}:${target.id}:${target.invalid}` : ''
   const selectedRef = useRef(selectedId)
   const [historyReady, setHistoryReady] = useState(false)
   const [messages, setMessages] = useState<Message[]>([]), [messageChannelId, setMessageChannelId] = useState(''), [minutes, setMinutes] = useState<Minute[]>([])
-  const [tasks, setTasks] = useState<TeamTask[]>([])
+  const [tasks, setTasks] = useState<TeamTask[]>([]), [workChannelId, setWorkChannelId] = useState('')
   const [receipts, setReceipts] = useState<{ staffId: string; seq: number }[]>([])
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), [loaded, setLoaded] = useState(false)
   const [auditInput, setAuditInput] = useState(''), [auditReason, setAuditReason] = useState('')
@@ -80,8 +82,8 @@ export function TeamCommunication({ client, scope, staffId, language, administra
     selectedRef.current = selectedId
     const draft = compact ? drafts.current.get(selectedId) : undefined
     setText(draft?.text || ''); setFiles(draft?.files || []); setSendOriginal(draft?.original || false)
-    setPanel('chat'); setAuditInput(''); setAuditReason(''); setManaging(false); setSaved('')
-  }, [selectedId, compact])
+    setPanel(target ? target.kind === 'message' ? 'chat' : 'work' : navigation?.work ? 'work' : 'chat'); setAuditInput(''); setAuditReason(''); setManaging(false); setSaved('')
+  }, [selectedId, compact, scope, targetKey, navigation?.work])
   useLayoutEffect(() => {
     if (!compact || !composerInput.current) return
     const input = composerInput.current
@@ -154,7 +156,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
     return () => clearInterval(timer)
   }, [client, scope, online, queueReady])
   useEffect(() => {
-    setMessages([]); setHistoryReady(false); setMinutes([]); setTasks([]); setReceipts([]); setMeta(null); setEditing(null); setVersions([]); setError('')
+    setMessages([]); setHistoryReady(false); setWorkChannelId(''); setMinutes([]); setTasks([]); setReceipts([]); setMeta(null); setEditing(null); setVersions([]); setError('')
     if (!selectedId || !currentChannel?.member && !auditReason) return
     let active = true, inFlight = false, cursor = 0, stopped = false
     const pull = async () => {
@@ -178,7 +180,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
         cursor = response.cursor; setHistoryReady(!response.hasMore); setError('')
         const [records, followUps] = await Promise.all([client.request('get', `/team/channels/${selectedId}/minutes${query}`), client.request('get', `/team/channels/${selectedId}/tasks${query}`)])
         if (!active || !client.current()) return
-        setMinutes(records); setTasks(followUps)
+        setMinutes(records); setTasks(followUps); setWorkChannelId(selectedId)
         if (!auditReason && document.visibilityState === 'visible') {
           await client.request('put', `/team/channels/${selectedId}/read`, { seq: cursor })
           if (active && client.current()) window.dispatchEvent(new Event('notification-awareness-changed'))
@@ -253,6 +255,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
     <div className="team-shell">
       <aside className="team-sidebar"><div className="team-sidebar-heading"><h2>{w.channels}</h2><span>{channels.length}</span></div><input className="team-search" type="search" aria-label={chat.search} placeholder={chat.search} value={search} onChange={e => setSearch(e.target.value)} />{!loaded ? <p className="p-4">{w.loading}</p> : !channels.length ? <p className="p-4 text-sm text-gray-500">{w.empty}</p> : <div className="team-channel-list">{channels.filter(c => c.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(c => <button key={c.id} disabled={busy} aria-pressed={selectedId === c.id} className={`team-channel ${selectedId === c.id ? 'team-channel-active' : ''}`} onClick={() => select(c)}><span className="team-avatar" aria-hidden="true">{c.title.slice(0, 1).toLocaleUpperCase()}</span><span className="team-channel-text"><span className="team-channel-title">{c.title}</span><span className="team-channel-kind">{w[c.kind as 'direct']} {c.archived ? '· ' + w.archived : ''}</span>{c.preview && <span className="team-channel-preview block truncate text-xs text-gray-500" title={c.preview.authorName + ': ' + c.preview.text}>{c.preview.authorName}: {c.preview.text}</span>}{outbox.some(m => m.channelId === c.id) && <span className="team-pending-label">{w.pending}: {outbox.filter(m => m.channelId === c.id).length}</span>}</span>{c.unread > 0 && <span aria-label={`${c.unread} ${w.unread}`} className="team-unread">{c.unread}</span>}</button>)}{!channels.some(c => c.title.toLocaleLowerCase().includes(search.toLocaleLowerCase())) && <p className="p-4 text-sm text-gray-500">{chat.searchEmpty}</p>}</div>}</aside>
       <section className="team-conversation">
+        {target && (target.invalid || loaded && (!selectedId || !currentChannel?.member)) && <TeamWorkTargetStatus id={target.id} kind={target.kind} scope={scope + selectedId} ready found={false} failed language={language} />}
         {!selectedId ? <p className="rounded-xl border bg-white p-8 text-center text-gray-500">{w.select}</p> : <>
           <header className="team-conversation-header"><div className="team-conversation-title"><button type="button" className="team-mobile-back team-control" aria-label={compact && panel === 'work' ? chat.chat : chat.back} disabled={busy} onClick={() => panel === 'work' && compact ? setPanel('chat') : setSelectedId('')}>←</button><span className="team-avatar" aria-hidden="true">{currentChannel?.title.slice(0, 1).toLocaleUpperCase()}</span><div className="min-w-0"><h2 title={currentChannel?.title}>{currentChannel?.title}</h2><p>{w[currentChannel?.kind as 'direct']}</p></div>{compact && <button type="button" className="team-work-entry" aria-label={panel === 'work' ? chat.chat : chat.work} title={chat.work} aria-pressed={panel === 'work'} onClick={() => setPanel(panel === 'work' ? 'chat' : 'work')}><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="m3 6 2 2 3-4M11 6h10M3 13h4m4 0h10M3 20h4m4 0h10" /></svg>{tasks.some(t => !['completed', 'cancelled'].includes(t.status)) && <i aria-hidden="true" />}</button>}</div><details ref={conversationInfo} className="team-conversation-info"><summary aria-label={chat.info}>{compact ? <span aria-hidden="true">⋯</span> : chat.info}</summary>{compact && <><h3>{chat.info}</h3><p>{currentChannel?.title} · {w[currentChannel?.kind as 'direct']}</p>{privacy}{receiptDetails}{roundControls}<p>{w.fileLimit}</p></>}<p className="text-xs text-gray-500">{w.members}: {currentChannel?.members.map(m => name(m.staffId)).join('、')}</p>
             {currentChannel?.canEdit && <button className={button} onClick={() => { setMemberIds(currentChannel.members.map(m => m.staffId)); setHostId(currentChannel.ownerId); setManaging(v => !v) }}>{w.manage}</button>}
@@ -263,7 +266,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
           {(currentChannel?.member || auditReason) && <>
             {auditReason && <p className="rounded-lg bg-purple-50 p-3 text-sm">{w.audit} · {w.readOnly}</p>}
             <section className="team-chat-panel" hidden={panel !== 'chat'} aria-label={chat.chat}>
-              <TeamChatMessages key={selectedId} historyFailed={!!error} historyReady={!compact || messageChannelId === selectedId && historyReady} scrollPositions={compact ? scrollPositions.current : undefined} messages={messageChannelId === selectedId ? messages : []} client={client} staffId={staffId} channelId={selectedId} query={query} language={language}>
+              <TeamChatMessages targetSeq={target?.kind === 'message' && !target.invalid && currentChannel?.member ? Number(target.id) : undefined} targetActive={panel === 'chat'} key={selectedId} historyFailed={!!error} historyReady={!compact || messageChannelId === selectedId && historyReady} scrollPositions={compact ? scrollPositions.current : undefined} messages={messageChannelId === selectedId ? messages : []} client={client} staffId={staffId} channelId={selectedId} query={query} language={language}>
               {outbox.filter(m => m.channelId === selectedId && !messages.some(message => message.requestId === m.id)).map(m => <article key={m.id} className="team-bubble team-bubble-own team-pending"><p className="team-message-text">{m.text}</p><p className="team-pending-label">{m.files.length ? `${w.attachment}: ${m.files.length} · ` : ''}{m.error === 'TEAM_MESSAGE_CONTEXT_CHANGED' ? w.messageChanged : m.error ? w.failed : w.pending}</p>{m.error === 'TEAM_MESSAGE_CONTEXT_CHANGED' ? <button className="team-control" disabled={busy||!!text.trim()||!!files.length} onClick={() => { setText(m.text); setFiles(m.files); void removePending(m.id).then(async()=>{setOutbox(await pendingMessages(scope));void pollRef.current?.()}) }}>{w.reviewMessage}</button> : m.error && <button className="team-control" onClick={() => { void savePending({ ...m, retryable: true, nextRetryAt: 0 }).then(() => flush()) }}>{w.retry}</button>}</article>)}
               </TeamChatMessages>
               {currentChannel?.member && !meta?.archived && !currentChannel.archived && <>{meta?.kind === 'meeting' && !meta.round ? <p className="mt-4 text-sm">{w.ended}</p> : <form className="team-composer" onSubmit={send}>
@@ -277,8 +280,8 @@ export function TeamCommunication({ client, scope, staffId, language, administra
             {aiAdmin && currentChannel?.member && !auditReason && workflowPanel?.({ channelId: selectedId, directory, tasks, onChanged: () => setRefreshKey(v => v + 1) })}
             {aiAdmin && currentChannel?.member && !auditReason && !meta?.archived && <TeamAi key={'ai:' + scope + selectedId} client={client} language={language} channelId={selectedId} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} />}
             {aiAdmin && currentChannel?.member && !auditReason && !meta?.archived && <TeamOperations key={'operations:' + scope + selectedId} client={client} scope={scope} staffId={staffId} language={language} channelId={selectedId} directory={directory.filter(d => currentChannel.members.some(m => m.staffId === d.id))} tasks={tasks} onChanged={() => setRefreshKey(v => v + 1)} />}
-            {!auditReason && currentChannel?.member && <TeamManagementActions key={'management:'+scope+selectedId} client={client} scope={scope} channelId={selectedId} staffId={staffId} language={language} administration={aiAdmin} directory={directory} />}
-            <TeamTasks key={'tasks:' + scope + selectedId + auditReason} tasks={tasks} client={client} channelId={selectedId} staffId={staffId} language={language} name={name} canManage={!!meta?.canEdit && !!currentChannel?.member && !auditReason} readOnly={!!auditReason || !!meta?.archived} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} onReportIssue={task => {
+            {!auditReason && currentChannel?.member && <TeamManagementActions key={'management:'+scope+selectedId} client={client} scope={scope} channelId={selectedId} staffId={staffId} language={language} administration={aiAdmin} directory={directory} targetId={target?.kind === 'action' && !target.invalid ? target.id : undefined} targetActive={panel === 'work'} />}
+            <TeamTasks targetId={target?.kind === 'task' && !target.invalid && currentChannel?.member ? target.id : undefined} targetReady={workChannelId === selectedId} targetFailed={!!error} targetActive={panel === 'work'} key={'tasks:' + scope + selectedId + auditReason} tasks={workChannelId === selectedId ? tasks : []} client={client} channelId={selectedId} staffId={staffId} language={language} name={name} canManage={!!meta?.canEdit && !!currentChannel?.member && !auditReason} readOnly={!!auditReason || !!meta?.archived} messages={messages} onChanged={() => setRefreshKey(v => v + 1)} onReportIssue={task => {
               const draft = language.startsWith('zh') ? `任务：${task.text}\n遇到的困难：\n需要的帮助：` : language.startsWith('en') ? `Task: ${task.text}\nDifficulty: \nHelp needed: ` : `Tugas: ${task.text}\nKendala: \nBantuan yang dibutuhkan: `
               updateDraft({ text: (text.trim() ? text + '\n\n' : '') + draft }); setPanel('chat'); requestAnimationFrame(() => composerInput.current?.focus())
             }} />

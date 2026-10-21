@@ -1,0 +1,63 @@
+/* Narrow official MCP / disposable PG replay regression; no model or push transport. */
+const assert=require('node:assert/strict'),path=require('node:path'),http=require('node:http'),fs=require('node:fs'),{randomUUID,createHash}=require('node:crypto');
+const root=path.resolve(__dirname,'../..'),lib=n=>require(root+'/server/node_modules/'+n),built=n=>require(root+'/server/dist/services/'+n);
+assert(process.env.BT_TEST_RUN?.startsWith('bt-test-'));const url=new URL(process.env.DATABASE_URL);assert.equal(url.hostname,'127.0.0.1');assert.equal(url.pathname,'/team_test');
+const {PrismaClient}=lib('@prisma/client'),{McpServer,createMcpHandler}=lib('@modelcontextprotocol/server'),{toNodeHandler}=lib('@modelcontextprotocol/node'),{Client,StreamableHTTPClientTransport}=lib('@modelcontextprotocol/client');
+const {createTeamAgentBridge}=built('teamAgentBridge/service'),{actions}=built('teamAgentBridge/contract'),{createWorkItemService}=built('externalMcp/workItemService'),{createWorkItemTools}=built('externalMcp/workItemTools'),{workItemActions}=built('externalMcp/workItemContract'),{teamCommunication,readTeam,writeTeam}=built('TeamCommunicationService');
+const db=new PrismaClient(),storeId='wi-replay-store',agentId=randomUUID(),task={taskId:randomUUID(),version:1},owner={id:'wi-replay-owner',staffId:'wi-replay-owner-staff',storeId,role:'admin'},employee={id:'wi-replay-employee',staffId:'wi-replay-employee-staff',storeId,role:'staff',employeeApp:true};
+let grant={agentId,displayName:'Synthetic replay agent',storeId,sponsorUserId:owner.id,version:1,clientRevision:1,expiresAt:new Date(Date.now()+3600000).toISOString(),revoked:false,actions:[...actions],staffIds:[owner.staffId,employee.staffId],channelIds:[]};
+const saveGrant=()=>db.config.upsert({where:{storeId_key:{storeId,key:'fixture.replay.grant'}},create:{storeId,key:'fixture.replay.grant',category:'test',value:JSON.stringify(grant)},update:{value:JSON.stringify(grant)}});
+// Test-only runtime/source proof; these synthetic ports must never be production host defaults.
+const fixtureSource={kind:'public_sop',id:'synthetic-replay-source',version:1};
+const communication={
+ assertContext:async(tx,g,scope)=>{assert.equal(g.storeId,storeId);assert.deepEqual(scope.task,task);assert(scope.audienceStaffIds.every(id=>[owner.staffId,employee.staffId].includes(id)));return{purpose:'employee_work',compartmentKey:scope.compartmentKey,memoryNamespace:scope.compartmentKey,executionId:'synthetic-replay-execution'}},
+ admitOutput:async(tx,g,scope,input)=>({decision:'allow',executionId:scope.executionId,compartmentKey:scope.compartmentKey,audienceHash:scope.audienceHash,textHash:input.textHash,requestId:input.requestId,dataClasses:['operational'],sources:[fixtureSource]}),
+ authorizeSource:async(tx,g,scope,source)=>{assert.deepEqual(source,fixtureSource);return{dataClasses:['operational']}}
+};
+const bridgeDeps={enabled:true,communication,resolveGrant:async tx=>JSON.parse((await tx.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:'fixture.replay.grant'}}})).value),tasks:{assert:async(tx,g,ref)=>assert.deepEqual(ref,task)},readAttachment:async()=>{throw Error('unused')}};
+const service=createWorkItemService(db,{enabled:true,withActor:(tx,action,ctx,operation)=>createTeamAgentBridge(tx,bridgeDeps).withActor(action,ctx.task,ctx.channelId,operation),assertApprovalTarget:async()=>{throw Error('not authorized')}});
+let server,sdk,client,channel,ctx,t,assignInput,reviewInput,firstReview;const passed=[],req=()=>randomUUID(),native=()=>teamCommunication(db);
+async function check(name,fn){await fn();passed.push(name);console.log('PASS '+name)}
+async function call(name,args,ok=true){const r=await client.callTool({name,arguments:args});if(ok){assert(!r.isError,JSON.stringify(r));return r.structuredContent.result}assert(r.isError);return r}
+const snapshot=async()=>({task:await readTeam(db,storeId,`task.${channel.id}.${t.id}`),audit:await db.financeAuditLog.count({where:{storeId}}),reminders:await db.config.count({where:{storeId,key:{startsWith:'employee.workspace.reminder.'}}}),signal:await db.config.findUnique({where:{storeId_key:{storeId,key:'employee.workspace.notification.chat.pending'}}})});
+async function policy(mode){await db.config.upsert({where:{storeId_key:{storeId,key:'staff.access.policy.v2'}},create:{storeId,key:'staff.access.policy.v2',category:'test',value:JSON.stringify({version:2,active:true,revision:1,roles:[{id:'replay-manager',name:'Synthetic manager',description:'',permissions:{'team.manage':mode}}],assignments:[{staffId:owner.staffId,roleId:'replay-manager',overrides:{}}]})},update:{value:JSON.stringify({version:2,active:true,revision:2,roles:[{id:'replay-manager',name:'Synthetic manager',description:'',permissions:{'team.manage':mode}}],assignments:[{staffId:owner.staffId,roleId:'replay-manager',overrides:{}}]})}})}
+async function main(){
+ const tenant=await db.tenant.create({data:{name:'Synthetic replay regression'}});await db.store.create({data:{id:storeId,tenantId:tenant.id,name:'Synthetic replay store'}});
+ for(const[a,phone]of[[owner,'08995177001'],[employee,'08995177002']])await db.user.create({data:{id:a.id,phone,password:'synthetic-not-login',role:a.role,storeId,staff:{create:{id:a.staffId,storeId,name:a.id,employeeNumber:a.staffId}}}});await saveGrant();
+ const bridge=createTeamAgentBridge(db,bridgeDeps);channel=await bridge.create({task,requestId:req(),title:'Synthetic native replay channel',members:[owner.staffId,employee.staffId]});ctx={task,channelId:channel.id};await bridge.send({...ctx,requestId:req(),expectedLastSeq:0,text:'Synthetic source'});
+ const roundId=req();await writeTeam(db,storeId,`minutes.${channel.id}.${roundId}`,{id:roundId,fromSeq:1,toSeq:1,version:1,status:'confirmed',sourceSeq:[1],actions:[{text:'Synthetic employee task',ownerId:employee.staffId,dueDate:'2030-01-01',sourceSeq:[1]}]});
+ sdk=createMcpHandler(async()=>{const s=new McpServer({name:'isolated-work-item-replay',version:'1'});createWorkItemTools(s,service,workItemActions);return s},{legacy:'stateless',responseMode:'json'});const handler=toNodeHandler({fetch:r=>r.headers.get('authorization')==='Bearer synthetic-replay-only'?sdk.fetch(r):new Response(null,{status:401})});server=http.createServer(handler);await new Promise(r=>server.listen(0,'127.0.0.1',r));client=new Client({name:'synthetic-replay-client',version:'1'},{versionNegotiation:{mode:{pin:'2026-07-28'}}});await client.connect(new StreamableHTTPClientTransport(new URL('http://127.0.0.1:'+server.address().port+'/mcp'),{requestInit:{headers:{Authorization:'Bearer synthetic-replay-only'}}}));
+ await check('authorized review creates an immutable operation receipt and normal replay remains idempotent',async()=>{
+  assignInput={...ctx,requestId:req(),roundId,minuteVersion:1,actionIndex:0};t=await call('team_task_assign',assignInput);assert.equal(t.view,'operation_receipt');
+  await native().taskAction(employee,channel.id,t.id,{requestId:req(),expectedVersion:1,action:'accept'});await native().send(employee,channel.id,{requestId:req(),text:'FIRST_PRIVATE_EVIDENCE'});await native().taskAction(employee,channel.id,t.id,{requestId:req(),expectedVersion:2,action:'submit',note:'FIRST_PRIVATE_EVIDENCE',sourceSeq:[2]});
+  reviewInput={...ctx,employeeTaskId:t.id,requestId:req(),expectedVersion:3,action:'return',note:'Synthetic request for correction'};firstReview=await call('team_task_review',reviewInput);assert.equal(firstReview.version,4);assert.equal((await call('team_task_review',reviewInput)).version,4);assert.equal(firstReview.view,'operation_receipt');
+ });
+ await native().send(employee,channel.id,{requestId:req(),text:'LATEST_PRIVATE_EMPLOYEE_EVIDENCE'});await native().taskAction(employee,channel.id,t.id,{requestId:req(),expectedVersion:4,action:'submit',note:'LATEST_PRIVATE_EMPLOYEE_EVIDENCE',sourceSeq:[3]});
+ await check('new review, tasks.read and old review receipt all reject after real sponsor team.manage removal',async()=>{
+  grant.actions=['tasks.review'];await saveGrant();await db.user.update({where:{id:owner.id},data:{role:'manager'}});await policy('deny');const before=await snapshot();
+  await call('team_task_get',{...ctx,employeeTaskId:t.id},false);await call('team_task_review',{...reviewInput,requestId:req(),expectedVersion:5},false);await call('team_task_review',reviewInput,false);assert.deepEqual(await snapshot(),before);
+ });
+ await check('legal old review without tasks.read returns version4 snapshot, never later version5 evidence',async()=>{
+  await policy('allow');const before=await snapshot(),r=await call('team_task_review',reviewInput);assert.equal(r.version,4);assert.equal(r.status,'changes_requested');assert.equal(r.view,'operation_receipt');assert(!JSON.stringify(r).includes('LATEST_PRIVATE_EMPLOYEE_EVIDENCE'));assert.deepEqual(await snapshot(),before);await call('team_task_get',{...ctx,employeeTaskId:t.id},false);
+ });
+ await check('old request still rejects changed body and current plan reviewer removal',async()=>{
+  await call('team_task_review',{...reviewInput,note:'Changed body'},false);const current=await readTeam(db,storeId,`task.${channel.id}.${t.id}`),planId=req();await writeTeam(db,storeId,`task.${channel.id}.${t.id}`,{...current,planId,planRevision:1,audienceIds:[owner.staffId,employee.staffId],reviewerId:employee.staffId});
+  await call('team_task_review',reviewInput,false);await writeTeam(db,storeId,`task.${channel.id}.${t.id}`,current);
+ });
+ await check('assignment same request and origin dedup cannot become an alternate current-evidence read',async()=>{
+  grant.actions=['tasks.assign'];await saveGrant();const before=await snapshot();for(const input of [assignInput,{...assignInput,requestId:req()}]){const r=await call('team_task_assign',input);assert.equal(r.version,1);assert.equal(r.status,'assigned');assert.equal(r.view,'operation_receipt');assert.deepEqual(r.events.map(x=>x.action),['assign']);assert(!JSON.stringify(r).includes('PRIVATE_EVIDENCE'));assert(!JSON.stringify(r).includes('LATEST_PRIVATE_EMPLOYEE_EVIDENCE'))}const after=await snapshot();assert.deepEqual(after.task,before.task);assert.equal(after.audit,before.audit);assert.equal(after.reminders,before.reminders);
+ });
+ await check('old agent receipt without stored result fails closed instead of returning current task',async()=>{
+  grant.actions=['tasks.review'];await saveGrant();const key=`taskRequest.agent:${agentId}.${reviewInput.requestId}`,old=await readTeam(db,storeId,key),{result,...legacy}=old;await writeTeam(db,storeId,key,legacy);const before=await snapshot();await call('team_task_review',reviewInput,false);assert.deepEqual(await snapshot(),before);await writeTeam(db,storeId,key,old);
+ });
+ await check('revoked current grant rejects old receipt even when stored result is available',async()=>{
+  grant.revoked=true;await saveGrant();await call('team_task_review',reviewInput,false);grant.revoked=false;await saveGrant();
+ });
+ await check('new authorized review uses current version and human native replay behavior stays intact',async()=>{
+  const r=await call('team_task_review',{...reviewInput,requestId:req(),expectedVersion:5});assert.equal(r.version,6);assert(JSON.stringify(r).includes('LATEST_PRIVATE_EMPLOYEE_EVIDENCE'));
+  await native().taskAction(employee,channel.id,t.id,{requestId:req(),expectedVersion:6,action:'submit',note:'AFTER_LEGITIMATE_REVIEW',sourceSeq:[3]});await db.user.update({where:{id:owner.id},data:{role:'admin'}});
+  const input={requestId:req(),expectedVersion:7,action:'complete'};assert.equal((await native().taskAction(owner,channel.id,t.id,input)).version,8);assert.equal((await native().taskAction(owner,channel.id,t.id,input)).version,8);
+ });
+ const out=path.join(root,'output/agent-notification-work-items');fs.mkdirSync(out,{recursive:true});fs.writeFileSync(out+'/replay-p2-results.json',JSON.stringify({tests:passed.length,passed,batch:process.env.BT_TEST_RUN,realPg:true,officialMcp:true,productionWrites:0,realPush:0,modelCalls:0},null,2));
+}
+main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{if(client)await client.close();if(server)await new Promise(r=>server.close(r));if(sdk)await sdk.close?.();await db.$disconnect()});

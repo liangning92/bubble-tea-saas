@@ -190,6 +190,11 @@ export async function projectApprovalAwareness(db: any, actor: ActorInput): Prom
   return project(db, actor)
 }
 
+/** Exact-object awareness only; the caller must separately authorize this object. Never executes approval. */
+export async function projectApprovalAwarenessTarget(db: any, actor: ActorInput, target: { domain: string; objectId: string }): Promise<ApprovalAwareness[]> {
+  return project(db, actor, await nodes(db, actor.storeId, target))
+}
+
 /** Worker hook. No transport, push keys, accounts, or business mutations. */
 export async function collectApprovalNotices(db: any, storeId: string): Promise<number> {
   if (typeof db.$transaction === 'function') return db.$transaction((tx: any) => collectApprovalNotices(tx, storeId), { timeout: 30000 })

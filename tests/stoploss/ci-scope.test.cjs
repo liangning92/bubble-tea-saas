@@ -265,3 +265,31 @@ test('agent task and Hermes changes select isolated task checks without unrelate
   const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');assert.match(runner,/if\(plan\.agentTasks\).*test-agent-tasks\.py/);assert.match(runner,/--import.*hermesTransport\.test\.ts/);
  }finally{f.close()}
 });
+
+test('team agent bridge selects the synthetic MCP and PostgreSQL checks without unrelated POS',()=>{
+ const f=fixture();try{
+  for(const file of ['server/src/services/teamAgentBridge/service.ts','server/src/services/teamAgentBridge/events.ts','server/src/services/externalMcp/teamCommunicationTools.ts','tests/stoploss/team-agent-bridge-check.cjs']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.teamAgentBridge,true,file);assert.equal(p.electronTypes,false);assert.equal(p.browser.length,0);assert(!p.components.includes('pos'));assert.deepEqual(p.unmappedCode,[]);
+  }
+ }finally{f.close()}
+});
+
+test('notification and native employee task adapters select real MCP/PG and scoped deep-link UI',()=>{
+ const f=fixture();try{
+  for(const file of ['server/src/services/externalMcp/workItemService.ts','server/src/services/TeamTaskReminderService.ts','server/src/services/TeamWorkItemLinks.ts','tests/stoploss/team-work-items-check.cjs','tests/stoploss/team-work-item-replay-check.cjs']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.teamWorkItems,true,file);assert.equal(p.electronTypes,false);assert(!p.components.includes('pos'));assert.deepEqual(p.unmappedCode,[]);
+  }
+  for(const file of ['shared/teamWorkTarget.tsx','shared/TeamCommunication.tsx','shared/TeamChatMessages.tsx','shared/TeamTasks.tsx','shared/TeamManagementActions.tsx','client-staff/src/components/StaffTeamConversation.tsx']){f.write(file);const p=selectScope([file],f);assert(p.teamWorkItems,file);assert(p.browser.some(b=>b.scripts.includes('tests/stoploss/team-work-item-target-browser-check.cjs')),file)}
+  const runner=fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8');assert.match(runner,/if\(plan\.teamWorkItems\).*with-docker-test\.py.*test-team-work-items\.py/);
+ }finally{f.close()}
+});
+
+test('employee runtime source, child scripts and fixtures require isolated PG with server dependencies',()=>{
+ const f=fixture();try{
+  f.write('tests/stoploss/employee-runtime-child.test.cjs');
+  for(const file of ['server/src/services/teamAgentBridge/employeeRuntime.ts','scripts/hermes_employee/host_stdio.py','scripts/test-employee-runtime.py','tests/stoploss/employee-runtime-check.cjs']){
+   f.write(file);const p=selectScope([file],f);assert.equal(p.employeeRuntime,true,file);assert(p.unitTests.includes('tests/stoploss/employee-runtime-child.test.cjs'));assert.equal(p.needsDependencies,true);assert.equal(p.needsServer,true);assert.equal(p.electronTypes,false);assert(!p.components.includes('pos'));
+  }
+  assert.match(fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8'),/if\(plan\.employeeRuntime\).*with-docker-test\.py.*test-employee-runtime\.py/);
+ }finally{f.close()}
+});

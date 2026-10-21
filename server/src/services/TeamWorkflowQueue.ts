@@ -4,6 +4,7 @@ import type { ManagementConsent } from './TeamManagementContext'
 import type { ManagementResult } from './TeamManagementPolicy'
 import { inheritManagementPolicy } from './TeamManagementDefaults'
 import type { TeamActor, TeamChannel } from './TeamCommunicationService'
+import { enqueueEmployeeIntake } from './teamAgentBridge/employeeIntake'
 
 export const workflowHash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 export const workflowPad = (n: number) => String(n).padStart(12, '0')
@@ -46,7 +47,8 @@ export const workflowJobKey = (c: string, seq: number) => `workflow.job.${c}.${w
 
 /** Called under the message's channel transaction lock. No provider, timer or credentials. */
 export async function enqueueTeamWorkflow(db: any, a: TeamActor, c: TeamChannel, message: any, ports: Ports) {
-  if (message.ai) return
+  if (message.ai || message.agent) return
+  if (await enqueueEmployeeIntake(db,a.storeId,c,message)) return
   const inherited = await inheritManagementPolicy(db, a.storeId, c)
   if (inherited.active && 'paused' in inherited && inherited.paused) return
   if (inherited.active && 'unavailable' in inherited && inherited.unavailable) {

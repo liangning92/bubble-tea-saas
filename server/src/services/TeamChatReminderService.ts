@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import { readTeam, TeamChannel } from './TeamCommunicationService'
 import { employeeAppAccess } from './EmployeeAppAccess'
 import { readWork, writeWork } from './EmployeeWorkspaceStore'
+import { teamWorkItemLink } from './TeamWorkItemLinks'
 
 const eventPrefix = 'team-chat:'
 export async function chatRecipientAccess(db: any, storeId: string, staffId: string, userId?: string) {
@@ -33,7 +34,7 @@ export async function enqueueChatReminders(db: any, storeId: string, c: TeamChan
     const key = `reminder.${member.staffId}.${id}`
     if (await readWork(storeId, key, db)) continue
     await writeWork(storeId, key, { id, userId: person.userId, staffId: member.staffId, event, title: 'Pesan kerja baru / 新工作消息',
-      url: '/team?channel=' + encodeURIComponent(c.id), createdAt: message.createdAt, read: false, status: 'pending',
+      url: teamWorkItemLink(c.id, { messageSeq: message.seq }), createdAt: message.createdAt, read: false, status: 'pending',
       chat: { channelId: c.id, messageId: message.id, seq: message.seq } }, db)
     queued = true
   }

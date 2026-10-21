@@ -1,3 +1,4 @@
+import { TeamWorkTargetStatus, teamWorkTargetStyle } from './teamWorkTarget'
 import { useState } from 'react'
 import type { TeamClient } from './TeamCommunication'
 import { teamCopy } from './teamCopy'
@@ -12,7 +13,8 @@ export interface TeamTask {
 }
 type Action = 'accept' | 'submit' | 'return' | 'complete' | 'cancel'
 const button = 'rounded-lg border px-3 py-2 text-sm disabled:opacity-50'
-export function TeamTasks({ tasks, client, channelId, staffId, language, name, canManage, readOnly, messages, onChanged, onReportIssue }: {
+export function TeamTasks({ tasks, client, channelId, staffId, language, name, canManage, readOnly, messages, onChanged, onReportIssue, targetId, targetReady = true, targetFailed = false, targetActive = true }: {
+ targetId?: string; targetReady?: boolean; targetFailed?: boolean; targetActive?: boolean
  tasks: TeamTask[]; client: TeamClient; channelId: string; staffId: string; language: string; name: (id: string) => string
  canManage: boolean; readOnly: boolean; messages: { seq: number; authorId: string; text: string; files: string[] }[]; onChanged: () => void; onReportIssue?: (task: TeamTask) => void
 }) {
@@ -35,10 +37,11 @@ export function TeamTasks({ tasks, client, channelId, staffId, language, name, c
   } catch (e: any) { if (client.current()) setError(e?.response?.data?.message || 'TEAM_OPERATION_FAILED') }
   finally { setBusy(false) }
  }
- return <section className="space-y-3 rounded-xl border bg-white p-4" data-testid="team-tasks">
+ return <section className="space-y-3 rounded-xl border bg-white p-4" data-testid="team-tasks" data-team-target-scope={channelId}>
+  <TeamWorkTargetStatus id={targetId} kind="task" scope={channelId + staffId} ready={targetReady} failed={targetFailed} found={tasks.some(task => task.id === targetId)} active={targetActive} language={language} />
   <h3 className="font-semibold">{w.tasks}</h3><p className="text-xs text-gray-500">{w.taskHelp}</p>
   {!tasks.length && <p className="text-sm text-gray-500">{w.noTasks}</p>}
-  {tasks.map(task => <article key={task.id} className="space-y-2 rounded-lg border p-3 text-sm" data-testid="team-task">
+  {tasks.map(task => <article key={task.id} className="space-y-2 rounded-lg border p-3 text-sm" data-testid="team-task" data-team-target-kind="task" data-team-target-id={task.id} style={!targetFailed && task.id === targetId ? teamWorkTargetStyle : undefined}>
    <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="whitespace-pre-wrap break-words font-medium">{task.text}</h4><span className="rounded-full bg-gray-100 px-3 py-1">{w[task.status]}</span></div>
    <p>{common.owner}: {name(task.ownerId)} · {common.due}: {task.deadlineAt ? date(task.deadlineAt) : task.dueDate} · {task.planId ? op.planSnapshot : w.snapshot}: {task.planRevision || task.minuteVersion}</p>
    {task.planId && <div className="space-y-1"><p>{op.reviewer}: {name(task.reviewerId || '')}</p><p>{op.acceptBy}: {date(task.acceptByAt!)}</p><p className="whitespace-pre-wrap break-words">{op.evidence}: {task.evidenceRequired}</p><p className="whitespace-pre-wrap break-words">{op.criteria}: {task.acceptanceCriteria}</p>{task.planPaused && <p role="status" className="text-amber-700">{op.planPaused}</p>}</div>}

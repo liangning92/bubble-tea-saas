@@ -1,3 +1,4 @@
+import { TeamWorkTargetStatus, teamWorkTargetStyle } from './teamWorkTarget'
 import { useEffect, useRef, useState } from 'react'
 import type { TeamClient } from './TeamCommunication'
 
@@ -53,8 +54,8 @@ function savedCommand(raw:string|null):Command|null {
   if(!v||typeof v.actionId!=='string'||typeof v.requestId!=='string'||!['submit_evidence','verify','cancel'].includes(v.action)||!Number.isSafeInteger(v.expectedVersion)||typeof v.note!=='string'||!Array.isArray(v.sourceSeq)||typeof v.criteriaConfirmed!=='boolean')throw Error('JOURNAL_INVALID')
   return v
 }
-export function TeamManagementActions({client,scope,channelId,staffId,language,administration,directory=[]}:{
-  client:Pick<TeamClient,'request'|'current'>;scope:string;channelId:string;staffId:string;language:string;administration:boolean;directory?:{id:string;name:string}[]
+export function TeamManagementActions({client,scope,channelId,staffId,language,administration,directory=[],targetId,targetActive=true}:{
+  targetId?:string;targetActive?:boolean;client:Pick<TeamClient,'request'|'current'>;scope:string;channelId:string;staffId:string;language:string;administration:boolean;directory?:{id:string;name:string}[]
 }) {
   const c=language.startsWith('zh')?zh:language.startsWith('en')?en:id, resource=`${scope}:${channelId}:${staffId}:${administration?'admin':'employee'}`
   const storage=`team-management-actions:${resource}`, base=`/team/channels/${encodeURIComponent(channelId)}/management/actions`
@@ -116,14 +117,15 @@ export function TeamManagementActions({client,scope,channelId,staffId,language,a
     }finally{writing.current=false;if(current(n))setBusy(false)}
   }
   const numbers=refs(sourceRefs),closed=(r:ManagementActionView)=>['verified','cancelled'].includes(r.status)
-  return <section className="min-w-0 space-y-3 rounded-xl border bg-white p-4" data-testid="team-management-actions" aria-label={c.title}>
+  return <section className="min-w-0 space-y-3 rounded-xl border bg-white p-4" data-testid="team-management-actions" data-team-target-scope={resource} aria-label={c.title}>
+    <TeamWorkTargetStatus id={targetId} kind="action" scope={resource} ready={state.resource===resource&&!state.loading} failed={state.resource===resource&&state.failed} found={items.some(item=>item.id===targetId)} active={targetActive} language={language}/>
     <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">{c.title}</h3><button type="button" className={button} disabled={busy} onClick={()=>void load(!!command)}>{command?c.check:c.refresh}</button></div>
     <p className="text-xs text-gray-600">{c.help}</p>
     {(state.resource!==resource||state.loading)&&<p role="status" className="text-sm text-gray-500">{c.loading}</p>}
     {feedbackHere.error&&<p role="alert" className="break-words text-sm text-red-700">{feedbackHere.error}</p>}{feedbackHere.notice&&<p role="status" className="text-sm text-green-800">{feedbackHere.notice}</p>}
     {command&&<p role="status" className="text-sm text-amber-800">{c.unknown}</p>}
     {state.resource===resource&&!state.loading&&!state.failed&&!items.length&&<p className="text-sm text-gray-500">{c.empty}</p>}
-    {items.map(record=><article key={record.id} className="min-w-0 space-y-2 rounded-lg border p-3 text-sm" data-testid={`management-action-${record.id}`}>
+    {items.map(record=><article key={record.id} className="min-w-0 space-y-2 rounded-lg border p-3 text-sm" data-testid={`management-action-${record.id}`} data-team-target-kind="action" data-team-target-id={record.id} style={!state.failed&&record.id===targetId?teamWorkTargetStyle:undefined}>
       <div className="flex flex-wrap items-start justify-between gap-2"><h4 className="whitespace-pre-wrap break-words font-medium">{record.title}</h4><span className="rounded-full bg-gray-100 px-2 py-1">{c[record.status]}</span></div>
       {record.blockedReason === 'responsible_owner_unavailable' && <p role="status" className="text-sm text-amber-800">{c.blockedOwner}</p>}
       <p className="break-words">{c.owner}: {name(record.assignedStaffId)} · {c.reviewer}: {name(record.operatorStaffId)}</p>

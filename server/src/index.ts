@@ -20,6 +20,7 @@ import {serviceHealth} from './services/HealthService'
 import prisma from './config/database'
 import { createAgentPilotHost } from './services/agentTasks/host'
 import { mountAgentPilot } from './routes/agentPilot'
+import { configuredEmployeeDeployment } from './services/teamAgentBridge/employeeConfigured'
 import { upgradeLocalSqlite } from './utils/sqliteUpgrade'
 import { aiPermissionsRouter } from './routes/aiPermissions'
 // Global BigInt JSON serialization support
@@ -189,6 +190,8 @@ app.use(morgan('dev', {
 }))
 const agentPilotHost = createAgentPilotHost(prisma)
 mountAgentPilot(app, agentPilotHost)
+const employeeHermes=configuredEmployeeDeployment(prisma)
+if(employeeHermes)app.use('/api/internal/employee-hermes',employeeHermes.router)
 httpServer.once('close', () => { void agentPilotHost.close().catch(() => console.error('[AgentPilot] AGENT_PILOT_CLOSE_FAILED')) })
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))

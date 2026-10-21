@@ -1,0 +1,163 @@
+import { createHash } from 'crypto'
+import { TeamActor, TeamChannel, TeamError, teamCommunication, readTeam } from '../TeamCommunicationService'
+import { bindTeamAgent } from './identity'
+import { readAuthorizedBridgeChannel } from './directDelegation'
+import { BridgeAction, BridgeDependencies, BridgeGrant, grantSchema, schemas, TaskRef } from './contract'
+import { communicationScope, checkOutput, OutputPlan, assertDataAudience, textHash } from './confidentiality'
+import { TEAM_AGENT_PREFIX as prefix, teamReplyEventId } from './events'
+const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
+const denied = (): never => { throw new TeamError(403, 'TEAM_AGENT_ACCESS_DENIED') }
+async function read(db: any, storeId: string, key: string) {
+  const r = await db.config.findUnique({ where: { storeId_key: { storeId, key: prefix + key } } })
+  return r ? JSON.parse(r.value) : null
+}
+async function put(db: any, storeId: string, key: string, value: unknown) {
+  await db.config.upsert({ where: { storeId_key: { storeId, key: prefix + key } }, create: { storeId, key: prefix + key, category: 'staff', value: JSON.stringify(value) }, update: { value: JSON.stringify(value) } })
+}
+export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
+  const native = teamCommunication(db), now = deps.now || Date.now
+  async function grant(database: any, action: BridgeAction) {
+    if (deps.enabled !== true) denied()
+    const g = grantSchema.parse(await deps.resolveGrant(database))
+    if (g.revoked || Date.parse(g.expiresAt) <= now() || !g.actions.includes(action)) denied()
+    const sponsor = await database.user.findFirst({ where: { id: g.sponsorUserId, storeId: g.storeId, role: { in: ['admin', 'manager'] } }, select: { id: true, staff: { select: { id: true, storeId: true, status: true } } } })
+    if (!sponsor?.staff || sponsor.staff.status !== 'active' || sponsor.staff.storeId !== g.storeId) denied()
+    return g
+  }
+  async function authorize(database: any, g: BridgeGrant, action: BridgeAction, task?: TaskRef, channelId?: string, currentChannel?: TeamChannel) {
+    const fresh = await grant(database, action)
+    if (fresh.agentId !== g.agentId || fresh.storeId !== g.storeId || fresh.sponsorUserId !== g.sponsorUserId || fresh.version !== g.version || fresh.clientRevision !== g.clientRevision || hash(fresh) !== hash(g)) denied()
+    if (task) await deps.tasks.assert(database, fresh, task, channelId)
+    if (channelId) {
+      const authorized = await readAuthorizedBridgeChannel(database,fresh,task!,channelId,currentChannel,now())
+      if(authorized.delegatedDirect&&!['messages.read','messages.send'].includes(action))denied()
+      if(authorized.delegatedDirect&&action==='messages.send'){
+        const sourcePrefix='team.communication.message.'+channelId+'.'
+        const rows=await database.config.findMany({where:{storeId:g.storeId,key:{startsWith:sourcePrefix,gte:sourcePrefix+String(authorized.fromSeq).padStart(12,'0')},value:{contains:'"authorId":'+JSON.stringify(authorized.sourceStaffId)}},orderBy:{key:'desc'},take:1,select:{value:true}})
+        const source=rows[0]&&JSON.parse(rows[0].value)
+        if(!source||source.authorId!==authorized.sourceStaffId||source.channelId!==channelId||source.seq<authorized.fromSeq||source.seq>authorized.channel.lastSeq||source.ai||source.agent||typeof source.text!=='string'||!source.text.trim())denied()
+      }
+      if (task) await communicationScope(database,deps,fresh,task,authorized.channel)
+      return authorized
+    } else if (task) await communicationScope(database,deps,fresh,task)
+  }
+  async function actor(action: BridgeAction, task?: TaskRef, channelId?: string, replyToSeq?: number, directive?: OutputPlan) {
+    const g = await grant(db, action)
+    await authorize(db, g, action, task, channelId)
+    const a: TeamActor = { id: g.sponsorUserId, storeId: g.storeId, staffId: 'agent:' + g.agentId, role: 'agent' }
+    bindTeamAgent(a, { action, agentId: g.agentId, grantVersion: g.version, clientRevision: g.clientRevision, name: g.displayName, context: task ? { task, replyToSeq } : undefined,
+      created: async (database, c) => { if(action!=='conversation.create')denied(); await authorize(database, g, action, task); if(action==='conversation.create') await checkOutput(database,deps,g,task,c,directive,{text:(c as any).title,files:[]}); await put(database, g.storeId, 'channel.' + c.id, { agentId: g.agentId, task, createdAt: new Date(now()).toISOString() }) },
+      check: async database => { await authorize(database, g, action, task, channelId) },
+      directChannel: async (database,c) => { if(!task||c.id!==channelId)return null; const authorized=await authorize(database,g,action,task,c.id,c);return authorized?.delegatedDirect?{fromSeq:authorized.fromSeq}:null },
+      channel: async (database, c) => { await authorize(database,g,action,task,c.id,c); if(action==='conversation.create') await checkOutput(database,deps,g,task,c,directive,{text:c.title,files:[]}) },
+      outbound: async (database,c,input) => { if(!task) denied(); await checkOutput(database,deps,g,task,c,directive,input) } })
+    return { a, g }
+  }
+  async function visibleMessages(a:TeamActor,id:string,after:number) {
+    const c=await readTeam(db,a.storeId,'channel.'+id)
+    const floor=Math.max(...c.members.map((m:any)=>m.fromSeq))
+    const page=await native.messages(a,id,Math.max(after,floor-1))
+    const currentFloor=Math.max(...page.channel.members.map((m:any)=>m.fromSeq))
+    return {...page,messages:page.messages.filter((m:any)=>m.seq>=currentFloor),aiHandlingUpdates:page.aiHandlingUpdates.filter((m:any)=>m.seq>=currentFloor),cursor:Math.max(page.cursor,currentFloor-1)}
+  }
+  async function attachmentAudience(g:BridgeGrant,id:string,fileId:string) {
+    const c=await readTeam(db,g.storeId,'channel.'+id), floor=Math.max(...c.members.map((m:any)=>m.fromSeq))
+    const prefix='team.communication.fileGrant.'+id+'.'+fileId+'.'
+    if(!await db.config.findFirst({where:{storeId:g.storeId,key:{startsWith:prefix,gte:prefix+String(floor).padStart(12,'0')}},select:{id:true}})) denied()
+    return c
+  }
+  return {
+    async withActor<T>(action: BridgeAction, task: TaskRef, channelId: string, operation: (actor: TeamActor) => Promise<T>): Promise<T> {
+      const { a } = await actor(action, task, channelId)
+      return operation(a)
+    },
+    async directory(input: unknown) {
+      schemas.directory.parse(input)
+      const { g } = await actor('directory.read')
+      return db.staff.findMany({ where: { storeId: g.storeId, id: { in: g.staffIds }, status: 'active' },
+        select: { id: true, name: true, position: true, user: { select: { role: true } } }, orderBy: { name: 'asc' } })
+    },
+    async channels(input: unknown) {
+      const v = schemas.channels.parse(input), { g } = await actor('conversations.read', v.task)
+      const created = await db.config.findMany({ where: { storeId: g.storeId, key: { startsWith: prefix + 'channel.' } }, take: 501 })
+      if (created.length > 500) throw new TeamError(409, 'TEAM_CHANNEL_LIMIT')
+      const ids = new Set<string>(g.channelIds)
+      for (const row of created) if (JSON.parse(row.value).agentId === g.agentId) ids.add(row.key.slice((prefix + 'channel.').length))
+      const result = []
+      for (const id of ids) {
+        let authorized
+        try { authorized=await authorize(db, g, 'conversations.read', v.task, id) }
+        catch (error) { if (error instanceof TeamError && error.status === 403) continue; throw error }
+        const c = await readTeam(db, g.storeId, 'channel.' + id)
+        result.push({ id: c.id, title: c.title, kind: c.kind, version: c.version, lastSeq: c.lastSeq,
+          fromSeq: authorized.fromSeq })
+      }
+      return result
+    },
+    async create(input: unknown) {
+      const v = schemas.create.parse(input), { a, g } = await actor('conversation.create', v.task,undefined,undefined,{purpose:'title',requestId:v.requestId,expectedTextHash:textHash(v.title)})
+      if (v.members.some(id => !g.staffIds.includes(id))) denied()
+      const c = await native.create(a, { requestId: v.requestId, title: v.title, kind: 'group', members: v.members })
+      return c
+    },
+    async messages(input: unknown) {
+      const v = schemas.messages.parse(input), { a } = await actor('messages.read', v.task, v.channelId)
+      return visibleMessages(a, v.channelId, v.afterSeq)
+    },
+    async attachment(input: unknown) {
+      const v = schemas.attachment.parse(input), { a, g } = await actor('attachments.read', v.task, v.channelId)
+      const file = await native.attachment(a, v.channelId, v.fileId)
+      await attachmentAudience(g,v.channelId,v.fileId)
+      // Storage transport is injected; no host-specific path or public file URL.
+      if (file.size > 2 * 1024 * 1024) throw new TeamError(413, 'TEAM_ATTACHMENT_TOO_LARGE')
+      const bytes = await deps.readAttachment(a.storeId, v.fileId)
+      if (bytes.byteLength > 2 * 1024 * 1024) throw new TeamError(413, 'TEAM_ATTACHMENT_TOO_LARGE')
+      // Recheck after I/O so revocation while loading does not disclose the file.
+      await actor('attachments.read', v.task, v.channelId)
+      const c = await attachmentAudience(g,v.channelId,v.fileId), scope = await communicationScope(db,deps,g,v.task,c)
+      if (!deps.communication?.classifyAttachment) denied()
+      const contentHash = createHash('sha256').update(bytes).digest('hex')
+      const label = await deps.communication.classifyAttachment(db,g,scope,v.fileId,contentHash)
+      if(label.contentHash !== contentHash || label.channelId !== v.channelId || label.taskId !== v.task.taskId) denied()
+      await assertDataAudience(db,g,scope,label.dataClass)
+      await actor('attachments.read',v.task,v.channelId)
+      await attachmentAudience(g,v.channelId,v.fileId)
+      return { fileId: v.fileId, type: file.type, size: bytes.byteLength, encoding: 'base64', content: Buffer.from(bytes).toString('base64') }
+    },
+    async send(input: unknown) {
+      const v = schemas.send.parse(input), directive:OutputPlan = { purpose:'message',requestId:v.requestId,expectedTextHash:textHash(v.text),replyToSeq:v.replyToSeq }, { a, g } = await actor('messages.send', v.task, v.channelId, v.replyToSeq,directive)
+      // Requiring a visible source ensures replies cannot cite pre-membership history.
+      if (v.replyToSeq !== undefined) {
+        const page = await native.messages(a, v.channelId, v.replyToSeq - 1)
+        if (!page.messages.some((m: any) => m.seq === v.replyToSeq)) denied()
+      }
+      const result = await native.send(a, v.channelId, { requestId: v.requestId, text: v.text, files: [], expectedLastSeq: v.expectedLastSeq })
+      // Wake failure must not turn a committed message into an apparent failed write.
+      try { deps.messageCommitted?.(a.storeId) } catch { /* persisted native reminder is recoverable */ }
+      return { ...result, task: v.task, replyToSeq: v.replyToSeq, delivery: 'stored' }
+    },
+    async receipts(input: unknown) {
+      const v = schemas.receipts.parse(input), { a } = await actor('receipts.read', v.task, v.channelId)
+      return { device: 'unknown', receipts: await native.receipts(a, v.channelId) }
+    },
+    async markRead(input: unknown) {
+      const v = schemas.markRead.parse(input), { a } = await actor('agent.read', v.task, v.channelId)
+      return native.markRead(a, v.channelId, v.throughSeq) // only the agent's own cursor
+    },
+    async changes(input: unknown) {
+      const v = schemas.changes.parse(input), { a, g } = await actor('changes.read', v.task, v.channelId)
+      const page = await visibleMessages(a, v.channelId, v.afterSeq)
+      const events = []
+      for (const message of page.messages) {
+        if (message.authorId === a.staffId || message.agent) continue
+        const eventId = teamReplyEventId(g.agentId, v.task.taskId, v.channelId, message.id)
+        // Pending was committed atomically with the employee message, not created by this scan.
+        const pending = await read(db, g.storeId, 'pending.' + eventId)
+        if (!pending) throw new TeamError(409, 'TEAM_REPLY_OUTBOX_MISSING')
+        events.push({ eventId, name: 'team.message_created', timestamp: message.createdAt,
+          data: { taskId: v.task.taskId, channelId: v.channelId, messageId: message.id, seq: message.seq }, cursor: message.seq })
+      }
+      return { events, nextCursor: page.cursor, hasMore: page.hasMore, followupState: 'pending', execution: 'not_started' }
+    }
+  }
+}

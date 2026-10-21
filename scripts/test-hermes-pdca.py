@@ -19,6 +19,8 @@ try:
                    check=True, cwd=root, env=env, timeout=240)
     subprocess.run([str(python), '-m', 'unittest', 'discover', '-s', 'hermes/tests',
                     '-p', 'test_pdca*.py', '-v'], check=True, cwd=root, env=env, timeout=180)
+    subprocess.run([str(python), '-m', 'unittest', 'discover', '-s', 'hermes/tests',
+                    '-p', 'test_source_verifier_batch.py', '-v'], check=True, cwd=root, env=env, timeout=60)
 finally:
     shutil.rmtree(base)
     print('Owned synthetic Hermes test environment removed', flush=True)
