@@ -3,7 +3,7 @@ import { Webhook } from 'standardwebhooks'
 import { ProtocolError } from '@modelcontextprotocol/server'
 import { EventOwner, EventRepository, Subscription, eventCatalog, subscribeInput, unsubscribeInput, taskEvent } from './eventsContract'
 import { assertAgentPilotStamp } from '../agentTasks/pilot'
-import { WebhookPost, publicCallbackUrl } from './webhookDelivery'
+import { WebhookPost, publicCallbackUrl, CallbackDiagnostic, CallbackFailure, callbackDiagnostic } from './webhookDelivery'
 
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const ownerKey = (owner: EventOwner) => [owner.storeId, owner.agentId, owner.subjectKey, ...(owner.pilot ? [owner.pilot.id, owner.pilot.startedAt, owner.pilot.expiresAt] : [])]
@@ -16,7 +16,7 @@ const secretValid = (secret: string) => /^whsec_[A-Za-z0-9+/]+={0,2}$/.test(secr
 })()
 export function taskEvents(options: { repository: EventRepository; post: WebhookPost;
   authorize: (owner: EventOwner, taskId: string) => Promise<void>;
-  audit: (event: { action: string; subscriptionId: string; storeId: string; status?: number }) => Promise<void>;
+  audit: (event: { action: string; subscriptionId: string; storeId: string; status?: number; diagnostic?: CallbackDiagnostic & { elapsedMs: number } }) => Promise<void>;
   now?: () => number }) {
   const now = options.now || Date.now
   const active = (owner: EventOwner) => assertAgentPilotStamp(owner, now())
@@ -61,13 +61,21 @@ export function taskEvents(options: { repository: EventRepository; post: Webhook
         if (old) state.subscriptions[state.subscriptions.indexOf(old)] = value; else state.subscriptions.push(value)
         return { ...value }
       })
+      const verificationStarted = now()
+      let verificationPhase: 'verification' | 'authorization' = 'verification', verificationStatus: number | undefined
       try {
         const challenge = randomUUID(), response = await post(sub, { type: 'verification', challenge }, randomUUID())
+        verificationStatus = response.status
         active(owner)
         if (now() >= sub.expiresAt) throw Error('subscription_expired')
-        const echoed = JSON.parse(response.body)?.challenge
-        if (response.status < 200 || response.status >= 300 || typeof echoed !== 'string' || !same(echoed, challenge)) throw Error('challenge_failed')
+        if (response.status < 200 || response.status >= 300) throw new CallbackFailure('http_status', 'response', response.status)
+        let echoed: unknown
+        try { echoed = JSON.parse(response.body)?.challenge } catch { throw new CallbackFailure('response_invalid_json', 'verification', response.status) }
+        if (typeof echoed !== 'string') throw new CallbackFailure('challenge_missing', 'verification', response.status)
+        if (!same(echoed, challenge)) throw new CallbackFailure('challenge_mismatch', 'verification', response.status)
+        verificationPhase = 'authorization'
         await authorized(owner, v.arguments.taskId)
+        verificationPhase = 'verification'
         await options.repository.transaction(owner.storeId, state => {
           active(owner)
           const current = state.subscriptions.find(s => s.id === id)
@@ -75,10 +83,11 @@ export function taskEvents(options: { repository: EventRepository; post: Webhook
           if (!current || current.generation !== sub.generation) throw Error('subscription_changed')
           current.active = true
         })
-      } catch {
+      } catch (error) {
+        const diagnostic = { ...callbackDiagnostic(error, verificationPhase, verificationStatus), elapsedMs: Math.max(0, Math.floor(now() - verificationStarted)) }
         await options.repository.transaction(owner.storeId, state => { const current = state.subscriptions.find(s => s.id === id); if (current?.generation === sub.generation) { current.active = false; current.secret = ''; delete current.previousSecret } })
-        await options.audit({ action: 'callback_verification_failed', subscriptionId: id, storeId: owner.storeId })
-        throw new ProtocolError(-32015, 'Callback endpoint verification failed', { reason: 'challenge_failed' })
+        await options.audit({ action: 'callback_verification_failed', subscriptionId: id, storeId: owner.storeId, ...(diagnostic.status ? { status: diagnostic.status } : {}), diagnostic })
+        throw new ProtocolError(-32015, 'Callback endpoint verification failed', diagnostic)
       }
       await options.audit({ action: 'subscribed', subscriptionId: id, storeId: owner.storeId })
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false }
