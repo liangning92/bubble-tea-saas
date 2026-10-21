@@ -12,7 +12,7 @@ export interface DispatchRecord {
   target: { origin: string; identityId: string; credentialGeneration: number; dockerDesktopHost?: boolean }
   requestedBy: { agentId: string; grantVersion: number; clientRevision: number }
   state: 'in_flight' | 'admitted' | 'admission_unknown' | 'rejected'
-  mapping?: RunMapping; admission?: AdmissionResult; lastStatus?: StatusResult; updatedAt: string
+  mapping?: RunMapping; admission?: AdmissionResult; lastStatus?: StatusResult; lastStatusTaskVersion?: number; updatedAt: string
 }
 export interface DispatchTransport {
   dispatch(prepared: PreparedDispatch): Promise<AdmissionResult>
@@ -143,11 +143,11 @@ export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskD
     async reconcile(principal: AgentPrincipal, input: z.infer<typeof inputSchema>): Promise<DispatchRecord> {
       const v = inputSchema.parse(input)
       const record = await db.$transaction(async (tx: any) => {
-        await lockTeam(tx, principal.storeId, 'agent.tasks'); await scope(tx, principal, v.eventId, v.authVersion)
+        await lockTeam(tx, principal.storeId, 'agent.tasks'); const { task } = await scope(tx, principal, v.eventId, v.authVersion)
         const r = await readTeam<DispatchRecord>(tx, principal.storeId, key(v.eventId))
         if (!r) fail('AGENT_DISPATCH_RECEIPT_NOT_FOUND', 404)
         assertTarget(r)
-        return r
+        return { ...r, observedTaskVersion: task.version }
       })
       if (!record.mapping) {
         // Allow the bounded HTTP attempt to finish before recording a lost receipt as unknown.
@@ -170,7 +170,8 @@ export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskD
       return db.$transaction(async (tx: any) => {
         await lockTeam(tx, principal.storeId, 'agent.tasks'); const { p } = await scope(tx, principal, v.eventId, v.authVersion)
         const r = await readTeam<DispatchRecord>(tx, p.storeId, key(v.eventId))
-        if (!r?.mapping || r.mapping.hermesRunId !== record.mapping!.hermesRunId) fail('AGENT_DISPATCH_RECEIPT_CHANGED')
+        if (!r?.mapping || JSON.stringify(r.mapping) !== JSON.stringify(record.mapping) || JSON.stringify(result.mapping) !== JSON.stringify(record.mapping)) fail('AGENT_DISPATCH_RECEIPT_CHANGED')
+        r.lastStatusTaskVersion = record.observedTaskVersion
         r.lastStatus = result; await saved(tx, p, r, 'agent_dispatch_status_checked'); return r
       })
     }

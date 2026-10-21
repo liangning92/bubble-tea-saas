@@ -122,16 +122,64 @@ const reviewBody = (view, evidenceId, decision) => ({ requestId: randomUUID(), a
 (async () => {
   try {
     tenant = await prisma.tenant.create({ data: { name: 'Synthetic agent tasks HTTP acceptance' } }); await open();
-    async function runtimeFixture(publish) {
+    async function runtimeFixture(publish, options = {}) {
       const f = await fixture(), native = createAgentTaskService(prisma, deps), profile = 'synthetic-runtime', origin = 'http://127.0.0.1:43112';
-      let sessionId, posts = 0; const hermesRunId = 'run_synthetic_' + randomUUID();
+      let sessionId, posts = 0, polls = 0; const hermesRunId = 'run_synthetic_' + randomUUID();
       const client = new HermesRunsClient({ origin, profile, bearerToken: () => 'synthetic-runtime-key', admissionBindings: persistentAdmissionBindings(prisma, f.storeId),
         fetch: async (_url, init) => { if (init.method === 'POST') { posts++; sessionId = JSON.parse(init.body).session_id; return { status: 202, text: async () => JSON.stringify({ run_id: hermesRunId, status: 'started', replayed: false }) } }
-          return { status: 200, text: async () => JSON.stringify({ run_id: hermesRunId, session_id: sessionId, status: 'running' }) } } });
+          polls++; if(options.onStatus)await options.onStatus(); return { status: 200, text: async () => JSON.stringify({ run_id: hermesRunId, session_id: sessionId, status: options.status || 'running' }) } } });
       const dispatcher = createAgentTaskDispatcher(prisma, deps, profile, client, { origin, identityId: 'synthetic-runtime', credentialGeneration: 1 });
       const runtime = createAgentTaskRuntime(prisma, native, dispatcher, publish); service = runtime.service;
-      return { f, native, dispatcher, runtime, posts: () => posts };
+      return { f, native, dispatcher, runtime, posts: () => posts, polls: () => polls };
     }
+    await check('terminal supervision: completed mapped run without report becomes visible after cursor advanced', async () => {
+      let delivered=0;const options={status:'running'},x=await runtimeFixture(async()=>{delivered++;return[{state:'accepted'}]},options),{f}=x;
+      const assigned=await good(f.managerToken,'assign',f.assignment),claim=await good(f.executorToken,'claim',claimBody(assigned));
+      const evidence=await good(f.executorToken,'readStockEvidence',leasedBody(claim,claim));
+      const model={taskId:claim.taskId,runId:claim.runId,taskVersion:evidence.taskVersion,state:'ready',billingStatus:'usage_recorded',usage:{prompt_tokens:11951,completion_tokens:79}};
+      await put(f.storeId,'team.communication.agent.model.run.'+claim.runId,{requestId:'synthetic-ready-receipt'});
+      await put(f.storeId,'team.communication.agent.model.request.'+f.executor.agentId+'.synthetic-ready-receipt',model);
+      const page=await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:0,limit:100});options.status='completed';
+      const before=x.polls();await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:page.nextCursor,limit:100});
+      const current=await good(f.managerToken,'get',{taskId:claim.taskId,authVersion:1});console.log('TERMINAL_OBSERVATION',JSON.stringify({state:current.state,pollsBefore:before,pollsAfter:x.polls(),delivered,report:!!current.report}));
+      assert.equal(current.state,'blocked');assert.equal(current.programFailure.code,'AGENT_TASK_PROGRAM_EXECUTOR_TERMINAL_NO_REPORT');assert(!current.report);assert.equal(delivered,1);
+      const again=await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:page.nextCursor,limit:100});assert.equal(delivered,1);assert.equal(x.posts(),1);
+      const review={...claimBody(current),programFailureId:current.programFailure.id,programFailureVersion:current.programFailure.version,decision:'rework',check:{summary:'Manager explicitly reviews terminal failure; no model report exists',checkedEvidenceIds:[],criteria:[{id:'native_refs',result:'not_met',note:'Executor terminated before reporting'}]},nextPlan:plan()};
+      const next=await good(f.managerToken,'review',review);assert.equal(next.round,2);assert.notEqual(next.runId,current.runId);assert.equal(x.posts(),2);
+      await x.dispatcher.reconcile(f.manager,{eventId:assigned.dispatch.eventId,authVersion:1});
+      const afterOld=await good(f.managerToken,'get',{taskId:next.taskId,authVersion:1});assert.equal(afterOld.runId,next.runId);assert.equal(afterOld.state,'assigned');assert(!afterOld.programFailure);
+      const saved=await prisma.config.findUnique({where:{storeId_key:{storeId:f.storeId,key:'team.communication.agent.model.request.'+f.executor.agentId+'.synthetic-ready-receipt'}}});assert.deepEqual(JSON.parse(saved.value),model);
+    });
+    await check('terminal supervision: failed cancelled interrupted are program failures, unknown billing is never reworked', async () => {
+      for(const status of ['failed','cancelled','interrupted']){
+        const x=await runtimeFixture(async()=>[{state:'accepted'}],{status}),{f}=x,assigned=await good(f.managerToken,'assign',f.assignment),claim=await good(f.executorToken,'claim',claimBody(assigned));
+        await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:0,limit:100});const current=await good(f.managerToken,'get',{taskId:claim.taskId,authVersion:1});assert.equal(current.state,'blocked');assert(!current.report);assert.equal(current.programFailure.knownNotSent,false);assert.equal(x.posts(),1);
+      }
+      const x=await runtimeFixture(async()=>[{state:'accepted'}],{status:'completed'}),{f}=x,assigned=await good(f.managerToken,'assign',f.assignment),claim=await good(f.executorToken,'claim',claimBody(assigned));
+      await put(f.storeId,'team.communication.agent.model.run.'+claim.runId,{requestId:'uncertain'});await put(f.storeId,'team.communication.agent.model.request.'+f.executor.agentId+'.uncertain',{taskId:claim.taskId,runId:claim.runId,taskVersion:claim.taskVersion,state:'unknown',billingStatus:'possible'});
+      await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:0,limit:100});const current=await good(f.managerToken,'get',{taskId:claim.taskId,authVersion:1});assert.equal(current.state,'unknown');
+      const denied=await request(f.managerToken,'review',{...claimBody(current),programFailureId:current.programFailure.id,programFailureVersion:1,decision:'rework',check:{summary:'Cannot reset unknown billing',checkedEvidenceIds:[],criteria:[{id:'native_refs',result:'not_met',note:'Unknown call outcome'}]},nextPlan:plan()});assert.notEqual(denied.status,200);assert.equal(x.posts(),1);
+    });
+    await check('terminal supervision: concurrent real report wins, mismatched receipt and revoked manager fail closed', async () => {
+      const options={status:'completed'},x=await runtimeFixture(async()=>[{state:'accepted'}],options),{f}=x,assigned=await good(f.managerToken,'assign',f.assignment),claim=await good(f.executorToken,'claim',claimBody(assigned));
+      const evidence=await good(f.executorToken,'readStockEvidence',leasedBody(claim,claim));let reported;
+      options.onStatus=async()=>{options.onStatus=null;reported=await good(f.executorToken,'report',reportBody(evidence,claim,evidence));};
+      await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:0,limit:100});const current=await good(f.managerToken,'get',{taskId:claim.taskId,authVersion:1});assert.equal(current.state,'awaiting_review');assert.equal(current.report.id,reported.report.id);assert(!current.programFailure);
+      const other=await runtimeFixture(async()=>[{state:'accepted'}],{status:'completed'}),g=other.f,a=await good(g.managerToken,'assign',g.assignment),c=await good(g.executorToken,'claim',claimBody(a));
+      await put(g.storeId,grantKey(g.manager.agentId),{enabled:false,channelId:g.channel.id,principal:g.manager});const before=other.polls();await assert.rejects(other.runtime.recoverOutbox(g.manager,{authVersion:1,after:0,limit:100}));assert.equal(other.polls(),before);
+      await put(g.storeId,grantKey(g.manager.agentId),{enabled:true,channelId:g.channel.id,principal:g.manager});
+      const bad=createAgentTaskDispatcher(prisma,deps,'synthetic-runtime',{dispatch:()=>{throw Error('UNUSED')},status:async mapping=>({kind:'status',mapping:{...mapping,hermesRunId:'wrong'},status:'completed',next:'read_backend_report'})},{origin:'http://127.0.0.1:43112',identityId:'synthetic-runtime',credentialGeneration:1});
+      await assert.rejects(bad.reconcile(g.manager,{eventId:a.dispatch.eventId,authVersion:1}),/AGENT_DISPATCH_RECEIPT_CHANGED/);assert.equal((await good(g.managerToken,'get',{taskId:c.taskId,authVersion:1})).state,'running');
+    });
+    await check('terminal supervision: possible billing remains unknown and supervision audit failure rolls back all business records', async () => {
+      const x=await runtimeFixture(async()=>[{state:'accepted'}],{status:'completed'}),{f}=x,assigned=await good(f.managerToken,'assign',f.assignment),claim=await good(f.executorToken,'claim',claimBody(assigned));
+      await put(f.storeId,'team.communication.agent.model.run.'+claim.runId,{requestId:'ready-but-billing-possible'});await put(f.storeId,'team.communication.agent.model.request.'+f.executor.agentId+'.ready-but-billing-possible',{taskId:claim.taskId,runId:claim.runId,taskVersion:claim.taskVersion,state:'ready',billingStatus:'possible'});
+      await x.dispatcher.reconcile(f.manager,{eventId:assigned.dispatch.eventId,authVersion:1});
+      const before=await prisma.config.findMany({where:{storeId:f.storeId,key:{startsWith:'team.communication.'}},orderBy:{key:'asc'}}),native=createAgentTaskService(faultDb,deps);
+      faultAudit=true;await assert.rejects(native.supervise(f.manager,{taskId:claim.taskId,runId:claim.runId,round:claim.round,expectedVersion:claim.taskVersion,authVersion:1}),/SYNTHETIC_AUDIT_FAILURE/);
+      const after=await prisma.config.findMany({where:{storeId:f.storeId,key:{startsWith:'team.communication.'}},orderBy:{key:'asc'}});assert.deepEqual(after,before,'Task, program failure, lease, event cursor and outbox all roll back');
+      await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:0,limit:100});const current=await good(f.managerToken,'get',{taskId:claim.taskId,authVersion:1});assert.equal(current.state,'unknown');assert.equal(current.programFailure.knownNotSent,false);assert(!current.report);assert.equal(x.posts(),1);
+    });
     await check('runtime recovery cursor: limit-one pagination retries original event after publisher restart using returned cursor', async () => {
       let publisherCalls = 0, mode = 'failed'; const eventIds = [];
       const x = await runtimeFixture(async (_store, event) => { publisherCalls++; eventIds.push(event.id); if (mode === 'failed') throw Error('SYNTHETIC_PUBLISH_FAILURE'); return [] });

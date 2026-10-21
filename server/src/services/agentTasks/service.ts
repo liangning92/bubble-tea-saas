@@ -27,6 +27,23 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
     if (p.pilot && JSON.stringify(p.pilot)!==JSON.stringify(live.pilot)) fail('AGENT_TASK_PILOT_CHANGED',403)
     return live
   }
+  // A terminal transport receipt is not an executor report or an acceptance.
+  // Only a current mapped run with known model billing can be explicitly reworked.
+  async function terminalWithoutReport(tx:any,p:AgentPrincipal,t:RecordTask,observedVersion=t.version,requireKnownBilling=true) {
+    const x=t.agentTask,r=await readTeam<any>(tx,p.storeId,`agent.dispatch.${x.eventId}`)
+    const status=r?.lastStatus,refs=r?.prepared?.references
+    if(r?.state!=='admitted'||r.taskId!==t.id||r.runId!==x.runId||r.eventId!==x.eventId||r.lastStatusTaskVersion!==observedVersion||
+      !r.mapping||status?.kind!=='status'||!['completed','failed','cancelled','interrupted'].includes(status.status)||
+      JSON.stringify(status.mapping)!==JSON.stringify(r.mapping)||JSON.stringify(r.mapping.dispatch)!==JSON.stringify(r.prepared)||
+      refs?.taskId!==t.id||refs.backendRunId!==x.runId||refs.round!==x.round||refs.executorId!==x.executorId)return false
+    if(!requireKnownBilling)return true
+    const pointer=await readTeam<any>(tx,p.storeId,`agent.model.run.${x.runId}`)
+    if(!pointer)return true
+    const model=await readTeam<any>(tx,p.storeId,`agent.model.request.${x.executorId}.${pointer.requestId}`)
+    return !!model&&model.taskId===t.id&&model.runId===x.runId&&model.taskVersion===observedVersion&&model.state==='ready'&&
+      model.billingStatus==='usage_recorded'&&Number.isFinite(model.usage?.prompt_tokens)&&model.usage.prompt_tokens>=0&&
+      Number.isFinite(model.usage?.completion_tokens)&&model.usage.completion_tokens>=0
+  }
   async function storeLock(tx:any,storeId:string){await lockTeam(tx,storeId,'agent.tasks')}
   async function load(tx:any,p:AgentPrincipal,taskId:string) {
     const index=await readTeam(tx,p.storeId,`agent.task.index.${taskId}`)
@@ -119,9 +136,12 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
         else if(model.state==='withheld')code='AGENT_TASK_PROGRAM_MODEL_RESULT_WITHHELD'
         else if(['reserved','calling'].includes(model.state)&&Number.isFinite(model.deadlineAt)&&model.deadlineAt<=now()){knownNotSent=model.state==='reserved'&&model.billingStatus==='not_started'&&!model.startedAt&&!model.providerReceipt&&!model.usage;code=knownNotSent?'AGENT_TASK_PROGRAM_MODEL_NOT_SENT':'AGENT_TASK_PROGRAM_MODEL_OUTCOME_UNKNOWN'}
       }
+      const terminalVerified=!code&&await terminalWithoutReport(tx,p,t,t.version,false)
+      const terminal=terminalVerified&&await terminalWithoutReport(tx,p,t)
+      if(terminalVerified)code='AGENT_TASK_PROGRAM_EXECUTOR_TERMINAL_NO_REPORT'
       if(!code&&(!x.lease||x.lease.until<=now()||Date.parse(x.plan.deadlineAt)<=now()||!!x.reportDueAt&&Date.parse(x.reportDueAt)<=now()))code='AGENT_TASK_PROGRAM_REPORT_DEADLINE_UNKNOWN'
       if(!code)return view(tx,p,t,true)
-      x.state=knownNotSent?'blocked':'unknown';x.error=code
+      x.state=knownNotSent||terminal?'blocked':'unknown';x.error=code
       x.programFailure={id:randomUUID(),version:1,code,knownNotSent,source:'program'}
       delete x.lease;t.version++
       t.events.push({action:'agent_program_blocked',by:'program:agent-task-supervisor',at:at(),note:code,sourceSeq:[]})
@@ -163,7 +183,8 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
       await storeLock(tx,principal.storeId);const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,'management.review',t.channelId,v.authVersion);bound(p,t,'manager');const old=await repeated(tx,p,v,'review');if(old)return old;version(t,v.expectedVersion);run(t,v)
       const r=await reportFor(tx,p,t),program=v.programFailureId?t.agentTask.programFailure:undefined
       if(v.programFailureId){
-        if(!program||program.id!==v.programFailureId||program.version!==v.programFailureVersion||!program.knownNotSent||t.agentTask.state!=='blocked'||r||v.decision!=='rework')fail('AGENT_TASK_PROGRAM_RECOVERY_FORBIDDEN')
+        const terminalRecovery=program?.code==='AGENT_TASK_PROGRAM_EXECUTOR_TERMINAL_NO_REPORT'&&await terminalWithoutReport(tx,p,t,t.version-1)
+        if(!program||program.id!==v.programFailureId||program.version!==v.programFailureVersion||!program.knownNotSent&&!terminalRecovery||t.agentTask.state!=='blocked'||r||v.decision!=='rework')fail('AGENT_TASK_PROGRAM_RECOVERY_FORBIDDEN')
       }else if(!r||r.id!==v.reportId||r.version!==v.reportVersion||r.runId!==v.runId||r.round!==v.round||t.agentTask.reportVersion!==v.reportVersion)fail('AGENT_TASK_REPORT_CHANGED')
       if(t.agentTask.state==='unknown'||r?.outcome==='unknown'||!['awaiting_review','blocked'].includes(t.agentTask.state))fail('AGENT_TASK_REVIEW_OUTCOME_UNKNOWN')
       const expected=t.agentTask.plan.criteria.map(c=>c.id),given=v.check.criteria.map(c=>c.id)
