@@ -48,7 +48,9 @@ const sourceSchema=z.discriminatedUnion('kind',[
  z.object({kind:z.literal('conversation'),channelId:z.string().uuid(),messageId:z.string().uuid(),seq:z.number().int().positive()}).strict(),
  z.object({kind:z.literal('employee_task'),taskId:z.string().uuid(),version:z.number().int().positive()}).strict(),
  z.object({kind:z.literal('public_sop'),id:z.string().min(1),version:z.number().int().positive()}).strict(),
- z.object({kind:z.literal('memory'),compartmentKey:z.string().regex(/^[a-f0-9]{64}$/)}).strict()
+ z.object({kind:z.literal('memory'),compartmentKey:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
+ z.object({kind:z.literal('employee_exchange'),executionId:z.string().uuid(),questionMessageId:z.string().uuid()}).strict(),
+ z.object({kind:z.literal('inventory_evidence'),query:z.string().trim().min(1).max(80),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)}).strict()
 ])
 const dataClassSchema=z.enum(['operational','revenue','profit','cost','salary','private_staff','unknown'])
 const admissionSchema=z.object({decision:z.enum(['allow','deny','unknown']),executionId:z.string().min(1).max(128),compartmentKey:z.string(),audienceHash:z.string(),textHash:z.string(),requestId:z.string().uuid(),dataClasses:z.array(dataClassSchema).max(10),sources:z.array(sourceSchema).max(100)}).strict()

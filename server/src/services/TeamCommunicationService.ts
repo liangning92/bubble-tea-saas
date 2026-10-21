@@ -7,6 +7,7 @@ import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
 import { recordTeamAgentReply } from './teamAgentBridge/events'
+import { assertLegacyConsumer } from './teamAgentBridge/employeeIntake'
 import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentDirectChannelAccess, teamAgentTaskAuthority, teamAgentOutbound } from './teamAgentBridge/identity'
 import { enqueueTeamTaskReminder } from './TeamTaskReminderService'
 
@@ -301,9 +302,11 @@ export function teamCommunication(db: DB = prisma) {
           if (c.members.some(member => member.fromSeq > draft.sourceFloor) || digest(c.members) !== draft.audienceHash) fail(403, 'TEAM_AI_AUDIENCE_CHANGED')
           if (draft.operation) await assertOperationScope(tx, a, c, draft.operation)
           if (managementAuthorization) {
+            await assertLegacyConsumer(tx,a.storeId,id)
             await assertManagementSend(tx, a, c, draft, managementAuthorization, v.text)
             ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, managementAuthorization, authorizedBy: a.staffId }
           } else if (routineAuthorization) {
+            await assertLegacyConsumer(tx,a.storeId,id)
             await assertRoutineSend(tx, a, c, draft, routineAuthorization, v.text)
             ai = { provider: 'minimax', model: draft.model, draftId: aiDraftId, routineAuthorization, authorizedBy: a.staffId }
           } else {

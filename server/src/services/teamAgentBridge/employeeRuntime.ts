@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { TeamChannel, TeamError, readTeam, writeTeam, lockTeam } from '../TeamCommunicationService'
 import { createTeamAgentBridge } from './service'
 import { employeeSystemTemplateHash } from './employeeRuntimeSystem'
+import { readAuthorizedBridgeChannel } from './directDelegation'
+import { readEmployeeInventoryEvidence } from './employeeInventoryEvidence'
 import { TEAM_AGENT_PREFIX } from './events'
 import { BridgeDependencies, BridgeGrant, CommunicationPolicyPort, CommunicationScope, CommunicationSource, grantSchema } from './contract'
 import { readCommunicationScope, textHash } from './confidentiality'
@@ -19,7 +21,7 @@ const key = (id: string) => 'employeeRuntime.execution.' + id
 const pointer = (scope: CommunicationScope) => 'employeeRuntime.context.' + scope.compartmentKey
 const fn = (name: string, description: string, properties: any, required: string[]) => ({ type: 'function' as const, function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } })
 const readMessage = z.object({ seq: z.number().int().positive() }).strict()
-const sendMessage = z.object({ text: z.string().trim().min(1).max(4000) }).strict()
+const sendMessage = z.object({ text: z.string().trim().min(1).max(4000), expectsReply:z.boolean().optional() }).strict()
 const empty = z.object({}).strict()
 type State = { ticket: EmployeeRuntimeTicket; grant: BridgeGrant; scope: CommunicationScope; expiresAt: string; version: number; phase: 'input'|'response'|'tools'|'final'|'complete'|'unknown'; turn: number; sources: EmployeeRuntimeSource[]; inputs: any[]; responses: any[]; tools: any[]; lastSeq: number; fault?: { code: string; at: string } }
 export interface EmployeeRuntimeDependencies extends Omit<BridgeDependencies, 'communication'> {
@@ -32,9 +34,9 @@ export interface EmployeeRuntimeDependencies extends Omit<BridgeDependencies, 'c
 }
 /** Private trusted-child ports. No HTTP enrollment or production mount. All native
  * writes and their exact tool receipts share the same outer database transaction. */
-export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies): { host: EmployeeRuntimeHostPort; communication: CommunicationPolicyPort; inspect(id: string): Promise<any>; recover(id: string): Promise<void> } {
+export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies) {
   const now = deps.now || Date.now
-  const atomic = (tx: any) => ({ config: tx.config, staff: tx.staff, user: tx.user, financeAuditLog: tx.financeAuditLog, store: tx.store, $transaction: async (operation: any) => operation(atomic(tx)) })
+  const atomic = (tx: any) => ({ config: tx.config, staff: tx.staff, user: tx.user, financeAuditLog: tx.financeAuditLog, store: tx.store, inventory:tx.inventory, inventoryCountItem:tx.inventoryCountItem, $transaction: async (operation: any) => operation(atomic(tx)) })
   async function fresh(tx: any, s?: State) {
     if (deps.enabled !== true) fail('EMPLOYEE_RUNTIME_DISABLED')
     const g = grantSchema.parse(await deps.resolveGrant(tx))
@@ -45,8 +47,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     if (s) {
       if (Date.parse(s.expiresAt) <= now()) fail('EMPLOYEE_RUNTIME_EXPIRED')
       await deps.tasks.assert(tx, g, s.scope.task, s.scope.channelId)
-      const c = await readTeam<TeamChannel>(tx,g.storeId,'channel.' + s.scope.channelId)
-      if (!c || c.archived || !c.members.some(m=>m.staffId === 'agent:' + g.agentId) || c.members.some(m=>m.staffId !== 'agent:' + g.agentId && !g.staffIds.includes(m.staffId))) fail('EMPLOYEE_RUNTIME_AUDIENCE_CHANGED')
+      const {channel:c} = await readAuthorizedBridgeChannel(tx,g,s.scope.task,s.scope.channelId!,undefined,now())
       await binding(tx,g,s.scope)
       const scope = await readCommunicationScope(tx,g,s.scope.task,c,s.scope.requesterStaffId)
       if (hash(scope) !== hash(s.scope)) fail('EMPLOYEE_RUNTIME_AUDIENCE_CHANGED')
@@ -79,7 +80,11 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
   const communication: CommunicationPolicyPort = {
     async assertContext(tx,g,scope) {
       const p = await readTeam<any>(tx,g.storeId,pointer(scope)), s = p && await load(tx,p.executionId)
-      if (!s || hash(g)!==hash(s.grant) || hash(scope)!==hash(s.scope) || ['unknown'].includes(s.phase)) fail()
+      // Channel authorization precedes the native send's reply-to resolution.
+      // Only its omitted requester can be filled from this server-owned trace;
+      // actual outbound admission still requires the exact resolved requester.
+      const comparable={...scope,requesterStaffId:scope.requesterStaffId??s?.scope.requesterStaffId}
+      if (!s || hash(g)!==hash(s.grant) || hash(comparable)!==hash(s.scope) || ['unknown'].includes(s.phase)) fail()
       await fresh(tx,s)
       return { purpose:'employee_work', compartmentKey:scope.compartmentKey, memoryNamespace:scope.compartmentKey, executionId:s.ticket.executionId }
     },
@@ -105,8 +110,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
         await lockTeam(tx,deps.storeId,pointer(scope))
         const g = await fresh(tx)
         if (hash(g)!==hash(grant)) fail()
-        const c = await readTeam<TeamChannel>(tx,g.storeId,'channel.'+scope.channelId)
-        if (!c || c.archived || !c.members.some(m=>m.staffId==='agent:'+g.agentId) || c.members.some(m=>m.staffId!=='agent:'+g.agentId&&!g.staffIds.includes(m.staffId))) fail()
+        const {channel:c} = await readAuthorizedBridgeChannel(tx,g,scope.task,scope.channelId!,undefined,now())
         await deps.tasks.assert(tx,g,scope.task,c.id)
         await binding(tx,g,scope)
         const actual = await readCommunicationScope(tx,g,scope.task,c,scope.requesterStaffId)
@@ -118,9 +122,10 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
         const executionId=randomUUID(),requestId=randomUUID(),tools=[]
         if(g.actions.includes('messages.read')) tools.push(fn('employee_read_message','Read one current audience-visible message',{seq:{type:'integer',minimum:1}},['seq']))
         if(g.actions.includes('tasks.read')) tools.push(fn('employee_read_task','Read this assigned employee task',{},[]))
-        if(g.actions.includes('messages.send')) tools.push(fn('employee_send_message','Send at most one natural operational reply in this execution to this exact current audience',{text:{type:'string',minLength:1,maxLength:4000}},['text']))
+        if(g.actions.includes('inventory.read')) tools.push(fn('employee_read_inventory','Read authorized book inventory and certified physical-count evidence for any named item; no costs, no writes, ambiguous matches require clarification',{query:{type:'string',minLength:1,maxLength:80}},['query']))
+        if(g.actions.includes('messages.send')) tools.push(fn('employee_send_message','Send at most one natural operational reply in this execution to this exact current audience; set expectsReply only for a question requiring new staff facts, not an acknowledgement',{text:{type:'string',minLength:1,maxLength:4000},expectsReply:{type:'boolean'}},['text']))
         const ticket:EmployeeRuntimeTicket={ protocol:EMPLOYEE_RUNTIME_PROTOCOL,executionId,requestId,traceVersion:1,compartmentKey:scope.compartmentKey,audienceHash:scope.audienceHash,
-          inputContextHash:hash(facts),toolSchemaHash:hash(tools),sealedUserContent:JSON.stringify({task:scope.task,facts:facts.map(f=>f.value)}),instruction:EMPLOYEE_RUNTIME_INSTRUCTION,
+          inputContextHash:hash(facts),toolSchemaHash:hash(tools),sealedUserContent:JSON.stringify({task:scope.task,capabilities:{replyRoute:'Use employee_send_message for a relevant employee answer or clarification. The final assistant response is an internal report, never automatically posted to the employee. Report actions and blockers honestly.',conversation:'Free operational questions and clarification; not limited to one item or fixed phrases',actions:'Only the issued tools can execute actions. Without an implementing tool, explain that leave/profile/purchase changes have not been performed; never promise completion or approval.',restrictedRequests:'No extra data grant. Explain the access boundary without fetching data or asking for private details.',evidence:'Book stock is not a physical count. A report is not manager acceptance.'},facts:facts.map(f=>f.value)}),instruction:EMPLOYEE_RUNTIME_INSTRUCTION,
           isolation:{protocol:EMPLOYEE_RUNTIME_PROTOCOL,profile:'employee_work',sessionId:'employee_work_'+hash([executionId,scope.compartmentKey]),compartmentKey:scope.compartmentKey,memoryNamespace:scope.compartmentKey,memoryEnabled:false,contextFilesEnabled:false,auxiliaryModelsEnabled:false,sharedHistoryEnabled:false,builtinToolsEnabled:false},model:'MiniMax-M3.1-Flash',tools }
         const s:State={ticket,grant:g,scope,expiresAt:new Date(Math.min(Date.parse(g.expiresAt),now()+Math.min(deps.maxExecutionMs||60000,120000))).toISOString(),version:1,phase:'input',turn:0,sources:facts,inputs:[],responses:[],tools:[],lastSeq:c.lastSeq}
         await writeTeam(tx,g.storeId,key(executionId),s);await writeTeam(tx,g.storeId,pointer(scope),{executionId})
@@ -173,11 +178,18 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       }else if(v.name==='employee_read_task'){
         empty.parse(v.args);if(!s.grant.actions.includes('tasks.read'))fail()
         sources=[await readEmployeeRuntimeSource(tx,s.grant,s.scope,{kind:'employee_task',taskId:s.scope.task.taskId,version:s.scope.task.version})];value=sources[0].value
+      }else if(v.name==='employee_read_inventory'){
+        if(!s.grant.actions.includes('inventory.read'))fail()
+        const args=z.object({query:z.string().trim().min(1).max(80)}).strict().parse(v.args)
+        value=await readEmployeeInventoryEvidence(tx,s.grant,s.scope,{query:args.query!})
+        sources=[await readEmployeeRuntimeSource(tx,s.grant,s.scope,{kind:'inventory_evidence',query:args.query,fingerprint:value.fingerprint})]
       }else if(v.name==='employee_send_message'){
         const args=sendMessage.parse(v.args)
         const bridge=createTeamAgentBridge(tx,{...deps,communication,messageCommitted:undefined})
-        const r=await bridge.send({channelId:s.scope.channelId,task:s.scope.task,requestId:s.ticket.requestId,expectedLastSeq:s.lastSeq,text:args.text})
-        value={messageId:r.id,seq:r.seq,delivery:'stored',device:'unknown'};s.lastSeq=r.seq
+        const reply=s.scope.requesterStaffId?s.sources.find(x=>x.source.kind==='conversation'&&(x.value as any)?.authorStaffId===s.scope.requesterStaffId):undefined
+        if(s.scope.requesterStaffId&&!reply)fail('EMPLOYEE_RUNTIME_REQUESTER_SOURCE_REQUIRED')
+        const r=await bridge.send({channelId:s.scope.channelId,task:s.scope.task,requestId:s.ticket.requestId,expectedLastSeq:s.lastSeq,text:args.text,...(reply?.source.kind==='conversation'?{replyToSeq:reply.source.seq}:{})})
+        value={messageId:r.id,seq:r.seq,delivery:'stored',device:'unknown',expectsReply:args.expectsReply===true};s.lastSeq=r.seq
       }else fail('EMPLOYEE_RUNTIME_TOOL_DENIED')
       for(const source of sources)if(!s.sources.some(x=>hash(x.source)===hash(source.source)))s.sources.push(source)
       s.tools.push({turn:s.turn,toolCallId:v.toolCallId,name:v.name,value,sources})
@@ -197,5 +209,33 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       })
     },
   }
-  return {host,communication,async inspect(id){const s=await load(db,id);const g=await fresh(db);if(hash(g)!==hash(s.grant))fail();return {executionId:id,phase:s.phase,version:s.version,turn:s.turn,fault:s.fault}},async recover(id){const s=await load(db,id);if(s.phase!=='complete')await host.markUnknown(id,s.version,'EMPLOYEE_RUNTIME_PROCESS_INTERRUPTED')}}
+  const provider = {
+    /** Same trace lock, separate admission receipt: no trace-version bump while
+     * the trusted child is awaiting the provider's response. */
+    async claim(executionId:string,inputHash:string) {
+      return db.$transaction(async(tx:any)=>{
+        await lockTeam(tx,deps.storeId,key(executionId));const s=await load(tx,executionId);await fresh(tx,s)
+        const request=s.inputs.at(-1)
+        if(s.phase!=='response'||!request||hash(request)!==inputHash)fail('EMPLOYEE_RUNTIME_PROVIDER_INPUT_CHANGED')
+        const admissionKey=key(executionId)+'.provider.'+s.turn
+        if(await readTeam(tx,deps.storeId,admissionKey))fail('EMPLOYEE_RUNTIME_PROVIDER_ALREADY_RESERVED')
+        const config=await readTeam<any>(tx,deps.storeId,'ai.settings')
+        if(!config?.version)fail('EMPLOYEE_RUNTIME_MODEL_CONFIG_UNAVAILABLE')
+        await writeTeam(tx,deps.storeId,admissionKey,{state:'reserved',inputHash,turn:s.turn,at:new Date(now()).toISOString(),configVersion:config.version})
+        return {storeId:deps.storeId,executionId,turn:s.turn,inputHash,request,configVersion:config.version,deadlineAt:Date.parse(s.expiresAt)}
+      })
+    },
+    async settle(executionId:string,turn:number,inputHash:string,result:{state:'response';value:any}|{state:'unknown'}) {
+      await db.$transaction(async(tx:any)=>{
+        await lockTeam(tx,deps.storeId,key(executionId));const s=await load(tx,executionId),k=key(executionId)+'.provider.'+turn
+        const receipt=await readTeam<any>(tx,deps.storeId,k)
+        if(!receipt||receipt.inputHash!==inputHash||receipt.state!=='reserved'||s.turn!==turn)fail('EMPLOYEE_RUNTIME_PROVIDER_RECEIPT_CONFLICT')
+        // Result evidence survives expiry/revocation; no further operation is
+        // authorized by saving it. Unknown never releases the reservation.
+        await writeTeam(tx,deps.storeId,k,{...receipt,...result,completedAt:new Date(now()).toISOString()})
+        if(result.state==='unknown'&&s.phase!=='complete'){s.phase='unknown';s.version++;s.fault={code:'EMPLOYEE_RUNTIME_PROVIDER_OUTCOME_UNKNOWN',at:new Date(now()).toISOString()};await writeTeam(tx,deps.storeId,key(executionId),s)}
+      })
+    },
+  }
+  return {host,communication,provider,async inspect(id:string){const s=await load(db,id);const g=await fresh(db);if(hash(g)!==hash(s.grant))fail();return {executionId:id,phase:s.phase,version:s.version,turn:s.turn,fault:s.fault}},async recover(id:string){const s=await load(db,id);if(s.phase!=='complete')await host.markUnknown(id,s.version,'EMPLOYEE_RUNTIME_PROCESS_INTERRUPTED')}}
 }

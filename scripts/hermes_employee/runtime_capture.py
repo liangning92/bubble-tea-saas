@@ -43,6 +43,7 @@ class RuntimeEnvironment:
         self.environ = os.environ
         self.baseline = dict(os.environ)
         self.tainted = False
+        self.reason = None
         self.repairing = False
         sys.addaudithook(self.audit)
         loader = types.ModuleType("hermes_cli.env_loader")
@@ -83,6 +84,7 @@ class RuntimeEnvironment:
             elif key == "HERMES_SESSION_ID":
                 return
             self.tainted = True
+            self.reason = 'EMPLOYEE_ENV_MUTATION_' + (key if re.fullmatch(r'[A-Z0-9_]{1,60}',key) else 'UNKNOWN_KEY')
             raise PermissionError("EMPLOYEE_ENVIRONMENT_MUTATION_DENIED")
         if event == "open" and args and isinstance(args[0], (str, bytes)):
             path = Path(text(args[0]))
@@ -91,6 +93,7 @@ class RuntimeEnvironment:
             shared_config = name == "config.yaml" and not path.resolve().is_relative_to(self.profile)
             if secret or shared_config:
                 self.tainted = True
+                self.reason = 'EMPLOYEE_SHARED_CONFIGURATION_READ_DENIED'
                 raise PermissionError("EMPLOYEE_SHARED_CONFIGURATION_READ_DENIED")
         if event == "import" and args and str(args[0]).startswith("agent.secret_sources"):
             self.tainted = True
@@ -125,6 +128,8 @@ class RuntimeEnvironment:
             valid = sys.modules["hermes_constants"].get_hermes_home().resolve() == self.profile
         if self.tainted or not valid:
             self.tainted = True
+            if not self.reason:
+                self.reason = 'EMPLOYEE_ENVIRONMENT_INTEGRITY_FAILED'
             self.restore()  # keep shutdown/cleanup inside the original compartment too
             raise RuntimeError("EMPLOYEE_ENVIRONMENT_INTEGRITY_FAILED")
 
@@ -166,6 +171,13 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
     profile_name = "employee_work"
     profile = root / "executions" / digest(execution) / "profiles" / profile_name
     profile.mkdir(parents=True, mode=0o700, exist_ok=False)  # one-use even after crash/restart
+    # Pinned Hermes otherwise replaces custom tools with tool_search/describe/call.
+    # Keep the actual SDK catalog identical to the backend-issued tools; this is
+    # a new private profile, never the user's default or stock profile.
+    config_path = profile / "config.yaml"
+    with config_path.open('x', encoding='utf-8') as config_file:
+        os.chmod(config_path, 0o600)
+        config_file.write('tools:\n  tool_search:\n    enabled: "off"\n')
     os.environ["HERMES_HOME"] = str(profile)
     os.chdir(home)
     session = isolation["sessionId"] if isolation else "employee_work_" + digest(key + ":" + execution)
@@ -226,16 +238,25 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
                     nonlocal capture_failed
                     chunks = []
                     size = 0
+                    response_recorded = False
                     try:
                         for chunk in stream:
                             chunks.append(chunk)
                             size += len(chunk)
                             if size > max_bytes:
                                 raise RuntimeError("INCOMPLETE_RUNTIME_CAPTURE")
-                            yield chunk
+                        # The SDK stops iteration as soon as it sees [DONE], so
+                        # post-yield recording can be skipped on a real socket.
+                        # Preserve/authorize the COMPLETE response before any
+                        # tool-bearing bytes become visible to Hermes.
                         finish(chunks)
+                        response_recorded = True
+                        yield from chunks
                     except BaseException:
-                        capture_failed = True
+                        # SDK generator close after [DONE] is expected once the
+                        # entire response was already recorded above.
+                        if not response_recorded:
+                            capture_failed = True
                         raise
                 def close(self):
                     stream.close()
@@ -254,7 +275,11 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
 
     def capture_send(client, request, **kwargs):
         nonlocal capture_failed
-        environment.check()
+        try:
+            environment.check()
+        except Exception:
+            observed["captureFailures"].append({"code": environment.reason or "EMPLOYEE_ENVIRONMENT_INTEGRITY_FAILED"})
+            raise
         if str(request.url) != provider_url:
             # Hermes probes local provider metadata while resolving context length. Block
             # these without forwarding a byte; they contain only the configured model ID.
@@ -280,8 +305,10 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
             response = provider_send(client, request, **kwargs)
             environment.check()
             return observe_response(response, len(observed["modelRequests"]))
-        except Exception:
+        except Exception as error:
             capture_failed = True
+            code = str(error)
+            observed["captureFailures"].append({"code": code if re.fullmatch(r"[A-Z0-9_]{1,100}",code) else 'EMPLOYEE_PROVIDER_' + type(error).__name__.upper()})
             raise
 
     async def deny_unobserved_async(*args, **kwargs):
@@ -298,6 +325,9 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
         from tools.registry import registry
         environment.check()
         from hermes_cli import config as hermes_config
+        from tools.tool_search import load_config as tool_search_config
+        if tool_search_config().enabled != "off":
+            raise RuntimeError("EMPLOYEE_TOOL_SEARCH_MUST_BE_OFF")
         terminal_defaults = dict(environment.baseline)
         hermes_config.apply_terminal_config_to_env(env=terminal_defaults,
             config={"terminal": hermes_config.DEFAULT_CONFIG["terminal"]}, override=False)
@@ -362,9 +392,10 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
                                     and output and not result.get("failed") and not result.get("interrupted")
                                     and len(observed["modelRequests"]) == len(observed["modelResponses"])
                                     and all(t["complete"] for t in observed["toolEvents"]))
-    except Exception:
+    except Exception as error:
         environment.restore()
         observed["complete"] = False
+        observed["captureFailures"].append({"code": "EMPLOYEE_CAPTURE_" + type(error).__name__.upper()})
     finally:
         if agent is not None:
             try:
@@ -378,6 +409,8 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
             observed["complete"] = False
         httpx.Client.send = original_send
         httpx.AsyncClient.send = original_async_send
+        if environment.reason:
+            observed["captureFailures"].append({"code": environment.reason})
     return observed
 
 
@@ -451,14 +484,16 @@ def run_ticket(ticket: dict, config: dict, port, *, provider_send: Callable) -> 
         if phase != "awaiting_response" or record["requestOrdinal"] != turn:
             raise RuntimeError("UNEXPECTED_PROVIDER_RESPONSE")
         parsed = parse_provider_response(record)
+        # Preserve the complete real receipt before local rejection. A blocked
+        # tool call is not permission to discard its provider ID or resend it.
+        receipt = port.recordResponse({"executionId": execution, "expectedTraceVersion": version, "turn": turn, **parsed})
+        version = receipt["traceVersion"]
         calls = parsed["providerMessage"].get("tool_calls", [])
         if (len({call.get("id") for call in calls}) != len(calls)
                 or any(not call.get("id") or call.get("type") != "function"
                     or call["function"]["name"] not in tools
                     or not isinstance(json.loads(call["function"]["arguments"]), dict) for call in calls)):
             raise RuntimeError("UNISSUED_MODEL_TOOL_CALL")
-        receipt = port.recordResponse({"executionId": execution, "expectedTraceVersion": version, "turn": turn, **parsed})
-        version = receipt["traceVersion"]
         pending = [{"ordinal": i, "call": call} for i, call in enumerate(parsed["providerMessage"].get("tool_calls", []))]
         if parsed["finishReason"] == "tool_calls" and pending:
             phase = "tools_pending"
@@ -503,5 +538,7 @@ def run_ticket(ticket: dict, config: dict, port, *, provider_send: Callable) -> 
         return {"observation": observation, "stored": stored}
     except Exception:
         phase = "unknown"
-        port.markUnknown(execution, version, "EMPLOYEE_RUNTIME_UNCONFIRMED")
+        failures = observation.get("captureFailures", []) if "observation" in locals() else []
+        code = failures[-1].get("code", "EMPLOYEE_RUNTIME_UNCONFIRMED") if failures else "EMPLOYEE_RUNTIME_UNCONFIRMED"
+        port.markUnknown(execution, version, code if re.fullmatch(r"[A-Z0-9_]{1,100}", code) else "EMPLOYEE_RUNTIME_UNCONFIRMED")
         return {"unknown": True, "executionId": execution}

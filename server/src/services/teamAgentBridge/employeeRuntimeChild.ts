@@ -12,6 +12,8 @@ export interface EmployeeRuntimeChildConfig {
   python: string; repository: string; hermesSource: string; hermesExpectedSha: string;
   isolatedRoot: string; providerBaseUrl: string; providerCredential: string;
   deadlineAt: string
+  /** Private test/operations sink only; never forwarded in HTTP error responses. */
+  diagnosticSink?: (chunk:Buffer)=>void
 }
 export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, port: EmployeeRuntimeHostPort, config: EmployeeRuntimeChildConfig): Promise<{state:'complete'|'unknown';executionId:string}> {
   if(!isAbsolute(config.python)||resolve(config.python)!==config.python||!(await stat(config.python)).isFile())throw Error('EMPLOYEE_RUNTIME_PYTHON_REQUIRED')
@@ -30,13 +32,13 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
     env:{PATH:'/usr/bin:/bin',PYTHONDONTWRITEBYTECODE:'1',PYTHONUNBUFFERED:'1'},stdio:['pipe','pipe','pipe'],cwd:config.isolatedRoot,
   })
   const decoder=new StringDecoder('utf8')
-  let version=ticket.traceVersion,buffer='',finished=false,failed=false,outputStored=false,bytes=0
+  let version=ticket.traceVersion,buffer='',finished=false,failed=false,outputStored=false,bytes=0,failureCode='EMPLOYEE_RUNTIME_CHILD_UNCONFIRMED'
   let queue:Promise<void>=Promise.resolve()
-  const stop=()=>{failed=true;child.kill('SIGTERM')}
+  const stop=(error?:unknown)=>{const code=(error as any)?.code||(error as any)?.message;if(typeof code==='string'&&/^[A-Z0-9_]{1,100}$/.test(code))failureCode=code;failed=true;child.kill('SIGTERM')}
   const timer=setTimeout(stop,remaining)
   // Stderr can contain library/raw response prose. Drain without publishing or
   // including it in errors; structured persistent port records are the evidence.
-  child.stderr.on('data',()=>{})
+  child.stderr.on('data',(chunk:Buffer)=>config.diagnosticSink?.(chunk))
   child.stdin.on('error',stop)
   child.stdout.on('data',(chunk:Buffer)=>{
     bytes+=chunk.length;if(bytes>8_000_000){stop();return}
@@ -71,7 +73,7 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
   child.stdin.write(JSON.stringify({ticket,config:{isolatedRoot:config.isolatedRoot,homePath:join(config.isolatedRoot,'homes',createHash('sha256').update(ticket.executionId).digest('hex')),hermesSource:config.hermesSource,hermesExpectedSha:config.hermesExpectedSha,providerBaseUrl:config.providerBaseUrl,providerCredential:config.providerCredential}})+'\n')
   const code=await exit;clearTimeout(timer);await queue
   if(code!==0||failed||!finished||buffer.trim()){
-    await port.markUnknown(ticket.executionId,version,'EMPLOYEE_RUNTIME_CHILD_UNCONFIRMED')
+    await port.markUnknown(ticket.executionId,version,failureCode)
     return {state:'unknown',executionId:ticket.executionId}
   }
   // finished alone is insufficient: recordOutput already checked the exact final

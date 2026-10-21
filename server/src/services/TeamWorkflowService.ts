@@ -3,6 +3,7 @@ import { z } from 'zod'
 import prisma from '../config/database'
 import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam, teamCommunication, TEAM_PREFIX } from './TeamCommunicationService'
 import { teamAi, readAiConnection } from './TeamAiService'
+import { assertLegacyConsumer } from './teamAgentBridge/employeeIntake'
 import { ensureAction, followupDue, beginFollowup, settleFollowup, listActions } from './TeamManagementActions'
 import { readWork, writeWork } from './EmployeeWorkspaceStore'
 import { managementConsentSchema, assertManagementAudience, assertManagementFresh, managementPrivateText, managementContext } from './TeamManagementContext'
@@ -288,6 +289,8 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         // Pause/disable blocks execution, not accounting reconciliation. Jobs and
         // exports also derive this projection when no consumer remains alive.
         const billingChanged = await refreshBilling(tx, storeId, j)
+        try { await assertLegacyConsumer(tx,storeId,channelId,sourceSeq) }
+        catch { j.status='blocked';j.error='TEAM_LEGACY_CONSUMER_REPLACED';await save(tx,storeId,j,now);return null }
         if (j.nextAttemptAt && j.nextAttemptAt > now || j.status === 'processing' && j.leaseUntil! > now) {
           if (billingChanged) await save(tx, storeId, j, now)
           return null
@@ -336,6 +339,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
         const policy = await readTeam<WorkflowPolicy>(db, storeId, `workflow.policy.${channelId}`)
         const d = await ai.generate(operator(storeId, prepared), channelId,
           { requestId: prepared.aiRequestId, kind: policy?.management ? 'management' : policy?.automaticSend ? 'routine' : 'workflow', consent: true, sourceSeq: [prepared.sourceSeq] }, async (tx: any) => {
+            await assertLegacyConsumer(tx,storeId,channelId,sourceSeq)
             const current = await readTeam<WorkflowJob>(tx, storeId, workflowJobKey(channelId, sourceSeq))
             if (current?.status !== 'processing' || current.leaseToken !== prepared.leaseToken || current.leaseUntil! <= clock()) fail('TEAM_WORKFLOW_LEASE_CHANGED')
             await scope(tx, storeId, prepared, prepared.claimEpoch, clock())

@@ -85,6 +85,23 @@ async function main(){
   assert.equal((await runtime.inspect(t.executionId)).phase,'unknown');const saved=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(saved.responses.length,2);assert.equal(saved.responses[1].providerRequestId,'synthetic-provider-2');assert.equal(saved.tools.length,1);assert.equal((await readTeam(db,storeId,'channel.'+channel.id)).lastSeq,before.lastSeq+1);
   await assert.rejects(()=>input(runtime,t,p,blocked.traceVersion,3));
  });
+ await check('restricted employee questions are redacted without obtaining financial or private records',async()=>{
+  task.version++;const question=await teamCommunication(db).send(staff,channel.id,{requestId:randomUUID(),text:'今天营业额多少？'});
+  const s={kind:'conversation',channelId:channel.id,messageId:question.id,seq:question.seq};scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));
+  const t=await make().host.begin(grant,scope,[s]);assert(!t.sealedUserContent.includes(question.text));assert(t.sealedUserContent.includes('Restricted-data request'));assert(!t.tools.some(x=>/finance|revenue|salary|staff_create|leave_submit/.test(x.function.name)));await make().recover(t.executionId);
+ });
+ await check('private HTTP relay matches reserved SDK input, persists provider receipt and never resends duplicate',async()=>{
+  const express=require(root+'/server/node_modules/express'),{createEmployeeRuntimeHttp}=built('teamAgentBridge/employeeRuntimeHttp');
+  const t=await next(),runtime=make(),p=wire(t);await input(runtime,t,p);await writeTeam(db,storeId,'ai.settings',{version:7});let sends=0;
+  const app=express();app.use(express.json({limit:'2mb'}));app.use(createEmployeeRuntimeHttp({enabled:true,resolve:async(token,kind)=>token==='synthetic-execution-provider-only'&&kind==='provider'?{executionId:t.executionId,expiresAt:new Date(Date.now()+60000).toISOString(),runtime}:null,transport:async(s,v,request,before)=>{assert.equal(s,storeId);assert.equal(v,7);assert.equal(request.reasoning_effort,'low');assert.equal(request.stream,false);assert(!('max_tokens'in request));await before();sends++;return{id:'synthetic-http-provider-receipt',choices:[{finish_reason:'stop',message:{role:'assistant',content:'Fakta belum lengkap; belum ada perubahan data.'}}]}}}));
+  const server=await new Promise(resolve=>{const x=app.listen(0,'127.0.0.1',()=>resolve(x))});try{
+   const url='http://127.0.0.1:'+server.address().port+'/v1/chat/completions',headers={authorization:'Bearer synthetic-execution-provider-only','content-type':'application/json'};
+   assert.equal((await fetch(url,{method:'POST',headers,body:JSON.stringify({...p,model:'unapproved'})})).status,409);assert.equal(sends,0);
+   const response=await fetch(url,{method:'POST',headers,body:JSON.stringify(p)});assert.equal(response.status,200);assert((await response.text()).includes('synthetic-http-provider-receipt'));assert.equal(sends,1);
+   assert.equal((await fetch(url,{method:'POST',headers,body:JSON.stringify(p)})).status,409);assert.equal(sends,1);
+   const receipt=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId+'.provider.1');assert.equal(receipt.state,'response');assert.equal(receipt.value.id,'synthetic-http-provider-receipt');
+  }finally{await new Promise(r=>server.close(r));await runtime.recover(t.executionId)}
+ });
  if(process.env.EMPLOYEE_REAL_HERMES==='1')await check('actual pinned Hermes child executes two scoped tools and persists all three real SDK turns',async()=>{
   const fs=require('node:fs/promises'),http=require('node:http'),os=require('node:os');
   const {runEmployeeRuntimeChild}=built('teamAgentBridge/employeeRuntimeChild');
@@ -93,14 +110,14 @@ async function main(){
   try{
    const runtime=createEmployeeRuntime(db,{...deps,approvedSystemHashes:[],reviewedSystemTemplate:{hash:template.hash,isolatedRoot:root},maxExecutionMs:120000});
    task.version++;scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));const t=await runtime.host.begin(grant,scope,[source]);
-   server=http.createServer((req,res)=>{let body='';req.on('data',b=>body+=b);req.on('end',()=>{calls++;const p=JSON.parse(body);assert.equal(req.url,'/v1/chat/completions');assert.equal(p.model,t.model);assert(!body.includes('MANAGER_SECRET_SENTINEL'));
+   server=http.createServer((req,res)=>{if(req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({object:'list',data:[{id:t.model,object:'model'}]}));return}let body='';req.on('data',b=>body+=b);req.on('end',()=>{calls++;const p=JSON.parse(body);assert.equal(req.method,'POST');assert.equal(req.url,'/v1/chat/completions');assert.equal(p.model,t.model);assert(!body.includes('MANAGER_SECRET_SENTINEL'));
     let delta,reason;
     if(calls===1){delta={role:'assistant',tool_calls:[{index:0,id:'real-read',type:'function',function:{name:'employee_read_message',arguments:JSON.stringify({seq:m.seq})}}]};reason='tool_calls'}
     else if(calls===2){delta={role:'assistant',tool_calls:[{index:0,id:'real-send',type:'function',function:{name:'employee_send_message',arguments:JSON.stringify({text:'Mohon konfirmasi petugas pemeriksa penutup mesin.'})}}]};reason='tool_calls'}
     else{delta={role:'assistant',content:'Pertanyaan tersimpan. Menunggu jawaban staf, belum dianggap selesai.'};reason='stop'}
     const chunk={id:'synthetic-real-hermes-'+calls,object:'chat.completion.chunk',created:1,model:t.model,choices:[{index:0,delta,finish_reason:null}]};res.writeHead(200,{'content-type':'text/event-stream'});res.end('data: '+JSON.stringify(chunk)+'\n\ndata: '+JSON.stringify({...chunk,choices:[{index:0,delta:{},finish_reason:reason}]})+'\n\ndata: [DONE]\n\n');
    })});await new Promise(r=>server.listen(0,'127.0.0.1',r));
-   const config={python:process.env.EMPLOYEE_HERMES_PYTHON,hermesSource:process.env.EMPLOYEE_HERMES_SOURCE,hermesExpectedSha:template.hermesSha,repository:require('node:fs').realpathSync(path.resolve(__dirname,'../..')),isolatedRoot:root,providerBaseUrl:'http://127.0.0.1:'+server.address().port+'/v1',providerCredential:'synthetic-no-real-model-credential',deadlineAt:new Date(Date.now()+110000).toISOString()};
+   const config={python:process.env.EMPLOYEE_HERMES_PYTHON,hermesSource:process.env.EMPLOYEE_HERMES_SOURCE,hermesExpectedSha:template.hermesSha,repository:require('node:fs').realpathSync(path.resolve(__dirname,'../..')),isolatedRoot:root,providerBaseUrl:'http://127.0.0.1:'+server.address().port+'/v1',providerCredential:'synthetic-no-real-model-credential',deadlineAt:new Date(Date.now()+110000).toISOString(),diagnosticSink:b=>require('node:fs').appendFileSync('/tmp/employee-synthetic-child-diagnostic.log',b)};
    const result=await runEmployeeRuntimeChild(t,runtime.host,config);const state=await runtime.inspect(t.executionId);
    assert.equal(result.state,'complete',JSON.stringify({result,state,calls}));assert.equal(calls,3);assert.equal(state.turn,3);
    const saved=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(saved.phase,'complete');assert.equal(saved.tools.length,2);assert.equal(saved.inputs.length,3);assert.equal(saved.responses.length,3);

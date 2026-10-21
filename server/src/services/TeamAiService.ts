@@ -400,11 +400,12 @@ export interface TeamAgentModelProviderRequest {
 }
 export type TeamAgentModelTransport = (storeId: string, configVersion: number, request: TeamAgentModelProviderRequest,
   beforeSend: () => Promise<void>, deadlineAt?: number) => Promise<any>
-export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: boolean; fetch?: typeof fetch } = {}): TeamAgentModelTransport {
+export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: boolean; fetch?: typeof fetch; toolProfile?: 'stock_readonly'|'employee_work' } = {}): TeamAgentModelTransport {
   return async (storeId, configVersion, request, beforeSend, deadlineAt) => {
     if (options.enabled !== true) denied('AGENT_MODEL_RELAY_DISABLED')
+    const toolNames = options.toolProfile === 'employee_work' ? ['employee_read_message','employee_read_task','employee_read_inventory','employee_send_message'] : ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report']
     if (Object.keys(request).some(k => !['model', 'stream', 'reasoning_effort', 'reasoning_split', 'messages', 'tools', 'tool_choice'].includes(k)) ||
-      !request.tools.every(t => t?.type === 'function' && ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report'].includes(t.function?.name)) ||
+      !request.tools.every(t => t?.type === 'function' && toolNames.includes(t.function?.name)) ||
       request.model !== 'MiniMax-M3.1-Flash' || request.stream !== false || request.reasoning_effort !== 'low' || request.reasoning_split !== true ||
       'max_tokens' in request || 'max_completion_tokens' in request) denied('AGENT_MODEL_REQUEST_INVALID', 400)
     const config = await readTeam(db, storeId, 'ai.settings')
