@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import hashlib
 
 
 def main(*, provider_send=None):
@@ -21,7 +22,18 @@ def main(*, provider_send=None):
     if not root.is_absolute() or root.resolve() != root or root.is_symlink():
         raise ValueError("CANONICAL_ISOLATED_ROOT_REQUIRED")
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    home = tempfile.mkdtemp(prefix="employee-home-", dir=root)
+    # Host can pre-bind the exact empty HOME for reviewed system-template checks.
+    # Default remains exclusive per-process for standalone diagnostics.
+    if "homePath" in config:
+        expected_home = root / "homes" / hashlib.sha256(ticket["executionId"].encode()).hexdigest()
+        home_path = Path(config["homePath"])
+        if home_path != expected_home or home_path.resolve() != home_path:
+            raise ValueError("HOST_HOME_BINDING_INVALID")
+        home_path.parent.mkdir(mode=0o700, exist_ok=True)
+        home_path.mkdir(mode=0o700, exist_ok=False)
+        home = str(home_path)
+    else:
+        home = tempfile.mkdtemp(prefix="employee-home-", dir=root)
     os.environ.clear()
     os.environ.update(HOME=home, PATH="/usr/bin:/bin", PYTHONDONTWRITEBYTECODE="1", NO_PROXY="*")
     sys.path.insert(0, str(Path(__file__).resolve().parent))

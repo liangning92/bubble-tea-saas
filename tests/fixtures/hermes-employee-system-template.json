@@ -1,0 +1,6 @@
+{
+  "hermesSha": "a7198a8855ad98681114ff5138eb01fe132a62e7",
+  "hash": "3b5ae3568dc140bb434df988508aef1ff3ac2e9b4a9106ce495dc1b5a297232e",
+  "mode": "pinned isolated employee_work; exact instruction; host-only paths/clock/OS substitutions",
+  "syntheticCapture": true
+}

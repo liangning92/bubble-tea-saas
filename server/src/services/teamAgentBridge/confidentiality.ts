@@ -6,8 +6,7 @@ import { TeamActor, TeamChannel, TeamError, readTeam } from '../TeamCommunicatio
 import type { BridgeDependencies, BridgeGrant, TaskRef, CommunicationScope, OutputRequest } from './contract'
 export const contextKey = (g: BridgeGrant, task: TaskRef, channelId?: string, audience?:string) => createHash('sha256').update(JSON.stringify([g.storeId,g.agentId,task.taskId,task.version,channelId || 'new',audience || 'new',g.version,g.clientRevision])).digest('hex')
 const reject = (): never => { throw new TeamError(403, 'TEAM_COMMUNICATION_DATA_POLICY_DENIED') }
-export async function communicationScope(db: any, deps: BridgeDependencies, g: BridgeGrant, task: TaskRef, channel?: TeamChannel, requesterStaffId?: string): Promise<CommunicationScope> {
-  if (!deps.communication) reject()
+export async function readCommunicationScope(db: any, g: BridgeGrant, task: TaskRef, channel?: TeamChannel, requesterStaffId?: string): Promise<CommunicationScope> {
   const audienceStaffIds = channel ? channel.members.filter(m => m.staffId !== 'agent:' + g.agentId).map(m => m.staffId).sort() : []
   const people = await db.staff.findMany({ where: { storeId:g.storeId,id:{in:audienceStaffIds},status:'active' }, select:{id:true,user:{select:{id:true,storeId:true,role:true}}} })
   if (people.length !== audienceStaffIds.length || people.some((s:any) => !s.user || s.user.storeId !== g.storeId || employeeAppAccess(s.user.role).modes['personal.messages'] !== 'allow')) reject()
@@ -16,6 +15,11 @@ export async function communicationScope(db: any, deps: BridgeDependencies, g: B
   const accessHash=createHash('sha256').update(JSON.stringify([people.sort((a:any,b:any)=>a.id.localeCompare(b.id)),policies])).digest('hex')
   const membersHash=channel?audienceHash(channel):''
   const scope: CommunicationScope = { compartmentKey: contextKey(g,task,channel?.id,membersHash+accessHash), task, channelId: channel?.id, audienceStaffIds, audienceHash:membersHash, requesterStaffId }
+  return scope
+}
+export async function communicationScope(db: any, deps: BridgeDependencies, g: BridgeGrant, task: TaskRef, channel?: TeamChannel, requesterStaffId?: string): Promise<CommunicationScope> {
+  if (!deps.communication) reject()
+  const scope = await readCommunicationScope(db,g,task,channel,requesterStaffId)
   const proof = await deps.communication.assertContext(db,g,scope)
   if (proof.purpose !== 'employee_work' || proof.compartmentKey !== scope.compartmentKey || proof.memoryNamespace !== scope.compartmentKey || typeof proof.executionId!=='string' || !/^[A-Za-z0-9_.:-]{1,128}$/.test(proof.executionId)) reject()
   scope.executionId=proof.executionId
