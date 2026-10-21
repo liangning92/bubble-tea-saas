@@ -7,7 +7,7 @@ import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
 import { recordTeamAgentReply } from './teamAgentBridge/events'
-import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentTaskAuthority } from './teamAgentBridge/identity'
+import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentTaskAuthority, teamAgentOutbound } from './teamAgentBridge/identity'
 import { enqueueTeamTaskReminder } from './TeamTaskReminderService'
 
 export const TEAM_PREFIX = 'team.communication.'
@@ -111,7 +111,7 @@ async function channel(db: DB, a: TeamActor, id: string, auditReason?: string) {
     if (!canTeam(a, 'team.audit') || auditReason.trim().length < 5 || auditReason.length > 500) fail(403, 'TEAM_AUDIT_REQUIRED')
     await audit(db, a, id, 'view', { reason: auditReason, lastSeq: c.lastSeq, kind: c.kind })
   } else if (!member) fail(403, 'TEAM_MEMBERSHIP_REQUIRED')
-  return { c, fromSeq: auditReason === undefined ? member!.fromSeq : 1 }
+  return { c, fromSeq: teamAgentProvenance(a) ? Math.max(...c.members.map(m => m.fromSeq)) : auditReason === undefined ? member!.fromSeq : 1 }
 }
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 // An assignment receipt is its original result, never a read of later employee evidence.
@@ -252,10 +252,10 @@ export function teamCommunication(db: DB = prisma) {
       const sourceMessages = rows.slice(0, 100), member = c.members.find(m => m.staffId === a.staffId)
       // Existing incremental polls must refresh saved source statuses without replaying message history.
       const messagePrefix = TEAM_PREFIX + `message.${id}.`
-      const refreshRows = member && !c.archived && after >= member.fromSeq ? await db.config.findMany({ where: { storeId: a.storeId,
-        key: { startsWith: messagePrefix, gte: messagePrefix + pad(member.fromSeq), lte: messagePrefix + pad(after) },
+      const refreshRows = member && !c.archived && after >= fromSeq ? await db.config.findMany({ where: { storeId: a.storeId,
+        key: { startsWith: messagePrefix, gte: messagePrefix + pad(fromSeq), lte: messagePrefix + pad(after) },
         value: { contains: '"authorId":' + JSON.stringify(a.staffId) } }, orderBy: { key: 'desc' }, take: 100, select: { value: true } }) : []
-      const refreshSources = refreshRows.map((row: any) => JSON.parse(row.value)).filter((m: any) => m.channelId === id && m.authorId === a.staffId && !m.ai && m.seq >= member!.fromSeq && m.seq <= after)
+      const refreshSources = refreshRows.map((row: any) => JSON.parse(row.value)).filter((m: any) => m.channelId === id && m.authorId === a.staffId && !m.ai && m.seq >= fromSeq && m.seq <= after)
       const handling = await projectOwnAiHandling(db, a, c, [...sourceMessages, ...refreshSources])
       const messages = sourceMessages.map(({ aiHandling: _untrusted, ...m }: any) => ({ ...m, ...(handling.has(m.id) ? { aiHandling: handling.get(m.id) } : {}) }))
       const aiHandlingUpdates = refreshSources.map((m: any) => ({ messageId: m.id, seq: m.seq, aiHandling: handling.get(m.id) || null }))
@@ -270,9 +270,10 @@ export function teamCommunication(db: DB = prisma) {
         if (teamAgentProvenance(a)) await lock(tx, a.storeId, `request.${a.staffId}.${v.requestId}`)
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c } = await channel(tx, a, id)
+        await teamAgentOutbound(tx, a, c, { text: v.text, files: v.files })
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v, ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) })
-        if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return old.message }
+        if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); await teamAgentOutbound(tx, a, c, old.message); return old.message }
         if (teamAgentProvenance(a) && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
         // Serialize the final automatic effect with store revocation, before
         // acquiring ai-budget (defaults saves use defaults -> ai-budget).

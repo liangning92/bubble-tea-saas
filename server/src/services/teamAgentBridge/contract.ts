@@ -26,10 +26,23 @@ export interface BridgeTaskPort {
 }
 export interface BridgeDependencies {
   enabled?: boolean
+  communication?: CommunicationPolicyPort
   resolveGrant(db: any): Promise<BridgeGrant>
   tasks: BridgeTaskPort
   // Post-commit wake only; durable reminders remain owned by the native delivery worker.
   messageCommitted?: (storeId: string) => void
   readAttachment(storeId: string, fileId: string): Promise<Uint8Array>
   now?: () => number
+}
+
+export interface CommunicationScope { compartmentKey:string; task:TaskRef; channelId?:string; audienceStaffIds:string[]; audienceHash:string; executionId?:string; requesterStaffId?:string }
+export type CommunicationSource = {kind:'conversation';channelId:string;messageId:string;seq:number} | {kind:'employee_task';taskId:string;version:number} | {kind:'public_sop';id:string;version:number} | {kind:'memory';compartmentKey:string}
+export interface OutputRequest { purpose:'message'|'title';requestId:string;textHash:string }
+export type CommunicationDataClass = 'operational'|'revenue'|'profit'|'cost'|'salary'|'private_staff'|'unknown'
+export interface CommunicationPolicyPort {
+  // Trusted runtime trace, never model/body-supplied labels. Host must verify actual profile/task/memory isolation.
+  assertContext(db:any,grant:BridgeGrant,scope:CommunicationScope):Promise<{purpose:'employee_work';compartmentKey:string;memoryNamespace:string;executionId:string}>
+  admitOutput(db:any,grant:BridgeGrant,scope:CommunicationScope,input:OutputRequest):Promise<{decision:'allow'|'deny'|'unknown';executionId:string;compartmentKey:string;audienceHash:string;textHash:string;requestId:string;dataClasses:CommunicationDataClass[];sources:CommunicationSource[]}>
+  authorizeSource(db:any,grant:BridgeGrant,scope:CommunicationScope,source:CommunicationSource):Promise<{dataClasses:CommunicationDataClass[]}>
+  classifyAttachment?(db:any,grant:BridgeGrant,scope:CommunicationScope,fileId:string,contentHash:string):Promise<{dataClass:'operational'|'revenue'|'profit'|'cost'|'salary'|'private_staff'|'unknown';contentHash:string;channelId:string;taskId:string}>
 }

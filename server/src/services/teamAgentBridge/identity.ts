@@ -3,7 +3,7 @@ import type { TeamActor, TeamChannel } from '../TeamCommunicationService'
 
 // Request-local capability, never deserialized from a JWT or HTTP/tool body.
 // Only the bridge constructs it after checking the fresh action/data grant.
-type Binding = { action: BridgeAction; agentId: string; grantVersion: number; name: string; clientRevision: number; context?: { task: TaskRef; replyToSeq?: number }; check(db: any): Promise<void>; channel(db: any, channel: TeamChannel): Promise<void>; created?(db: any, channel: { id: string }): Promise<void> }
+type Binding = { action: BridgeAction; agentId: string; grantVersion: number; name: string; clientRevision: number; context?: { task: TaskRef; replyToSeq?: number }; check(db: any): Promise<void>; channel(db: any, channel: TeamChannel): Promise<void>; outbound(db:any,channel:TeamChannel,input:{text:string;files:string[]}):Promise<void>; created?(db: any, channel: TeamChannel): Promise<void> }
 const trusted = new WeakMap<TeamActor, Binding>()
 export function bindTeamAgent(actor: TeamActor, binding: Binding): TeamActor {
   trusted.set(actor, binding)
@@ -25,9 +25,14 @@ export async function teamAgentChannelAccess(db: any, actor: TeamActor, channel:
   if (binding) await binding.channel(db, channel)
 }
 
-export async function teamAgentChannelCreated(db: any, actor: TeamActor, channel: { id: string }) {
+export async function teamAgentChannelCreated(db: any, actor: TeamActor, channel: TeamChannel) {
   const binding = trusted.get(actor)
   if (binding) { await binding.check(db); await binding.created?.(db, channel) }
+}
+
+export async function teamAgentOutbound(db:any,actor:TeamActor,channel:TeamChannel,input:{text:string;files:string[]}) {
+  const binding=trusted.get(actor)
+  if(binding) await binding.outbound(db,channel,input)
 }
 
 /** Narrow native task seam. Never grants role=agent global manager powers. */
