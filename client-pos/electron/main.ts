@@ -2,7 +2,10 @@ import { consumeUpgradeSession } from './upgradeSession'
 import { cupStickerTspl } from './cupSticker'
 import { parsePrinterNames } from './printerInventory'
 import { requestReceiptHandover } from './receiptHandover'
-import { renderTemplateReceipt } from './receiptRaster'
+// Native PDF/canvas modules are needed only when a receipt is printed.
+async function renderTemplateReceipt(data: any): Promise<Buffer> {
+  return (await import('./receiptRaster')).renderTemplateReceipt(data)
+}
 import { shiftReceiptLayout } from './shiftReceiptLayout'
 import { WindowsRawPrinter } from './windowsRawPrinter'
 import { fetchReceiptLogo } from './receiptLogo'
@@ -50,7 +53,8 @@ function getOrCreateLocalJwtSecret(): string {
     return safeStorage.decryptString(fs.readFileSync(secretPath))
   }
 }
-import { exec as execChild, fork, spawn } from 'child_process'
+import { exec as execChild, execFile, fork, spawn } from 'child_process'
+import { promisify } from 'util'
 import net from 'net'
 import log from 'electron-log/main'
 // asar 打包后 stdout/stderr 无效，electron-log 内部调用会抛 EPIPE
@@ -213,6 +217,12 @@ if (process.env.ELECTRON_DISABLE_GPU !== '1') {
 
 // 窗口引用
 let mainWindow: BrowserWindow | null = null
+let finishLocalServerBoot: (ready: boolean) => void
+const localServerBoot = new Promise<boolean>(resolve => { finishLocalServerBoot = resolve })
+ipcMain.handle('wait-for-local-server', async event => ({ready: (event.sender === mainWindow?.webContents || event.sender === customerWindow?.webContents) && await localServerBoot}))
+ipcMain.on('login-window-ready', event => {
+  if (event.sender === mainWindow?.webContents) writeCrash('[STARTUP] login-visible pid=' + process.pid + ' elapsedMs=' + Math.round(process.uptime() * 1000))
+})
 // The customer display must not consume the main cashier's one-time session.
 ipcMain.handle('consume-upgrade-session',event=>event.sender===mainWindow?.webContents?consumeUpgradeSession():null)
 let customerWindow: BrowserWindow | null = null
@@ -397,22 +407,22 @@ async function startLocalServer(): Promise<void> {
   // 导致端口 7072 被僵尸进程占用，新实例卡在 waitForPort 超时
   try {
     const { execSync } = require('child_process')
+    let cleanedResidual = false
     if (process.platform === 'win32') {
       // Windows: 查找占用 7072 端口的进程并强制结束
-      const result = execSync(
-        `netstat -ano | findstr :7072 | findstr LISTENING`,
-        { encoding: 'utf8', windowsHide: true }
-      )
+      const run = promisify(execFile)
+      const {stdout: result} = await run('netstat.exe', ['-ano'], {encoding:'utf8',windowsHide:true,timeout:5000})
       const lines = result.trim().split('\n')
       for (const line of lines) {
         const parts = line.trim().split(/\s+/)
         const localAddr = parts[1] || ''
-        if (!localAddr.includes(':7072')) continue
+        if (!localAddr.endsWith(':7072') || !parts.includes('LISTENING')) continue
         const pid = parts[parts.length - 1]
         if (!pid || pid === '0') continue
         console.log(`[Server] Killing residual process PID=${pid} holding port 7072`)
         try {
-          execSync(`taskkill /F /PID ${pid}`, { windowsHide: true })
+          await run('taskkill.exe', ['/F','/PID',pid], {windowsHide:true,timeout:5000})
+          cleanedResidual = true
           console.log(`[Server] Residual process ${pid} killed`)
         } catch (killErr: any) {
           console.warn(`[Server] Failed to kill PID ${pid}:`, killErr.message)
@@ -429,6 +439,7 @@ async function startLocalServer(): Promise<void> {
         console.log(`[Server] Killing residual process PID=${pid} holding port 7072`)
         try {
           process.kill(parseInt(pid), 'SIGKILL')
+          cleanedResidual = true
           console.log(`[Server] Residual process ${pid} killed`)
         } catch (killErr: any) {
           console.warn(`[Server] Failed to kill PID ${pid}:`, killErr.message)
@@ -436,7 +447,7 @@ async function startLocalServer(): Promise<void> {
       }
     }
     // 等待系统释放端口
-    await new Promise(r => setTimeout(r, 1000))
+    if (cleanedResidual) await new Promise(r => setTimeout(r, 1000))
   } catch (cleanupErr) {
     // 端口未被占用 → 忽略错误
     console.log('[Server] No residual process on port 7072, proceeding...')
@@ -716,7 +727,7 @@ function createMainWindow() {
     }
   })
 
-  // 加载主界面（服务器启动后才加载，确保 API 可用）
+  // Load the login interface immediately; its submit action waits for local API readiness.
   if (isDev) {
     mainWindow.loadURL('http://localhost:6063')
     mainWindow.webContents.openDevTools()
@@ -2998,7 +3009,6 @@ app.on('second-instance', () => {
 
 // 应用启动
 app.whenReady().then(async () => {
-  if (process.platform === 'win32') void windowsPrinter.warm().catch(error=>writeCrash('[WIN-RAW] Worker warmup failed: '+error.message))
   console.log('[Electron] App ready, starting up...')
 
   // 警告：打印模块加载失败
@@ -3022,56 +3032,36 @@ app.whenReady().then(async () => {
     }
   })
 
-  // 先启动本地服务器（仅打包模式）
-  if (app.isPackaged) {
-    // 启动服务器并等待 schema 同步完成
-    // 注意：即使这里抛异常，也不应该导致整个 app 退出
+  // Show the cashier before starting local API work. No API-dependent business
+  // screens or background sync mount until the renderer's boot handshake resolves.
+  createMainWindow()
+  writeCrash('[STARTUP] window-created pid=' + process.pid + ' elapsedMs=' + Math.round(process.uptime() * 1000))
+  if (mainWindow) setupUpdater(mainWindow,onlineInstallationHooks)
+  if (!app.isPackaged) {
+    finishLocalServerBoot!(true)
+    createCustomerWindow()
+    setTimeout(() => checkForUpdatesOnStart(), 10000)
+    return
+  }
+  setImmediate(() => { void (async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
     try {
       await startLocalServer()
-    } catch (err: any) {
-      log.error('[Electron] startLocalServer() threw:', err.message, err.stack)
-      // 不退出，继续尝试启动窗口和服务器
-    }
-
-    // 等待服务器 port 7072 可用后再创建窗口
-    try {
       await waitForPort(7072, 60000)
-      log.log('[Electron] Server is ready, creating windows...')
-      try {
-        createMainWindow()
-        console.log('[Electron] Main window created')
-      } catch (e) {
-        console.error('[Electron] Failed to create main window:', e)
-      }
-      try {
-        createCustomerWindow()
-        console.log('[Electron] Customer window created')
-      } catch (e) {
-        console.warn('[Electron] Failed to create customer window:', e)
-      }
-      if (mainWindow) {
-        setupUpdater(mainWindow,onlineInstallationHooks)
-        setTimeout(() => checkForUpdatesOnStart(), 10000)
-      }
-    } catch (err: any) {
-      log.error('[Electron] Server failed to start:', err.message)
-      // 即使服务器启动失败也创建主窗口，显示错误页
-      createMainWindow()
-      if (mainWindow) {
-        showErrorPage(mainWindow, '服务器启动失败',
-          '本地 API 服务器未能成功启动，应用程序无法正常工作。',
-          `错误：${err.message}\n\n请尝试重新安装应用程序。\n如果问题持续，请查看日志文件获取详细信息。`)
-      }
-    }
-  } else {
-    // 开发模式：直接创建窗口（vite dev server 已运行）
-    createMainWindow()
-    createCustomerWindow()
-    if (mainWindow) {
-      setupUpdater(mainWindow,onlineInstallationHooks)
+      if (!mainWindow || mainWindow.isDestroyed()) {stopLocalServer(); return}
+      writeCrash('[STARTUP] api-ready pid=' + process.pid + ' elapsedMs=' + Math.round(process.uptime() * 1000))
+      finishLocalServerBoot!(true)
+      try { createCustomerWindow() } catch (error) { console.warn('[Electron] Failed to create customer window:', error) }
+      if (process.platform === 'win32') void windowsPrinter.warm().catch(error=>writeCrash('[WIN-RAW] Worker warmup failed: '+error.message))
       setTimeout(() => checkForUpdatesOnStart(), 10000)
+    } catch (err: any) {
+      finishLocalServerBoot!(false)
+      log.error('[Electron] Server failed to start:', err.message)
+      if (mainWindow && !mainWindow.isDestroyed()) showErrorPage(mainWindow, '服务器启动失败',
+        '本地 API 服务器未能成功启动，应用程序无法正常工作。',
+        `错误：${err.message}\n\n请查看日志文件获取详细信息。`)
     }
-  }
+  })() })
 })
 
 app.on('window-all-closed', () => {

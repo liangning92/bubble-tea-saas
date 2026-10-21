@@ -141,20 +141,44 @@ Var BTPSUpgradeDiagnostic
 # Disable CRC check for installer and uninstaller
 CRCCheck off
 
+!macro BTPSRepairShortcut link
+  ClearErrors
+  CreateShortCut "${link}" "$appExe" "" "$appExe" 0 SW_SHOWNORMAL "" "${APP_DESCRIPTION}"
+  ${If} ${Errors}
+    DetailPrint "Unable to refresh BTPS shortcut: ${link}"
+  ${Else}
+    WinShell::SetLnkAUMI "${link}" "${APP_ID}"
+  ${EndIf}
+  ClearErrors
+!macroend
+
 !macro customInstall
   # 启用 Windows LongPaths 支持（解除260字符路径限制）
   # 使用 HKCU（当前用户注册表），无需管理员权限
   WriteRegDWORD HKCU "SOFTWARE\Microsoft\Windows\CurrentVersion\FileSystem" "LongPathsEnabled" 1
 
-  # 创建桌面快捷方式
-  CreateShortcut "$DESKTOP\BTPS.lnk" "$INSTDIR\BTPS.exe"
-  CreateShortcut "$DESKTOP\BubbleTeaPOS.lnk" "$INSTDIR\BTPS.exe"
+  # electron-builder preserves missing/stale links during --updated installs.
+  # Repair both canonical links after the old uninstaller has finished. Use
+  # builder's paths so current-user/all-users and redirected folders agree.
+  SetOutPath "$INSTDIR"
+  !insertmacro createMenuDirectory
+  !insertmacro BTPSRepairShortcut "$newStartMenuLink"
+  ${IfNot} ${isNoDesktopShortcut}
+    !insertmacro BTPSRepairShortcut "$newDesktopLink"
+  ${EndIf}
+  # Retain an existing legacy entry without creating two icons on fresh installs.
+  ${If} ${FileExists} "$DESKTOP\BubbleTeaPOS.lnk"
+    !insertmacro BTPSRepairShortcut "$DESKTOP\BubbleTeaPOS.lnk"
+  ${EndIf}
+  System::Call 'Shell32::SHChangeNotify(i 0x8000000, i 0, i 0, i 0)'
 !macroend
 
 !macro customUnInstall
   # 卸载时不关闭 LongPaths（其他应用可能也用）
-  # 删除桌面快捷方式
-  Delete "$DESKTOP\BTPS.lnk"
-  Delete "$DESKTOP\BubbleTeaPOS.lnk"
-  Delete "$DESKTOP\BTPS 日志.lnk"
+  # Upgrades invoke the old uninstaller too. Canonical links are managed by
+  # builder; remove legacy entries only on an actual uninstall.
+  ${IfNot} ${isUpdated}
+    Delete "$DESKTOP\BubbleTeaPOS.lnk"
+    Delete "$DESKTOP\BTPS 日志.lnk"
+  ${EndIf}
 !macroend

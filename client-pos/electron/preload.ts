@@ -98,6 +98,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return ipcRenderer.invoke('check-for-updates')
   },
 
+  waitForLocalServer: () => ipcRenderer.invoke('wait-for-local-server'),
+  notifyLoginReady: () => ipcRenderer.send('login-window-ready'),
   consumeUpgradeSession: () => ipcRenderer.invoke('consume-upgrade-session'),
   getUpdateState: () => ipcRenderer.invoke('get-update-state'),
 

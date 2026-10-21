@@ -40,19 +40,20 @@ function RootRoute() {
 
 const TvDisplayPage = lazy(() => import('./pages/TvDisplayPage').then(module => ({ default: module.TvDisplayPage })))
 
-function App() {
-  const {user,apiUrl,token}=useAuthStore()
-  useEffect(()=>{syncManager.startSync(30000);const resume=()=>{void syncManager.syncPendingOrders()};window.addEventListener('pos-session-restored',resume);return()=>{window.removeEventListener('pos-session-restored',resume);syncManager.destroy()}},[])
-  useEffect(()=>{if(user?.id)void syncManager.syncPendingOrders()},[user?.id,user?.storeId,apiUrl,token])
+function App({desktopStarting = false}: {desktopStarting?: boolean} = {}) {
+  const {user,apiUrl,token,isAuthenticated}=useAuthStore()
+  useEffect(()=>{if(desktopStarting)return;syncManager.startSync(30000);const resume=()=>{void syncManager.syncPendingOrders()};window.addEventListener('pos-session-restored',resume);return()=>{window.removeEventListener('pos-session-restored',resume);syncManager.destroy()}},[desktopStarting])
+  useEffect(()=>{if(!desktopStarting&&user?.id)void syncManager.syncPendingOrders()},[desktopStarting,user?.id,user?.storeId,apiUrl,token])
   const installing=useOrderStore(state=>state.isInstallingUpdate)
+  if(desktopStarting && user)return <RouteLoading/>
   return (
-    <StaffAccessProvider api={api} actor={user?[user.id,user.storeId,apiUrl||'pos'].join(':'):''} owner={user?.role==='admin'}><StaffApprovalDialog/>
+    <StaffAccessProvider api={api} actor={!desktopStarting&&user?[user.id,user.storeId,apiUrl||'pos'].join(':'):''} owner={!desktopStarting&&user?.role==='admin'}><StaffApprovalDialog/>
       <UpdateNotification />
       <ReceiptHandoverModal />
       <div style={installing?{pointerEvents:'none'}:undefined} onKeyDownCapture={event=>{if(installing){event.preventDefault();event.stopPropagation()}}}>
       <Suspense fallback={<RouteLoading />}><Routes>
       <Route path="/approvals" element={<ProtectedRoute><><OfflineRefundInbox/><StaffApprovalInbox api={api} userId={user?.id||''}/></></ProtectedRoute>}/>
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={!desktopStarting&&isAuthenticated?<Navigate to="/pos" replace/>:<LoginPage desktopStarting={desktopStarting}/>} />
       <Route path="/customer-display" element={<CustomerDisplayPage />} />
       <Route path="/tv-display" element={<TvDisplayPage />} />
       <Route path="/register-member" element={<RegisterMemberPage />} />
