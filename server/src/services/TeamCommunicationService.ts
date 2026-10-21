@@ -114,6 +114,15 @@ async function channel(db: DB, a: TeamActor, id: string, auditReason?: string) {
   return { c, fromSeq: auditReason === undefined ? member!.fromSeq : 1 }
 }
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
+// An assignment receipt is its original result, never a read of later employee evidence.
+function assignmentReceipt(t: TeamTask): TeamTask {
+  const by = t.events.find(e => e.action === 'assign')?.by
+  if (!by) fail(409, 'TEAM_REQUEST_RESULT_UNAVAILABLE')
+  return { id: t.id, channelId: t.channelId, roundId: t.roundId, minuteVersion: t.minuteVersion, actionIndex: t.actionIndex,
+    text: t.text, ownerId: t.ownerId, dueDate: t.dueDate, sourceSeq: t.sourceSeq, fromSeq: t.fromSeq,
+    status: 'assigned', version: 1, createdAt: t.createdAt, updatedAt: t.createdAt,
+    events: [{ action: 'assign', by, at: t.createdAt, note: '', sourceSeq: t.sourceSeq }] }
+}
 export async function assertOperationScope(db: DB, a: TeamActor, c: TeamChannel, input: unknown) {
   const scope = z.object({ planId: uuid, taskId: uuid, planVersion: z.number().int().positive(), taskVersion: z.number().int().positive() }).passthrough().parse(input)
   const p = await read(db, a.storeId, `operationPlan.${c.id}.${scope.planId}`)
@@ -451,7 +460,8 @@ export function teamCommunication(db: DB = prisma) {
           const task = await read(tx, a.storeId, `task.${id}.${previous.taskId}`)
           if (!task || task.fromSeq < fromSeq) fail(404, 'TEAM_TASK_NOT_FOUND')
           if (task.agentTask) fail(403, 'TEAM_AGENT_TASK_PRINCIPAL_REQUIRED')
-          return task
+          if (authority && !previous.result) fail(409, 'TEAM_REQUEST_RESULT_UNAVAILABLE')
+          return authority ? previous.result : task
         }
         const m = await read(tx, a.storeId, `minutes.${id}.${v.roundId}`)
         if (!m || m.fromSeq < fromSeq) fail(404, 'TEAM_MINUTES_NOT_FOUND')
@@ -466,8 +476,9 @@ export function teamCommunication(db: DB = prisma) {
           const task = await read(tx, a.storeId, `task.${id}.${existing.taskId}`)
           if (!task || task.fromSeq < fromSeq) fail(404, 'TEAM_TASK_NOT_FOUND')
           if (task.agentTask) fail(403, 'TEAM_AGENT_TASK_PRINCIPAL_REQUIRED')
-          await write(tx, a.storeId, requestKey, { hash, taskId: existing.taskId })
-          return task
+          const result = authority ? assignmentReceipt(task) : task
+          await write(tx, a.storeId, requestKey, { hash, taskId: existing.taskId, ...(authority ? { result } : {}) })
+          return result
         }
         if ((await list(tx, a.storeId, `task.${id}.`, 201)).length >= 200) fail(409, 'TEAM_TASK_LIMIT')
         const at = new Date().toISOString()
@@ -476,7 +487,7 @@ export function teamCommunication(db: DB = prisma) {
           events: [{ action: 'assign', by: a.staffId, at, note: '', sourceSeq: action.sourceSeq }] }
         await write(tx, a.storeId, `task.${id}.${task.id}`, task)
         await write(tx, a.storeId, originKey, { taskId: task.id })
-        await write(tx, a.storeId, requestKey, { hash, taskId: task.id })
+        await write(tx, a.storeId, requestKey, { hash, taskId: task.id, ...(authority ? { result: task } : {}) })
         await enqueueTeamTaskReminder(tx, a.storeId, c, task, a.staffId)
         await audit(tx, a, id, 'create', { action: 'task', taskId: task.id, roundId: v.roundId, minuteVersion: m.version })
         return task
@@ -495,10 +506,20 @@ export function teamCommunication(db: DB = prisma) {
         const key = `task.${id}.${taskId}`, task: TeamTask = await read(tx, a.storeId, key)
         if (!task || task.fromSeq < fromSeq || task.planId && !task.audienceIds?.includes(authority?.staffId || a.staffId)) fail(404, 'TEAM_TASK_NOT_FOUND')
         if (task.agentTask) fail(403, 'TEAM_AGENT_TASK_PRINCIPAL_REQUIRED')
+        if (v.action === 'accept' || v.action === 'submit') {
+          if (task.ownerId !== a.staffId) fail(403, 'TEAM_TASK_ASSIGNEE_REQUIRED')
+        } else {
+          manage(authority?.sponsor || a, c)
+          if (task.planId && ['return', 'complete'].includes(v.action) && task.reviewerId !== (authority?.staffId || a.staffId)) fail(403, 'TEAM_PLAN_REVIEWER_REQUIRED')
+        }
         const { criteriaConfirmed, ...legacyInput } = v
         const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, taskId, ...legacyInput, ...(criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
         const old = await read(tx, a.storeId, requestKey)
-        if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); return task }
+        if (old) {
+          if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT')
+          if (authority && !old.result) fail(409, 'TEAM_REQUEST_RESULT_UNAVAILABLE')
+          return authority ? old.result : task
+        }
         if (c.archived) fail(409, 'TEAM_CHANNEL_CLOSED')
         if (task.version !== v.expectedVersion) fail(409, 'TEAM_VERSION_CONFLICT')
         if (['completed', 'cancelled'].includes(task.status)) fail(409, 'TEAM_TASK_CLOSED')
@@ -508,7 +529,6 @@ export function teamCommunication(db: DB = prisma) {
           if (digest(c.members) !== p.audienceHash) fail(409, 'TEAM_PLAN_AUDIENCE_CHANGED')
         }
         if (v.action === 'accept' || v.action === 'submit') {
-          if (task.ownerId !== a.staffId) fail(403, 'TEAM_TASK_ASSIGNEE_REQUIRED')
           if (v.action === 'accept' && task.status !== 'assigned' || v.action === 'submit' && !['accepted', 'changes_requested'].includes(task.status)) fail(409, 'TEAM_TASK_TRANSITION')
           if (v.action === 'submit' && (!v.note || !v.sourceSeq.length)) fail(400, 'TEAM_TASK_EVIDENCE_REQUIRED')
           for (const n of v.sourceSeq) {
@@ -516,8 +536,6 @@ export function teamCommunication(db: DB = prisma) {
             if (!message || n < fromSeq || n < task.fromSeq || message.authorId !== a.staffId) fail(400, 'TEAM_TASK_EVIDENCE_REQUIRED')
           }
         } else {
-          manage(authority?.sponsor || a, c)
-          if (task.planId && ['return', 'complete'].includes(v.action) && task.reviewerId !== (authority?.staffId || a.staffId)) fail(403, 'TEAM_PLAN_REVIEWER_REQUIRED')
           if (task.planId && v.action === 'complete' && (!v.criteriaConfirmed || !v.note)) fail(400, 'TEAM_PLAN_CRITERIA_REQUIRED')
           if (['return', 'complete'].includes(v.action) && task.status !== 'submitted') fail(409, 'TEAM_TASK_TRANSITION')
           if (['return', 'cancel'].includes(v.action) && !v.note) fail(400, 'TEAM_TASK_NOTE_REQUIRED')
@@ -528,7 +546,7 @@ export function teamCommunication(db: DB = prisma) {
         task.status = states[v.action]; task.version++; task.updatedAt = at
         task.events.push({ action: v.action, by: a.staffId, at, note: v.note, sourceSeq: v.sourceSeq, ...(v.criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
         await write(tx, a.storeId, key, task)
-        await write(tx, a.storeId, requestKey, { hash, taskId })
+        await write(tx, a.storeId, requestKey, { hash, taskId, ...(authority ? { result: task } : {}) })
         await enqueueTeamTaskReminder(tx, a.storeId, c, task, a.staffId)
         await audit(tx, a, id, 'update', { action: 'task', taskId, version: task.version, status: task.status })
         return task

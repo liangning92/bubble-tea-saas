@@ -26,6 +26,8 @@ withActor: (database, action, context, operation) =>
 
 原生任务事件的 by 仍为 agent 身份；审计真实 user FK 是 sponsor，独立保留 agentId/grantVersion/clientRevision/task 来源，不冒充员工。任务写、幂等 receipt、提醒及固定 store signal 在同一事务。指派/退回/完成提醒仅给真实责任人；旧版本、解绑/停用、退出频道、历史 floor 或已变化计划均阻断投递。通知已读只影响通知，不能完成任务。
 
+agent 指派/复核返回 `view=operation_receipt`，当前查询返回 `view=current`。复核旧请求先重查真实 sponsor 当前管理权和适用计划 reviewer；命中回执也不跳过。agent 回执保存原操作结果，不读取后续版本的新证据；重复指派或同纪要动作去重仅返回最初指派快照。旧 agent 回执若缺少保存结果则拒绝并要求有权限的当前查询，不能回落到当前 task；普通员工/管理员原生回放语义保留。
+
 ## 通知证据语义
 
 - queued：持久提醒待现有消费者处理。
@@ -55,6 +57,8 @@ InboxService 由主集成线程独占，本线未改。合入时需保留既有 
 `python3 scripts/with-docker-test.py -- python3 scripts/test-team-work-items.py --native-regression --bridge-regression`：官方 MCP 客户端/临时 HTTP、单个临时 PG，原20组+新增2组原生任务受控并发共22组、16组桥（包含两项P2）、5组通知HTTP、67组原生沟通均通过。新增并发用例真实持有第一 receipt 读取并观察第二频道 PostgreSQL Lock 等待，证明 assign/review 两路径均仅1次变更。CI 默认新脚本只跑工作项22组和通知5组；桥/原生回归由各自既有域选择，避免重复。另有10组既有设备、17组通知HTTP、7组跨进程/PG停启回归通过。仅合成账号/模拟 Push，无真实模型。涵盖幂等、真实权限降级、旧 client/version/撤权竞态、审批零业务写、跨店/历史 floor、任务和提醒/signal 真写后抛错全回滚、员工 Inbox/已读与任务状态分离。
 
 `node tests/stoploss/team-work-item-target-browser-check.cjs`：真实 React 合成页面的消息/任务/行动定位和三宽响应式。不能代替真实手机。
+
+回执权限 P2 的独立最小入口：`python3 scripts/with-docker-test.py -- python3 scripts/test-team-work-items.py --replay-only`。仅跑8组真实PG/官方MCP：当前降权下新/旧复核和读均拒绝、合法旧请求版本快照不含新证据、当前 reviewer/正文变化拒绝、指派两种去重无新证据、旧格式回执失败关闭、撤权与正常新复核/人工原生回放。默认工作项脚本也包含这8组；组合主线可只复跑此增量。
 
 生产只读核实：2026-10-21 00:51 UTC，2 条订阅 active=0/eligible=0；01:09 UTC核实 Lawrence 为唯一 EMP005、active、cashier，存在既有管理员双人会话，API 已挂载四个 push-device 自检路由。没有发送测试消息，没有读取/输出 key 值。
 

@@ -276,7 +276,7 @@ test('team agent bridge selects the synthetic MCP and PostgreSQL checks without 
 
 test('notification and native employee task adapters select real MCP/PG and scoped deep-link UI',()=>{
  const f=fixture();try{
-  for(const file of ['server/src/services/externalMcp/workItemService.ts','server/src/services/TeamTaskReminderService.ts','server/src/services/TeamWorkItemLinks.ts','tests/stoploss/team-work-items-check.cjs']){
+  for(const file of ['server/src/services/externalMcp/workItemService.ts','server/src/services/TeamTaskReminderService.ts','server/src/services/TeamWorkItemLinks.ts','tests/stoploss/team-work-items-check.cjs','tests/stoploss/team-work-item-replay-check.cjs']){
    f.write(file);const p=selectScope([file],f);assert.equal(p.teamWorkItems,true,file);assert.equal(p.electronTypes,false);assert(!p.components.includes('pos'));assert.deepEqual(p.unmappedCode,[]);
   }
   for(const file of ['shared/teamWorkTarget.tsx','shared/TeamCommunication.tsx','shared/TeamChatMessages.tsx','shared/TeamTasks.tsx','shared/TeamManagementActions.tsx','client-staff/src/components/StaffTeamConversation.tsx']){f.write(file);const p=selectScope([file],f);assert(p.teamWorkItems,file);assert(p.browser.some(b=>b.scripts.includes('tests/stoploss/team-work-item-target-browser-check.cjs')),file)}
