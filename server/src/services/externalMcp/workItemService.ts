@@ -13,10 +13,10 @@ const digest = (s: string) => createHash('sha256').update(s).digest('hex')
 const safeFailure = (e: unknown) => typeof e === 'string' && /^(404|410|429|4\d\d|5\d\d)$/.test(e) ? 'HTTP_' + e : 'PUSH_DELIVERY_FAILED'
 const instant = (value?: string) => value && /^\d{4}-\d\d-\d\dT/.test(value) && Number.isFinite(Date.parse(value)) ? value : null
 
-function taskView(t: TeamTask & { planPaused?: boolean }, now: Date) {
+function taskView(t: TeamTask & { planPaused?: boolean }, now: Date, view: 'current' | 'operation_receipt' = 'current') {
   const deadline = instant(t.deadlineAt), acceptBy = instant(t.acceptByAt)
   const closed = ['completed', 'cancelled'].includes(t.status)
-  return { id: t.id, channelId: t.channelId, version: t.version, status: t.status, text: t.text,
+  return { view, id: t.id, channelId: t.channelId, version: t.version, status: t.status, text: t.text,
     assignedStaffId: t.ownerId, reviewerStaffId: t.reviewerId || null, dueDate: t.dueDate,
     deadlineAt: deadline, acceptByAt: acceptBy,
     overdue: closed ? false : deadline ? now.getTime() > Date.parse(deadline) : null,
@@ -104,14 +104,14 @@ export function createWorkItemService(db: any, deps: WorkItemDependencies) {
       enabled(); const v = workItemSchemas.assign.parse(input)
       return deps.withActor(db, 'tasks.assign', v as WorkItemContext, async actor => {
         const task = await teamCommunication(db).createTask(actor, v.channelId!, { requestId: v.requestId, roundId: v.roundId, minuteVersion: v.minuteVersion, actionIndex: v.actionIndex })
-        return taskView(task, clock())
+        return taskView(task, clock(), 'operation_receipt')
       })
     },
     async review(input: unknown) {
       enabled(); const v = workItemSchemas.review.parse(input)
       return deps.withActor(db, 'tasks.review', v as WorkItemContext, async actor => {
         const task = await teamCommunication(db).taskAction(actor, v.channelId!, v.employeeTaskId!, { requestId: v.requestId, expectedVersion: v.expectedVersion, action: v.action, note: v.note, criteriaConfirmed: v.criteriaConfirmed })
-        return taskView(task, clock())
+        return taskView(task, clock(), 'operation_receipt')
       })
     },
     async approval(input: unknown) {

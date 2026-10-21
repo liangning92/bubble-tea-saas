@@ -26,8 +26,12 @@ try:
     env = dict(os.environ, NODE_ENV='production', DATABASE_URL=f'postgresql://team_test@127.0.0.1:{port}/team_test',
                JWT_SECRET='synthetic-team-work-item-fixture-only', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
-    command(['node', 'tests/stoploss/team-work-items-check.cjs'], env=env)
-    command(['node', 'tests/stoploss/team-chat-notification-http-check.cjs'], env=env)
+    if '--replay-only' in sys.argv:
+        command(['node', 'tests/stoploss/team-work-item-replay-check.cjs'], env=env)
+    else:
+        command(['node', 'tests/stoploss/team-work-items-check.cjs'], env=env)
+        command(['node', 'tests/stoploss/team-chat-notification-http-check.cjs'], env=env)
+        command(['node', 'tests/stoploss/team-work-item-replay-check.cjs'], env=env)
     if '--bridge-regression' in sys.argv:
         command(['node', 'tests/stoploss/team-agent-bridge-check.cjs'], env=env)
     if '--native-regression' in sys.argv:
