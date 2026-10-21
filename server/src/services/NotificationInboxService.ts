@@ -105,7 +105,8 @@ export function notificationInbox(db: any = prisma, sources?: InboxSources) {
       items.set(r.id, { id: r.id, event: r.event,
         kind: r.event.startsWith('team-chat:') ? 'chat' : r.event.startsWith('training-content:') ? 'training_update' : 'business_reminder',
         title: r.title, url: r.url, read: !!marker || r.read === true, pending: false, createdAt: r.createdAt, delivery: reminderDeliveryView({...r,read:!!marker||r.read===true}),
-        ...(r.chat ? { domain: 'chat', objectId: r.chat.channelId, adminUrl: `/staff/communication?channel=${encodeURIComponent(r.chat.channelId)}` } : {}),
+        ...(r.chat ? { domain: 'chat', objectId: r.chat.channelId, adminUrl: `/staff/communication?channel=${encodeURIComponent(r.chat.channelId)}&message=${r.chat.seq}` } : {}),
+        ...(r.teamTask ? { domain: 'team_task', objectId: r.teamTask.taskId, adminUrl: '/staff/communication' + destination.search, status: r.teamTask.status, pending: ['assigned', 'changes_requested'].includes(r.teamTask.status) } : {}),
         ...(r.trainingUpdate ? { adminUrl: '/staff/training' + destination.search } : {}),
         ...(r.trainingUpdate ? { trainingUpdate: r.trainingUpdate } : {}) })
     }

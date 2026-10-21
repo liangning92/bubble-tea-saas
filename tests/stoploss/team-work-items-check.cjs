@@ -54,8 +54,8 @@ async function main(){
   await call('team_task_get',{...ctx,employeeTaskId:req()},false);await call('team_task_get',{...ctx,employeeTaskId:assigned.id,role:'admin'},false);
  });
  await check('actual employee inbox opens native task; reading notification cannot finish it',async()=>{
-  const {notificationInbox}=built('NotificationInboxService'),inbox=notificationInbox(db);const card=(await inbox.read(employee)).items.find(i=>i.url.includes('task='+assigned.id));assert(card);assert.equal(card.kind,'business_reminder');await inbox.markRead(employee,card.id);
-  assert.equal((await service.get({...ctx,employeeTaskId:assigned.id})).status,'assigned');assert.equal((await inbox.read(employee)).items.find(i=>i.id===card.id).read,true);
+  const {notificationInbox}=built('NotificationInboxService'),inbox=notificationInbox(db);const card=(await inbox.read(employee)).items.find(i=>i.url.includes('task='+assigned.id));assert(card);assert.equal(card.kind,'business_reminder');assert.equal(card.domain,'team_task');assert.equal(card.objectId,assigned.id);assert.equal(card.status,'assigned');assert.equal(card.pending,true);assert.equal(card.adminUrl,'/staff/communication'+new URL(card.url,'https://inbox.invalid').search);const receipt=await inbox.markRead(employee,card.id);assert.equal(receipt.pending,true);
+  assert.equal((await service.get({...ctx,employeeTaskId:assigned.id})).status,'assigned');const readCard=(await inbox.read(employee)).items.find(i=>i.id===card.id);assert.equal(readCard.read,true);assert.equal(readCard.pending,true);
  });
  await check('ordinary employee cannot assign/review and sponsor downgrade does not inherit admin wildcard',async()=>{
   await assert.rejects(()=>native().createTask(employee,channel.id,{requestId:req(),roundId,minuteVersion:1,actionIndex:0}));
@@ -63,6 +63,7 @@ async function main(){
   await db.user.update({where:{id:owner.id},data:{role:'manager'}});await call('team_task_assign',{...assign,requestId:req()},false);await db.user.update({where:{id:owner.id},data:{role:'admin'}});
  });
  await check('read-only delivery starts unconfirmed with zero active subscriptions, never device accepted',async()=>{
+  const {notificationInbox}=built('NotificationInboxService');const card=(await notificationInbox(db).read(employee)).items.find(i=>i.domain==='chat'&&i.objectId===channel.id);assert(card);assert.equal(card.adminUrl,`/staff/communication?channel=${encodeURIComponent(channel.id)}&message=${sent.seq}`);
   const r=await call('team_delivery_get',{...ctx,messageId:sent.id,messageSeq:sent.seq,recipientStaffId:employee.staffId});assert.equal(r.device,'unknown');assert.equal(r.read.state,'unread');assert.equal(r.push.state,'queued');assert.equal(r.subscriptions.ready,0);assert.equal(r.response.state,'not_observed');assert(r.url.includes('message=1'));
   assert.equal(await readTeam(db,storeId,`read.${channel.id}.${employee.staffId}`),null);
  });
