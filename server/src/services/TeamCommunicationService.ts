@@ -438,6 +438,7 @@ export function teamCommunication(db: DB = prisma) {
     async createTask(a: TeamActor, id: string, input: unknown) {
       const v = z.object({ requestId: uuid, roundId: uuid, minuteVersion: z.number().int().positive(), actionIndex: z.number().int().min(0).max(39) }).strict().parse(input)
       return db.$transaction(async (tx: DB) => {
+        await lock(tx, a.storeId, `taskRequest.${a.staffId}.${v.requestId}`)
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id)
         const authority = await teamAgentTaskAuthority(tx, a, 'tasks.assign')
@@ -486,6 +487,7 @@ export function teamCommunication(db: DB = prisma) {
       const v = z.object({ requestId: uuid, expectedVersion: z.number().int().positive(),
         action: z.enum(['accept', 'submit', 'return', 'complete', 'cancel']), note: z.string().trim().max(1000).default(''), sourceSeq: z.array(seq).max(20).default([]), criteriaConfirmed: z.boolean().default(false) }).strict().parse(input)
       return db.$transaction(async (tx: DB) => {
+        await lock(tx, a.storeId, `taskRequest.${a.staffId}.${v.requestId}`)
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id)
         const authority = await teamAgentTaskAuthority(tx, a, 'tasks.review')
