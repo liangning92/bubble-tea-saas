@@ -126,3 +126,15 @@ test('packaged login window exists while local API remains pending; customer and
 test('API failure keeps the original early window and shows its existing startup error',async()=>{
  assert.deepEqual(await packagedBoot(true),['window','updater','server','ready:false','error']);
 });
+
+
+test('only the cashier and registered customer display receive API readiness; upgrade session stays cashier-only',async()=>{
+ const begin=source.indexOf('let finishLocalServerBoot:'),end=source.indexOf('let customerWindow:',begin);const handlers={};
+ const mainWindow={webContents:{}},customerWindow={webContents:{}};const raw=source.slice(begin,end);
+ vm.runInNewContext(ts.transpileModule(raw,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText+';finishLocalServerBoot(true)',{ipcMain:{handle:(name,fn)=>handlers[name]=fn,on(){}},mainWindow,customerWindow,consumeUpgradeSession:()=> 'main-session',writeCrash(){}});
+ assert.deepEqual(JSON.parse(JSON.stringify(await handlers['wait-for-local-server']({sender:mainWindow.webContents}))),{ready:true});
+ assert.deepEqual(JSON.parse(JSON.stringify(await handlers['wait-for-local-server']({sender:customerWindow.webContents}))),{ready:true});
+ assert.deepEqual(JSON.parse(JSON.stringify(await handlers['wait-for-local-server']({sender:{}}))),{ready:false});
+ assert.equal(handlers['consume-upgrade-session']({sender:customerWindow.webContents}),null);
+ assert.equal(handlers['consume-upgrade-session']({sender:mainWindow.webContents}),'main-session');
+});
