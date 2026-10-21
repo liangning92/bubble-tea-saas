@@ -54,3 +54,7 @@ bridge.withActor(action, taskRef, channelId, callback) 仅向可信服务提供�
 - 修复后本轮实际运行 16 组官方 MCP/临时 PostgreSQL：新增跨频道并发的真实数据库锁等待＋唯一消息/回执断言、同频道并发正向，以及 grant 字节不变时由原生管理员改成员/恢复/归档后的 create 回放拒绝。日志 output/team-agent-bridge/p2-regression.log；结果 output/team-agent-bridge/result.json；临时数据库清理完成。
 - server tsc 在本次修复代码上通过。67 组原生回归、admin/staff 类型检查和34组CI范围结果属于上一提交验证，本轮未宣称重新运行。
 - 生产仍默认关闭，未部署、扩 grant、发送真实消息或调用模型。最终放行由主线程对固定增量复审决定。
+
+## 后续保密准入增量
+
+自然语言send.text/create.title仍保留，但现在必须由可信employee_work runtime/source policy端口提供当前执行与输入/输出来源准入；缺失默认拒绝。附件增加分类及全受众边界。真实runtime尚未接线；完整威胁模型、保留能力与未验条件见 HERMES-COMMUNICATION-CONFIDENTIALITY.md。

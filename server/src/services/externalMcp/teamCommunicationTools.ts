@@ -1,3 +1,4 @@
+import { TeamError } from '../TeamCommunicationService'
 import { McpServer, fromJsonSchema } from '@modelcontextprotocol/server'
 import { zodToJsonSchema } from 'zod-to-json-schema'
 import { createTeamAgentBridge } from '../teamAgentBridge/service'
@@ -22,7 +23,7 @@ export function createTeamCommunicationTools(server: McpServer, bridge: ReturnTy
       try {
         const result = await (bridge[method] as (input: unknown) => Promise<unknown>)(input)
         return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: { result } }
-      } catch { return { isError: true, content: [{ type: 'text', text: 'TEAM_AGENT_OPERATION_REJECTED; reread authoritative state before retrying uncertain writes.' }] } }
+      } catch (error) { if(error instanceof TeamError && error.message==='TEAM_AGENT_OUTPUT_NEEDS_REVIEW') return { isError:true,content:[{type:'text',text:'TEAM_AGENT_OUTPUT_NEEDS_REVIEW; ask the owner for clarification without forwarding sensitive content.'}] }; return { isError: true, content: [{ type: 'text', text: 'TEAM_AGENT_OPERATION_REJECTED; reread authoritative state before retrying uncertain writes.' }] } }
     })
   }
 }

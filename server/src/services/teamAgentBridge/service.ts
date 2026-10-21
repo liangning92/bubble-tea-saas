@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import { TeamActor, TeamChannel, TeamError, teamCommunication, readTeam } from '../TeamCommunicationService'
 import { bindTeamAgent } from './identity'
 import { BridgeAction, BridgeDependencies, BridgeGrant, grantSchema, schemas, TaskRef } from './contract'
+import { communicationScope, checkOutput, OutputPlan, assertDataAudience, textHash } from './confidentiality'
 import { TEAM_AGENT_PREFIX as prefix, teamReplyEventId } from './events'
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const denied = (): never => { throw new TeamError(403, 'TEAM_AGENT_ACCESS_DENIED') }
@@ -36,17 +37,32 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
       const humans = c.members.filter((m: any) => m.staffId !== 'agent:' + g.agentId).map((m: any) => m.staffId)
       const active = await database.staff.findMany({ where: { storeId: g.storeId, id: { in: humans }, status: 'active' }, select: { id: true } })
       if (active.length !== new Set(humans).size) denied()
-    }
+      if (task) await communicationScope(database,deps,fresh,task,c)
+    } else if (task) await communicationScope(database,deps,fresh,task)
   }
-  async function actor(action: BridgeAction, task?: TaskRef, channelId?: string, replyToSeq?: number) {
+  async function actor(action: BridgeAction, task?: TaskRef, channelId?: string, replyToSeq?: number, directive?: OutputPlan) {
     const g = await grant(db, action)
     await authorize(db, g, action, task, channelId)
     const a: TeamActor = { id: g.sponsorUserId, storeId: g.storeId, staffId: 'agent:' + g.agentId, role: 'agent' }
     bindTeamAgent(a, { action, agentId: g.agentId, grantVersion: g.version, clientRevision: g.clientRevision, name: g.displayName, context: task ? { task, replyToSeq } : undefined,
-      created: async (database, c) => { await authorize(database, g, action, task); await put(database, g.storeId, 'channel.' + c.id, { agentId: g.agentId, task, createdAt: new Date(now()).toISOString() }) },
+      created: async (database, c) => { await authorize(database, g, action, task); if(action==='conversation.create') await checkOutput(database,deps,g,task,c,directive,{text:(c as any).title,files:[]}); await put(database, g.storeId, 'channel.' + c.id, { agentId: g.agentId, task, createdAt: new Date(now()).toISOString() }) },
       check: database => authorize(database, g, action, task, channelId),
-      channel: (database, c) => authorize(database, g, action, task, c.id, c) })
+      channel: async (database, c) => { await authorize(database,g,action,task,c.id,c); if(action==='conversation.create') await checkOutput(database,deps,g,task,c,directive,{text:c.title,files:[]}) },
+      outbound: async (database,c,input) => { if(!task) denied(); await checkOutput(database,deps,g,task,c,directive,input) } })
     return { a, g }
+  }
+  async function visibleMessages(a:TeamActor,id:string,after:number) {
+    const c=await readTeam(db,a.storeId,'channel.'+id)
+    const floor=Math.max(...c.members.map((m:any)=>m.fromSeq))
+    const page=await native.messages(a,id,Math.max(after,floor-1))
+    const currentFloor=Math.max(...page.channel.members.map((m:any)=>m.fromSeq))
+    return {...page,messages:page.messages.filter((m:any)=>m.seq>=currentFloor),aiHandlingUpdates:page.aiHandlingUpdates.filter((m:any)=>m.seq>=currentFloor),cursor:Math.max(page.cursor,currentFloor-1)}
+  }
+  async function attachmentAudience(g:BridgeGrant,id:string,fileId:string) {
+    const c=await readTeam(db,g.storeId,'channel.'+id), floor=Math.max(...c.members.map((m:any)=>m.fromSeq))
+    const prefix='team.communication.fileGrant.'+id+'.'+fileId+'.'
+    if(!await db.config.findFirst({where:{storeId:g.storeId,key:{startsWith:prefix,gte:prefix+String(floor).padStart(12,'0')}},select:{id:true}})) denied()
+    return c
   }
   return {
     async withActor<T>(action: BridgeAction, task: TaskRef, channelId: string, operation: (actor: TeamActor) => Promise<T>): Promise<T> {
@@ -76,28 +92,37 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
       return result
     },
     async create(input: unknown) {
-      const v = schemas.create.parse(input), { a, g } = await actor('conversation.create', v.task)
+      const v = schemas.create.parse(input), { a, g } = await actor('conversation.create', v.task,undefined,undefined,{purpose:'title',requestId:v.requestId,expectedTextHash:textHash(v.title)})
       if (v.members.some(id => !g.staffIds.includes(id))) denied()
       const c = await native.create(a, { requestId: v.requestId, title: v.title, kind: 'group', members: v.members })
       return c
     },
     async messages(input: unknown) {
       const v = schemas.messages.parse(input), { a } = await actor('messages.read', v.task, v.channelId)
-      return native.messages(a, v.channelId, v.afterSeq)
+      return visibleMessages(a, v.channelId, v.afterSeq)
     },
     async attachment(input: unknown) {
-      const v = schemas.attachment.parse(input), { a } = await actor('attachments.read', v.task, v.channelId)
+      const v = schemas.attachment.parse(input), { a, g } = await actor('attachments.read', v.task, v.channelId)
       const file = await native.attachment(a, v.channelId, v.fileId)
+      await attachmentAudience(g,v.channelId,v.fileId)
       // Storage transport is injected; no host-specific path or public file URL.
       if (file.size > 2 * 1024 * 1024) throw new TeamError(413, 'TEAM_ATTACHMENT_TOO_LARGE')
       const bytes = await deps.readAttachment(a.storeId, v.fileId)
       if (bytes.byteLength > 2 * 1024 * 1024) throw new TeamError(413, 'TEAM_ATTACHMENT_TOO_LARGE')
       // Recheck after I/O so revocation while loading does not disclose the file.
       await actor('attachments.read', v.task, v.channelId)
+      const c = await attachmentAudience(g,v.channelId,v.fileId), scope = await communicationScope(db,deps,g,v.task,c)
+      if (!deps.communication?.classifyAttachment) denied()
+      const contentHash = createHash('sha256').update(bytes).digest('hex')
+      const label = await deps.communication.classifyAttachment(db,g,scope,v.fileId,contentHash)
+      if(label.contentHash !== contentHash || label.channelId !== v.channelId || label.taskId !== v.task.taskId) denied()
+      await assertDataAudience(db,g,scope,label.dataClass)
+      await actor('attachments.read',v.task,v.channelId)
+      await attachmentAudience(g,v.channelId,v.fileId)
       return { fileId: v.fileId, type: file.type, size: bytes.byteLength, encoding: 'base64', content: Buffer.from(bytes).toString('base64') }
     },
     async send(input: unknown) {
-      const v = schemas.send.parse(input), { a } = await actor('messages.send', v.task, v.channelId, v.replyToSeq)
+      const v = schemas.send.parse(input), directive:OutputPlan = { purpose:'message',requestId:v.requestId,expectedTextHash:textHash(v.text),replyToSeq:v.replyToSeq }, { a, g } = await actor('messages.send', v.task, v.channelId, v.replyToSeq,directive)
       // Requiring a visible source ensures replies cannot cite pre-membership history.
       if (v.replyToSeq !== undefined) {
         const page = await native.messages(a, v.channelId, v.replyToSeq - 1)
@@ -118,7 +143,7 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
     },
     async changes(input: unknown) {
       const v = schemas.changes.parse(input), { a, g } = await actor('changes.read', v.task, v.channelId)
-      const page = await native.messages(a, v.channelId, v.afterSeq)
+      const page = await visibleMessages(a, v.channelId, v.afterSeq)
       const events = []
       for (const message of page.messages) {
         if (message.authorId === a.staffId || message.agent) continue
