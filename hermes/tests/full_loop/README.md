@@ -8,18 +8,23 @@ service/production bindings and restricted model relay. The AS, credentials,
 inventory and MiniMax transport are synthetic and confined to owned loopback TLS
 and a temporary PostgreSQL instance.
 
-Run only with already-built API dist and an owned temporary Python 3.11 SDK venv:
+Run only with already-built API dist and an owned temporary Python 3.11 **full gateway** venv (official SDK 1.27 plus the hash-locked gateway dependencies):
 
 ```sh
-python3 scripts/with-docker-test.py -- python3 hermes/tests/full_loop/run.py --sdk-python /absolute/owned/venv311/bin/python
+python3 scripts/with-docker-test.py -- python3 hermes/tests/full_loop/run.py --sdk-python /absolute/owned/venv311/bin/python --hermes-source /absolute/read-only/a719-checkout
 ```
 
-`requirements-gateway.txt` is the runtime increment, including the pinned
-`aiohttp==3.14.3` required by a719's `RequestKey` import. The fixture also reads
-existing Hermes dependency packages without executing their `.pth` files. The
-full read-only dependency version manifest is recorded under
-`output/hermes-full-loop/readonly-hermes-dependencies.json`; this is not evidence
-of a completely fresh, independently reconstructed gateway environment.
+The fixture now reads only that explicit fresh venv's site-packages with `-S`.
+It does not read default or live Hermes dependency sites. A prior successful run
+used read-only existing dependencies; that historical result below does not
+validate this new fresh-environment fixture revision. The caller must supply the
+full lock rather than combine the increment with a user environment.
+
+The provider request must expose exactly `store_task_get` and `store_task_report`;
+the actual Hermes registry still contains all four native aliases for program
+preparation. The dedicated config sets `tools.tool_search.enabled: off` so Hermes
+keeps those aliases in its cached `valid_tool_names` snapshot. Preparation is
+performed by the bridge program before the model; it is not a model acceptance.
 
 The test-only launcher and factory use owned localhost pins. Production
 `activate()` remains fixed to its public endpoints and is not exercised or

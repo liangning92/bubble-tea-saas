@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """One full real archived-Hermes loop; run through with-docker-test.py.
 
-Requires prebuilt API dist, a temporary Python3.11 SDK1.27 venv and the existing
-Hermes read-only dependency directory. Never installs into actual Hermes.
+Requires prebuilt API dist and an explicit disposable Python3.11 full gateway
+venv with official SDK1.27. No default or live Hermes dependency site is used. Never installs into actual Hermes.
 """
 import argparse
 from datetime import datetime
@@ -22,7 +22,7 @@ import time
 
 ROOT=Path(__file__).resolve().parents[3]
 PIN='a7198a8855ad98681114ff5138eb01fe132a62e7'
-REAL=Path('/Users/liangning/.hermes/hermes-agent')
+REAL=None
 OUT=ROOT/'output/hermes-full-loop'
 
 def port():
@@ -42,14 +42,16 @@ def kill(p):
         try: p.wait(timeout=10)
         except subprocess.TimeoutExpired: os.killpg(p.pid,signal.SIGKILL);p.wait(timeout=5)
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--sdk-python',required=True);args=parser.parse_args()
+    global REAL
+    parser=argparse.ArgumentParser();parser.add_argument('--sdk-python',required=True);parser.add_argument('--hermes-source',required=True);args=parser.parse_args()
+    REAL=Path(args.hermes_source).resolve()
     run=os.environ.get('BT_TEST_RUN','');assert run.startswith('bt-test-'),'Use scripts/with-docker-test.py'
     sdk=Path(args.sdk_python).resolve();assert sdk.is_file()
     # Resolve symlinks only for validation, use the venv path to discover its owned site.
     sdk_venv=Path(args.sdk_python).parent.parent
     sdk_sites=list((sdk_venv/'lib').glob('python3.11/site-packages'))
-    hermes_sites=REAL/'venv/lib/python3.11/site-packages'
-    assert len(sdk_sites)==1 and hermes_sites.is_dir(),'PYTHON311_DEPENDENCIES_REQUIRED'
+    assert len(sdk_sites)==1,'FRESH_FULL_GATEWAY_PYTHON311_DEPENDENCIES_REQUIRED'
+    assert not sdk_venv.resolve().is_relative_to(REAL.resolve()),'DEFAULT_HERMES_VENV_FORBIDDEN'
     assert command(['/usr/bin/git','-C',str(REAL),'rev-parse','HEAD'],capture_output=True,text=True).stdout.strip()==PIN
     base=Path(tempfile.mkdtemp(prefix=run+'-hermes-full-',dir='/tmp')).resolve();base.chmod(0o700)
     isolated_env={'PATH':os.environ.get('PATH','/usr/bin:/bin'),'LANG':'en_US.UTF-8','HOME':str(base/'user-home'),'BT_TEST_RUN':run,'BT_TEST_LABEL':os.environ.get('BT_TEST_LABEL','')}
@@ -87,7 +89,7 @@ def main():
         private(base/'client.json',json.dumps({**fixture['endpoints'],'client_id':'synthetic-executor','client_secret':'synthetic-secret','scopes':['executor.claim','executor.evidence','executor.report']}))
         spec={**{k:fixture[k] for k in ('endpoints','pilot')},'profile_home':str(profile),'hermes_source':str(source),'python_executable':str(Path(args.sdk_python)),'gateway_bearer_file':str(base/'gateway.key'),'private_client_file':str(base/'client.json'),'port':port()}
         sys.path.insert(0,str(ROOT/'hermes'));import pdca_launcher
-        guard={'root':str(base),'real_source':str(REAL),'source':str(source),'profile':str(profile),'sites':[str(p) for p in sdk_sites]+[str(hermes_sites)]};private(base/'guard.json',json.dumps(guard))
+        guard={'root':str(base),'real_source':str(REAL),'source':str(source),'profile':str(profile),'sites':[str(p) for p in sdk_sites]};private(base/'guard.json',json.dumps(guard))
         glog=(OUT/(run+'-gateway.log')).open('w');handles.append(glog)
         def spawn(argv,**kw):
             # The production bootstrap pins public endpoints; this explicit test-only

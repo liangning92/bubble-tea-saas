@@ -1,0 +1,63 @@
+{
+  "mode": "after",
+  "snapshot": {
+    "valid_tool_names": [
+      "store_task_claim",
+      "store_task_get",
+      "store_task_read_stock_evidence",
+      "store_task_report"
+    ],
+    "schema_names": [
+      "store_task_claim",
+      "store_task_get",
+      "store_task_read_stock_evidence",
+      "store_task_report"
+    ]
+  },
+  "completed": true,
+  "partial": false,
+  "error": null,
+  "programTerminal": true,
+  "nativeState": "awaiting_review",
+  "operations": [
+    {
+      "name": "store_task_get",
+      "requestId": null
+    },
+    {
+      "name": "store_task_claim",
+      "requestId": "f3cd087e-1207-5b8e-a1d5-db88b5e85229"
+    },
+    {
+      "name": "store_task_read_stock_evidence",
+      "requestId": "667e41c3-33f2-5ad7-a2f5-2f555d1ffd5c"
+    },
+    {
+      "name": "store_task_report",
+      "requestId": "be55a7a2-3046-4b4b-b884-9e47f8667d0f"
+    }
+  ],
+  "modelRequests": [
+    {
+      "keys": [
+        "evidenceId",
+        "expectedVersion",
+        "inputSnapshotHash",
+        "leaseToken",
+        "leaseVersion",
+        "model",
+        "requestId",
+        "round",
+        "runId",
+        "stream",
+        "taskId"
+      ],
+      "requestId": "67782047-7c2b-580f-8067-d5ef8c06e027"
+    }
+  ],
+  "unregisteredCallRejected": true,
+  "rawAliasFallbackDenied": true,
+  "actualProvider": false,
+  "actualHermes": true,
+  "defaultStateRead": false
+}

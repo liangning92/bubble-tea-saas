@@ -58,6 +58,7 @@ class LauncherTests(unittest.TestCase):
         cfg = json.loads((home / 'config.yaml').read_text())
         self.assertEqual(cfg['platform_toolsets']['api_server'], ['pdca_executor_only'])
         self.assertEqual(cfg['fallback_model'], [])
+        self.assertEqual(cfg['tools'], {'tool_search': {'enabled': 'off'}})
         self.assertEqual(cfg['security'], {'allow_lazy_installs': False, 'tirith_enabled': False})
         self.assertFalse(cfg['auxiliary']['title_generation']['enabled'])
         self.assertFalse(cfg['compression']['enabled'])
@@ -87,6 +88,18 @@ class LauncherTests(unittest.TestCase):
         cfg = json.loads((home / 'config.yaml').read_text()); cfg['platform_toolsets']['api_server'].append('terminal')
         (home / 'config.yaml').write_text(json.dumps(cfg))
         with self.assertRaises(Blocked): live_runtime_projector(home, environment=env)
+    def test_tool_search_cannot_be_enabled_or_implicitly_auto(self):
+        self.start(); home=Path(self.spec['profile_home']); env=self.spawned[0][1]['env']
+        original=json.loads((home/'config.yaml').read_text())
+        for tools in (None, {}, {'tool_search': {'enabled': 'auto'}}, {'tool_search': {'enabled': 'on'}}):
+            with self.subTest(tools=tools):
+                changed=copy.deepcopy(original)
+                if tools is None:changed.pop('tools')
+                else:changed['tools']=tools
+                (home/'config.yaml').write_text(json.dumps(changed))
+                with self.assertRaisesRegex(Blocked,'UNSAFE_LIVE_PROFILE'):live_runtime_projector(home,environment=env)
+        (home/'config.yaml').write_text(json.dumps(original))
+        self.assertEqual(live_runtime_projector(home,environment=env)['enabled_tools'],sorted(TOOLS))
     def test_runtime_installer_config_cannot_be_removed_or_enabled(self):
         self.start(); home=Path(self.spec['profile_home']); env=self.spawned[0][1]['env']
         original=json.loads((home/'config.yaml').read_text())

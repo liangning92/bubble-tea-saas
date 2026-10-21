@@ -1,0 +1,57 @@
+{
+  "mode": "before",
+  "snapshot": {
+    "valid_tool_names": [
+      "tool_call",
+      "tool_describe",
+      "tool_search"
+    ],
+    "schema_names": [
+      "tool_search",
+      "tool_describe",
+      "tool_call"
+    ]
+  },
+  "completed": false,
+  "partial": true,
+  "error": "Model generated invalid tool call: store_task_claim",
+  "programTerminal": false,
+  "nativeState": "running",
+  "operations": [
+    {
+      "name": "store_task_get",
+      "requestId": null
+    },
+    {
+      "name": "store_task_claim",
+      "requestId": "e0603e69-d3ce-50d9-a785-9ff5e72d6a5c"
+    },
+    {
+      "name": "store_task_read_stock_evidence",
+      "requestId": "e0691997-f994-5e4e-8642-0692b2f9fc7a"
+    }
+  ],
+  "modelRequests": [
+    {
+      "keys": [
+        "evidenceId",
+        "expectedVersion",
+        "inputSnapshotHash",
+        "leaseToken",
+        "leaseVersion",
+        "model",
+        "requestId",
+        "round",
+        "runId",
+        "stream",
+        "taskId"
+      ],
+      "requestId": "4b8c7048-b337-51fb-9af5-c4f0f8f230c2"
+    }
+  ],
+  "unregisteredCallRejected": true,
+  "rawAliasFallbackDenied": true,
+  "actualProvider": false,
+  "actualHermes": true,
+  "defaultStateRead": false
+}

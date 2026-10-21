@@ -59,6 +59,7 @@ def gateway_config(spec, home):
     denied = {"provider": "custom", "model": "pdca-raw-denied", "base_url": policy.provider_base_url, "api_key": SENTINEL}
     return {"model": {"default": "MiniMax-M3.1-Flash", "provider": "custom", "base_url": policy.provider_base_url, "api_key": SENTINEL, "streaming": False},
         "fallback_model": [], "compression": {"enabled": False},
+        "tools": {"tool_search": {"enabled": "off"}},
         "security": {"allow_lazy_installs": False, "tirith_enabled": False},
         "memory": {"memory_enabled": False, "user_profile_enabled": False, "nudge_interval": 0},
         "auxiliary": {name: {**denied, "enabled": False} for name in ("vision", "approval", "compression", "title_generation", "session_search", "web_extract", "curator", "background_review", "moa_reference")},
@@ -76,7 +77,8 @@ def live_runtime_projector(home, *, environment=None):
     cfg = json.loads(private_file(Path(home) / "config.yaml"))
     model = cfg.get("model", {}); memory = cfg.get("memory", {}); aux = cfg.get("auxiliary", {})
     expected_aux = {"provider": "custom", "model": "pdca-raw-denied", "base_url": model.get("base_url"), "api_key": SENTINEL, "enabled": False}
-    if (cfg.get("security") != {"allow_lazy_installs": False, "tirith_enabled": False}
+    if (cfg.get("tools") != {"tool_search": {"enabled": "off"}}
+            or cfg.get("security") != {"allow_lazy_installs": False, "tirith_enabled": False}
             or model.get("provider") != "custom" or model.get("default") != "MiniMax-M3.1-Flash" or model.get("streaming") is not False
             or cfg.get("platform_toolsets") != {"api_server": ["pdca_executor_only"], "cli": []}
             or cfg.get("mcp_servers") != {} or memory.get("user_profile_enabled") is not False
