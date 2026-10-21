@@ -14,7 +14,7 @@ jest.mock('../src/services/TeamAiService', () => ({
   createTeamAgentMiniMaxTransport: () => async () => { throw Error('REAL_TRANSPORT_MUST_NOT_RUN') }
 }))
 import { createAgentModelRelay, agentModelRelayRequestSchema } from '../src/services/agentTasks/modelRelay'
-import { readTaskSchema, leaseSchema } from '../src/services/agentTasks/contract'
+import { readTaskSchema } from '../src/services/agentTasks/contract'
 const hash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const completion = (content: string) => ({ id: 'synthetic-provider', choices: [{ finish_reason: 'stop', message: { role: 'assistant', content } }], usage: { prompt_tokens: 40, completion_tokens: 20 } })
 const tool = (id: string, name: string, args: any) => ({ id: 'synthetic-provider', choices: [{ finish_reason: 'tool_calls', message: { role: 'assistant', content: null, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] } }], usage: { prompt_tokens: 40, completion_tokens: 20 } })
@@ -58,29 +58,46 @@ describe('default-closed sealed claimed-run model relay (fake provider only)', (
     expect(results.some(r => r.status === 'fulfilled')).toBe(true); expect(f.calls()).toBe(1)
     const again = await f.relay().complete(f.principal, f.request); expect(again.choices[0].finish_reason).toBe('stop'); expect(f.calls()).toBe(1)
   })
-  test('native GET then native evidence receipt rebuild a complete two-tool continuation; tokens never enter model context', async () => {
-    const f = fixture(), nativeRequestId = randomUUID()
-    f.rawReplies.splice(0, 1, tool('get-1', 'store_task_get', {}), tool('evidence-2', 'store_task_read_stock_evidence', { requestId: nativeRequestId }), completion('No physical count is available; difference remains unknown.'))
+  test('sealed-phase GET continuations preserve complete context without repeating preparation; tokens never enter model context', async () => {
+    const f = fixture()
+    f.rawReplies.splice(0, 1, tool('get-1', 'store_task_get', {}), tool('get-2', 'store_task_get', {}), completion('No physical count is available; difference remains unknown.'))
     const first = await f.relay().complete(f.principal, f.request)
     expect(JSON.parse(first.choices[0].message.tool_calls[0].function.arguments)).toEqual({ taskId: f.request.taskId })
     expect(readTaskSchema.omit({ authVersion: true }).strict().safeParse(JSON.parse(first.choices[0].message.tool_calls[0].function.arguments)).success).toBe(true)
     const secondBody = { ...f.request, requestId: randomUUID(), previousRequestId: f.request.requestId, toolResults: [{ toolCallId: 'get-1' }] }
     const second = await f.relay().complete(f.principal, secondBody), native = JSON.parse(second.choices[0].message.tool_calls[0].function.arguments)
-    expect(native.leaseToken).toBe(f.request.leaseToken); expect(native).not.toHaveProperty('authVersion')
-    expect(leaseSchema.omit({ authVersion: true }).strict().safeParse(native).success).toBe(true)
-    f.team('agent.request.' + f.principal.agentId + '.' + nativeRequestId, { hash: hash({ operation: 'evidence', input: leaseSchema.parse({ ...native, authVersion: 1 }) }), result: {
-      taskId: native.taskId, runId: native.runId, round: native.round, evidenceId: f.request.evidenceId, inputSnapshotHash: f.request.inputSnapshotHash } })
-    const third = await f.relay().complete(f.principal, { ...f.request, requestId: randomUUID(), previousRequestId: secondBody.requestId, toolResults: [{ toolCallId: 'evidence-2', receiptRequestId: nativeRequestId }] })
+    expect(native).toEqual({ taskId: f.request.taskId }); expect(native).not.toHaveProperty('authVersion')
+    const third = await f.relay().complete(f.principal, { ...f.request, requestId: randomUUID(), previousRequestId: secondBody.requestId, toolResults: [{ toolCallId: 'get-2' }] })
     expect(third.choices[0].finish_reason).toBe('stop'); expect(f.calls()).toBe(3)
     expect(f.inputs[2].messages.map((m: any) => m.role)).toEqual(['system', 'user', 'assistant', 'tool', 'assistant', 'tool'])
-    expect(f.inputs[2].messages.at(-1).content).toContain(f.request.inputSnapshotHash)
-    expect(f.inputs[0].reasoning_effort).toBe('low'); expect(f.inputs[0].tools.map((t: any) => t.function.name)).toEqual(['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report'])
+    expect(f.inputs[2].messages.at(-1).content).toContain(f.request.taskId)
+    expect(f.inputs[0].reasoning_effort).toBe('low'); expect(f.inputs[0].tools.map((t: any) => t.function.name)).toEqual(['store_task_get', 'store_task_report'])
+    expect(f.inputs[0].messages[0].content).toContain('already claimed this run and sealed its evidence')
   })
   test('missing native mutation receipt cannot be replaced by caller tool text or another model request', async () => {
-    const f = fixture(), id = randomUUID(); f.rawReplies.splice(0, 1, tool('missing', 'store_task_read_stock_evidence', { requestId: id }))
+    const f = fixture(), id = randomUUID(); f.rawReplies.splice(0, 1, tool('missing', 'store_task_report', { requestId: id, outcome: 'completed', rawReport: 'Physical count is unavailable; findings are unverified.', sourceRefs: [] }))
     await f.relay().complete(f.principal, f.request)
     await expect(f.relay().complete(f.principal, { ...f.request, requestId: randomUUID(), previousRequestId: f.request.requestId, toolResults: [{ toolCallId: 'missing', receiptRequestId: id }] })).rejects.toThrow('AGENT_MODEL_TOOL_RECEIPT_REQUIRED')
     expect(f.calls()).toBe(1)
+  })
+  test.each(['store_task_claim', 'store_task_read_stock_evidence'])('fresh provider %s cannot repeat completed preparation or trigger another provider call', async name => {
+    const f = fixture(); f.rawReplies.splice(0, 1, tool('repeat-preparation', name, { requestId: randomUUID() }))
+    await expect(f.relay().complete(f.principal, f.request)).rejects.toThrow('AGENT_MODEL_OUTCOME_UNKNOWN')
+    const record: any = f.rows.get(f.store + '|team.communication.agent.model.request.' + f.principal.agentId + '.' + f.request.requestId)
+    expect(record.state).toBe('blocked'); expect(record.billingStatus).toBe('usage_recorded'); expect(record.usage).toEqual({ prompt_tokens: 40, completion_tokens: 20, total_tokens: 60 })
+    await expect(f.relay().complete(f.principal, f.request)).rejects.toThrow('AGENT_MODEL_OUTCOME_UNKNOWN')
+    expect(f.calls()).toBe(1)
+  })
+  test('historical ready preparation response is retained and replayed without a new provider call', async () => {
+    const f = fixture(); await f.relay().complete(f.principal, f.request)
+    const key = f.store + '|team.communication.agent.model.request.' + f.principal.agentId + '.' + f.request.requestId
+    const record: any = f.rows.get(key)
+    record.providerMessage = tool('historic-claim', 'store_task_claim', { requestId: randomUUID() }).choices[0].message
+    record.finishReason = 'tool_calls'; f.rows.set(key, record)
+    const before = JSON.stringify(record), replay = await f.relay().complete(f.principal, f.request)
+    expect(replay.choices[0].message.tool_calls[0].function.name).toBe('store_task_claim')
+    expect(JSON.parse(replay.choices[0].message.tool_calls[0].function.arguments).taskId).toBe(f.request.taskId)
+    expect(JSON.stringify(f.rows.get(key))).toBe(before); expect(f.calls()).toBe(1)
   })
   test('unknown provider outcome remains durable across restart and blocks new-ID reruns', async () => {
     const f = fixture(); f.setProvider(async () => { throw Error('SYNTHETIC_LOST_RESPONSE') })
