@@ -210,6 +210,17 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     },
   }
   const provider = {
+    async assertFresh(executionId:string,turn:number,inputHash:string,providerRequest?:unknown) {
+      await db.$transaction(async(tx:any)=>{
+        await lockTeam(tx,deps.storeId,key(executionId));const s=await load(tx,executionId);await fresh(tx,s)
+        const receipt=await readTeam<any>(tx,deps.storeId,key(executionId)+'.provider.'+turn)
+        if(s.phase!=='response'||s.turn!==turn||hash(s.inputs.at(-1))!==inputHash||receipt?.state!=='reserved'||receipt.inputHash!==inputHash)fail('EMPLOYEE_RUNTIME_PROVIDER_INPUT_CHANGED')
+        if(providerRequest){
+          if(receipt.startedAt)fail('EMPLOYEE_RUNTIME_PROVIDER_ALREADY_STARTED')
+          await writeTeam(tx,deps.storeId,key(executionId)+'.provider.'+turn,{...receipt,startedAt:new Date(now()).toISOString(),providerRequest:structuredClone(providerRequest)})
+        }
+      })
+    },
     /** Same trace lock, separate admission receipt: no trace-version bump while
      * the trusted child is awaiting the provider's response. */
     async claim(executionId:string,inputHash:string) {

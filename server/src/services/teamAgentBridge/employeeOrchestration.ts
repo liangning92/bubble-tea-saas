@@ -29,6 +29,8 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
   if(deps.enabled!==true)fail('EMPLOYEE_ORCHESTRATION_DISABLED')
   const row=await tx.config.findUnique({where:{storeId_key:{storeId,key:employeeRouteKey(e.channelId)}}})
   const route=employeeRouteSchema.parse(row&&JSON.parse(row.value))
+  const policy=await readTeam<any>(tx,storeId,'workflow.policy.'+e.channelId)
+  if(policy?.paused||policy?.enabled===false)fail('EMPLOYEE_ORCHESTRATION_CHANNEL_PAUSED')
   const g=await tx.config.findUnique({where:{storeId_key:{storeId,key:employeeGrantKey(route.agentId)}}})
   const grant=grantSchema.parse(g&&JSON.parse(g.value))
   if(!route.enabled||route.paused||Date.parse(route.expiresAt)<=now()||Date.parse(route.expiresAt)>Date.parse(grant.expiresAt)||grant.revoked||grant.storeId!==storeId||grant.agentId!==route.agentId||!grant.actions.includes('messages.read')||!grant.actions.includes('messages.send'))fail('EMPLOYEE_ORCHESTRATION_AUTHORITY_CHANGED')

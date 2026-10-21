@@ -102,6 +102,17 @@ async function main(){
    const receipt=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId+'.provider.1');assert.equal(receipt.state,'response');assert.equal(receipt.value.id,'synthetic-http-provider-receipt');
   }finally{await new Promise(r=>server.close(r));await runtime.recover(t.executionId)}
  });
+ await check('source revocation after provider claim blocks transport before send and preserves unknown reservation',async()=>{
+  const express=require(root+'/server/node_modules/express'),{createEmployeeRuntimeHttp}=built('teamAgentBridge/employeeRuntimeHttp');
+  const t=await next(),runtime=make(),p=wire(t);await input(runtime,t,p);await writeTeam(db,storeId,'ai.settings',{version:7});let sends=0;
+  const original=await readTeam(db,storeId,'message.'+channel.id+'.000000000001');
+  const app=express();app.use(createEmployeeRuntimeHttp({enabled:true,resolve:async()=>({executionId:t.executionId,expiresAt:new Date(Date.now()+60000).toISOString(),runtime}),transport:async(_s,_v,_r,before)=>{
+   await writeTeam(db,storeId,'message.'+channel.id+'.000000000001',{...original,text:'Changed source after claim, before provider'});
+   try{await before();sends++;throw Error('SHOULD_NOT_SEND')}finally{await writeTeam(db,storeId,'message.'+channel.id+'.000000000001',original)}
+  }}));const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s))});
+  try{assert.equal((await fetch('http://127.0.0.1:'+server.address().port+'/v1/chat/completions',{method:'POST',headers:{authorization:'Bearer synthetic-scope-source-revocation','content-type':'application/json'},body:JSON.stringify(p)})).status,409);assert.equal(sends,0);assert.equal((await runtime.inspect(t.executionId)).phase,'unknown');assert.equal((await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId+'.provider.1')).state,'unknown')}
+  finally{await new Promise(r=>server.close(r))}
+ });
  if(process.env.EMPLOYEE_REAL_HERMES==='1')await check('actual pinned Hermes child executes two scoped tools and persists all three real SDK turns',async()=>{
   const fs=require('node:fs/promises'),http=require('node:http'),os=require('node:os');
   const {runEmployeeRuntimeChild}=built('teamAgentBridge/employeeRuntimeChild');

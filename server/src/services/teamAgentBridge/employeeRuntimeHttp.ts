@@ -43,6 +43,7 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
         if(Date.now()>=Math.min(admission!.deadlineAt,Date.parse(a.expiresAt)))throw Error('EMPLOYEE_INGRESS_EXPIRED')
         // Credential revocation is checked again immediately before transport.
         const live=await access(req,'provider');if(live.executionId!==a.executionId)throw Error('EMPLOYEE_INGRESS_UNAUTHORIZED')
+        await runtime!.provider.assertFresh(admission!.executionId,admission!.turn,admission!.inputHash,request)
       },Math.min(admission.deadlineAt,Date.parse(a.expiresAt)))
       await runtime.provider.settle(a.executionId,admission.turn,admission.inputHash,{state:'response',value:raw})
       if(p.stream===true){

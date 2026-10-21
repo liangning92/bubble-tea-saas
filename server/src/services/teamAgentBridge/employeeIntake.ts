@@ -36,6 +36,8 @@ export async function enqueueEmployeeIntake(db:any,storeId:string,c:TeamChannel,
   try{
     if(!route)throw Error('EMPLOYEE_ROUTE_INVALID')
     if(!route.enabled||route.paused)throw Error('EMPLOYEE_ROUTE_PAUSED')
+    const policy=await readTeam<any>(db,storeId,'workflow.policy.'+c.id)
+    if(policy?.paused||policy?.enabled===false)throw Error('EMPLOYEE_ROUTE_PAUSED')
     if(Date.parse(route.expiresAt)<=nowMs)throw Error('EMPLOYEE_ROUTE_EXPIRED')
     const grantRow=await db.config.findUnique({where:{storeId_key:{storeId,key:employeeGrantKey(route.agentId)}}})
     const grant=grantSchema.parse(grantRow&&JSON.parse(grantRow.value))
