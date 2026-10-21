@@ -3,6 +3,7 @@ import { cupStickerTspl } from './cupSticker'
 import { parsePrinterNames } from './printerInventory'
 import { requestReceiptHandover } from './receiptHandover'
 import { renderTemplateReceipt } from './receiptRaster'
+import { shiftReceiptLayout } from './shiftReceiptLayout'
 import { WindowsRawPrinter } from './windowsRawPrinter'
 import { fetchReceiptLogo } from './receiptLogo'
 import { exactPrinterName } from './printerTarget'
@@ -1534,11 +1535,17 @@ ipcMain.handle('print-shift-report', async (_event, data) => {
   try {
     writeCrash(`[SHIFT-REPORT] ====== print-shift-report called ======`)
     const resolvedName = data.printerHost ? '' : await resolvePrinterName(data.printerName)
-    const text = generateShiftReportText(data)
+    if (!(data.printerHost && data.printerPort) && !resolvedName) return {success:false,error:'No receipt printer found for shift report'}
+    const receiptBuf = await renderTemplateReceipt(shiftReceiptLayout(data))
+    const initCmd = Buffer.from([0x1B, 0x40])
+    const cutCmd = data.paperSize === '80mm'
+      ? Buffer.from([0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x01])
+      : Buffer.from([0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A])
+    const rawBytes = Buffer.concat([initCmd, receiptBuf, cutCmd])
 
     if (data.printerHost && data.printerPort) {
       try {
-        await printViaNetwork(text, data.printerHost, data.printerPort)
+        await printViaNetworkRaw(rawBytes, data.printerHost, data.printerPort)
         writeCrash('[SHIFT-REPORT] Network print success')
         return { success: true }
       } catch (netErr: any) {
@@ -1549,13 +1556,6 @@ ipcMain.handle('print-shift-report', async (_event, data) => {
 
     if (resolvedName) {
       const isComPort = /^COM\d+/i.test(resolvedName)
-      const initCmd = Buffer.from([0x1B, 0x40])  // ESC @
-      const is80mm = data.paperSize === '80mm'
-      const cutCmd = is80mm
-        ? Buffer.from([0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x01])
-        : Buffer.from([0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A, 0x0D, 0x0A])
-      const rawBytes = Buffer.concat([initCmd, encodeEscPosText(text), cutCmd])
-
       if (isComPort) {
         try {
           await printViaComPort(resolvedName, rawBytes)
