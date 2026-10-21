@@ -34,6 +34,30 @@ def wait_file(p,process,timeout=40):
         if process.poll() is not None: raise RuntimeError('OWNED_CHILD_EXITED_BEFORE_READY')
         time.sleep(.1)
     raise RuntimeError('OWNED_CHILD_START_TIMEOUT')
+def short_owned_base():
+    # Darwin AF_UNIX is limited to 104 bytes including the terminating NUL.
+    # Batch attribution stays in evidence/env; avoid embedding it in HERMES_HOME.
+    base=Path(tempfile.mkdtemp(prefix='hf-',dir='/tmp')).resolve();base.chmod(0o700)
+    return base
+
+def poll_run_status(opener, request, deadline, *, now=time.monotonic, pause=time.sleep):
+    """Retry only read timeouts inside the original absolute loop deadline."""
+    from urllib.error import URLError
+    assert request.get_method()=='GET','STATUS_POLL_MUST_BE_READ_ONLY'
+    while True:
+        remaining=deadline-now()
+        if remaining<=0:raise RuntimeError('ISOLATED_REAL_LOOP_TIMEOUT')
+        try:
+            with opener.open(request,timeout=min(3,remaining)) as response:state=json.load(response)
+        except (TimeoutError,URLError) as error:
+            if isinstance(error,URLError) and not isinstance(error.reason,TimeoutError):raise
+        else:
+            if now()>=deadline:raise RuntimeError('ISOLATED_REAL_LOOP_TIMEOUT')
+            if state['status'] in ('completed','failed','cancelled','stopped'):return state
+        remaining=deadline-now()
+        if remaining<=0:raise RuntimeError('ISOLATED_REAL_LOOP_TIMEOUT')
+        pause(min(.15,remaining))
+
 def command(args,**kw): return subprocess.run(args,check=True,cwd=ROOT,**kw)
 def private(path,text): path.write_text(text); path.chmod(0o600)
 def kill(p):
@@ -53,7 +77,7 @@ def main():
     assert len(sdk_sites)==1,'FRESH_FULL_GATEWAY_PYTHON311_DEPENDENCIES_REQUIRED'
     assert not sdk_venv.resolve().is_relative_to(REAL.resolve()),'DEFAULT_HERMES_VENV_FORBIDDEN'
     assert command(['/usr/bin/git','-C',str(REAL),'rev-parse','HEAD'],capture_output=True,text=True).stdout.strip()==PIN
-    base=Path(tempfile.mkdtemp(prefix=run+'-hermes-full-',dir='/tmp')).resolve();base.chmod(0o700)
+    base=short_owned_base()
     isolated_env={'PATH':os.environ.get('PATH','/usr/bin:/bin'),'LANG':'en_US.UTF-8','HOME':str(base/'user-home'),'BT_TEST_RUN':run,'BT_TEST_LABEL':os.environ.get('BT_TEST_LABEL','')}
     (base/'user-home').mkdir(mode=0o700)
     backend=child=None;started=False;cleanup=False;status='not_run';reason=None;handles=[]
@@ -135,11 +159,7 @@ def main():
         req=urllib.request.Request(origin+'/p/stock-ro-001/v1/runs',data=body,headers={'Authorization':'Bearer '+bearer,'Content-Type':'application/json','Idempotency-Key':fixture['dispatch']['references']['eventId']})
         with opener.open(req,timeout=10) as r: assert r.status==202; admitted=json.load(r)
         runid=admitted['run_id'];deadline=time.monotonic()+45
-        while True:
-            with opener.open(urllib.request.Request(origin+'/p/stock-ro-001/v1/runs/'+runid,headers={'Authorization':'Bearer '+bearer}),timeout=3) as r: state=json.load(r)
-            if state['status'] in ('completed','failed','cancelled','stopped'): break
-            if time.monotonic()>deadline: raise RuntimeError('ISOLATED_REAL_LOOP_TIMEOUT')
-            time.sleep(.15)
+        state=poll_run_status(opener,urllib.request.Request(origin+'/p/stock-ro-001/v1/runs/'+runid,headers={'Authorization':'Bearer '+bearer}),deadline)
         assert state['status']=='completed',json.dumps({'status':state['status']})
         backend.stdin.write('{"command":"finish"}\n');backend.stdin.flush();backend.stdin.close();backend.wait(timeout=10);assert backend.returncode==0,'NATIVE_REPORT_NOT_PERSISTED'
         native=json.loads((base/'backend-result.json').read_text())
