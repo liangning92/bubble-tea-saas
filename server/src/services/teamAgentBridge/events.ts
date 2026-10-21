@@ -5,7 +5,11 @@ export const teamReplyEventId = (agentId: string, taskId: string, channelId: str
 
 /** Native send transaction owns source + pending fact. No model, callback, timer or secret. */
 export async function recordTeamAgentReply(db: any, storeId: string, channel: any, message: any) {
-  if (message.agent) return
+  if (message.agent || message.ai) return
+  // employee_work's native-send hook already owns the durable event. Do not
+  // enqueue the former physical-member bridge consumer as a second execution.
+  const cutover=await db.config.findUnique({where:{storeId_key:{storeId,key:TEAM_AGENT_PREFIX+'employeeRoute.'+channel.id}}})
+  if(cutover)return
   const row = await db.config.findUnique({ where: { storeId_key: { storeId, key: TEAM_AGENT_PREFIX + 'channel.' + channel.id } } })
   if (!row) return
   const binding = JSON.parse(row.value), member = channel.members.find((m: any) => m.staffId === 'agent:' + binding.agentId)
