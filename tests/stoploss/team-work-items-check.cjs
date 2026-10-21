@@ -17,6 +17,8 @@ const deps={enabled:true,withActor:(tx,action,ctx,operation)=>createTeamAgentBri
 let service=createWorkItemService(db,deps),channel,assigned,sent,client,server,sdk,ctx;
 const native=()=>teamCommunication(db),req=()=>randomUUID(),pad=n=>String(n).padStart(12,'0');
 function faultDatabase(){let seen=false;return{seen:()=>seen,db:{$transaction:fn=>db.$transaction(tx=>fn(new Proxy(tx,{get(target,key){if(key==='config')return new Proxy(target.config,{get(model,method){if(method==='upsert')return async args=>{const result=await model.upsert(args);if(args.where.storeId_key.key==='employee.workspace.notification.chat.pending'){seen=true;throw Error('after durable signal')}return result};return typeof model[method]==='function'?model[method].bind(model):model[method]}});return typeof target[key]==='function'?target[key].bind(target):target[key]}}))),user:db.user,staff:db.staff,config:db.config}}}
+function heldReceiptDatabase(requestId){let enter,release,held=false;const entered=new Promise(r=>enter=r),gate=new Promise(r=>release=r);const key='team.communication.taskRequest.agent:'+agentId+'.'+requestId;return{entered,release,db:{$transaction:fn=>db.$transaction(tx=>fn(new Proxy(tx,{get(target,name){if(name==='config')return new Proxy(target.config,{get(model,method){if(method==='findUnique')return async args=>{const result=await model.findUnique(args);if(!held&&args.where.storeId_key?.key===key){held=true;enter();await gate}return result};return typeof model[method]==='function'?model[method].bind(model):model[method]}});return typeof target[name]==='function'?target[name].bind(target):target[name]}})),{timeout:15000}),user:db.user,staff:db.staff,config:db.config}}}
+async function observeLock(){const end=Date.now()+3000;while(Date.now()<end){const [r]=await db.$queryRawUnsafe(`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%Config%'`);if(r.n>0)return;await new Promise(r=>setTimeout(r,20))}throw Error('second native channel did not wait on the shared request lock')}
 async function check(name,fn){await fn();passed.push(name);console.log('PASS '+name)}
 async function call(name,args,ok=true){const r=await client.callTool({name,arguments:args});if(ok){assert(!r.isError,JSON.stringify(r));return r.structuredContent.result}assert(r.isError);return r}
 const taskRows=()=>db.config.count({where:{storeId,key:{startsWith:'team.communication.task.'}}});
@@ -140,6 +142,22 @@ async function main(){
   const round=req(),m={...minutes,id:round,actions:[{...minutes.actions[0],text:'Rollback synthetic source'}]};await writeTeam(db,storeId,`minutes.${channel.id}.${round}`,m);
   const before=await taskRows(),beforeReminders=(await reminders()).length,marker=await readWork(storeId,'notification.chat.pending',db),fault=faultDatabase();
   await assert.rejects(()=>createWorkItemService(fault.db,deps).assign({...ctx,requestId:req(),roundId:round,minuteVersion:1,actionIndex:0}));assert(fault.seen());assert.equal(await taskRows(),before);assert.equal((await reminders()).length,beforeReminders);assert.deepEqual(await readWork(storeId,'notification.chat.pending',db),marker);
+ });
+ const secondChannel=await createTeamAgentBridge(db,bridgeDeps).create({task,requestId:req(),title:'Synthetic second native channel',members:[owner.staffId,employee.staffId]});const ctx2={task,channelId:secondChannel.id};
+ await createTeamAgentBridge(db,bridgeDeps).send({...ctx2,requestId:req(),expectedLastSeq:0,text:'Synthetic second work source'});await native().send(employee,secondChannel.id,{requestId:req(),text:'Synthetic second result evidence'});
+ async function minuteFor(c,label){const id=req();await writeTeam(db,storeId,`minutes.${c.id}.${id}`,{...minutes,id,actions:[{...minutes.actions[0],text:label}]});return id}
+ await check('cross-channel same agent requestId assignment waits on real PG lock and mutates once',async()=>{
+  const a=await minuteFor(channel,'Concurrent assignment A'),b=await minuteFor(secondChannel,'Concurrent assignment B'),requestId=req(),hold=heldReceiptDatabase(requestId),before=await taskRows();
+  const first=createWorkItemService(hold.db,deps).assign({...ctx,requestId,roundId:a,minuteVersion:1,actionIndex:0});let both;
+  try{await hold.entered;both=Promise.allSettled([first,service.assign({...ctx2,requestId,roundId:b,minuteVersion:1,actionIndex:0})]);await observeLock()}finally{hold.release()}
+  const results=await both;assert.equal(results.filter(x=>x.status==='fulfilled').length,1);assert.equal(results.filter(x=>x.status==='rejected').length,1);assert.equal(await taskRows(),before+1);
+ });
+ await check('cross-channel same agent requestId review waits on real PG lock and reviews once',async()=>{
+  const tasks=[];for(const c of [channel,secondChannel]){const round=await minuteFor(c,'Concurrent review '+c.id);let t=await native().createTask(owner,c.id,{requestId:req(),roundId:round,minuteVersion:1,actionIndex:0});t=await native().taskAction(employee,c.id,t.id,{requestId:req(),expectedVersion:1,action:'accept'});t=await native().taskAction(employee,c.id,t.id,{requestId:req(),expectedVersion:2,action:'submit',note:'Synthetic review evidence',sourceSeq:[2]});tasks.push(t)}
+  const requestId=req(),hold=heldReceiptDatabase(requestId),input={requestId,expectedVersion:3,action:'return',note:'Synthetic controlled concurrent review'};
+  const first=createWorkItemService(hold.db,deps).review({...ctx,...input,employeeTaskId:tasks[0].id});let both;
+  try{await hold.entered;both=Promise.allSettled([first,service.review({...ctx2,...input,employeeTaskId:tasks[1].id})]);await observeLock()}finally{hold.release()}
+  const results=await both;assert.equal(results.filter(x=>x.status==='fulfilled').length,1);assert.equal(results.filter(x=>x.status==='rejected').length,1);const rows=await Promise.all(tasks.map(t=>readTeam(db,storeId,`task.${t.channelId}.${t.id}`)));assert.deepEqual(rows.map(t=>t.version).sort(),[3,4]);
  });
  const out=path.join(root,'output/agent-notification-work-items');fs.mkdirSync(out,{recursive:true});fs.writeFileSync(out+'/pg-mcp.json',JSON.stringify({tests:passed.length,passed,production:false,pushTransportCalls:0,modelCalls:0},null,2));
 }
