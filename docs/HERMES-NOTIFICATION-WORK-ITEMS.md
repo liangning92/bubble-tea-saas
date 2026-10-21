@@ -16,6 +16,10 @@ withActor: (database, action, context, operation) =>
 
 `context.task={taskId,version}` 是 host 的智能体执行授权任务，和被操作的 `employeeTaskId` 不同。bridgeDependencies.tasks.assert 必须接真实授权任务状态，不能使用测试 allowlist。每次读取/真实写事务重查同门店、active sponsor、scope、grant/client版本、频道成员范围与历史 floor。host 工具 scopes 必须取已认证 token 与当前 grant 的交集，不能从工具 body 取值。新 scopes 未获生产批准，原 STOCK-RO-001 grant 不因此扩大。
 
+保密隔离基础增量为 `bfad226973c67b21f59c101dde06c1d3fefa25eb`。`bridgeDependencies.communication` 必须由可信 host 实现：`assertContext` 证明独立 employee_work 任务、profile/模型及同隔间 memory，返回绑定当前 audience/权限/grant/client 版本的 compartmentKey、memoryNamespace 和 executionId；端口缺失或证明失配即拒绝。五工具仅调用该上下文准入，不接受工具 body 自报 executionId、来源清单或隔间身份。任务 get/assign/review 的原生事务也会重查，旧 receipt 不能绕过。
+
+普通 `send.text`、`create.title` 保留自然语言 schema。仅准备测试频道/源消息时，夹具另实现合成 `admitOutput` 与 `authorizeSource`：出站证明绑定真实 textHash/requestId/executionId/compartmentKey/current audience hash，逐来源返回数据分类。本轮禁止 protected/unknown 数据出站；模板仅敏感拒答兜底。此处两个工作项夹具中的 synthetic public_sop 来源及 runtime proof 仅证明适配契约，不能复用作生产默认 allow。真实 Hermes runtime trace、独立 profile/记忆和 source ACL 尚未接通，生产工具仍未注册/授权。完整契约见 [沟通保密隔离说明](HERMES-COMMUNICATION-CONFIDENTIALITY.md)。
+
 | 工具 | 动作 | 输入目标 | 业务边界 |
 |---|---|---|---|
 | team_delivery_get | delivery.read | channel/messageId/messageSeq/recipientStaffId | 只读当前可访问消息和当前收件人；不标员工已读、不重发 |
@@ -54,13 +58,15 @@ InboxService 由主集成线程独占，本线未改。合入时需保留既有 
 
 ## 验证与真实设备
 
-`python3 scripts/with-docker-test.py -- python3 scripts/test-team-work-items.py --native-regression --bridge-regression`：官方 MCP 客户端/临时 HTTP、单个临时 PG，原20组+新增2组原生任务受控并发共22组、16组桥（包含两项P2）、5组通知HTTP、67组原生沟通均通过。新增并发用例真实持有第一 receipt 读取并观察第二频道 PostgreSQL Lock 等待，证明 assign/review 两路径均仅1次变更。CI 默认新脚本只跑工作项22组和通知5组；桥/原生回归由各自既有域选择，避免重复。另有10组既有设备、17组通知HTTP、7组跨进程/PG停启回归通过。仅合成账号/模拟 Push，无真实模型。涵盖幂等、真实权限降级、旧 client/version/撤权竞态、审批零业务写、跨店/历史 floor、任务和提醒/signal 真写后抛错全回滚、员工 Inbox/已读与任务状态分离。
+`python3 scripts/with-docker-test.py -- python3 scripts/test-team-work-items.py --native-regression --bridge-regression` 使用官方 MCP 客户端/临时 HTTP 和单个临时 PG。旧端口基线原20组+2组原生任务受控并发共22组、16组桥（包含两项P2）、5组通知HTTP、67组原生沟通均通过。并发用例真实持有第一 receipt 读取并观察第二频道 PostgreSQL Lock 等待，证明 assign/review 两路径均仅1次变更。保密端口适配新增4组：五工具缺端口拒绝、错误purpose/共享memory/缺execution拒绝、body伪造proof在准入前拒绝、可信actor取得后原生任务读/指派/复核再查context；负例核对无持久状态或审计变更。CI 默认脚本包含工作项及通知5组、回执8组；桥/原生回归由各自既有域选择。另有10组既有设备、17组通知HTTP、7组跨进程/PG停启旧回归通过。均为合成账号/模拟 Push，无真实模型；新组合终态以精确SHA交付证据为准。
+
+本次 bfad2269 端口适配组合在单批次 `bt-test-4ceb86566d30` 实跑：26组工作项、5组通知HTTP、8组回执、24组沟通桥及67组原生回归均通过，API编译通过；测试PG和wrapper资源已清理。该结果不包括真实host/trace/source ACL接线或生产grant。
 
 `node tests/stoploss/team-work-item-target-browser-check.cjs`：真实 React 合成页面的消息/任务/行动定位和三宽响应式。不能代替真实手机。
 
 回执权限 P2 的独立最小入口：`python3 scripts/with-docker-test.py -- python3 scripts/test-team-work-items.py --replay-only`。仅跑8组真实PG/官方MCP：当前降权下新/旧复核和读均拒绝、合法旧请求版本快照不含新证据、当前 reviewer/正文变化拒绝、指派两种去重无新证据、旧格式回执失败关闭、撤权与正常新复核/人工原生回放。默认工作项脚本也包含这8组；组合主线可只复跑此增量。
 
-生产只读核实：2026-10-21 00:51 UTC，2 条订阅 active=0/eligible=0；01:09 UTC核实 Lawrence 为唯一 EMP005、active、cashier，存在既有管理员双人会话，API 已挂载四个 push-device 自检路由。没有发送测试消息，没有读取/输出 key 值。
+历史只读核实：2026-10-21 00:51 UTC，2 条订阅 active=0/eligible=0；01:09 UTC核实 Lawrence 为唯一 EMP005、active、cashier，存在既有管理员双人会话，API 已挂载四个 push-device 自检路由。该只读阶段没有发消息，没有读取/输出 key 值。
 
 父已授权唯一发送者可给 Lawrence 该私有测试会话发一条标注测试的消息。执行前的最短设备配合：
 
@@ -70,7 +76,7 @@ InboxService 由主集成线程独占，本线未改。合入时需保留既有 
 4. 用户锁屏观察是否显示；点通知，核对确切消息，再亲自回复指定测试文字。
 5. 核对原生员工 read 游标/实际回复记录。任务反馈另使用已部署原生功能，不声称本轮尚未部署的新工具已可用。
 
-当前阻断是目标设备重新订阅与真实锁屏显示确认，不是缺新 Push 密钥或扩大 Hermes grant。没有真实手机结论；教程待实际功能验证再发布，现不向员工派发材料。
+本次授权真机测试已结束：用户自行启用后该账户有效订阅为1；唯一手动测试消息 seq10 于2026-10-21 08:46:27 WIB通过已部署Admin会话发出，推送服务约3秒后接受，随后真实Lawrence回复seq12“测试收到”。用户明确确认在iPhone锁屏看到通知；seq11为旧工作流AI自动回复，排除在真人回执之外。仅证明Lawrence这台iPhone的既有工作消息路径，不证明所有员工设备或新Hermes工具已接通。没有代用户标已读、扩grant或改生产策略；观察已停止，Admin标签已恢复释放。其他Android/iPhone设备及任务端到端反馈仍需实际配合；教程不据此批量派发。
 
 ## 迁云依赖
 
