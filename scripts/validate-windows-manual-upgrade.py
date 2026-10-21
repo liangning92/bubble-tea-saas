@@ -272,6 +272,25 @@ def verify_shortcuts(phase):
     print(json.dumps({'shortcutPhase': phase, 'passed': True, 'links': rows}), flush=True)
 
 
+def startup_metrics(log_text, launched):
+    marks = re.findall(r'\[STARTUP\] (window-created|login-visible|api-ready) pid=(\d+) elapsedMs=(\d+)', log_text)
+    windows = [(index, pid) for index, (name, pid, _) in enumerate(marks) if name == 'window-created']
+    if not windows:
+        return None
+    start, boot_pid = windows[-1]
+    if int(boot_pid) not in {row['ProcessId'] for row in launched}:
+        return None
+    # A previous local API may still answer health during normal shutdown.
+    # Also discard older marks if Windows reuses a process ID.
+    metrics = {name: int(elapsed) for name, pid, elapsed in marks[start:] if pid == boot_pid}
+    if not {'window-created', 'login-visible', 'api-ready'} <= metrics.keys():
+        return None
+    assert 0 < metrics['window-created'] <= 10000, ('Cashier window appeared too late', metrics)
+    assert 0 < metrics['login-visible'] <= 10000, ('Login form appeared too late', metrics)
+    assert metrics['window-created'] < metrics['api-ready'], metrics
+    return metrics
+
+
 def verify_started_runtime(expected_version):
     env = dict(os.environ, BTPS_OWNED_RUNTIME=str(APP / 'BTPS.exe'))
     query = "$rows=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $env:BTPS_OWNED_RUNTIME} | Select-Object ProcessId,ExecutablePath); ConvertTo-Json -InputObject $rows -Compress"
@@ -300,18 +319,14 @@ def verify_started_runtime(expected_version):
                         last_health.update(statusCode=error.code, body=error.read().decode('utf-8', errors='replace')[:2000])
                     ready = False
                 if ready:
+                    crash = DATA / 'logs/crash.log'
+                    metrics = startup_metrics(crash.read_text(errors='replace') if crash.is_file() else '', launched)
+                    if metrics is None:
+                        time.sleep(.25)
+                        continue
                     verified = True
                     ready_at = time.monotonic()
                     trace(f'runtime-ready at={ready_at:.3f} version={expected_version}')
-                    crash = DATA / 'logs/crash.log'
-                    marks = re.findall(r'\[STARTUP\] (window-created|login-visible|api-ready) pid=(\d+) elapsedMs=(\d+)', crash.read_text(errors='replace') if crash.is_file() else '')
-                    assert marks, 'Installed startup must record window, login paint and API readiness'
-                    boot_pid = next(pid for name, pid, _ in reversed(marks) if name == 'window-created')
-                    metrics = {name: int(elapsed) for name, pid, elapsed in marks if pid == boot_pid}
-                    assert int(boot_pid) in {row['ProcessId'] for row in launched}
-                    assert 0 < metrics['window-created'] <= 10000, ('Cashier window appeared too late', metrics)
-                    assert 0 < metrics['login-visible'] <= 10000, ('Login form appeared too late', metrics)
-                    assert metrics['window-created'] < metrics['api-ready'], metrics
                     print(json.dumps({'startupMetrics': metrics, 'loginVisibleLimitMs': 10000}), flush=True)
                     return {'startupMetrics': metrics,'readyAtMonotonic': ready_at, 'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
