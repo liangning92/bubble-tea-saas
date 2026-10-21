@@ -7,7 +7,7 @@ import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
 import { recordTeamAgentReply } from './teamAgentBridge/events'
-import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentTaskAuthority, teamAgentOutbound } from './teamAgentBridge/identity'
+import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentDirectChannelAccess, teamAgentTaskAuthority, teamAgentOutbound } from './teamAgentBridge/identity'
 import { enqueueTeamTaskReminder } from './TeamTaskReminderService'
 
 export const TEAM_PREFIX = 'team.communication.'
@@ -110,8 +110,10 @@ async function channel(db: DB, a: TeamActor, id: string, auditReason?: string) {
   if (auditReason !== undefined) {
     if (!canTeam(a, 'team.audit') || auditReason.trim().length < 5 || auditReason.length > 500) fail(403, 'TEAM_AUDIT_REQUIRED')
     await audit(db, a, id, 'view', { reason: auditReason, lastSeq: c.lastSeq, kind: c.kind })
-  } else if (!member) fail(403, 'TEAM_MEMBERSHIP_REQUIRED')
-  return { c, fromSeq: teamAgentProvenance(a) ? Math.max(...c.members.map(m => m.fromSeq)) : auditReason === undefined ? member!.fromSeq : 1 }
+  }
+  const delegated = auditReason === undefined && !member ? await teamAgentDirectChannelAccess(db, a, c) : null
+  if (auditReason === undefined && !member && !delegated) fail(403, 'TEAM_MEMBERSHIP_REQUIRED')
+  return { c, fromSeq: teamAgentProvenance(a) ? Math.max(...c.members.map(m => m.fromSeq), delegated?.fromSeq || 1) : auditReason === undefined ? member!.fromSeq : 1 }
 }
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 // An assignment receipt is its original result, never a read of later employee evidence.

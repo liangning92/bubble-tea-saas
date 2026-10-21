@@ -3,7 +3,7 @@ import type { TeamActor, TeamChannel } from '../TeamCommunicationService'
 
 // Request-local capability, never deserialized from a JWT or HTTP/tool body.
 // Only the bridge constructs it after checking the fresh action/data grant.
-type Binding = { action: BridgeAction; agentId: string; grantVersion: number; name: string; clientRevision: number; context?: { task: TaskRef; replyToSeq?: number }; check(db: any): Promise<void>; channel(db: any, channel: TeamChannel): Promise<void>; outbound(db:any,channel:TeamChannel,input:{text:string;files:string[]}):Promise<void>; created?(db: any, channel: TeamChannel): Promise<void> }
+type Binding = { action: BridgeAction; agentId: string; grantVersion: number; name: string; clientRevision: number; context?: { task: TaskRef; replyToSeq?: number }; check(db: any): Promise<void>; channel(db: any, channel: TeamChannel): Promise<void>; outbound(db:any,channel:TeamChannel,input:{text:string;files:string[]}):Promise<void>; directChannel?(db:any,channel:TeamChannel):Promise<{fromSeq:number}|null>; created?(db: any, channel: TeamChannel): Promise<void> }
 const trusted = new WeakMap<TeamActor, Binding>()
 export function bindTeamAgent(actor: TeamActor, binding: Binding): TeamActor {
   trusted.set(actor, binding)
@@ -23,6 +23,14 @@ export function teamAgentProvenance(actor: TeamActor) {
 export async function teamAgentChannelAccess(db: any, actor: TeamActor, channel: TeamChannel) {
   const binding = trusted.get(actor)
   if (binding) await binding.channel(db, channel)
+}
+
+// This private capability is constructed only by the live server bridge. A role,
+// actor-shaped body or persisted message cannot create it.
+export async function teamAgentDirectChannelAccess(db:any,actor:TeamActor,channel:TeamChannel):Promise<{fromSeq:number}|null> {
+  const binding=trusted.get(actor)
+  if(!binding?.directChannel)return null
+  return binding.directChannel(db,channel)
 }
 
 export async function teamAgentChannelCreated(db: any, actor: TeamActor, channel: TeamChannel) {

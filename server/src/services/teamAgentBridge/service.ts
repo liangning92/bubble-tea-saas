@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { TeamActor, TeamChannel, TeamError, teamCommunication, readTeam } from '../TeamCommunicationService'
 import { bindTeamAgent } from './identity'
+import { readAuthorizedBridgeChannel } from './directDelegation'
 import { BridgeAction, BridgeDependencies, BridgeGrant, grantSchema, schemas, TaskRef } from './contract'
 import { communicationScope, checkOutput, OutputPlan, assertDataAudience, textHash } from './confidentiality'
 import { TEAM_AGENT_PREFIX as prefix, teamReplyEventId } from './events'
@@ -28,16 +29,16 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
     if (fresh.agentId !== g.agentId || fresh.storeId !== g.storeId || fresh.sponsorUserId !== g.sponsorUserId || fresh.version !== g.version || fresh.clientRevision !== g.clientRevision || hash(fresh) !== hash(g)) denied()
     if (task) await deps.tasks.assert(database, fresh, task, channelId)
     if (channelId) {
-      const created = await read(database, g.storeId, 'channel.' + channelId)
-      if (created?.agentId !== g.agentId || !task || created.task?.taskId !== task.taskId) denied()
-      // Check the exact native snapshot returned to callers, including create receipt replay.
-      const c = currentChannel || await readTeam(database, g.storeId, 'channel.' + channelId)
-      if (!c || c.archived || !c.members.some((m: any) => m.staffId === 'agent:' + g.agentId) ||
-        c.members.some((m: any) => m.staffId !== 'agent:' + g.agentId && !g.staffIds.includes(m.staffId))) denied()
-      const humans = c.members.filter((m: any) => m.staffId !== 'agent:' + g.agentId).map((m: any) => m.staffId)
-      const active = await database.staff.findMany({ where: { storeId: g.storeId, id: { in: humans }, status: 'active' }, select: { id: true } })
-      if (active.length !== new Set(humans).size) denied()
-      if (task) await communicationScope(database,deps,fresh,task,c)
+      const authorized = await readAuthorizedBridgeChannel(database,fresh,task!,channelId,currentChannel,now())
+      if(authorized.delegatedDirect&&!['messages.read','messages.send'].includes(action))denied()
+      if(authorized.delegatedDirect&&action==='messages.send'){
+        const sourcePrefix='team.communication.message.'+channelId+'.'
+        const rows=await database.config.findMany({where:{storeId:g.storeId,key:{startsWith:sourcePrefix,gte:sourcePrefix+String(authorized.fromSeq).padStart(12,'0')},value:{contains:'"authorId":'+JSON.stringify(authorized.sourceStaffId)}},orderBy:{key:'desc'},take:1,select:{value:true}})
+        const source=rows[0]&&JSON.parse(rows[0].value)
+        if(!source||source.authorId!==authorized.sourceStaffId||source.channelId!==channelId||source.seq<authorized.fromSeq||source.seq>authorized.channel.lastSeq||source.ai||source.agent||typeof source.text!=='string'||!source.text.trim())denied()
+      }
+      if (task) await communicationScope(database,deps,fresh,task,authorized.channel)
+      return authorized
     } else if (task) await communicationScope(database,deps,fresh,task)
   }
   async function actor(action: BridgeAction, task?: TaskRef, channelId?: string, replyToSeq?: number, directive?: OutputPlan) {
@@ -45,8 +46,9 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
     await authorize(db, g, action, task, channelId)
     const a: TeamActor = { id: g.sponsorUserId, storeId: g.storeId, staffId: 'agent:' + g.agentId, role: 'agent' }
     bindTeamAgent(a, { action, agentId: g.agentId, grantVersion: g.version, clientRevision: g.clientRevision, name: g.displayName, context: task ? { task, replyToSeq } : undefined,
-      created: async (database, c) => { await authorize(database, g, action, task); if(action==='conversation.create') await checkOutput(database,deps,g,task,c,directive,{text:(c as any).title,files:[]}); await put(database, g.storeId, 'channel.' + c.id, { agentId: g.agentId, task, createdAt: new Date(now()).toISOString() }) },
-      check: database => authorize(database, g, action, task, channelId),
+      created: async (database, c) => { if(action!=='conversation.create')denied(); await authorize(database, g, action, task); if(action==='conversation.create') await checkOutput(database,deps,g,task,c,directive,{text:(c as any).title,files:[]}); await put(database, g.storeId, 'channel.' + c.id, { agentId: g.agentId, task, createdAt: new Date(now()).toISOString() }) },
+      check: async database => { await authorize(database, g, action, task, channelId) },
+      directChannel: async (database,c) => { if(!task||c.id!==channelId)return null; const authorized=await authorize(database,g,action,task,c.id,c);return authorized?.delegatedDirect?{fromSeq:authorized.fromSeq}:null },
       channel: async (database, c) => { await authorize(database,g,action,task,c.id,c); if(action==='conversation.create') await checkOutput(database,deps,g,task,c,directive,{text:c.title,files:[]}) },
       outbound: async (database,c,input) => { if(!task) denied(); await checkOutput(database,deps,g,task,c,directive,input) } })
     return { a, g }
@@ -83,11 +85,12 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
       for (const row of created) if (JSON.parse(row.value).agentId === g.agentId) ids.add(row.key.slice((prefix + 'channel.').length))
       const result = []
       for (const id of ids) {
-        try { await authorize(db, g, 'conversations.read', v.task, id) }
+        let authorized
+        try { authorized=await authorize(db, g, 'conversations.read', v.task, id) }
         catch (error) { if (error instanceof TeamError && error.status === 403) continue; throw error }
         const c = await readTeam(db, g.storeId, 'channel.' + id)
         result.push({ id: c.id, title: c.title, kind: c.kind, version: c.version, lastSeq: c.lastSeq,
-          fromSeq: c.members.find((m: any) => m.staffId === 'agent:' + g.agentId).fromSeq })
+          fromSeq: authorized.fromSeq })
       }
       return result
     },
