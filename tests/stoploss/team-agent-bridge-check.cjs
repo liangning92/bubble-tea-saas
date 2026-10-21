@@ -101,6 +101,60 @@ async function main() {
     await call('messages',{...context(),task:{taskId:randomUUID(),version:1}},false);
   });
 
+  await check('same agent requestId is serialized across channels before any second message effect',async()=>{
+    const a=await bridge.create({requestId:randomUUID(),title:'Concurrent destination A',members:[employee.staffId],task});
+    const b=await bridge.create({requestId:randomUUID(),title:'Concurrent destination B',members:[employee.staffId],task:otherTask});
+    const requestId=randomUUID(),receiptKey='team.communication.request.agent:'+agentId+'.'+requestId;
+    let releaseFirst,firstRead,reads=0;
+    const gate=new Promise(r=>releaseFirst=r),ready=new Promise(r=>firstRead=r);
+    const observedDb=new Proxy(db,{get(target,key){
+      if(key!=='$transaction'){const value=target[key];return typeof value==='function'?value.bind(target):value;}
+      return fn=>target.$transaction(tx=>fn(new Proxy(tx,{get(t,k){
+        if(k!=='config')return t[k];
+        return new Proxy(t.config,{get(c,method){
+          if(method!=='findUnique')return c[method];
+          return async args=>{const result=await c.findUnique(args);if(args.where.storeId_key?.key===receiptKey){reads++;if(reads===1){firstRead();await gate;}}return result;};
+        }});
+      }})),{timeout:15000});
+    }});
+    const observed=createTeamAgentBridge(observedDb,deps);
+    const first=observed.send({channelId:a.id,task,requestId,expectedLastSeq:0,text:'Destination A'});
+    const firstOutcome=first.then(value=>({value}),error=>({error}));
+    await ready;
+    const second=observed.send({channelId:b.id,task:otherTask,requestId,expectedLastSeq:0,text:'Destination B'});
+    const secondOutcome=second.then(value=>({value}),error=>({error}));
+    let blocked=false;
+    try{
+      for(let i=0;i<100;i++){
+        const waits=await db.$queryRawUnsafe("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'");
+        if(waits[0].n>0){blocked=true;break;}
+        await new Promise(r=>setTimeout(r,10));
+      }
+    }finally{releaseFirst();}
+    const [one,two]=await Promise.all([firstOutcome,secondOutcome]);
+    assert(blocked,'second channel must wait on the shared author/request receipt scope');
+    assert(one.value);assert.equal(two.error?.message,'TEAM_REQUEST_CONFLICT');
+    const messages=await db.config.findMany({where:{storeId,key:{startsWith:'team.communication.message.'},value:{contains:JSON.stringify(requestId)}}});
+    assert.equal(messages.length,1);assert.equal(JSON.parse(messages[0].value).channelId,a.id);
+    assert.equal((await readTeam(db,storeId,'channel.'+b.id)).lastSeq,0);
+    const receipt=await readTeam(db,storeId,'request.agent:'+agentId+'.'+requestId);assert.equal(receipt.message.id,one.value.id);
+    const sameArgs={channelId:b.id,task:otherTask,requestId:randomUUID(),expectedLastSeq:0,text:'Same destination retry'};
+    const same=await Promise.all([bridge.send(sameArgs),bridge.send(sameArgs)]);assert.equal(same[0].id,same[1].id);
+  });
+  await check('create replay rechecks current audience and archive without changing grant bytes',async()=>{
+    const args={requestId:randomUUID(),title:'Current audience replay',members:[employee.staffId],task:otherTask};
+    let c=await call('create',args);
+    const initialGrant=(await db.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:'fixture.grant'}}})).value;
+    const admin={id:grant.sponsorUserId,storeId,staffId:'bridge-owner-staff',role:'admin'};
+    c=await teamCommunication(db).updateMembers(admin,c.id,{expectedVersion:c.version,members:[...c.members.map(m=>m.staffId),'bridge-owner-staff'],ownerId:c.ownerId,archived:false});
+    await call('messages',{channelId:c.id,task:otherTask},false);
+    const outside=await call('create',args,false);assert(!JSON.stringify(outside).includes('bridge-owner-staff'));
+    c=await teamCommunication(db).updateMembers(admin,c.id,{expectedVersion:c.version,members:c.members.filter(m=>m.staffId!=='bridge-owner-staff').map(m=>m.staffId),ownerId:c.ownerId,archived:false});
+    assert.equal((await call('create',args)).id,c.id);
+    c=await teamCommunication(db).updateMembers(admin,c.id,{expectedVersion:c.version,members:c.members.map(m=>m.staffId),ownerId:c.ownerId,archived:true});
+    await call('messages',{channelId:c.id,task:otherTask},false);await call('create',args,false);
+    assert.equal((await db.config.findUniqueOrThrow({where:{storeId_key:{storeId,key:'fixture.grant'}}})).value,initialGrant);
+  });
   await check('create rechecks revocation after native lock; channel and binding roll back together',async()=>{
     let unlock, locked;const ready=new Promise(r=>locked=r),gate=new Promise(r=>unlock=r);
     const holder=db.$transaction(async tx=>{await writeTeam(tx,storeId,'lock.create',{fixture:true});locked();await gate;},{timeout:15000});
@@ -152,6 +206,8 @@ async function main() {
     grant.revoked=true;await saveGrant();await call('send',{...context(),requestId:randomUUID(),expectedLastSeq:3,text:'revoked'},false);
     grant.revoked=false;grant.expiresAt='2020-01-01T00:00:00.000Z';await saveGrant();await call('changes',{...context()},false);
   });
-  console.log(JSON.stringify({passed:passed.length,checks:passed,realEmployeesContacted:0,modelCalls:0,productionGrantsChanged:0}));
+  const result={batch:process.env.BT_TEST_RUN,passed:passed.length,checks:passed,realEmployeesContacted:0,modelCalls:0,productionGrantsChanged:0};
+  const fs=require('node:fs');fs.mkdirSync(root+'/output/team-agent-bridge',{recursive:true});fs.writeFileSync(root+'/output/team-agent-bridge/result.json',JSON.stringify(result,null,2));
+  console.log(JSON.stringify(result));
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await client?.close().catch(()=>{});await sdk?.close();if(server)await new Promise(r=>server.close(r));await db.$disconnect()});
