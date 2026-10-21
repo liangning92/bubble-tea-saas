@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { TeamActor, TeamError, teamCommunication, readTeam } from '../TeamCommunicationService'
+import { TeamActor, TeamChannel, TeamError, teamCommunication, readTeam } from '../TeamCommunicationService'
 import { bindTeamAgent } from './identity'
 import { BridgeAction, BridgeDependencies, BridgeGrant, grantSchema, schemas, TaskRef } from './contract'
 import { TEAM_AGENT_PREFIX as prefix, teamReplyEventId } from './events'
@@ -22,14 +22,15 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
     if (!sponsor?.staff || sponsor.staff.status !== 'active' || sponsor.staff.storeId !== g.storeId) denied()
     return g
   }
-  async function authorize(database: any, g: BridgeGrant, action: BridgeAction, task?: TaskRef, channelId?: string) {
+  async function authorize(database: any, g: BridgeGrant, action: BridgeAction, task?: TaskRef, channelId?: string, currentChannel?: TeamChannel) {
     const fresh = await grant(database, action)
     if (fresh.agentId !== g.agentId || fresh.storeId !== g.storeId || fresh.sponsorUserId !== g.sponsorUserId || fresh.version !== g.version || fresh.clientRevision !== g.clientRevision || hash(fresh) !== hash(g)) denied()
     if (task) await deps.tasks.assert(database, fresh, task, channelId)
     if (channelId) {
       const created = await read(database, g.storeId, 'channel.' + channelId)
       if (created?.agentId !== g.agentId || !task || created.task?.taskId !== task.taskId) denied()
-      const c = await readTeam(database, g.storeId, 'channel.' + channelId)
+      // Check the exact native snapshot returned to callers, including create receipt replay.
+      const c = currentChannel || await readTeam(database, g.storeId, 'channel.' + channelId)
       if (!c || c.archived || !c.members.some((m: any) => m.staffId === 'agent:' + g.agentId) ||
         c.members.some((m: any) => m.staffId !== 'agent:' + g.agentId && !g.staffIds.includes(m.staffId))) denied()
       const humans = c.members.filter((m: any) => m.staffId !== 'agent:' + g.agentId).map((m: any) => m.staffId)
@@ -43,7 +44,8 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
     const a: TeamActor = { id: g.sponsorUserId, storeId: g.storeId, staffId: 'agent:' + g.agentId, role: 'agent' }
     bindTeamAgent(a, { action, agentId: g.agentId, grantVersion: g.version, clientRevision: g.clientRevision, name: g.displayName, context: task ? { task, replyToSeq } : undefined,
       created: async (database, c) => { await authorize(database, g, action, task); await put(database, g.storeId, 'channel.' + c.id, { agentId: g.agentId, task, createdAt: new Date(now()).toISOString() }) },
-      check: database => authorize(database, g, action, task, channelId) })
+      check: database => authorize(database, g, action, task, channelId),
+      channel: (database, c) => authorize(database, g, action, task, c.id, c) })
     return { a, g }
   }
   return {

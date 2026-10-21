@@ -7,7 +7,7 @@ import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
 import { recordTeamAgentReply } from './teamAgentBridge/events'
-import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentTaskAuthority } from './teamAgentBridge/identity'
+import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentTaskAuthority, teamAgentChannelAccess } from './teamAgentBridge/identity'
 import { enqueueTeamTaskReminder } from './TeamTaskReminderService'
 
 export const TEAM_PREFIX = 'team.communication.'
@@ -105,6 +105,7 @@ async function channel(db: DB, a: TeamActor, id: string, auditReason?: string) {
   uuid.parse(id); await identity(db, a)
   const c = await read<TeamChannel>(db, a.storeId, channelKey(id))
   if (!c) fail(404, 'TEAM_CHANNEL_NOT_FOUND')
+  await teamAgentChannelAccess(db, a, c)
   const member = c.members.find(m => m.staffId === a.staffId)
   if (auditReason !== undefined) {
     if (!canTeam(a, 'team.audit') || auditReason.trim().length < 5 || auditReason.length > 500) fail(403, 'TEAM_AUDIT_REQUIRED')
@@ -255,6 +256,9 @@ export function teamCommunication(db: DB = prisma) {
     async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization, managementAuthorization?: ManagementAuthorization) {
       const v = messageSchema.parse(input)
       return db.$transaction(async (tx: DB) => {
+        // Agent receipts are scoped by store/author/request, not by channel.
+        // Serialize that scope before inspecting or producing either channel's effects.
+        if (teamAgentProvenance(a)) await lock(tx, a.storeId, `request.${a.staffId}.${v.requestId}`)
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c } = await channel(tx, a, id)
         const requestKey = `request.${a.staffId}.${v.requestId}`

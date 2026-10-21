@@ -35,7 +35,7 @@ bridge.withActor(action, taskRef, channelId, callback) 仅向可信服务提供�
 ## 验收命令与限制
 
 - server tsc；admin/staff tsc；git diff --check。
-- 本轮已通过：14组官方MCP/真实临时PG桥接用例；67组原生沟通回归；34组CI范围决策。独立代码复审已修复3项并确认无新增明确P1/P2。
+- 初次提交已通过：14组官方MCP/真实临时PG桥接用例；67组原生沟通回归；34组CI范围决策。独立代码复审已修复3项并确认无新增明确P1/P2。
 - CI范围已新增 teamAgentBridge 域及隔离脚本入口。
 - `BT_TEST_RUN=bt-test-team-agent-<batch> python3 scripts/test-team-agent-bridge.py`：官方 MCP 2026-07-28 客户端＋随机本机 HTTP＋临时 PostgreSQL，使用合成员工、授权、task port 与附件存储，不连接生产。
 - `BT_TEST_RUN=bt-test-team-native-<batch> python3 scripts/test-team-communication.py`：原生团队沟通回归，模型/通知传输均为 fixture。
@@ -46,3 +46,11 @@ bridge.withActor(action, taskRef, channelId, callback) 仅向可信服务提供�
 ## 迁云依赖
 
 生产代码不写 Mac 路径、localhost 拓扑或启动方式。须保留：事务数据库中的会话/消息/幂等 receipt/关联 pending、私有附件存储及授权加载端口、可信身份及实时 grant resolver、任务授权端口、原生通知投递 wake 与恢复、主线程 Events 的持久投递/重试能力。迁云需迁移这些持久数据并配置新网络/秘密供应；新实例重连使用持久序号与 eventId。pending 本轮只表示待执行，没有执行器领取租约，未来消费者必须复用主线执行权/租约，不能多实例直接执行。未采购或迁移服务器。
+
+## 3090beac 独立复审后的最小修复
+
+- agent 发消息的 requestId 回执作用域为 store/agent/requestId。现在先获得该作用域的数据库锁，再获得频道锁、重验授权、读取回执及产生任何消息/提醒副作用；不同频道并发不能各自提交冲突正文或任务。普通员工发送锁顺序未改。
+- 所有可信 agent 的原生 channel 读取都检查实际返回的同一频道快照（任务关联索引、成员范围、active 员工、归档状态），包含 create 幂等回执重放；创建 capability 不再因最初没有 channelId 跳过对象授权。
+- 修复后本轮实际运行 16 组官方 MCP/临时 PostgreSQL：新增跨频道并发的真实数据库锁等待＋唯一消息/回执断言、同频道并发正向，以及 grant 字节不变时由原生管理员改成员/恢复/归档后的 create 回放拒绝。日志 output/team-agent-bridge/p2-regression.log；结果 output/team-agent-bridge/result.json；临时数据库清理完成。
+- server tsc 在本次修复代码上通过。67 组原生回归、admin/staff 类型检查和34组CI范围结果属于上一提交验证，本轮未宣称重新运行。
+- 生产仍默认关闭，未部署、扩 grant、发送真实消息或调用模型。最终放行由主线程对固定增量复审决定。
