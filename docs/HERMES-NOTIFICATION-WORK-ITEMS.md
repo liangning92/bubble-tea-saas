@@ -1,6 +1,6 @@
 # Hermes 通知与员工工作项适配
 
-本线复用原生消息、employee.workspace 提醒/投递记录、员工 TeamTask 和审批感知投影。不创建平行通知库、任务状态机、worker 或模型调用。沟通桥基础提交 `3090beacaf7ca9f3fccd2ba2b03a67d458ce5d71`；本地基线另含 master `783ab68963c1ce95528941c15bab47a94b30bf96`。桥基础独立复审另发现跨频道 requestId 并发锁、创建回放当前成员/归档复验两项 P2，须纳入桥维护者后续固定修复；不能凭本线通过就单独放行基础桥。
+本线复用原生消息、employee.workspace 提醒/投递记录、员工 TeamTask 和审批感知投影。不创建平行通知库、任务状态机、worker 或模型调用。沟通桥基础提交 `3090beacaf7ca9f3fccd2ba2b03a67d458ce5d71`，必须含后续两项 P2 修复 `78bb84460f474d0b837c3f20ff108e81d6952d8e`（跨频道 requestId 并发锁、创建回放当前成员/归档复验），本候选已纳入。原生员工任务另补同 actor/requestId 锁，先于频道锁，避免两个频道并发重复执行任务请求。本地基线另含 master `783ab68963c1ce95528941c15bab47a94b30bf96`。
 
 ## 默认关闭与授权契约
 
@@ -52,7 +52,7 @@ InboxService 由主集成线程独占，本线未改。合入时需保留既有 
 
 ## 验证与真实设备
 
-`python3 scripts/with-docker-test.py -- python3 scripts/test-team-work-items.py --native-regression`：官方 MCP 客户端/临时 HTTP、临时 PG、20 组新场景、5 组通知 HTTP、67 组原生沟通。CI 默认新脚本只跑前两类；原生回归由既有 teamCommunication 域选择，避免重复。仅合成账号/模拟 Push，无真实模型。涵盖幂等、真实权限降级、旧 client/version/撤权竞态、审批零业务写、跨店/历史 floor、任务和提醒/signal 真写后抛错全回滚、员工 Inbox/已读与任务状态分离。
+`python3 scripts/with-docker-test.py -- python3 scripts/test-team-work-items.py --native-regression --bridge-regression`：官方 MCP 客户端/临时 HTTP、单个临时 PG，原20组+新增2组原生任务受控并发共22组、16组桥（包含两项P2）、5组通知HTTP、67组原生沟通均通过。新增并发用例真实持有第一 receipt 读取并观察第二频道 PostgreSQL Lock 等待，证明 assign/review 两路径均仅1次变更。CI 默认新脚本只跑工作项22组和通知5组；桥/原生回归由各自既有域选择，避免重复。另有10组既有设备、17组通知HTTP、7组跨进程/PG停启回归通过。仅合成账号/模拟 Push，无真实模型。涵盖幂等、真实权限降级、旧 client/version/撤权竞态、审批零业务写、跨店/历史 floor、任务和提醒/signal 真写后抛错全回滚、员工 Inbox/已读与任务状态分离。
 
 `node tests/stoploss/team-work-item-target-browser-check.cjs`：真实 React 合成页面的消息/任务/行动定位和三宽响应式。不能代替真实手机。
 
