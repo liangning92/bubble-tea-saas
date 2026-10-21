@@ -16,8 +16,9 @@ SOURCE = "/Users/liangning/.hermes/hermes-agent"
 PYTHON = SOURCE + "/venv/bin/python3"
 
 
-def worker(case, root):
+def worker(case, root, source_dir=None):
     root = str(Path(root).resolve())
+    source = source_dir or SOURCE
     home = Path(root) / ("home-" + case)
     home.mkdir()
     os.environ.clear()
@@ -26,7 +27,7 @@ def worker(case, root):
     from runtime_capture import run_employee, run_ticket, digest
     import socket
     socket.socket.connect = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("NETWORK_DISABLED"))
-    sys.path.insert(0, SOURCE)
+    sys.path.insert(0, source)
     import httpx
     calls = 0
     tool_calls = 0
@@ -34,7 +35,7 @@ def worker(case, root):
     expected_channel = "channel-employee-A"
     context = {"purpose": "employee_work", "compartmentKey": digest("channel-A-members-version-1"),
                "memoryNamespace": digest("channel-A-members-version-1"), "executionId": "execution-" + case,
-               "isolatedRoot": root, "hermesSource": SOURCE, "providerBaseUrl": "http://127.0.0.1:49191/v1",
+               "isolatedRoot": root, "hermesSource": source, "providerBaseUrl": "http://127.0.0.1:49191/v1",
                "hermesExpectedSha": "a7198a8855ad98681114ff5138eb01fe132a62e7",
                "model": "employee-fixture", "providerCredential": "synthetic-not-a-real-credential",
                "input": "Tolong bantu persiapan buka toko.",
@@ -51,11 +52,30 @@ def worker(case, root):
         context["tools"]["employee_update_task"] = {"name": "employee_update_task", "description": "Update only the current authorized task.",
             "parameters": {"type": "object", "properties": {"taskId": {"type": "string"}, "state": {"type": "string"}},
                 "required": ["taskId", "state"], "additionalProperties": False}}
+    source_env_attempts = []
+    mutation_denied = []
+    if source_dir:
+        env_path = str(Path(source) / ".env")
+        def audit_source_env(event, args):
+            if event == "open" and args and isinstance(args[0], (str, bytes)) and os.fsdecode(args[0]) == env_path:
+                source_env_attempts.append(True)
+        sys.addaudithook(audit_source_env)
 
     def model_service(client, request, **kwargs):
         nonlocal calls
         assert kwargs.get("follow_redirects") is False
         calls += 1
+        if case == "multi_late_dotenv":
+            from dotenv import load_dotenv
+            load_dotenv(Path(source) / ".env")
+        if case == "multi_env_mutation":
+            for key, value in {"HOME": str(Path(root).parent / "manager-outside"),
+                "HERMES_HOME": str(Path(root).parent / "manager-outside"), "HERMES_YOLO": "1",
+                "OPENAI_BASE_URL": "https://synthetic-forbidden.invalid/v1"}.items():
+                try: os.environ[key] = value
+                except PermissionError: mutation_denied.append(key)
+        if case == "multi_mapping_mutation":
+            os.environ._data[b"HERMES_HOME"] = str(Path(root).parent / "manager-outside").encode()
         if case == "multi_lost":
             raise httpx.ReadTimeout("synthetic response unknown", request=request)
         if calls == 1:
@@ -161,6 +181,13 @@ def worker(case, root):
                 return {"frames": [json.loads(line) for line in outgoing.getvalue().splitlines()], "providerCalls": calls}
             result = run_ticket(ticket, config, port, provider_send=model_service)
             result.update(providerCalls=calls, hostEvents=port.events, unknownMarks=port.unknown, task=port.task)
+            if source_dir:
+                result["environmentChecks"] = {"sourceEnvOpenAttempts": len(source_env_attempts),
+                    "sourceEnvSentinelLoaded": "SYNTHETIC_SOURCE_ENV_TOKEN" in os.environ,
+                    "homeUnchanged": os.environ.get("HOME") == str(home),
+                    "effectiveProfileInsideExecution": Path(os.environ.get("HERMES_HOME", "/")).is_relative_to(Path(root) / "executions"),
+                    "sourcePermissionOrRouteLoaded": any(k in os.environ for k in ["HERMES_YOLO", "OPENAI_BASE_URL", "OPENAI_API_KEY", "HERMES_MODEL"]),
+                    "deniedMutations": mutation_denied}
             return result
         result = run_employee(context, provider_send=model_service, tool_execute=tool_service)
         result.update(providerCalls=calls, backendToolCalls=tool_calls)
@@ -168,12 +195,10 @@ def worker(case, root):
             # Reusing an execution/profile after restart must fail before provider/model access.
             second_home = Path(root) / "restart-home"
             second_home.mkdir()
-            os.environ.clear()
-            os.environ.update(HOME=str(second_home), PATH="/usr/bin:/bin", PYTHONDONTWRITEBYTECODE="1", NO_PROXY="*")
             try:
                 run_employee(context, provider_send=model_service, tool_execute=tool_service)
                 result["restartRejected"] = False
-            except FileExistsError:
+            except (ValueError, FileExistsError):
                 result["restartRejected"] = True
         return result
     except (ValueError, FileExistsError) as error:
@@ -291,6 +316,6 @@ class RuntimeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--worker":
-        print("RUNTIME_RESULT:" + json.dumps(worker(sys.argv[2], sys.argv[3]), ensure_ascii=False))
+        print("RUNTIME_RESULT:" + json.dumps(worker(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None), ensure_ascii=False))
     else:
         unittest.main()
