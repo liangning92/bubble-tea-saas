@@ -19,6 +19,8 @@ declare global {
       // Updates
       checkForUpdates: () => Promise<{ updateAvailable: boolean }>
       downloadUpdate: () => Promise<boolean | {status:string; info?:any; progress:number; error?:string; currentVersion:string}>
+  waitForLocalServer?: () => Promise<{ready:boolean}>
+  notifyLoginReady?: () => void
   consumeUpgradeSession?: () => Promise<string|null>
   getUpdateState?: () => Promise<{status:string; info?:any; progress:number; error?:string; currentVersion:string}>
       installUpdate: (snapshot: any) => Promise<boolean>

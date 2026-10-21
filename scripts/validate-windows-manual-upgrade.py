@@ -14,6 +14,7 @@ import tempfile
 import time
 import winreg
 import runpy
+import re
 import socket
 import threading
 import traceback
@@ -44,6 +45,9 @@ APP.mkdir()
 DATA.joinpath('data').mkdir(parents=True)
 DB = DATA / 'data/dev.db'
 CASES = []
+SHORTCUT_CHECKS = []
+SHORTCUT_LAUNCHES = []
+OWNED_SHORTCUTS = []
 COMPLETED = False
 TRACE = pathlib.Path(os.environ['RUNNER_TEMP']) / 'btps-upgrade-validator-trace.txt'
 
@@ -215,6 +219,59 @@ def drive_installer(exe, process=None, on_retry=None, run_after_finish=True):
         assert retry_seen, 'Expected ordinary Retry dialog was not exercised'
 
 
+def shortcut_snapshot(seed=False):
+    # Resolve the real Windows shell folders, including redirected desktops.
+    # Fixture paths are supplied as process environment, never executable text.
+    script = r'''
+$ErrorActionPreference='Stop'
+[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new()
+$desktop=[Environment]::GetFolderPath('DesktopDirectory')
+$programs=[Environment]::GetFolderPath('Programs')
+$shell=New-Object -ComObject WScript.Shell
+$explorer=New-Object -ComObject Shell.Application
+$specs=@(@{kind='desktop';path=(Join-Path $desktop 'BTPS.lnk')},@{kind='start-menu';path=(Join-Path $programs 'BTPS.lnk')},@{kind='legacy-desktop';path=(Join-Path $desktop 'BubbleTeaPOS.lnk')})
+$rows=@(foreach($spec in $specs){
+ if($env:BTPS_SHORTCUT_SEED -eq '1'){
+  [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($spec.path)) | Out-Null
+  $link=$shell.CreateShortcut($spec.path)
+  $link.TargetPath=$env:BTPS_SHORTCUT_STALE_EXE
+  $link.WorkingDirectory=[IO.Path]::GetDirectoryName($env:BTPS_SHORTCUT_STALE_EXE)
+  $link.IconLocation=$env:BTPS_SHORTCUT_STALE_EXE+',0'
+  $link.Arguments='--obsolete-location'
+  $link.Save()
+ }
+ $exists=Test-Path -LiteralPath $spec.path
+ if($exists){
+  $link=$shell.CreateShortcut($spec.path)
+  $folder=$explorer.NameSpace([IO.Path]::GetDirectoryName($spec.path))
+  $item=$folder.ParseName([IO.Path]::GetFileName($spec.path))
+  [pscustomobject]@{kind=$spec.kind;path=$spec.path;exists=$true;target=$link.TargetPath;workingDirectory=$link.WorkingDirectory;icon=$link.IconLocation;arguments=$link.Arguments;appId=$item.ExtendedProperty('System.AppUserModel.ID')}
+ }else{[pscustomobject]@{kind=$spec.kind;path=$spec.path;exists=$false}}
+})
+ConvertTo-Json -InputObject $rows -Depth 4 -Compress
+'''
+    env = dict(os.environ, BTPS_SHORTCUT_SEED='1' if seed else '0',
+               BTPS_SHORTCUT_STALE_EXE=str(TEMP / 'retired-location/BTPS.exe'))
+    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script],
+                            env=env, capture_output=True, encoding='utf-8', timeout=30)
+    assert result.returncode == 0, ('Shortcut inspection failed', result.stdout, result.stderr)
+    return json.loads(result.stdout.strip().lstrip('\ufeff'))
+
+
+def verify_shortcuts(phase):
+    rows = shortcut_snapshot()
+    expected = os.path.normcase(str(APP / 'BTPS.exe'))
+    assert len(rows) == 3
+    for row in rows:
+        assert row['exists'], (phase, 'Missing shortcut', row)
+        assert os.path.normcase(row['target']) == expected, (phase, row)
+        assert os.path.normcase(row['workingDirectory']) == os.path.normcase(str(APP)), (phase, row)
+        assert os.path.normcase(row['icon'].rsplit(',', 1)[0].strip('"')) == expected, (phase, row)
+        assert row['arguments'] == '' and row['appId'] == 'com.bubbletea.pos', (phase, row)
+    SHORTCUT_CHECKS.append({'phase': phase, 'links': rows})
+    print(json.dumps({'shortcutPhase': phase, 'passed': True, 'links': rows}), flush=True)
+
+
 def verify_started_runtime(expected_version):
     env = dict(os.environ, BTPS_OWNED_RUNTIME=str(APP / 'BTPS.exe'))
     query = "$rows=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $env:BTPS_OWNED_RUNTIME} | Select-Object ProcessId,ExecutablePath); ConvertTo-Json -InputObject $rows -Compress"
@@ -246,7 +303,17 @@ def verify_started_runtime(expected_version):
                     verified = True
                     ready_at = time.monotonic()
                     trace(f'runtime-ready at={ready_at:.3f} version={expected_version}')
-                    return {'readyAtMonotonic': ready_at, 'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
+                    crash = DATA / 'logs/crash.log'
+                    marks = re.findall(r'\[STARTUP\] (window-created|login-visible|api-ready) pid=(\d+) elapsedMs=(\d+)', crash.read_text(errors='replace') if crash.is_file() else '')
+                    assert marks, 'Installed startup must record window, login paint and API readiness'
+                    boot_pid = next(pid for name, pid, _ in reversed(marks) if name == 'window-created')
+                    metrics = {name: int(elapsed) for name, pid, elapsed in marks if pid == boot_pid}
+                    assert int(boot_pid) in {row['ProcessId'] for row in launched}
+                    assert 0 < metrics['window-created'] <= 10000, ('Cashier window appeared too late', metrics)
+                    assert 0 < metrics['login-visible'] <= 10000, ('Login form appeared too late', metrics)
+                    assert metrics['window-created'] < metrics['api-ready'], metrics
+                    print(json.dumps({'startupMetrics': metrics, 'loginVisibleLimitMs': 10000}), flush=True)
+                    return {'startupMetrics': metrics,'readyAtMonotonic': ready_at, 'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
         print('Owned restart processes: ' + json.dumps(launched), flush=True)
         print('Owned loopback health result: ' + json.dumps(last_health), flush=True)
@@ -285,6 +352,9 @@ def verify_started_runtime(expected_version):
             raise RuntimeError('Owned installed POS did not exit normally')
 
 try:
+    initial_links = shortcut_snapshot()
+    assert not any(row['exists'] for row in initial_links), 'Runner must have no existing BTPS shortcuts'
+    OWNED_SHORTCUTS = [pathlib.Path(row['path']) for row in initial_links]
     fixture()
     history = historic()
     result = invoke('prepare')
@@ -341,6 +411,9 @@ try:
     CASES.append('compiled-helper-backup-failure-preserves-database')
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, REG, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as key:
         winreg.SetValueEx(key, 'InstallLocation', 0, winreg.REG_SZ, str(APP))
+        winreg.SetValueEx(key, 'KeepShortcuts', 0, winreg.REG_SZ, 'true')
+    # Reproduce a previous installation whose links survive but point elsewhere.
+    shortcut_snapshot(seed=True)
     installer = next(ROOT.glob('release/BTPS-*-Windows-x64.exe'))
     # A leftover local service must wait/retry without touching the DB/program.
     def owned_listener():
@@ -396,6 +469,12 @@ try:
     assert fast_downtime <= 120, ('Prepared upgrade exceeded 120 second release limit', fast_downtime)
     assert historic() == history, 'Restart must preserve the original business rows'
     CASES.append('real-interactive-nsis-online-install-without-repeat-confirmation-and-history-preserved')
+    verify_shortcuts('interactive-upgrade-repairs-stale-links')
+    CASES.append('interactive-upgrade-repairs-stale-desktop-and-start-menu-shortcuts')
+    # Reproduce the employee's missing desktop AND missing Start menu entry.
+    # Do this before the downtime timer, and remove only links owned by this run.
+    for link in OWNED_SHORTCUTS[:2]:
+        link.unlink()
     invoke('stage')
     invoke('refresh-stage')
     silent_started = time.monotonic()
@@ -409,6 +488,15 @@ try:
     print(json.dumps({'silentDowntimeSeconds': round(silent_downtime, 3), 'testCleanupSeconds': round(time.monotonic() - silent_ready_at, 3), 'localApiReady': silent_runtime['localApiReady']}), flush=True)
     assert silent_downtime <= 120, ('Silent update exceeded downtime limit', silent_downtime)
     CASES.append('silent-nsis-online-install-restarts-original-profile-and-preserves-history')
+    verify_shortcuts('silent-upgrade-restores-missing-links')
+    CASES.append('silent-upgrade-restores-missing-desktop-and-start-menu-shortcuts')
+    for link in OWNED_SHORTCUTS[:2]:
+        os.startfile(str(link))
+        runtime = verify_started_runtime(expected_version)
+        runtime.pop('readyAtMonotonic')
+        assert historic() == history
+        SHORTCUT_LAUNCHES.append({'path': str(link), 'runtime': runtime})
+    CASES.append('desktop-and-start-menu-shortcuts-launch-current-installed-runtime')
 
     if SCOPE in ('installer', 'legacy'):
         # Reproduce the employee failure with a valid receipt for another package.
@@ -474,7 +562,9 @@ try:
         authentic392 = authentic_validate(ROOT, TEMP, APP, DATA, DB, drive_installer, historic, verify_started_runtime, expected_version, alternate_profile,
             original_version='2026.10.392', original_hash='4b3b9d22e71d85e3e949d432d8a4a947ee0346b51505975bd98b63e41f137eff')
         assert authentic392['backgroundBackupReused'] and authentic392['downtimeSeconds'] <= 120
-    report = {'scope': SCOPE, 'authentic392': authentic392, 'authentic372': authentic372, 'authentic384': authentic384,
+    assert len(SHORTCUT_CHECKS) == 2 and len(SHORTCUT_LAUNCHES) == 2
+    report = {'scope': SCOPE, 'shortcuts': {'passed': True, 'checks': SHORTCUT_CHECKS, 'launches': SHORTCUT_LAUNCHES},
+              'authentic392': authentic392, 'authentic372': authentic372, 'authentic384': authentic384,
               'preparedDowntimeSeconds': round(fast_downtime, 3), 'silentDowntimeSeconds': round(silent_downtime, 3), 'downtimeLimitSeconds': 120, 'downtimeEndpoint': 'installed-local-api-ready-before-test-teardown', 'authentic295': authentic,
               'sourceSha': os.environ['GITHUB_SHA'], 'syntheticOnly': True, 'noRealDatabaseAccess': True,
               'allCriticalCasesPassed': True, 'installedVersion': installed_version, 'expectedVersion': expected_version,
@@ -497,6 +587,8 @@ except BaseException:
     pathlib.Path(os.environ['RUNNER_TEMP'], 'btps-upgrade-validator-error.txt').write_text(traceback.format_exc(), encoding='utf-8')
     raise
 finally:
+    for link in OWNED_SHORTCUTS:
+        link.unlink(missing_ok=True)
     # Remove only fixture roots created after absence assertions in this script.
     # On failure retain all synthetic artifacts for CI diagnosis.
     if COMPLETED:

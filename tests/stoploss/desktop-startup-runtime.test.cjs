@@ -105,3 +105,24 @@ test('closing Windows cashier exits normally even if a receipt renderer remains 
   handler();
   assert.deepEqual(actions, ['customer-close', 'normal-quit']);
 });
+
+async function packagedBoot(fail) {
+  const ast=ts.createSourceFile('main.ts',source,ts.ScriptTarget.Latest,true);let callback;
+  function visit(n){if(ts.isCallExpression(n)&&n.expression.getText(ast)==='app.whenReady().then')callback=n.arguments[0].getText(ast);ts.forEachChild(n,visit)}visit(ast);assert.ok(callback);
+  const calls=[];let launch,ready;
+  const service=new Promise(resolve=>{ready=resolve});
+  const context={process:{platform:'win32',uptime:()=>1,pid:7},app:{isPackaged:true},console:{log(){},error(){},warn(){}},printerLoadFailed:false,globalShortcut:{register(){}},log:{error(){}},writeCrash(){},mainWindow:null,
+    createMainWindow:()=>{context.mainWindow={isDestroyed:()=>false};calls.push('window')},setupUpdater:()=>calls.push('updater'),onlineInstallationHooks:{},
+    createCustomerWindow:()=>calls.push('customer'),startLocalServer:()=>{calls.push('server');return service},waitForPort:async()=>{if(fail)throw Error('API failed')},
+    finishLocalServerBoot:state=>calls.push('ready:'+state),windowsPrinter:{warm:async()=>{calls.push('printer')}},checkForUpdatesOnStart(){},stopLocalServer(){},showErrorPage:()=>calls.push('error'),
+    setImmediate:fn=>{launch=fn},setTimeout:()=>{},
+  };
+  vm.runInNewContext(ts.transpileModule('globalThis.run='+callback,{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,context);
+  await context.run();assert.deepEqual(calls,['window','updater'],'cashier exists before server or printer initialization');launch();assert.deepEqual(calls,['window','updater','server']);ready();for(let i=0;i<8;i++)await Promise.resolve();return calls;
+}
+test('packaged login window exists while local API remains pending; customer and printer wait for readiness',async()=>{
+ assert.deepEqual(await packagedBoot(false),['window','updater','server','ready:true','customer','printer']);
+});
+test('API failure keeps the original early window and shows its existing startup error',async()=>{
+ assert.deepEqual(await packagedBoot(true),['window','updater','server','ready:false','error']);
+});

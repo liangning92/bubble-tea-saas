@@ -20,7 +20,18 @@ const queryClient = new QueryClient({
   }
 })
 
+const root = ReactDOM.createRoot(document.getElementById('root')!)
+function render(desktopStarting = false) {
+  root.render(<React.StrictMode><ErrorBoundary><QueryClientProvider client={queryClient}><HashRouter>
+    <ToastProvider><App desktopStarting={desktopStarting}/></ToastProvider>
+  </HashRouter></QueryClientProvider></ErrorBoundary></React.StrictMode>)
+}
 async function start(){
+  if(window.electronAPI?.waitForLocalServer){
+    render(true)
+    const state=await window.electronAPI.waitForLocalServer()
+    if(!state.ready)return // The main process displays the existing actionable startup error.
+  }
   try {
     const raw=await window.electronAPI?.consumeUpgradeSession?.()
     if(raw){
@@ -42,12 +53,6 @@ async function start(){
   })
   connectionManager.startHealthCheck(30000)
   void connectionManager.connect().catch(() => {})
-  ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <ErrorBoundary><QueryClientProvider client={queryClient}><HashRouter>
-        <ToastProvider><App /></ToastProvider>
-      </HashRouter></QueryClientProvider></ErrorBoundary>
-    </React.StrictMode>
-  )
+  render()
 }
 void start()
