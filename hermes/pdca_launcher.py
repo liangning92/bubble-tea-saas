@@ -59,6 +59,8 @@ def gateway_config(spec, home):
     denied = {"provider": "custom", "model": "pdca-raw-denied", "base_url": policy.provider_base_url, "api_key": SENTINEL}
     return {"model": {"default": "MiniMax-M3.1-Flash", "provider": "custom", "base_url": policy.provider_base_url, "api_key": SENTINEL, "streaming": False},
         "fallback_model": [], "compression": {"enabled": False},
+        "tools": {"tool_search": {"enabled": "off"}},
+        "security": {"allow_lazy_installs": False, "tirith_enabled": False},
         "memory": {"memory_enabled": False, "user_profile_enabled": False, "nudge_interval": 0},
         "auxiliary": {name: {**denied, "enabled": False} for name in ("vision", "approval", "compression", "title_generation", "session_search", "web_extract", "curator", "background_review", "moa_reference")},
         "platform_toolsets": {"api_server": ["pdca_executor_only"], "cli": []},
@@ -70,10 +72,14 @@ def live_runtime_projector(home, *, environment=None):
     """Read this explicit private profile only. No import of Hermes/default config loader."""
     env = os.environ if environment is None else environment
     if env.get("HERMES_HOME") != str(home): raise Blocked("LIVE_PROFILE_CHANGED")
+    if env.get("HERMES_DISABLE_LAZY_INSTALLS") != "1" or env.get("TIRITH_ENABLED") != "0":
+        raise Blocked("RUNTIME_INSTALL_GUARD_CHANGED")
     cfg = json.loads(private_file(Path(home) / "config.yaml"))
     model = cfg.get("model", {}); memory = cfg.get("memory", {}); aux = cfg.get("auxiliary", {})
     expected_aux = {"provider": "custom", "model": "pdca-raw-denied", "base_url": model.get("base_url"), "api_key": SENTINEL, "enabled": False}
-    if (model.get("provider") != "custom" or model.get("default") != "MiniMax-M3.1-Flash" or model.get("streaming") is not False
+    if (cfg.get("tools") != {"tool_search": {"enabled": "off"}}
+            or cfg.get("security") != {"allow_lazy_installs": False, "tirith_enabled": False}
+            or model.get("provider") != "custom" or model.get("default") != "MiniMax-M3.1-Flash" or model.get("streaming") is not False
             or cfg.get("platform_toolsets") != {"api_server": ["pdca_executor_only"], "cli": []}
             or cfg.get("mcp_servers") != {} or memory.get("user_profile_enabled") is not False
             or set(aux) != {"vision", "approval", "compression", "title_generation", "session_search", "web_extract", "curator", "background_review", "moa_reference"}
@@ -271,7 +277,7 @@ def activate(spec, *, spawn=subprocess.Popen, now=time.time, start_watchdog=True
     public = {"endpoints": spec["endpoints"], "pilot": spec["pilot"], "private_client_file": spec["private_client_file"], "profile_home": str(home)}
     _write_new(home / "pdca-launch.json", json.dumps(public))
     env = {"HOME": str(isolated_user_home), "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8", "HERMES_HOME": str(home), "API_SERVER_HOST": "127.0.0.1", "API_SERVER_PORT": str(spec["port"]), "API_SERVER_KEY": key,
-        "PYTHONPATH": str(source), "HERMES_GATEWAY_NO_SUPERVISE": "1", "HERMES_ENABLE_PROJECT_PLUGINS": "0", "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1"}
+        "PYTHONPATH": str(source), "HERMES_GATEWAY_NO_SUPERVISE": "1", "HERMES_ENABLE_PROJECT_PLUGINS": "0", "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1", "HERMES_DISABLE_LAZY_INSTALLS": "1", "TIRITH_ENABLED": "0"}
     policy = policy_for(spec); policy.validate(now())
     policy.validate_runtime(live_runtime_projector(home, environment=env))
     process = spawn(launch["argv"], cwd=launch["cwd"], env=env, start_new_session=True)

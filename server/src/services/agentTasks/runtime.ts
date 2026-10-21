@@ -9,7 +9,7 @@ export type PublishTaskEvent = (storeId: string, event: AgentTaskEvent) => Promi
 /** Post-commit composition. Explicit recovery is callable by the existing service host;
  * this module creates no worker, timer, subscription or credentials on import.
  */
-export function createAgentTaskRuntime(db: any, service: AgentTaskService,
+export function createAgentTaskRuntime(db: any, service: AgentTaskService & { supervise?: (p: AgentPrincipal, input: {taskId:string;runId:string;round:number;expectedVersion:number;authVersion:number}) => Promise<AgentTaskView> },
   dispatcher: ReturnType<typeof createAgentTaskDispatcher>, publish: PublishTaskEvent) {
   if (!publish || !dispatcher?.dispatch || !dispatcher?.reconcile) throw Error('AGENT_RUNTIME_DEPENDENCIES_REQUIRED')
   async function publishEvent(storeId: string, event: AgentTaskEvent) {
@@ -65,6 +65,16 @@ export function createAgentTaskRuntime(db: any, service: AgentTaskService,
       return result
     },
     async review(p, input) {
+      // Only an explicit manager rework may refresh terminal evidence for this
+      // exact legacy deadline failure. Background recovery never downgrades unknown.
+      if (input.decision === 'rework' && input.programFailureId) {
+        const current = await service.get(p, { taskId: input.taskId, authVersion: input.authVersion })
+        if (current.state === 'unknown' && current.error === 'AGENT_TASK_PROGRAM_REPORT_DEADLINE_UNKNOWN' &&
+          current.runId === input.runId && current.round === input.round && current.taskVersion === input.expectedVersion &&
+          current.programFailure?.id === input.programFailureId && current.programFailure.version === input.programFailureVersion) {
+          await dispatcher.reconcile(p, { eventId: current.dispatch.eventId, authVersion: input.authVersion })
+        }
+      }
       const result = await service.review(p, input)
       if (input.decision === 'rework') {
         await dispatcher.dispatch(p, { eventId: result.dispatch.eventId, authVersion: input.authVersion })
@@ -82,6 +92,25 @@ export function createAgentTaskRuntime(db: any, service: AgentTaskService,
     service: wrapped,
     /** Recover only currently authorized durable events; old IDs never create new runs. */
     async recoverOutbox(principal: AgentPrincipal, input: Parameters<AgentTaskService['events']>[1]) {
+      // The durable cursor may already be past dispatch_ready. Poll only this
+      // store's singleton current run, never replay admission or scan other tasks.
+      let reconciledEventId: string | undefined
+      if (principal.role === 'manager') {
+        const singleton = await readTeam<any>(db, principal.storeId, 'agent.task.code.STOCK-RO-001')
+        if (singleton?.taskId) {
+          const current = await service.get(principal, { taskId: singleton.taskId, authVersion: input.authVersion })
+          const dispatch = await readTeam<any>(db, principal.storeId, `agent.dispatch.${current.dispatch.eventId}`)
+          if (['assigned', 'running'].includes(current.state) && !current.report && dispatch?.mapping && dispatch.runId === current.runId) {
+            await dispatcher.reconcile(principal, { eventId: current.dispatch.eventId, authVersion: input.authVersion })
+            reconciledEventId = current.dispatch.eventId
+            if (service.supervise) {
+              const fresh = await service.get(principal, { taskId: current.taskId, authVersion: input.authVersion })
+              try { await service.supervise(principal, { taskId: fresh.taskId, runId: fresh.runId, round: fresh.round, expectedVersion: fresh.taskVersion, authVersion: input.authVersion }) }
+              catch (error: any) { if (!['AGENT_TASK_VERSION_CONFLICT', 'AGENT_TASK_RUN_CHANGED'].includes(error?.message)) throw error }
+            }
+          }
+        }
+      }
       const page = await service.events(principal, input)
       let nextCursor = input.after
       for (const event of page.events) {
@@ -90,7 +119,7 @@ export function createAgentTaskRuntime(db: any, service: AgentTaskService,
           const current = await service.get(principal, { taskId: event.payload.taskId, authVersion: input.authVersion })
           if (current.runId !== event.payload.runId || current.round !== event.payload.round) { nextCursor = event.sequence; continue }
           await dispatcher.dispatch(principal, { eventId: event.id, authVersion: input.authVersion })
-          await dispatcher.reconcile(principal, { eventId: event.id, authVersion: input.authVersion })
+          if (reconciledEventId !== event.id) await dispatcher.reconcile(principal, { eventId: event.id, authVersion: input.authVersion })
         } else {
           const delivery = await publishEvent(principal.storeId, event)
           if (!delivery.accepted) return { ...page, nextCursor, hasMore: true, pendingEventId: event.id, retryAt: delivery.retryAt }

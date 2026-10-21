@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """One full real archived-Hermes loop; run through with-docker-test.py.
 
-Requires prebuilt API dist, a temporary Python3.11 SDK1.27 venv and the existing
-Hermes read-only dependency directory. Never installs into actual Hermes.
+Requires prebuilt API dist and an explicit disposable Python3.11 full gateway
+venv with official SDK1.27. No default or live Hermes dependency site is used. Never installs into actual Hermes.
 """
 import argparse
 from datetime import datetime
@@ -22,7 +22,7 @@ import time
 
 ROOT=Path(__file__).resolve().parents[3]
 PIN='a7198a8855ad98681114ff5138eb01fe132a62e7'
-REAL=Path('/Users/liangning/.hermes/hermes-agent')
+REAL=None
 OUT=ROOT/'output/hermes-full-loop'
 
 def port():
@@ -34,6 +34,39 @@ def wait_file(p,process,timeout=40):
         if process.poll() is not None: raise RuntimeError('OWNED_CHILD_EXITED_BEFORE_READY')
         time.sleep(.1)
     raise RuntimeError('OWNED_CHILD_START_TIMEOUT')
+def short_owned_base(run):
+    # Preserve the backend batch-owner guard and leave room for Darwin AF_UNIX.
+    assert run.startswith('bt-test-') and len(run)==20 and all(c in '0123456789abcdef' for c in run[8:]),'TEST_BATCH_REQUIRED'
+    base=Path(tempfile.mkdtemp(prefix=run+'-h-',dir='/tmp'));base.chmod(0o700)
+    return base
+
+def fixture_profile(base):
+    # The real CLI resolver requires the profiles parent, not just the leaf name.
+    return base/'profiles/stock-ro-001'
+
+def fixture_client_file(base):
+    # Private config rejects symlink ancestors; /tmp on Darwin is a symlink.
+    # Only the credential-file reference is canonical, never HERMES_HOME.
+    return (base/'client.json').resolve()
+
+def poll_run_status(opener, request, deadline, *, now=time.monotonic, pause=time.sleep):
+    """Retry only read timeouts inside the original absolute loop deadline."""
+    from urllib.error import URLError
+    assert request.get_method()=='GET','STATUS_POLL_MUST_BE_READ_ONLY'
+    while True:
+        remaining=deadline-now()
+        if remaining<=0:raise RuntimeError('ISOLATED_REAL_LOOP_TIMEOUT')
+        try:
+            with opener.open(request,timeout=min(3,remaining)) as response:state=json.load(response)
+        except (TimeoutError,URLError) as error:
+            if isinstance(error,URLError) and not isinstance(error.reason,TimeoutError):raise
+        else:
+            if now()>=deadline:raise RuntimeError('ISOLATED_REAL_LOOP_TIMEOUT')
+            if state['status'] in ('completed','failed','cancelled','stopped'):return state
+        remaining=deadline-now()
+        if remaining<=0:raise RuntimeError('ISOLATED_REAL_LOOP_TIMEOUT')
+        pause(min(.15,remaining))
+
 def command(args,**kw): return subprocess.run(args,check=True,cwd=ROOT,**kw)
 def private(path,text): path.write_text(text); path.chmod(0o600)
 def kill(p):
@@ -42,16 +75,18 @@ def kill(p):
         try: p.wait(timeout=10)
         except subprocess.TimeoutExpired: os.killpg(p.pid,signal.SIGKILL);p.wait(timeout=5)
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--sdk-python',required=True);args=parser.parse_args()
+    global REAL
+    parser=argparse.ArgumentParser();parser.add_argument('--sdk-python',required=True);parser.add_argument('--hermes-source',required=True);args=parser.parse_args()
+    REAL=Path(args.hermes_source).resolve()
     run=os.environ.get('BT_TEST_RUN','');assert run.startswith('bt-test-'),'Use scripts/with-docker-test.py'
     sdk=Path(args.sdk_python).resolve();assert sdk.is_file()
     # Resolve symlinks only for validation, use the venv path to discover its owned site.
     sdk_venv=Path(args.sdk_python).parent.parent
     sdk_sites=list((sdk_venv/'lib').glob('python3.11/site-packages'))
-    hermes_sites=REAL/'venv/lib/python3.11/site-packages'
-    assert len(sdk_sites)==1 and hermes_sites.is_dir(),'PYTHON311_DEPENDENCIES_REQUIRED'
+    assert len(sdk_sites)==1,'FRESH_FULL_GATEWAY_PYTHON311_DEPENDENCIES_REQUIRED'
+    assert not sdk_venv.resolve().is_relative_to(REAL.resolve()),'DEFAULT_HERMES_VENV_FORBIDDEN'
     assert command(['/usr/bin/git','-C',str(REAL),'rev-parse','HEAD'],capture_output=True,text=True).stdout.strip()==PIN
-    base=Path(tempfile.mkdtemp(prefix=run+'-hermes-full-',dir='/tmp')).resolve();base.chmod(0o700)
+    base=short_owned_base(run)
     isolated_env={'PATH':os.environ.get('PATH','/usr/bin:/bin'),'LANG':'en_US.UTF-8','HOME':str(base/'user-home'),'BT_TEST_RUN':run,'BT_TEST_LABEL':os.environ.get('BT_TEST_LABEL','')}
     (base/'user-home').mkdir(mode=0o700)
     backend=child=None;started=False;cleanup=False;status='not_run';reason=None;handles=[]
@@ -83,11 +118,11 @@ def main():
         blog=(OUT/(run+'-backend.log')).open('w');handles.append(blog)
         backend=subprocess.Popen(['node',str(Path(__file__).with_name('backend.cjs'))],cwd=ROOT,env=backendenv,stdin=subprocess.PIPE,stdout=blog,stderr=subprocess.STDOUT,text=True,start_new_session=True)
         fixture=wait_file(base/'backend-ready.json',backend)
-        profile=base/'hermes-root/profiles/stock-ro-001';bearer='synthetic-only-'+os.urandom(32).hex();private(base/'gateway.key',bearer)
+        profile=fixture_profile(base);bearer='synthetic-only-'+os.urandom(32).hex();private(base/'gateway.key',bearer)
         private(base/'client.json',json.dumps({**fixture['endpoints'],'client_id':'synthetic-executor','client_secret':'synthetic-secret','scopes':['executor.claim','executor.evidence','executor.report']}))
-        spec={**{k:fixture[k] for k in ('endpoints','pilot')},'profile_home':str(profile),'hermes_source':str(source),'python_executable':str(Path(args.sdk_python)),'gateway_bearer_file':str(base/'gateway.key'),'private_client_file':str(base/'client.json'),'port':port()}
+        spec={**{k:fixture[k] for k in ('endpoints','pilot')},'profile_home':str(profile),'hermes_source':str(source),'python_executable':str(Path(args.sdk_python)),'gateway_bearer_file':str(base/'gateway.key'),'private_client_file':str(fixture_client_file(base)),'port':port()}
         sys.path.insert(0,str(ROOT/'hermes'));import pdca_launcher
-        guard={'root':str(base),'real_source':str(REAL),'source':str(source),'profile':str(profile),'sites':[str(p) for p in sdk_sites]+[str(hermes_sites)]};private(base/'guard.json',json.dumps(guard))
+        guard={'root':str(base),'real_source':str(REAL),'source':str(source),'profile':str(profile),'sites':[str(p) for p in sdk_sites]};private(base/'guard.json',json.dumps(guard))
         glog=(OUT/(run+'-gateway.log')).open('w');handles.append(glog)
         def spawn(argv,**kw):
             # The production bootstrap pins public endpoints; this explicit test-only
@@ -113,7 +148,8 @@ def main():
         private(profile/'pdca-launch.json',json.dumps({'endpoints':spec['endpoints'],'pilot':spec['pilot'],'private_client_file':spec['private_client_file'],'profile_home':str(profile)}))
         env={'PATH':'/usr/bin:/bin','LANG':'en_US.UTF-8','HOME':str(userhome),'HERMES_HOME':str(profile),
              'API_SERVER_HOST':'127.0.0.1','API_SERVER_PORT':str(spec['port']),'API_SERVER_KEY':bearer,
-             'HERMES_GATEWAY_NO_SUPERVISE':'1','HERMES_ENABLE_PROJECT_PLUGINS':'0','PYTHONNOUSERSITE':'1'}
+             'HERMES_GATEWAY_NO_SUPERVISE':'1','HERMES_ENABLE_PROJECT_PLUGINS':'0','PYTHONNOUSERSITE':'1',
+             'HERMES_DISABLE_LAZY_INSTALLS':'1','TIRITH_ENABLED':'0'}
         child=spawn([str(Path(args.sdk_python)),'-m','hermes_cli.main','--profile','stock-ro-001','gateway','run'],cwd=str(profile),env=env,start_new_session=True)
         # urllib proxy support disabled; only fixture loopback HTTP is reachable here.
         import urllib.request
@@ -132,11 +168,7 @@ def main():
         req=urllib.request.Request(origin+'/p/stock-ro-001/v1/runs',data=body,headers={'Authorization':'Bearer '+bearer,'Content-Type':'application/json','Idempotency-Key':fixture['dispatch']['references']['eventId']})
         with opener.open(req,timeout=10) as r: assert r.status==202; admitted=json.load(r)
         runid=admitted['run_id'];deadline=time.monotonic()+45
-        while True:
-            with opener.open(urllib.request.Request(origin+'/p/stock-ro-001/v1/runs/'+runid,headers={'Authorization':'Bearer '+bearer}),timeout=3) as r: state=json.load(r)
-            if state['status'] in ('completed','failed','cancelled','stopped'): break
-            if time.monotonic()>deadline: raise RuntimeError('ISOLATED_REAL_LOOP_TIMEOUT')
-            time.sleep(.15)
+        state=poll_run_status(opener,urllib.request.Request(origin+'/p/stock-ro-001/v1/runs/'+runid,headers={'Authorization':'Bearer '+bearer}),deadline)
         assert state['status']=='completed',json.dumps({'status':state['status']})
         backend.stdin.write('{"command":"finish"}\n');backend.stdin.flush();backend.stdin.close();backend.wait(timeout=10);assert backend.returncode==0,'NATIVE_REPORT_NOT_PERSISTED'
         native=json.loads((base/'backend-result.json').read_text())
@@ -144,7 +176,7 @@ def main():
         # startup probes as evidence; they are never silently allowed.
         blocked=[json.loads(x)['code'] for x in (base/'isolation-violations.jsonl').read_text().splitlines()] if (base/'isolation-violations.jsonl').exists() else []
         assert 'ACTUAL_RESOLVED_AGENT_UNSAFE' not in blocked,'ACTUAL_RESOLVED_AGENT_UNSAFE'
-        status='passed';private(OUT/'result.json',json.dumps({'batch':run,'status':status,'actualHermesCommit':PIN,'productionActivateTested':False,'testOnlyLauncher':True,'actualAIAgent':True,'actualOfficialSdk127':True,'actualNativeCore':True,'actualRestrictedRelay':True,'actualProvider':False,'actualAS':False,'sourceHashes':hashes,'blockedIsolationProbes':blocked,'forbiddenOsOperationsExecuted':0,'native':native},indent=2))
+        status='passed';private(OUT/(run+'-result.json'),json.dumps({'batch':run,'status':status,'actualHermesCommit':PIN,'productionActivateTested':False,'testOnlyLauncher':True,'actualAIAgent':True,'actualOfficialSdk127':True,'actualNativeCore':True,'actualRestrictedRelay':True,'actualProvider':False,'actualAS':False,'sourceHashes':hashes,'blockedIsolationProbes':blocked,'forbiddenOsOperationsExecuted':0,'native':native},indent=2))
         print('PASS one archived a719 real AIAgent /v1/runs → official SDK → restricted relay → native unverified report')
     except BaseException as e:
         status='failed';reason=str(e);raise
