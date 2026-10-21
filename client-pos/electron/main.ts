@@ -219,7 +219,7 @@ if (process.env.ELECTRON_DISABLE_GPU !== '1') {
 let mainWindow: BrowserWindow | null = null
 let finishLocalServerBoot: (ready: boolean) => void
 const localServerBoot = new Promise<boolean>(resolve => { finishLocalServerBoot = resolve })
-ipcMain.handle('wait-for-local-server', async event => ({ready: event.sender === mainWindow?.webContents && await localServerBoot}))
+ipcMain.handle('wait-for-local-server', async event => ({ready: (event.sender === mainWindow?.webContents || event.sender === customerWindow?.webContents) && await localServerBoot}))
 ipcMain.on('login-window-ready', event => {
   if (event.sender === mainWindow?.webContents) writeCrash('[STARTUP] login-visible pid=' + process.pid + ' elapsedMs=' + Math.round(process.uptime() * 1000))
 })
