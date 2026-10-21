@@ -124,6 +124,67 @@ class RunningPilot:
         return self.process.wait()
 
 
+class _VerifiedGitObjectBatch:
+    """Raw cat-file protocol, without filters, replacement refs or trusted metadata.
+
+    An object's bytes are usable only after its requested OID, object type, exact
+    framing and SHA-1 are independently checked. The child is always reaped.
+    """
+    def __init__(self, argv, env):
+        self.argv, self.env, self.process = argv, env, None
+
+    def __enter__(self):
+        try:
+            self.process = subprocess.Popen([*self.argv, "cat-file", "--batch"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, env=self.env)
+        except OSError:
+            raise Blocked("HERMES_SOURCE_UNVERIFIABLE") from None
+        return self
+
+    def read(self, kind, oid):
+        if kind not in ("commit", "tree", "blob") or len(oid) != 40 or any(c not in '0123456789abcdef' for c in oid):
+            raise Blocked("HERMES_OBJECT_INVALID")
+        process = self.process
+        try:
+            process.stdin.write(oid.encode('ascii') + b"\n")
+            process.stdin.flush()
+            header = process.stdout.readline(256)
+            parts = header.rstrip(b"\n").split(b" ")
+            if (not header.endswith(b"\n") or len(parts) != 3 or parts[0] != oid.encode('ascii')
+                    or parts[1] != kind.encode('ascii') or not parts[2].isdigit() or len(parts[2]) > 20):
+                raise Blocked("HERMES_OBJECT_INVALID")
+            size = int(parts[2])
+            body = process.stdout.read(size)
+            if len(body) != size or process.stdout.read(1) != b"\n":
+                raise Blocked("HERMES_OBJECT_INVALID")
+        except (OSError, ValueError):
+            raise Blocked("HERMES_SOURCE_UNVERIFIABLE") from None
+        digest = hashlib.sha1(kind.encode() + b" " + str(size).encode() + b"\0" + body).hexdigest()
+        if digest != oid:
+            raise Blocked("HERMES_OBJECT_HASH_CHANGED")
+        return body
+
+    def __exit__(self, kind, value, traceback):
+        process = self.process
+        try:
+            process.stdin.close()
+            if kind is not None:
+                process.kill()
+            try:
+                code = process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+                if kind is None:
+                    raise Blocked("HERMES_SOURCE_UNVERIFIABLE") from None
+            else:
+                if code != 0 and kind is None:
+                    raise Blocked("HERMES_SOURCE_UNVERIFIABLE")
+        finally:
+            process.stdout.close()
+
+
 def verify_source_tree(source, *, expected_commit=None):
     """Verify the fixed raw commit/tree object chain and exact trusted checkout bytes.
 
@@ -140,10 +201,10 @@ def verify_source_tree(source, *, expected_commit=None):
     expected_commit = expected_commit or PINNED_HERMES
     git_env = {"PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
                "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0", "GIT_NO_REPLACE_OBJECTS": "1"}
+    git_argv = ["/usr/bin/git", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "-c", "core.attributesFile=" + os.devnull, "-C", str(source)]
     def git(*args):
         try:
-            return subprocess.check_output(["/usr/bin/git", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "-c", "core.attributesFile=" + os.devnull,
-                "-C", str(source), *args], stderr=subprocess.DEVNULL, env=git_env)
+            return subprocess.check_output([*git_argv, *args], stderr=subprocess.DEVNULL, env=git_env)
         except (OSError, subprocess.CalledProcessError):
             raise Blocked("HERMES_SOURCE_UNVERIFIABLE") from None
     if Path(os.fsdecode(git("rev-parse", "--show-toplevel").strip())).resolve() != source.resolve():
@@ -152,46 +213,44 @@ def verify_source_tree(source, *, expected_commit=None):
         raise Blocked("HERMES_SOURCE_CHANGED")
     if git("ls-files", "--others", "--exclude-standard", "-z") or git("ls-files", "--others", "--ignored", "--exclude-standard", "-z"):
         raise Blocked("HERMES_SOURCE_EXTRA_FILES")
-    def object_bytes(kind, oid):
-        if len(oid) != 40 or any(c not in '0123456789abcdef' for c in oid): raise Blocked("HERMES_OBJECT_INVALID")
-        body = git("cat-file", kind, oid)  # Raw object only; NEVER --filters or check-attr.
-        digest = hashlib.sha1(kind.encode() + b" " + str(len(body)).encode() + b"\0" + body).hexdigest()
-        if digest != oid: raise Blocked("HERMES_OBJECT_HASH_CHANGED")
-        return body
-    commit = object_bytes("commit", expected_commit)
-    header = commit.split(b"\n", 1)[0]
-    if not header.startswith(b"tree "): raise Blocked("HERMES_COMMIT_INVALID")
-    root_tree = header[5:].decode('ascii')
-    tracked = {}
-    def visit(oid, prefix=b"", depth=0):
-        if depth > 100: raise Blocked("HERMES_TREE_INVALID")
-        body = object_bytes("tree", oid); offset = 0; names = set()
-        while offset < len(body):
-            space = body.find(b" ", offset); nul = body.find(b"\0", space + 1)
-            if space < offset or nul <= space or nul + 21 > len(body): raise Blocked("HERMES_TREE_INVALID")
-            mode, name = body[offset:space], body[space + 1:nul]
-            child = body[nul + 1:nul + 21].hex(); offset = nul + 21
-            if not name or b"/" in name or name in (b".", b"..", b".git") or name in names: raise Blocked("HERMES_TREE_INVALID")
-            names.add(name); filename = prefix + name
-            if mode == b"40000": visit(child, filename + b"/", depth + 1)
-            elif mode in (b"100644", b"100755"): tracked[filename] = (mode, child.encode())
-            else: raise Blocked("HERMES_SOURCE_BOUNDARY_INVALID")
-    visit(root_tree)
-    if not tracked: raise Blocked("HERMES_SOURCE_EMPTY")
-    # The pinned revision has ONE verified root attributes blob, no custom filters,
-    # encodings or nested rules. Only its explicit *.ps1 eol=crlf rule changes bytes.
-    attributes = [name for name in tracked if name.rsplit(b"/", 1)[-1] == b".gitattributes"]
-    checkout_hashes = {}
-    if attributes:
-        if attributes != [b".gitattributes"] or tracked[b".gitattributes"][1] != b"80824c67581d7be781d3f457280f7f1dbbd22897":
-            raise Blocked("HERMES_ATTRIBUTES_UNSUPPORTED")
-        object_bytes("blob", tracked[b".gitattributes"][1].decode())
-        for filename, (_, blob) in tracked.items():
-            if filename.endswith(b".ps1"):
-                original = object_bytes("blob", blob.decode())
-                if b"\r" in original: raise Blocked("HERMES_CHECKOUT_CONVERSION_UNSUPPORTED")
-                checkout = original.replace(b"\n", b"\r\n")
-                checkout_hashes[filename] = hashlib.sha1(b"blob " + str(len(checkout)).encode() + b"\0" + checkout).hexdigest().encode()
+    # One raw-object process avoids a new Git process for every tree/blob.
+    # Each response still verifies its exact requested OID, type, size and hash.
+    with _VerifiedGitObjectBatch(git_argv, git_env) as objects:
+        object_bytes = objects.read
+        commit = object_bytes("commit", expected_commit)
+        header = commit.split(b"\n", 1)[0]
+        if not header.startswith(b"tree "): raise Blocked("HERMES_COMMIT_INVALID")
+        root_tree = header[5:].decode('ascii')
+        tracked = {}
+        def visit(oid, prefix=b"", depth=0):
+            if depth > 100: raise Blocked("HERMES_TREE_INVALID")
+            body = object_bytes("tree", oid); offset = 0; names = set()
+            while offset < len(body):
+                space = body.find(b" ", offset); nul = body.find(b"\0", space + 1)
+                if space < offset or nul <= space or nul + 21 > len(body): raise Blocked("HERMES_TREE_INVALID")
+                mode, name = body[offset:space], body[space + 1:nul]
+                child = body[nul + 1:nul + 21].hex(); offset = nul + 21
+                if not name or b"/" in name or name in (b".", b"..", b".git") or name in names: raise Blocked("HERMES_TREE_INVALID")
+                names.add(name); filename = prefix + name
+                if mode == b"40000": visit(child, filename + b"/", depth + 1)
+                elif mode in (b"100644", b"100755"): tracked[filename] = (mode, child.encode())
+                else: raise Blocked("HERMES_SOURCE_BOUNDARY_INVALID")
+        visit(root_tree)
+        if not tracked: raise Blocked("HERMES_SOURCE_EMPTY")
+        # The pinned revision has ONE verified root attributes blob, no custom filters,
+        # encodings or nested rules. Only its explicit *.ps1 eol=crlf rule changes bytes.
+        attributes = [name for name in tracked if name.rsplit(b"/", 1)[-1] == b".gitattributes"]
+        checkout_hashes = {}
+        if attributes:
+            if attributes != [b".gitattributes"] or tracked[b".gitattributes"][1] != b"80824c67581d7be781d3f457280f7f1dbbd22897":
+                raise Blocked("HERMES_ATTRIBUTES_UNSUPPORTED")
+            object_bytes("blob", tracked[b".gitattributes"][1].decode())
+            for filename, (_, blob) in tracked.items():
+                if filename.endswith(b".ps1"):
+                    original = object_bytes("blob", blob.decode())
+                    if b"\r" in original: raise Blocked("HERMES_CHECKOUT_CONVERSION_UNSUPPORTED")
+                    checkout = original.replace(b"\n", b"\r\n")
+                    checkout_hashes[filename] = hashlib.sha1(b"blob " + str(len(checkout)).encode() + b"\0" + checkout).hexdigest().encode()
     indexed = {}
     for entry in git("ls-files", "--stage", "-z").split(b"\0"):
         if entry:
