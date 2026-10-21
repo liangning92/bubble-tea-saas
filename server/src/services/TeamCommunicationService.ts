@@ -7,7 +7,8 @@ import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
 import { recordTeamAgentReply } from './teamAgentBridge/events'
-import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess } from './teamAgentBridge/identity'
+import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentTaskAuthority } from './teamAgentBridge/identity'
+import { enqueueTeamTaskReminder } from './TeamTaskReminderService'
 
 export const TEAM_PREFIX = 'team.communication.'
 export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
@@ -427,8 +428,9 @@ export function teamCommunication(db: DB = prisma) {
     },
     async tasks(a: TeamActor, id: string, auditReason?: string) {
       const { c, fromSeq } = await channel(db, a, id, auditReason)
+      const authority = await teamAgentTaskAuthority(db, a, 'tasks.read')
       const plans = new Map<string, any>()
-      const tasks = (await list(db, a.storeId, `task.${id}.`, 201)).filter((t: TeamTask) => !t.agentTask && t.fromSeq >= fromSeq && (!t.planId || auditReason !== undefined || t.audienceIds?.includes(a.staffId)))
+      const tasks = (await list(db, a.storeId, `task.${id}.`, 201)).filter((t: TeamTask) => !t.agentTask && t.fromSeq >= fromSeq && (!t.planId || auditReason !== undefined || t.audienceIds?.includes(authority?.staffId || a.staffId)))
       for (const t of tasks) if (t.planId && !plans.has(t.planId)) plans.set(t.planId, await read(db, a.storeId, `operationPlan.${id}.${t.planId}`))
       return tasks.map(t => ({ ...t, ...(t.planId ? { planPaused: plans.get(t.planId)?.status !== 'published' || plans.get(t.planId)?.revision !== t.planRevision || plans.get(t.planId)?.audienceHash !== digest(c.members) } : {}) }))
         .sort((a: TeamTask, b: TeamTask) => b.createdAt.localeCompare(a.createdAt))
@@ -437,7 +439,9 @@ export function teamCommunication(db: DB = prisma) {
       const v = z.object({ requestId: uuid, roundId: uuid, minuteVersion: z.number().int().positive(), actionIndex: z.number().int().min(0).max(39) }).strict().parse(input)
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
-        const { c, fromSeq } = await channel(tx, a, id); manage(a, c)
+        const { c, fromSeq } = await channel(tx, a, id)
+        const authority = await teamAgentTaskAuthority(tx, a, 'tasks.assign')
+        manage(authority?.sponsor || a, c)
         if (c.archived) fail(409, 'TEAM_CHANNEL_CLOSED')
         const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, ...v })
         const previous = await read(tx, a.storeId, requestKey)
@@ -445,6 +449,7 @@ export function teamCommunication(db: DB = prisma) {
           if (previous.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT')
           const task = await read(tx, a.storeId, `task.${id}.${previous.taskId}`)
           if (!task || task.fromSeq < fromSeq) fail(404, 'TEAM_TASK_NOT_FOUND')
+          if (task.agentTask) fail(403, 'TEAM_AGENT_TASK_PRINCIPAL_REQUIRED')
           return task
         }
         const m = await read(tx, a.storeId, `minutes.${id}.${v.roundId}`)
@@ -457,8 +462,11 @@ export function teamCommunication(db: DB = prisma) {
         // Unchanged action snapshots deduplicate across minute versions and double clicks.
         const originKey = `taskOrigin.${id}.${v.roundId}.${digest(action)}`, existing = await read(tx, a.storeId, originKey)
         if (existing) {
+          const task = await read(tx, a.storeId, `task.${id}.${existing.taskId}`)
+          if (!task || task.fromSeq < fromSeq) fail(404, 'TEAM_TASK_NOT_FOUND')
+          if (task.agentTask) fail(403, 'TEAM_AGENT_TASK_PRINCIPAL_REQUIRED')
           await write(tx, a.storeId, requestKey, { hash, taskId: existing.taskId })
-          return read(tx, a.storeId, `task.${id}.${existing.taskId}`)
+          return task
         }
         if ((await list(tx, a.storeId, `task.${id}.`, 201)).length >= 200) fail(409, 'TEAM_TASK_LIMIT')
         const at = new Date().toISOString()
@@ -468,6 +476,7 @@ export function teamCommunication(db: DB = prisma) {
         await write(tx, a.storeId, `task.${id}.${task.id}`, task)
         await write(tx, a.storeId, originKey, { taskId: task.id })
         await write(tx, a.storeId, requestKey, { hash, taskId: task.id })
+        await enqueueTeamTaskReminder(tx, a.storeId, c, task, a.staffId)
         await audit(tx, a, id, 'create', { action: 'task', taskId: task.id, roundId: v.roundId, minuteVersion: m.version })
         return task
       })
@@ -479,8 +488,10 @@ export function teamCommunication(db: DB = prisma) {
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id)
+        const authority = await teamAgentTaskAuthority(tx, a, 'tasks.review')
+        if (authority && !['return', 'complete'].includes(v.action)) fail(403, 'TEAM_AGENT_REVIEW_ONLY')
         const key = `task.${id}.${taskId}`, task: TeamTask = await read(tx, a.storeId, key)
-        if (!task || task.fromSeq < fromSeq || task.planId && !task.audienceIds?.includes(a.staffId)) fail(404, 'TEAM_TASK_NOT_FOUND')
+        if (!task || task.fromSeq < fromSeq || task.planId && !task.audienceIds?.includes(authority?.staffId || a.staffId)) fail(404, 'TEAM_TASK_NOT_FOUND')
         if (task.agentTask) fail(403, 'TEAM_AGENT_TASK_PRINCIPAL_REQUIRED')
         const { criteriaConfirmed, ...legacyInput } = v
         const requestKey = `taskRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, taskId, ...legacyInput, ...(criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
@@ -503,8 +514,8 @@ export function teamCommunication(db: DB = prisma) {
             if (!message || n < fromSeq || n < task.fromSeq || message.authorId !== a.staffId) fail(400, 'TEAM_TASK_EVIDENCE_REQUIRED')
           }
         } else {
-          manage(a, c)
-          if (task.planId && ['return', 'complete'].includes(v.action) && task.reviewerId !== a.staffId) fail(403, 'TEAM_PLAN_REVIEWER_REQUIRED')
+          manage(authority?.sponsor || a, c)
+          if (task.planId && ['return', 'complete'].includes(v.action) && task.reviewerId !== (authority?.staffId || a.staffId)) fail(403, 'TEAM_PLAN_REVIEWER_REQUIRED')
           if (task.planId && v.action === 'complete' && (!v.criteriaConfirmed || !v.note)) fail(400, 'TEAM_PLAN_CRITERIA_REQUIRED')
           if (['return', 'complete'].includes(v.action) && task.status !== 'submitted') fail(409, 'TEAM_TASK_TRANSITION')
           if (['return', 'cancel'].includes(v.action) && !v.note) fail(400, 'TEAM_TASK_NOTE_REQUIRED')
@@ -516,6 +527,7 @@ export function teamCommunication(db: DB = prisma) {
         task.events.push({ action: v.action, by: a.staffId, at, note: v.note, sourceSeq: v.sourceSeq, ...(v.criteriaConfirmed ? { criteriaConfirmed: true } : {}) })
         await write(tx, a.storeId, key, task)
         await write(tx, a.storeId, requestKey, { hash, taskId })
+        await enqueueTeamTaskReminder(tx, a.storeId, c, task, a.staffId)
         await audit(tx, a, id, 'update', { action: 'task', taskId, version: task.version, status: task.status })
         return task
       })

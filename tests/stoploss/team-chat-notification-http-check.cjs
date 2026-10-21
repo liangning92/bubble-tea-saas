@@ -63,7 +63,7 @@ async function main(){
     const r=reminders.find(r=>r.chat.channelId===f.channel.id);assert.equal(await chatReminderRelevant(prisma,f.storeId,r),false);
    });
    await test('chat delivery reuses existing keys/subscriptions, deduplicates concurrency, and no subscription/key becomes in-app without generating credentials',async()=>{
-    const f=await fixture();await preset(f);await ownerMessage(f);const mock=pushMock();await Promise.all([deliver(f.storeId,prisma,mock),deliver(f.storeId,prisma,mock)]);await deliver(f.storeId,prisma,mock);assert.equal(mock.sent.length,1);assert.equal(mock.sent[0].title,'Pesan kerja baru / 新工作消息');assert.equal(mock.sent[0].url,'/team?channel='+encodeURIComponent(f.channel.id));assert(!JSON.stringify(mock.sent).includes('private body'));
+    const f=await fixture();await preset(f);const message=await ownerMessage(f);const mock=pushMock();await Promise.all([deliver(f.storeId,prisma,mock),deliver(f.storeId,prisma,mock)]);await deliver(f.storeId,prisma,mock);assert.equal(mock.sent.length,1);assert.equal(mock.sent[0].title,'Pesan kerja baru / 新工作消息');assert.equal(mock.sent[0].url,'/team?channel='+encodeURIComponent(f.channel.id)+'&message='+message.seq);assert(!JSON.stringify(mock.sent).includes('private body'));
     for(const hasSubscription of [false,true]){const g=await fixture();if(hasSubscription){await preset(g);await prisma.config.deleteMany({where:{storeId:g.storeId,key:'employee.workspace.push-keys'}})}await ownerMessage(g);const none=pushMock();await deliver(g.storeId,prisma,none);assert.equal(none.sent.length,0);assert.equal((await recipientReminder(g)).status,'in_app');assert.equal(await readWork(g.storeId,'push-keys'),null)}
     assert.equal(generatedKeys,0);
    });

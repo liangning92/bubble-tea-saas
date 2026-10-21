@@ -1,4 +1,5 @@
 import { chatReminderRelevant } from './TeamChatReminderService';
+import { teamTaskReminderRelevant } from './TeamTaskReminderService';
 import { managementFollowupRelevant } from './ManagementFollowupReminder';
 import { trainingUpdateRelevant } from './TrainingLibraryStore';
 import { collectApprovalNotices, approvalNoticeRelevant } from './NotificationApprovalService';
@@ -284,6 +285,7 @@ export async function reminderStillRelevant(
   if (r.expiresAt && new Date(r.expiresAt) <= now) return false;
   if (r.managementAction || r.event?.startsWith('management-followup:')) return managementFollowupRelevant(db, storeId, r);
   if (r.event?.startsWith('team-chat:')) return chatReminderRelevant(db, storeId, r);
+  if (r.teamTask || r.event?.startsWith('team-task:')) return teamTaskReminderRelevant(db, storeId, r);
   if (r.event?.startsWith('training-content:')) return trainingUpdateRelevant(db, storeId, r, r.staffId);
   if (r.event?.startsWith('approval-notice:')) return approvalNoticeRelevant(db, storeId, r, r.staffId);
   if (/^(?:hygiene-review:|review:|leave-review:|reimbursement-review:|overtimeRequest-review:|shiftSwap-review:|attendanceCorrection-review:|swap-confirm:|swap-result:)/.test(r.event)) return false;
