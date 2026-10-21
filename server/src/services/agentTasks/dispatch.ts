@@ -168,9 +168,15 @@ export function createAgentTaskDispatcher(db: any, dependencies: Pick<AgentTaskD
       try { result = await transport.status(record.mapping) }
       catch { result = { kind: 'status_unknown', mapping: record.mapping, reason: 'network_or_timeout' } }
       return db.$transaction(async (tx: any) => {
-        await lockTeam(tx, principal.storeId, 'agent.tasks'); const { p } = await scope(tx, principal, v.eventId, v.authVersion)
+        await lockTeam(tx, principal.storeId, 'agent.tasks'); const { p, task } = await scope(tx, principal, v.eventId, v.authVersion)
         const r = await readTeam<DispatchRecord>(tx, p.storeId, key(v.eventId))
         if (!r?.mapping || JSON.stringify(r.mapping) !== JSON.stringify(record.mapping) || JSON.stringify(result.mapping) !== JSON.stringify(record.mapping)) fail('AGENT_DISPATCH_RECEIPT_CHANGED')
+        // An HTTP poll cannot overwrite a newer business transition. Within the
+        // same task version a verified terminal receipt is monotonic: a delayed
+        // running/unknown poll may not reopen it or erase its recovery evidence.
+        if (task.version !== record.observedTaskVersion) return r
+        const terminal = (s: StatusResult | undefined) => s?.kind === 'status' && ['completed', 'failed', 'cancelled', 'interrupted'].includes(s.status)
+        if (terminal(r.lastStatus) && !terminal(result)) return r
         r.lastStatusTaskVersion = record.observedTaskVersion
         r.lastStatus = result; await saved(tx, p, r, 'agent_dispatch_status_checked'); return r
       })

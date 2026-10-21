@@ -123,12 +123,12 @@ const reviewBody = (view, evidenceId, decision) => ({ requestId: randomUUID(), a
   try {
     tenant = await prisma.tenant.create({ data: { name: 'Synthetic agent tasks HTTP acceptance' } }); await open();
     async function runtimeFixture(publish, options = {}) {
-      const f = await fixture(), native = createAgentTaskService(prisma, deps), profile = 'synthetic-runtime', origin = 'http://127.0.0.1:43112';
+      const f = await fixture(), localDeps = options.now ? {...deps,now:options.now} : deps, native = createAgentTaskService(prisma, localDeps), profile = 'synthetic-runtime', origin = 'http://127.0.0.1:43112';
       let sessionId, posts = 0, polls = 0; const hermesRunId = 'run_synthetic_' + randomUUID();
       const client = new HermesRunsClient({ origin, profile, bearerToken: () => 'synthetic-runtime-key', admissionBindings: persistentAdmissionBindings(prisma, f.storeId),
         fetch: async (_url, init) => { if (init.method === 'POST') { posts++; sessionId = JSON.parse(init.body).session_id; return { status: 202, text: async () => JSON.stringify({ run_id: hermesRunId, status: 'started', replayed: false }) } }
-          polls++; if(options.onStatus)await options.onStatus(); return { status: 200, text: async () => JSON.stringify({ run_id: hermesRunId, session_id: sessionId, status: options.status || 'running' }) } } });
-      const dispatcher = createAgentTaskDispatcher(prisma, deps, profile, client, { origin, identityId: 'synthetic-runtime', credentialGeneration: 1 });
+          polls++; const observedStatus=options.status||'running'; if(options.onStatus)await options.onStatus(); return { status: 200, text: async () => JSON.stringify({ run_id: hermesRunId, session_id: sessionId, status: observedStatus }) } } });
+      const dispatcher = createAgentTaskDispatcher(prisma, localDeps, profile, client, { origin, identityId: 'synthetic-runtime', credentialGeneration: 1 });
       const runtime = createAgentTaskRuntime(prisma, native, dispatcher, publish); service = runtime.service;
       return { f, native, dispatcher, runtime, posts: () => posts, polls: () => polls };
     }
@@ -179,6 +179,61 @@ const reviewBody = (view, evidenceId, decision) => ({ requestId: randomUUID(), a
       faultAudit=true;await assert.rejects(native.supervise(f.manager,{taskId:claim.taskId,runId:claim.runId,round:claim.round,expectedVersion:claim.taskVersion,authVersion:1}),/SYNTHETIC_AUDIT_FAILURE/);
       const after=await prisma.config.findMany({where:{storeId:f.storeId,key:{startsWith:'team.communication.'}},orderBy:{key:'asc'}});assert.deepEqual(after,before,'Task, program failure, lease, event cursor and outbox all roll back');
       await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:0,limit:100});const current=await good(f.managerToken,'get',{taskId:claim.taskId,authVersion:1});assert.equal(current.state,'unknown');assert.equal(current.programFailure.knownNotSent,false);assert(!current.report);assert.equal(x.posts(),1);
+    });
+    await check('terminal CAS: delayed running or unknown cannot erase terminal at same version or after supervision', async () => {
+      for(const [lateStatus,superviseBeforeRelease] of [['running',true],['running',false],['invalid-upstream-state',false]]){
+        const options={status:lateStatus},x=await runtimeFixture(async()=>[{state:'accepted'}],options),{f}=x,a=await good(f.managerToken,'assign',f.assignment),c=await good(f.executorToken,'claim',claimBody(a));
+        let release,started;const gate=new Promise(r=>release=r),entered=new Promise(r=>started=r);let once=true;
+        options.onStatus=async()=>{if(once){once=false;started();await gate}};
+        const late=x.dispatcher.reconcile(f.manager,{eventId:a.dispatch.eventId,authVersion:1});await entered;options.status='completed';
+        await x.dispatcher.reconcile(f.manager,{eventId:a.dispatch.eventId,authVersion:1});
+        if(superviseBeforeRelease)await x.native.supervise(f.manager,{taskId:c.taskId,runId:c.runId,round:c.round,expectedVersion:c.taskVersion,authVersion:1});
+        release();await late;
+        if(!superviseBeforeRelease)await x.native.supervise(f.manager,{taskId:c.taskId,runId:c.runId,round:c.round,expectedVersion:c.taskVersion,authVersion:1});
+        const current=await good(f.managerToken,'get',{taskId:c.taskId,authVersion:1}),record=await prisma.config.findUnique({where:{storeId_key:{storeId:f.storeId,key:'team.communication.agent.dispatch.'+a.dispatch.eventId}}});
+        console.log('TERMINAL_CAS_OBSERVATION',JSON.stringify({lateStatus,superviseBeforeRelease,state:current.state,lastStatus:JSON.parse(record.value).lastStatus.status}));
+        assert.equal(JSON.parse(record.value).lastStatus.status,'completed');assert.equal(current.state,'blocked');
+        const next=await good(f.managerToken,'review',{...claimBody(current),programFailureId:current.programFailure.id,programFailureVersion:1,decision:'rework',check:{summary:'Explicit manager verifies preserved terminal',checkedEvidenceIds:[],criteria:[{id:'native_refs',result:'not_met',note:'No report'}]},nextPlan:plan()});assert.equal(next.round,2);
+      }
+    });
+    await check('deadline recovery: explicit review alone reconciles legacy v3 ready receipt to v4 deadline failure, strict negatives stay unknown', async () => {
+      for(const variant of ['valid','calling','unknown','withheld','possible','wrong_source_version','nonterminal','revoked','extra_version','missing_mapping','review_without_assign','original_provider_unknown','audit_failure']){
+        let clock=Date.now();const options={status:'running',now:()=>clock},x=await runtimeFixture(async()=>[{state:'accepted'}],options),{f}=x,a=await good(f.managerToken,'assign',f.assignment),c=await good(f.executorToken,'claim',claimBody(a)),e=await good(f.executorToken,'readStockEvidence',leasedBody(c,c));
+        assert.equal(e.taskVersion,3);const modelId=randomUUID(),model={taskId:c.taskId,runId:c.runId,taskVersion:e.taskVersion,state:'ready',billingStatus:'usage_recorded',usage:{prompt_tokens:11951,completion_tokens:79},sourceRefs:sourceRefs(e.evidence),providerReceipt:{id:'synthetic-preserved-receipt'}};
+        const modelKey='team.communication.agent.model.request.'+f.executor.agentId+'.'+modelId;
+        if(variant==='original_provider_unknown'){model.state='unknown';model.billingStatus='possible'}
+        await put(f.storeId,'team.communication.agent.model.run.'+c.runId,{requestId:modelId});await put(f.storeId,modelKey,model);
+        if(variant!=='original_provider_unknown')clock+=600001;const old=await x.native.supervise(f.manager,{taskId:e.taskId,runId:e.runId,round:e.round,expectedVersion:e.taskVersion,authVersion:1});
+        assert.equal(old.taskVersion,4);assert.equal(old.state,'unknown');assert.equal(old.programFailure.code,variant==='original_provider_unknown'?'AGENT_TASK_PROGRAM_MODEL_OUTCOME_UNKNOWN':'AGENT_TASK_PROGRAM_REPORT_DEADLINE_UNKNOWN');assert.equal(old.programFailure.knownNotSent,false);assert(!old.report);
+        await x.runtime.recoverOutbox(f.manager,{authVersion:1,after:0,limit:100});assert.equal((await good(f.managerToken,'get',{taskId:old.taskId,authVersion:1})).state,'unknown','No automatic deadline-unknown recovery');
+        options.status=variant==='nonterminal'?'running':'completed';
+        if(variant==='missing_mapping'){const key='team.communication.agent.dispatch.'+a.dispatch.eventId,row=await prisma.config.findUnique({where:{storeId_key:{storeId:f.storeId,key}}}),r=JSON.parse(row.value);delete r.mapping;await put(f.storeId,key,r)}
+        if(['calling','unknown','withheld'].includes(variant)){model.state=variant;model.billingStatus='possible';await put(f.storeId,modelKey,model)}
+        if(variant==='possible'){model.billingStatus='possible';await put(f.storeId,modelKey,model)}
+        if(variant==='wrong_source_version'){model.taskVersion=2;await put(f.storeId,modelKey,model)}
+        if(variant==='review_without_assign'){const narrow={...f.manager,scopes:['management.read','management.review']};await put(f.storeId,grantKey(f.manager.agentId),{enabled:true,channelId:f.channel.id,principal:narrow});await put(f.storeId,'test.agent.bearer.'+f.managerToken,narrow)}
+        if(variant==='revoked')await put(f.storeId,grantKey(f.manager.agentId),{enabled:false,channelId:f.channel.id,principal:f.manager});
+        if(variant==='extra_version'){const row=await prisma.config.findUnique({where:{storeId_key:{storeId:f.storeId,key:'team.communication.task.'+f.channel.id+'.'+old.taskId}}}),t=JSON.parse(row.value);t.version++;await put(f.storeId,row.key,t)}
+        const current=variant==='extra_version'?{...old,taskVersion:5}:old;
+        const input={...claimBody(current),programFailureId:old.programFailure.id,programFailureVersion:old.programFailure.version,decision:'rework',check:{summary:'Manager explicitly reconciles preserved ready result and terminal executor',checkedEvidenceIds:[],criteria:[{id:'native_refs',result:'not_met',note:'Executor terminal without report; original receipt retained'}]},nextPlan:plan()};
+        let response;
+        if(variant==='audit_failure'){
+          // Reconcile using the real runtime first; then inject only review audit failure.
+          await x.dispatcher.reconcile(f.manager,{eventId:a.dispatch.eventId,authVersion:1});
+          const before=await prisma.config.findMany({where:{storeId:f.storeId},orderBy:{key:'asc'}});faultAudit=true;
+          await assert.rejects(createAgentTaskService(faultDb,{...deps,now:()=>clock}).review(f.manager,input),/SYNTHETIC_AUDIT_FAILURE/);
+          assert.deepEqual(await prisma.config.findMany({where:{storeId:f.storeId},orderBy:{key:'asc'}}),before);continue;
+        }
+        response=await request(f.managerToken,'review',input);
+        if(variant==='valid'){
+          assert.equal(response.status,200,JSON.stringify(response));assert.equal(response.body.data.round,2);assert.notEqual(response.body.data.runId,old.runId);assert.equal(x.posts(),2);
+          const row=await prisma.config.findUnique({where:{storeId_key:{storeId:f.storeId,key:'team.communication.task.'+f.channel.id+'.'+old.taskId}}}),stored=JSON.parse(row.value),check=stored.agentTask.checks.at(-1);
+          assert.deepEqual(check.programFailure,old.programFailure);assert.equal(check.recoveryProof.sourceTaskVersion,3);assert.equal(check.recoveryProof.failureTaskVersion,4);assert.equal(check.recoveryProof.modelRequestId,modelId);assert.equal(check.recoveryProof.terminal,'completed');
+          const log=await prisma.financeAuditLog.findFirst({where:{storeId:f.storeId,entityId:old.taskId,description:'agent_task_rework'},orderBy:{createdAt:'desc'}});assert.equal(JSON.parse(log.newValue).detail.recoveryProof.modelRequestId,modelId);
+          console.log('LEGACY_DEADLINE_RECOVERY',JSON.stringify({fromVersion:4,sourceVersion:3,originalKnownNotSent:check.programFailure.knownNotSent,newRound:2,terminal:check.recoveryProof.terminal}));
+        }else{assert.notEqual(response.status,200,variant);const row=await prisma.config.findUnique({where:{storeId_key:{storeId:f.storeId,key:'team.communication.task.'+f.channel.id+'.'+old.taskId}}});assert.equal(JSON.parse(row.value).agentTask.state,'unknown',variant);assert.equal(x.posts(),1)}
+        assert.deepEqual(JSON.parse((await prisma.config.findUnique({where:{storeId_key:{storeId:f.storeId,key:modelKey}}})).value),model,'Original provider receipt unchanged');
+      }
     });
     await check('runtime recovery cursor: limit-one pagination retries original event after publisher restart using returned cursor', async () => {
       let publisherCalls = 0, mode = 'failed'; const eventIds = [];

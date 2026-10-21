@@ -65,6 +65,16 @@ export function createAgentTaskRuntime(db: any, service: AgentTaskService & { su
       return result
     },
     async review(p, input) {
+      // Only an explicit manager rework may refresh terminal evidence for this
+      // exact legacy deadline failure. Background recovery never downgrades unknown.
+      if (input.decision === 'rework' && input.programFailureId) {
+        const current = await service.get(p, { taskId: input.taskId, authVersion: input.authVersion })
+        if (current.state === 'unknown' && current.error === 'AGENT_TASK_PROGRAM_REPORT_DEADLINE_UNKNOWN' &&
+          current.runId === input.runId && current.round === input.round && current.taskVersion === input.expectedVersion &&
+          current.programFailure?.id === input.programFailureId && current.programFailure.version === input.programFailureVersion) {
+          await dispatcher.reconcile(p, { eventId: current.dispatch.eventId, authVersion: input.authVersion })
+        }
+      }
       const result = await service.review(p, input)
       if (input.decision === 'rework') {
         await dispatcher.dispatch(p, { eventId: result.dispatch.eventId, authVersion: input.authVersion })
