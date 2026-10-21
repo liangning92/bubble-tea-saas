@@ -63,3 +63,11 @@ The profile regression additionally runs pinned a719's actual
 It requires named `profiles/stock-ro-001`, proves the former leaf-only layout is
 rejected, and preserves the lexical `/tmp` spelling (the CLI resolver preserves it)
 to stay under Darwin's socket limit. No production bootstrap guard is relaxed.
+
+Private client-config references alone use the canonical path, satisfying the
+unchanged runtime prohibition on symlink ancestors (`/tmp` is a Darwin alias).
+HERMES_HOME remains lexical `/tmp` for the profile/socket requirement. The real
+`load_private_config` regression verifies success, former lexical-path refusal,
+mode refusal, and explicit symlink refusal using only synthetic credentials.
+Successful artifacts are named `{BT_TEST_RUN}-result.json`; old successful batch
+artifacts remain historical, and `cleanup.json` identifies the current batch.

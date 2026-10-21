@@ -60,6 +60,33 @@ class PollTests(unittest.TestCase):
             with socket.socket(socket.AF_UNIX) as server:server.bind(str(path))
         finally:shutil.rmtree(base)
 
+class PrivateClientPathTests(unittest.TestCase):
+    def test_real_config_loader_uses_canonical_client_only_and_keeps_guards(self):
+        sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+        from pdca_bridge import Blocked,ProfilePolicy,TOOLS,SCOPES
+        from pdca_runtime import EndpointPolicy,load_private_config
+        from datetime import datetime,timezone
+        import time,uuid
+        base=fixture.short_owned_base('bt-test-abcdef123456')
+        try:
+            origin='http://127.0.0.1:18443'
+            pins=EndpointPolicy(origin,origin+'/issuer',origin+'/mcp/agent-tasks')
+            now=time.time()
+            stamp={'id':str(uuid.uuid4()),'startedAt':datetime.fromtimestamp(now-1,timezone.utc).isoformat(),'expiresAt':datetime.fromtimestamp(now-1+86400,timezone.utc).isoformat()}
+            policy=ProfilePolicy('stock-ro-001',origin,origin+'/agent-model/v1','pdca-raw-provider-denied',(),TOOLS,SCOPES,stamp)
+            path=fixture.fixture_client_file(base)
+            fixture.private(path,json.dumps({**vars(pins),'client_id':'synthetic-client','client_secret':'synthetic-secret','scopes':sorted(SCOPES)}))
+            self.assertEqual(load_private_config(path,endpoints=pins,policy=policy).client_id,'synthetic-client')
+            self.assertEqual(str(fixture.fixture_profile(base).parent.parent.parent),'/tmp')
+            if Path('/tmp').is_symlink():
+                with self.assertRaisesRegex(Blocked,'UNSAFE_CLIENT_FILE'):load_private_config(base/'client.json',endpoints=pins,policy=policy)
+            path.chmod(0o644)
+            with self.assertRaisesRegex(Blocked,'UNSAFE_CLIENT_FILE'):load_private_config(path,endpoints=pins,policy=policy)
+            path.chmod(0o600)
+            link=path.with_name('client-link.json');link.symlink_to(path)
+            with self.assertRaisesRegex(Blocked,'UNSAFE_CLIENT_FILE'):load_private_config(link,endpoints=pins,policy=policy)
+        finally:shutil.rmtree(base)
+
 class ActualProfileTests(unittest.TestCase):
     def test_actual_a719_cli_profile_resolver_and_gateway_self_route(self):
         source=os.environ.get('HERMES_SOURCE')

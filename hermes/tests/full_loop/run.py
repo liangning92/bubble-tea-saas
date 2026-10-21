@@ -44,6 +44,11 @@ def fixture_profile(base):
     # The real CLI resolver requires the profiles parent, not just the leaf name.
     return base/'profiles/stock-ro-001'
 
+def fixture_client_file(base):
+    # Private config rejects symlink ancestors; /tmp on Darwin is a symlink.
+    # Only the credential-file reference is canonical, never HERMES_HOME.
+    return (base/'client.json').resolve()
+
 def poll_run_status(opener, request, deadline, *, now=time.monotonic, pause=time.sleep):
     """Retry only read timeouts inside the original absolute loop deadline."""
     from urllib.error import URLError
@@ -115,7 +120,7 @@ def main():
         fixture=wait_file(base/'backend-ready.json',backend)
         profile=fixture_profile(base);bearer='synthetic-only-'+os.urandom(32).hex();private(base/'gateway.key',bearer)
         private(base/'client.json',json.dumps({**fixture['endpoints'],'client_id':'synthetic-executor','client_secret':'synthetic-secret','scopes':['executor.claim','executor.evidence','executor.report']}))
-        spec={**{k:fixture[k] for k in ('endpoints','pilot')},'profile_home':str(profile),'hermes_source':str(source),'python_executable':str(Path(args.sdk_python)),'gateway_bearer_file':str(base/'gateway.key'),'private_client_file':str(base/'client.json'),'port':port()}
+        spec={**{k:fixture[k] for k in ('endpoints','pilot')},'profile_home':str(profile),'hermes_source':str(source),'python_executable':str(Path(args.sdk_python)),'gateway_bearer_file':str(base/'gateway.key'),'private_client_file':str(fixture_client_file(base)),'port':port()}
         sys.path.insert(0,str(ROOT/'hermes'));import pdca_launcher
         guard={'root':str(base),'real_source':str(REAL),'source':str(source),'profile':str(profile),'sites':[str(p) for p in sdk_sites]};private(base/'guard.json',json.dumps(guard))
         glog=(OUT/(run+'-gateway.log')).open('w');handles.append(glog)
@@ -171,7 +176,7 @@ def main():
         # startup probes as evidence; they are never silently allowed.
         blocked=[json.loads(x)['code'] for x in (base/'isolation-violations.jsonl').read_text().splitlines()] if (base/'isolation-violations.jsonl').exists() else []
         assert 'ACTUAL_RESOLVED_AGENT_UNSAFE' not in blocked,'ACTUAL_RESOLVED_AGENT_UNSAFE'
-        status='passed';private(OUT/'result.json',json.dumps({'batch':run,'status':status,'actualHermesCommit':PIN,'productionActivateTested':False,'testOnlyLauncher':True,'actualAIAgent':True,'actualOfficialSdk127':True,'actualNativeCore':True,'actualRestrictedRelay':True,'actualProvider':False,'actualAS':False,'sourceHashes':hashes,'blockedIsolationProbes':blocked,'forbiddenOsOperationsExecuted':0,'native':native},indent=2))
+        status='passed';private(OUT/(run+'-result.json'),json.dumps({'batch':run,'status':status,'actualHermesCommit':PIN,'productionActivateTested':False,'testOnlyLauncher':True,'actualAIAgent':True,'actualOfficialSdk127':True,'actualNativeCore':True,'actualRestrictedRelay':True,'actualProvider':False,'actualAS':False,'sourceHashes':hashes,'blockedIsolationProbes':blocked,'forbiddenOsOperationsExecuted':0,'native':native},indent=2))
         print('PASS one archived a719 real AIAgent /v1/runs → official SDK → restricted relay → native unverified report')
     except BaseException as e:
         status='failed';reason=str(e);raise
