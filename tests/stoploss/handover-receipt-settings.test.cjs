@@ -57,3 +57,17 @@ test('confirmation metadata and expense details respect switches and selected am
  const shown=renderPreview({receiptItems:{expenses:true}});
  assert.ok(shown.includes('Cups'));assert.ok(shown.includes('Rp 773685'));assert.ok(shown.includes('Rp 35000'));
 });
+
+const normalizedModule={exports:{}};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('client-admin/src/utils/handoverSettings.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{module:normalizedModule,exports:normalizedModule.exports,require:()=>exportsObject});
+test('old cash/QRIS choices migrate to the single field map while explicit receipt choices win',()=>{
+ const normalize=normalizedModule.exports.normalizeHandoverSettings;
+ const legacy={requireSupervisorConfirm:true,cashDifferenceLimit:500,summaryItems:{cashSales:false,qrisSales:false,openFloat:false,orderCount:false},showSummary:false};
+ const migrated=normalize(legacy);
+ for(const key of ['cashReceived','cashReceipts','qrisReceipts','openFloat','orderCount'])assert.equal(migrated.receiptItems[key],false,key);
+ assert.equal(migrated.requireSupervisorConfirm,true);assert.equal(migrated.cashDifferenceLimit,500);
+ assert.equal('summaryItems' in migrated,false);assert.equal('showSummary' in migrated,false);
+ const current=normalize({...legacy,receiptItems:{cashReceived:true,qrisReceipts:true,openFloat:true,revenue:false}});
+ assert.equal(current.receiptItems.cashReceived,true);assert.equal(current.receiptItems.qrisReceipts,true);assert.equal(current.receiptItems.openFloat,true);assert.equal(current.receiptItems.revenue,false);
+ assert.equal(JSON.stringify(normalize(current)),JSON.stringify(current));assert.equal(legacy.summaryItems.cashSales,false);
+});
