@@ -12,7 +12,7 @@ const grant={agentId,displayName:'Synthetic isolated Hermes',storeId,sponsorUser
 const system=[{role:'system',content:'SYNTHETIC pinned isolated system assembly; no manager memory'}];
 let channel,source,scope;
 const deps={enabled:true,storeId,approvedSystemHashes:[hash(system)],resolveGrant:async()=>structuredClone(grant),tasks:{assert:async(_db,g,t,c)=>{assert.equal(g.storeId,storeId);assert.deepEqual(t,task);assert.equal(c,channel.id)}},readAttachment:async()=>{throw Error('UNAVAILABLE')}};
-const make=()=>createEmployeeRuntime(db,deps),check=async(name,fn)=>{await fn();passed.push(name);console.log('PASS '+name)};
+const make=()=>createEmployeeRuntime(db,deps),check=async(name,fn)=>{if(process.env.EMPLOYEE_RUNTIME_CASE&&!name.includes(process.env.EMPLOYEE_RUNTIME_CASE))return;await fn();passed.push(name);console.log('PASS '+name)};
 async function begin(){scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));return make().host.begin(grant,scope,[source])}
 const wire=t=>({model:t.model,messages:[...system,{role:'user',content:t.sealedUserContent}],tools:t.tools,stream:true});
 async function input(runtime,t,p,version=t.traceVersion,turn=1){return runtime.host.recordInput({executionId:t.executionId,expectedTraceVersion:version,turn,inputHash:hash(p),toolSchemaHash:t.toolSchemaHash,isolation:t.isolation,providerRequest:p})}
@@ -27,9 +27,9 @@ async function main(){
  await check('default off and fabricated scope cannot create execution',async()=>{await assert.rejects(()=>createEmployeeRuntime(db,{...deps,enabled:false}).host.begin(grant,{},[source]));scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));await assert.rejects(()=>make().host.begin(grant,{...scope,audienceHash:'f'.repeat(64)},[source]));});
  await check('complete two-tool rounds persist sources and native reply atomically',async()=>{
   const runtime=make(),t=await begin(),p=wire(t);let v=(await input(runtime,t,p)).traceVersion;
-  const read={role:'assistant',content:null,tool_calls:[{id:'read-message-1',type:'function',function:{name:'employee_read_message',arguments:JSON.stringify({seq:m.seq})}}]};v=(await response(runtime,t,v,read)).traceVersion;
+  const read={role:'assistant',content:null,tool_calls:[{id:'read-message-1',type:'function',function:{name:'employee_read_message',arguments:JSON.stringify({seq:m.seq},null,2)}}]};v=(await response(runtime,t,v,read)).traceVersion;
   const r=await runtime.host.executeTool({executionId:t.executionId,expectedTraceVersion:v,turn:1,callOrdinal:0,toolCallId:'read-message-1',name:'employee_read_message',args:{seq:m.seq}});v=r.traceVersion;assert.equal(r.value.text,m.text);assert.equal(r.sources[0].source.messageId,m.id);
-  p.messages.push({...read,content:''},{role:'tool',tool_call_id:'read-message-1',content:JSON.stringify(r.value)});v=(await input(runtime,t,p,v,2)).traceVersion;
+  p.messages.push({...read,content:'',tool_calls:read.tool_calls.map(c=>({...c,function:{...c.function,arguments:JSON.stringify(JSON.parse(c.function.arguments))}}))},{role:'tool',tool_call_id:'read-message-1',content:JSON.stringify(r.value)});v=(await input(runtime,t,p,v,2)).traceVersion;
   const send={role:'assistant',content:null,tool_calls:[{id:'send-message-1',type:'function',function:{name:'employee_send_message',arguments:JSON.stringify({text:'Siapa petugas yang dapat memeriksa penutup mesin hari ini?'})}}]};v=(await response(runtime,t,v,send,2)).traceVersion;
   const sent=await runtime.host.executeTool({executionId:t.executionId,expectedTraceVersion:v,turn:2,callOrdinal:0,toolCallId:'send-message-1',name:'employee_send_message',args:JSON.parse(send.tool_calls[0].function.arguments)});v=sent.traceVersion;assert.equal(sent.value.delivery,'stored');assert.equal(sent.value.seq,2);
   p.messages.push({...send,content:''},{role:'tool',tool_call_id:'send-message-1',content:JSON.stringify(sent.value)});v=(await input(runtime,t,p,v,3)).traceVersion;
@@ -52,7 +52,7 @@ async function main(){
   p.messages=[...system,{role:'user',content:t.sealedUserContent},{role:'assistant',content:'old stock private session'}];await assert.rejects(()=>input(make(),t,p));assert.equal((await make().inspect(t.executionId)).turn,0);await make().recover(t.executionId);
  });
  await check('model tool substitution and unknown sources fail closed',async()=>{
-  const t=await next(),p=wire(t);let v=(await input(make(),t,p)).traceVersion;await assert.rejects(()=>response(make(),t,v,{role:'assistant',content:null,tool_calls:[{id:'sql',type:'function',function:{name:'sql',arguments:'{}'}}]}));
+  const t=await next(),p=wire(t);let v=(await input(make(),t,p)).traceVersion;await response(make(),t,v,{role:'assistant',content:null,tool_calls:[{id:'sql',type:'function',function:{name:'sql',arguments:'{}'}}]});const blocked=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(blocked.phase,'unknown');assert.equal(blocked.responses[0].providerRequestId,'synthetic-provider-1');
   await make().recover(t.executionId);await assert.rejects(()=>make().host.begin(grant,scope,[{kind:'public_sop',id:'guessed',version:1}]));
  });
  await check('source mutation and current recipient change reject old execution',async()=>{
@@ -74,6 +74,16 @@ async function main(){
  });
  await check('source facts require the corresponding read scope, not sponsor admin or send permission',async()=>{
   task.version++;scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));const original=[...grant.actions];grant.actions=['messages.send'];await assert.rejects(()=>make().host.begin(grant,scope,[source]));grant.actions=original;
+ });
+ await check('second outbound in a later model round records blocked receipt and creates no second native message',async()=>{
+  const t=await next(),runtime=make(),p=wire(t),before=await readTeam(db,storeId,'channel.'+channel.id);let v=(await input(runtime,t,p)).traceVersion;
+  const call={id:'single-allowed-send',type:'function',function:{name:'employee_send_message',arguments:JSON.stringify({text:'Mohon cek penutup mesin ketika aman.'})}},assistant={role:'assistant',content:null,tool_calls:[call]};
+  v=(await response(runtime,t,v,assistant)).traceVersion;
+  const sent=await runtime.host.executeTool({executionId:t.executionId,expectedTraceVersion:v,turn:1,callOrdinal:0,toolCallId:call.id,name:call.function.name,args:JSON.parse(call.function.arguments)});v=sent.traceVersion;
+  p.messages.push({...assistant,content:''},{role:'tool',content:JSON.stringify(sent.value),tool_call_id:call.id});v=(await input(runtime,t,p,v,2)).traceVersion;
+  const blocked=await response(runtime,t,v,{role:'assistant',content:null,tool_calls:[{...call,id:'second-denied-send'}]},2);
+  assert.equal((await runtime.inspect(t.executionId)).phase,'unknown');const saved=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(saved.responses.length,2);assert.equal(saved.responses[1].providerRequestId,'synthetic-provider-2');assert.equal(saved.tools.length,1);assert.equal((await readTeam(db,storeId,'channel.'+channel.id)).lastSeq,before.lastSeq+1);
+  await assert.rejects(()=>input(runtime,t,p,blocked.traceVersion,3));
  });
  if(process.env.EMPLOYEE_REAL_HERMES==='1')await check('actual pinned Hermes child executes two scoped tools and persists all three real SDK turns',async()=>{
   const fs=require('node:fs/promises'),http=require('node:http'),os=require('node:os');
@@ -97,6 +107,7 @@ async function main(){
    const rebuilt=createEmployeeRuntime(db,{...deps,approvedSystemHashes:[],reviewedSystemTemplate:{hash:template.hash,isolatedRoot:root}});await rebuilt.recover(t.executionId);assert.equal((await rebuilt.inspect(t.executionId)).phase,'complete');assert.equal(calls,3);
   }finally{if(server)await new Promise(r=>server.close(r));await fs.rm(root,{recursive:true,force:true})}
  });
- console.log(JSON.stringify({passed,realPg:true,syntheticProvider:true,realHermes:false,productionWrites:0}));
+ assert(passed.length>0,'Test filter selected no checks');
+ console.log(JSON.stringify({passed,realPg:true,syntheticProvider:true,realHermes:process.env.EMPLOYEE_REAL_HERMES==='1',productionWrites:0}));
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>db.$disconnect());

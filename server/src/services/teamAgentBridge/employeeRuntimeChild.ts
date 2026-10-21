@@ -30,7 +30,7 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
     env:{PATH:'/usr/bin:/bin',PYTHONDONTWRITEBYTECODE:'1',PYTHONUNBUFFERED:'1'},stdio:['pipe','pipe','pipe'],cwd:config.isolatedRoot,
   })
   const decoder=new StringDecoder('utf8')
-  let version=ticket.traceVersion,buffer='',finished=false,failed=false,bytes=0
+  let version=ticket.traceVersion,buffer='',finished=false,failed=false,outputStored=false,bytes=0
   let queue:Promise<void>=Promise.resolve()
   const stop=()=>{failed=true;child.kill('SIGTERM')}
   const timer=setTimeout(stop,remaining)
@@ -49,7 +49,7 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
         const frame=JSON.parse(line)
         if(frame.protocol!==EMPLOYEE_RUNTIME_PROTOCOL||Object.keys(frame).some(k=>!['protocol','method','params'].includes(k)))throw Error('EMPLOYEE_RUNTIME_FRAME_INVALID')
         if(frame.method==='finished'){
-          if(finished||frame.params?.unknown||frame.params?.stored?.requestId!==ticket.requestId||frame.params?.stored?.traceVersion!==version)throw Error('EMPLOYEE_RUNTIME_UNCONFIRMED')
+          if(!outputStored||finished||frame.params?.unknown||frame.params?.stored?.requestId!==ticket.requestId||frame.params?.stored?.traceVersion!==version)throw Error('EMPLOYEE_RUNTIME_UNCONFIRMED')
           finished=true;return
         }
         if(finished||!frame.params||frame.params.executionId!==ticket.executionId||frame.params.expectedTraceVersion!==version)throw Error('EMPLOYEE_RUNTIME_FRAME_ORDER_INVALID')
@@ -58,11 +58,11 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
           case 'recordInput':result=await port.recordInput(frame.params);break
           case 'recordResponse':result=await port.recordResponse(frame.params);break
           case 'executeTool':result=await port.executeTool(frame.params);break
-          case 'recordOutput':result=await port.recordOutput(frame.params);break
+          case 'recordOutput':result=await port.recordOutput(frame.params);if(result?.requestId!==ticket.requestId||result?.text!==frame.params.providerMessage?.content)throw Error('EMPLOYEE_RUNTIME_OUTPUT_RECEIPT_INVALID');outputStored=true;break
           case 'markUnknown':await port.markUnknown(ticket.executionId,version,frame.params.code);failed=true;result=null;break
           default:throw Error('EMPLOYEE_RUNTIME_METHOD_DENIED')
         }
-        if(result?.traceVersion)version=result.traceVersion
+        if(frame.method!=='markUnknown'){if(!Number.isSafeInteger(result?.traceVersion)||result.traceVersion!==version+1)throw Error('EMPLOYEE_RUNTIME_RECEIPT_VERSION_INVALID');version=result.traceVersion}
         child.stdin.write(JSON.stringify({result})+'\n')
       }).catch(stop)
     }

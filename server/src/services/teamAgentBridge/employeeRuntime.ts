@@ -12,6 +12,9 @@ import { EMPLOYEE_RUNTIME_INSTRUCTION, EMPLOYEE_RUNTIME_PROTOCOL, EmployeeRuntim
 const fail = (code = 'EMPLOYEE_RUNTIME_TRACE_DENIED'): never => { throw new TeamError(409, code) }
 const canonical=(v:any):any=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v
 const same=(a:any,b:any)=>hash(canonical(a))===hash(canonical(b))
+// Pinned Hermes parses then compact-serializes model tool arguments between
+// rounds. Compare their JSON value, while preserving every other message field.
+const history=(messages:any[])=>messages.map(m=>m.tool_calls?{...m,tool_calls:m.tool_calls.map((c:any)=>({...c,function:{...c.function,arguments:JSON.parse(c.function.arguments)}}))}:m)
 const key = (id: string) => 'employeeRuntime.execution.' + id
 const pointer = (scope: CommunicationScope) => 'employeeRuntime.context.' + scope.compartmentKey
 const fn = (name: string, description: string, properties: any, required: string[]) => ({ type: 'function' as const, function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } })
@@ -115,7 +118,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
         const executionId=randomUUID(),requestId=randomUUID(),tools=[]
         if(g.actions.includes('messages.read')) tools.push(fn('employee_read_message','Read one current audience-visible message',{seq:{type:'integer',minimum:1}},['seq']))
         if(g.actions.includes('tasks.read')) tools.push(fn('employee_read_task','Read this assigned employee task',{},[]))
-        if(g.actions.includes('messages.send')) tools.push(fn('employee_send_message','Send a natural operational reply to this exact current audience',{text:{type:'string',minLength:1,maxLength:4000}},['text']))
+        if(g.actions.includes('messages.send')) tools.push(fn('employee_send_message','Send at most one natural operational reply in this execution to this exact current audience',{text:{type:'string',minLength:1,maxLength:4000}},['text']))
         const ticket:EmployeeRuntimeTicket={ protocol:EMPLOYEE_RUNTIME_PROTOCOL,executionId,requestId,traceVersion:1,compartmentKey:scope.compartmentKey,audienceHash:scope.audienceHash,
           inputContextHash:hash(facts),toolSchemaHash:hash(tools),sealedUserContent:JSON.stringify({task:scope.task,facts:facts.map(f=>f.value)}),instruction:EMPLOYEE_RUNTIME_INSTRUCTION,
           isolation:{protocol:EMPLOYEE_RUNTIME_PROTOCOL,profile:'employee_work',sessionId:'employee_work_'+hash([executionId,scope.compartmentKey]),compartmentKey:scope.compartmentKey,memoryNamespace:scope.compartmentKey,memoryEnabled:false,contextFilesEnabled:false,auxiliaryModelsEnabled:false,sharedHistoryEnabled:false,builtinToolsEnabled:false},model:'MiniMax-M3.1-Flash',tools }
@@ -139,7 +142,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
           if(prior.content===null)prior.content=''
           const expected=[...s.inputs.at(-1).messages,prior]
           for(const call of s.responses.at(-1).providerMessage.tool_calls||[]){const r=s.tools.find(t=>t.turn===s.turn&&t.toolCallId===call.id);if(!r)fail();expected.push({role:'tool',tool_call_id:call.id,content:JSON.stringify(r.value)})}
-          if(!same(messages,expected)) fail('EMPLOYEE_RUNTIME_HISTORY_MISMATCH')
+          if(!same(history(messages),history(expected))) fail('EMPLOYEE_RUNTIME_HISTORY_MISMATCH')
         }
         // Provider controls cannot inject alternate history, tools, extra models or endpoints.
         if(Object.keys(p).some(k=>!['model','messages','tools','tool_choice','stream','stream_options','temperature','reasoning_effort'].includes(k))) fail()
@@ -150,11 +153,13 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     async recordResponse(raw){const v=employeeRuntimeResponseSchema.parse(raw);return mutate(v.executionId,v.expectedTraceVersion,async(_tx,s)=>{
       if(s.phase!=='response'||v.turn!==s.turn) fail()
       const calls=v.providerMessage.tool_calls||[]
-      if(v.finishReason==='tool_calls' ? !calls.length : calls.length>0||!v.providerMessage.content) fail()
-      if(calls.length>5||new Set(calls.map(c=>c.id)).size!==calls.length||calls.some(c=>!s.ticket.tools.some(t=>t.function.name===c.function.name))) fail()
-      if(calls.filter(c=>c.function.name==='employee_send_message').length>1) fail()
-      for(const c of calls) JSON.parse(c.function.arguments)
-      s.responses.push(structuredClone(v));s.phase=calls.length?'tools':'final'
+      let invalid=(v.finishReason==='tool_calls' ? !calls.length : calls.length>0||!v.providerMessage.content) || calls.length>5 || new Set(calls.map(c=>c.id)).size!==calls.length || calls.some(c=>!s.ticket.tools.some(t=>t.function.name===c.function.name))
+      invalid ||= calls.filter(c=>c.function.name==='employee_send_message').length>1 || calls.some(c=>c.function.name==='employee_send_message')&&s.tools.some(t=>t.name==='employee_send_message')
+      for(const c of calls)try{JSON.parse(c.function.arguments)}catch{invalid=true}
+      // A complete but invalid provider result is still a known receipt. Preserve
+      // its ID/message before blocking; never discard it and invite blind retry.
+      s.responses.push(structuredClone(v));s.phase=invalid?'unknown':calls.length?'tools':'final'
+      if(invalid)s.fault={code:'EMPLOYEE_RUNTIME_PROVIDER_RESULT_BLOCKED',at:new Date(now()).toISOString()}
       return {traceVersion:s.version+1}
     })},
     async executeTool(raw){const v=employeeRuntimeToolSchema.parse(raw);return mutate(v.executionId,v.expectedTraceVersion,async(tx,s)=>{
