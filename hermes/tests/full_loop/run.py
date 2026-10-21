@@ -37,12 +37,12 @@ def wait_file(p,process,timeout=40):
 def short_owned_base(run):
     # Preserve the backend batch-owner guard and leave room for Darwin AF_UNIX.
     assert run.startswith('bt-test-') and len(run)==20 and all(c in '0123456789abcdef' for c in run[8:]),'TEST_BATCH_REQUIRED'
-    base=Path(tempfile.mkdtemp(prefix=run+'-h-',dir='/tmp')).resolve();base.chmod(0o700)
+    base=Path(tempfile.mkdtemp(prefix=run+'-h-',dir='/tmp'));base.chmod(0o700)
     return base
 
 def fixture_profile(base):
-    # Keep the bootstrap's exact profile identity without the extra parent chain.
-    return base/'stock-ro-001'
+    # The real CLI resolver requires the profiles parent, not just the leaf name.
+    return base/'profiles/stock-ro-001'
 
 def poll_run_status(opener, request, deadline, *, now=time.monotonic, pause=time.sleep):
     """Retry only read timeouts inside the original absolute loop deadline."""
