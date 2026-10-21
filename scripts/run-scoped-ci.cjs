@@ -37,6 +37,7 @@ async function browserCheck(check){
   if(plan.chatNotification){if(!plan.notificationAwareness)run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--chat-notify'])}
   if(plan.domains.includes('externalMcpEvents')){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-external-mcp-events.py']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-external-mcp-events.py','--automatic'])}
   if(plan.teamAgentBridge){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-agent-bridge.py'])}
+  if(plan.teamWorkItems){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-work-items.py'])}
   if(plan.teamCommunication){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py'])}
   if(plan.aiSettings){if(!plan.teamCommunication)run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--ai-settings'])}
   if(plan.http.length){
