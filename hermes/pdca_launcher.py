@@ -168,8 +168,12 @@ class _VerifiedGitObjectBatch:
     def __exit__(self, kind, value, traceback):
         process = self.process
         try:
-            process.stdin.close()
-            if kind is not None:
+            close_failed = False
+            try:
+                process.stdin.close()
+            except OSError:
+                close_failed = True
+            if kind is not None or close_failed:
                 process.kill()
             try:
                 code = process.wait(timeout=5)
@@ -179,7 +183,7 @@ class _VerifiedGitObjectBatch:
                 if kind is None:
                     raise Blocked("HERMES_SOURCE_UNVERIFIABLE") from None
             else:
-                if code != 0 and kind is None:
+                if (code != 0 or close_failed) and kind is None:
                     raise Blocked("HERMES_SOURCE_UNVERIFIABLE")
         finally:
             process.stdout.close()

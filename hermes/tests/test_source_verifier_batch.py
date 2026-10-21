@@ -55,5 +55,17 @@ class BatchProtocolTests(unittest.TestCase):
         for kwargs in [{'kind':'tag'}, {'oid':'HEAD'}, {'code':1}]:
             with self.subTest(kwargs=kwargs), self.assertRaises(Blocked): self.read(self.header+self.body+b'\n', **kwargs)
 
+    def test_broken_pipe_close_still_reaps_and_fails_closed(self):
+        class BrokenClose(io.BytesIO):
+            def close(self):
+                super().close()
+                raise BrokenPipeError('synthetic closed child')
+        process = FakeProcess(self.header+self.body+b'\n')
+        process.stdin = BrokenClose()
+        with patch('pdca_launcher.subprocess.Popen', return_value=process), self.assertRaises(Blocked):
+            with _VerifiedGitObjectBatch(['/usr/bin/git'], {}) as objects:
+                self.assertEqual(objects.read('blob', self.oid), self.body)
+        self.assertTrue(process.waited and process.killed and process.stdout.closed)
+
 
 if __name__ == '__main__': unittest.main()
