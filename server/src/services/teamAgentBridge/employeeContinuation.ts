@@ -17,6 +17,10 @@ export interface EmployeeContinuationPorts {
   execute(reservation:EmployeeContinuationReservation):Promise<{runtimeExecutionId:string}>
   /** Authoritative persisted runtime + actual native outbound receipt, never model's 'done' or caller's supplied question. */
   readExecution(tx:any,reservation:EmployeeContinuationReservation):Promise<{phase:'running'|'complete'|'unknown'; question?:{messageId:string;seq:number}; reportId?:string}>
+  /** Decide whether a reservation whose authorization window closed can be released.
+   * Only the persisted runtime decides: a released reservation must have produced no
+   * outbound employee receipt, otherwise the employee's message was already answered. */
+  readAbandoned(tx:any,reservation:EmployeeContinuationReservation):Promise<{releasable:boolean;reason:string}>
 }
 interface State { lastSource:EmployeeContinuationEvent; version:number; channelId:string; task:TaskRef; phase:'ready'|'running'|'waiting_for_staff'|'awaiting_review'|'unknown'; queue:EmployeeContinuationEvent[]; active?:EmployeeContinuationReservation; lastConsumedSeq:number; question?:{messageId:string;seq:number}; reportId?:string; fault?:{code:string;at:string} }
 const key=(channel:string)=>'employeeContinuation.channel.'+channel
@@ -101,7 +105,24 @@ export function createEmployeeContinuation(db:any,ports:EmployeeContinuationPort
       return locked(channelId,async(tx,s)=>{
         const saved=await readTeam<any>(tx,ports.storeId,executionKey(executionId))
         if(!s||!saved||saved.reservation.event.channelId!==channelId)fail('EMPLOYEE_CONTINUATION_EXECUTION_NOT_FOUND')
-        await authority(tx,saved.reservation.event,saved.reservation.authorizationVersion)
+        // A renewed grant changes the authorization version of an unfinished reservation.
+        // Every other authority check still has to pass; only the version difference is
+        // tolerated, and an invalid or expired current authority keeps failing closed.
+        let rotated=false
+        try{await authority(tx,saved.reservation.event,saved.reservation.authorizationVersion)}
+        catch(error:any){if(error?.message!=='EMPLOYEE_CONTINUATION_AUTHORIZATION_CHANGED')throw error;rotated=true}
+        if(rotated){
+          if(!s.active||s.active.id!==executionId)fail('EMPLOYEE_CONTINUATION_EXECUTION_CHANGED')
+          const release=await ports.readAbandoned(tx,s.active)
+          if(!release.releasable)fail('EMPLOYEE_CONTINUATION_RELEASE_REFUSED')
+          // Release the abandoned turn and re-queue its source message so the renewed
+          // window can answer it. No execution, model call or employee receipt is reused.
+          delete s.active;s.phase='ready';s.fault={code:'EMPLOYEE_CONTINUATION_AUTHORIZATION_ROTATED',at:stamp()}
+          if(!s.queue.some(x=>x.sourceSeq===saved.reservation.event.sourceSeq))s.queue.push(saved.reservation.event)
+          s.queue.sort((x,y)=>x.sourceSeq-y.sourceSeq)
+          await writeTeam(tx,ports.storeId,executionKey(executionId),{reservation:saved.reservation,status:'released',fault:s.fault})
+          await save(tx,s);return {status:'released'}
+        }
         const task=taskRefSchema.parse(await ports.resolveTask(tx,saved.reservation.event,s.task));if(task.taskId!==s.task.taskId)fail('EMPLOYEE_CONTINUATION_TASK_CHANGED')
         if(['waiting_for_staff','awaiting_review'].includes(saved.status))return saved
         if(!s.active||s.active.id!==executionId)fail('EMPLOYEE_CONTINUATION_EXECUTION_CHANGED')

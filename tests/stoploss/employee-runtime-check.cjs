@@ -55,6 +55,21 @@ async function main(){
   const t=await next(),p=wire(t);let v=(await input(make(),t,p)).traceVersion;await response(make(),t,v,{role:'assistant',content:null,tool_calls:[{id:'sql',type:'function',function:{name:'sql',arguments:'{}'}}]});const blocked=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(blocked.phase,'unknown');assert.equal(blocked.responses[0].providerRequestId,'synthetic-provider-1');
   await make().recover(t.executionId);await assert.rejects(()=>make().host.begin(grant,scope,[{kind:'public_sop',id:'guessed',version:1}]));
  });
+ await check('reordered issued tool surface is the same surface; a changed surface is rejected',async()=>{
+  // The 2026-10-21 pilot failure: the runtime emitted exactly the issued tools in
+  // another order. The order is not part of the issued surface, but a different
+  // surface still is.
+  const t=await next(),p=wire(t);
+  const reordered={...p,tools:[...p.tools].reverse().map(x=>({function:{...x.function,parameters:{...x.function.parameters}},type:x.type}))};
+  await input(make(),t,reordered);
+  assert.equal((await make().inspect(t.executionId)).turn,1);
+  await make().recover(t.executionId);
+  const t2=await next(),p2=wire(t2);
+  const changed={...p2,tools:reordered.tools.map((x,i)=>i===0?{...x,function:{...x.function,description:x.function.description+' changed'}}:x)};
+  await assert.rejects(()=>input(make(),t2,changed));
+  assert.equal((await make().inspect(t2.executionId)).turn,0);
+  await make().recover(t2.executionId);
+ });
  await check('source mutation and current recipient change reject old execution',async()=>{
   const t=await next(),p=wire(t),original=await readTeam(db,storeId,'message.'+channel.id+'.000000000001');await writeTeam(db,storeId,'message.'+channel.id+'.000000000001',{...original,text:'profit confidential'});await assert.rejects(()=>input(make(),t,p));await writeTeam(db,storeId,'message.'+channel.id+'.000000000001',original);
   const c=await readTeam(db,storeId,'channel.'+channel.id);await writeTeam(db,storeId,'channel.'+channel.id,{...c,members:c.members.map(x=>x.staffId===staff.staffId?{...x,fromSeq:2}:x)});await assert.rejects(()=>input(make(),t,p));await writeTeam(db,storeId,'channel.'+channel.id,c);await make().recover(t.executionId);

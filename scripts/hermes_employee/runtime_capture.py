@@ -23,6 +23,33 @@ def digest(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def normalize_schema(value):
+    """Key-sorted JSON form. JSON Schema treats an empty required list exactly like an
+    absent one and the model SDK omits it, so that difference is normalized away."""
+    if isinstance(value, dict):
+        result = {}
+        for key in sorted(value):
+            if key == "required" and isinstance(value[key], list) and not value[key]:
+                continue
+            result[key] = normalize_schema(value[key])
+        return result
+    if isinstance(value, list):
+        return [normalize_schema(item) for item in value]
+    return value
+
+
+def canonical_tools(tools):
+    """The issued tool surface is a set of name+schema, not a sequence. The runtime may
+    emit the same backend-issued tools in another order and with its own JSON key order;
+    only a different surface is a violation. Names are unique, so the order is total."""
+    items = [normalize_schema(tool) for tool in (tools or [])]
+    return sorted(items, key=lambda tool: str((tool.get("function") or {}).get("name", "")))
+
+
+def canonical_tools_digest(tools) -> str:
+    return digest(json.dumps(canonical_tools(tools), ensure_ascii=False, separators=(",", ":")))
+
+
 @dataclass(frozen=True)
 class AuthorizedToolResult:
     """Internal trusted-host receipt, never parsed from a model/tool JSON body."""
@@ -466,8 +493,15 @@ def run_ticket(ticket: dict, config: dict, port, *, provider_send: Callable) -> 
             raise RuntimeError("REPEATED_OR_UNRECORDED_PROVIDER_TURN")
         actual = json.loads(request.content)
         phase = "awaiting_response"  # retry can never become a new turn
-        actual_tool_hash = digest(json.dumps(actual.get("tools", []), ensure_ascii=False, separators=(",", ":")))
-        if actual.get("tools", []) != ticket["tools"] or actual_tool_hash != ticket["toolSchemaHash"]:
+        # The ticket must still describe exactly its own issued surface. The canonical
+        # form is authoritative; the legacy raw form is accepted for a ticket that was
+        # issued before the comparison became order independent.
+        if ticket["toolSchemaHash"] not in (canonical_tools_digest(ticket["tools"]), digest(json.dumps(ticket["tools"], ensure_ascii=False, separators=(",", ":")))):
+            raise RuntimeError("TICKET_TOOL_SCHEMA_HASH_MISMATCH")
+        # Compare the actual tool surface as a set. The runtime is free to order the
+        # issued tools differently; it is not free to change, add or drop one.
+        actual_tool_hash = canonical_tools_digest(actual.get("tools", []))
+        if canonical_tools(actual.get("tools", [])) != canonical_tools(ticket["tools"]) or actual_tool_hash != canonical_tools_digest(ticket["tools"]):
             raise RuntimeError("ACTUAL_TOOL_SCHEMA_MISMATCH")
         turn += 1
         wire_hash = digest(json.dumps(actual, ensure_ascii=False, separators=(",", ":")))
@@ -539,6 +573,8 @@ def run_ticket(ticket: dict, config: dict, port, *, provider_send: Callable) -> 
     except Exception:
         phase = "unknown"
         failures = observation.get("captureFailures", []) if "observation" in locals() else []
-        code = failures[-1].get("code", "EMPLOYEE_RUNTIME_UNCONFIRMED") if failures else "EMPLOYEE_RUNTIME_UNCONFIRMED"
+        # The first failure is the cause; a later one (a retry blocked by the already
+        # reserved turn) is only a consequence. Report the cause, not the consequence.
+        code = failures[0].get("code", "EMPLOYEE_RUNTIME_UNCONFIRMED") if failures else "EMPLOYEE_RUNTIME_UNCONFIRMED"
         port.markUnknown(execution, version, code if re.fullmatch(r"[A-Z0-9_]{1,100}", code) else "EMPLOYEE_RUNTIME_UNCONFIRMED")
         return {"unknown": True, "executionId": execution}

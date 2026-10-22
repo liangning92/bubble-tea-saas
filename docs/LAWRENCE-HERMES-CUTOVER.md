@@ -21,7 +21,7 @@ send paths recheck this. Do not replay already-answered messages. Rollback is an
 explicit reviewed route change after stopping/reconciling active executions, not
 automatic fallback on a failed Hermes request.
 
-The current authorized window ends **2026-10-22T00:14:04.876Z**; configuration or
+The current authorized window ends **2026-10-23T10:00:00.000Z**; configuration or
 credential renewal must not extend it. Only the Lawrence conversation is approved.
 Do not enable financial/private-staff data, staff creation, leave submission,
 purchasing, stock writes or other conversations.

@@ -12,8 +12,10 @@ import tempfile
 import unittest
 
 HERE = Path(__file__).resolve().parent
-SOURCE = "/Users/liangning/.hermes/hermes-agent"
-PYTHON = SOURCE + "/venv/bin/python3"
+# The pinned source is the reviewed Hermes commit the pilot and the worker run. A
+# moving default checkout would test a different program than the one deployed.
+SOURCE = os.environ.get("HERMES_TEST_SOURCE", "/Users/liangning/.hermes/hermes-agent")
+PYTHON = os.environ.get("HERMES_TEST_PYTHON", SOURCE + "/venv/bin/python3")
 
 
 def worker(case, root, source_dir=None):
@@ -24,7 +26,7 @@ def worker(case, root, source_dir=None):
     os.environ.clear()
     os.environ.update(HOME=str(home), PATH="/usr/bin:/bin", PYTHONDONTWRITEBYTECODE="1", NO_PROXY="*")
     sys.path.insert(0, str(HERE))
-    from runtime_capture import run_employee, run_ticket, digest
+    from runtime_capture import run_employee, run_ticket, digest, canonical_tools, canonical_tools_digest
     import socket
     socket.socket.connect = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("NETWORK_DISABLED"))
     sys.path.insert(0, source)
@@ -107,14 +109,18 @@ def worker(case, root, source_dir=None):
         if case.startswith("multi_"):
             import uuid
             key = context["compartmentKey"]
+            issued_tools = [{"type": "function", "function": s} for s in context["tools"].values()]
+            # The real runtime may emit the issued tools in another order. The ticket
+            # order is the backend's, so a reordered surface must still be admitted.
+            if case == "multi_reordered_tools": issued_tools = list(reversed(issued_tools))
             ticket = {"protocol": "employee_work_trace_v1", "executionId": str(uuid.uuid4()), "requestId": str(uuid.uuid4()),
                 "traceVersion": 1, "compartmentKey": key, "audienceHash": digest("audience"), "inputContextHash": digest("sources"),
-                "toolSchemaHash": digest(json.dumps([{"type": "function", "function": s} for s in context["tools"].values()], ensure_ascii=False, separators=(",", ":"))),
+                "toolSchemaHash": canonical_tools_digest(issued_tools),
                 "sealedUserContent": context["input"], "instruction": "Coordinate only sealed employee facts; use scoped tools and answer naturally.",
                 "isolation": {"protocol": "employee_work_trace_v1", "profile": "employee_work", "sessionId": "employee_work_" + digest(case),
                     "compartmentKey": key, "memoryNamespace": key, "memoryEnabled": False, "contextFilesEnabled": False,
                     "auxiliaryModelsEnabled": False, "sharedHistoryEnabled": False, "builtinToolsEnabled": False},
-                "model": "MiniMax-M3.1-Flash", "tools": [{"type": "function", "function": s} for s in context["tools"].values()]}
+                "model": "MiniMax-M3.1-Flash", "tools": issued_tools}
             if case == "multi_schema_tamper": ticket["toolSchemaHash"] = digest("wrong-catalog")
             value = {"text": "Siapkan gelas dan cek label bahan sebelum buka."}
             config = {k: context[k] for k in ("isolatedRoot", "hermesSource", "hermesExpectedSha", "providerBaseUrl", "providerCredential")}
@@ -137,7 +143,7 @@ def worker(case, root, source_dir=None):
                     assert item["inputHash"] == digest(json.dumps(actual, ensure_ascii=False, separators=(",", ":")))
                     assert item["toolSchemaHash"] == ticket["toolSchemaHash"]
                     assert actual["messages"][1]["content"] == ticket["sealedUserContent"]
-                    assert actual["tools"] == ticket["tools"]
+                    assert canonical_tools(actual["tools"]) == canonical_tools(ticket["tools"])
                     if item["turn"] >= 2:
                         assert json.loads(actual["messages"][-1]["content"]) == self.last_value
                     return {**self.advance("recordInput", item), "maySend": case != "multi_denied"}
@@ -212,7 +218,7 @@ class RuntimeTest(unittest.TestCase):
             (Path(root) / "manager").mkdir()
             (Path(root) / "manager" / "MEMORY.md").write_text("SYNTHETIC_MANAGER_SECRET_PROFIT_777")
             (Path(root) / "stock-session.json").write_text("SYNTHETIC_INVENTORY_CONTEXT_888")
-            result = subprocess.run([PYTHON, "-I", "-B", str(__file__), "--worker", case, root],
+            result = subprocess.run([PYTHON, "-I", "-B", str(__file__), "--worker", case, root, SOURCE],
                                     capture_output=True, text=True, timeout=90,
                                     env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"})
             self.assertEqual(result.returncode, 0, result.stderr[-2000:])
@@ -306,6 +312,43 @@ class RuntimeTest(unittest.TestCase):
         self.assertTrue(r["unknown"])
         self.assertEqual(r["providerCalls"], 0)
         self.assertEqual(r["hostEvents"], [])
+
+    def test_reordered_issued_tools_are_the_same_surface_and_still_execute(self):
+        # The real 2026-10-21 failure: the runtime emitted exactly the issued tools in
+        # another order and dropped an empty required list. The surface was unchanged,
+        # but the order sensitive comparison rejected every provider turn.
+        r = self.run_case("multi_reordered_tools")
+        self.assertNotIn("unknown", r)
+        self.assertGreaterEqual(r["providerCalls"], 1)
+        self.assertTrue(any(e["method"] == "recordInput" for e in r["hostEvents"]))
+
+    def test_tool_surface_comparison_is_order_insensitive_but_still_exact(self):
+        from runtime_capture import canonical_tools, canonical_tools_digest
+        issued = [
+            {"type": "function", "function": {"name": "employee_read_message", "description": "Read one current audience-visible message",
+             "parameters": {"type": "object", "properties": {"seq": {"type": "integer", "minimum": 1}}, "required": ["seq"], "additionalProperties": False}}},
+            {"type": "function", "function": {"name": "employee_read_task", "description": "Read this assigned employee task",
+             "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False}}},
+        ]
+        # Same surface, other order, other key order, empty required dropped.
+        emitted = [
+            {"function": {"description": "Read this assigned employee task", "name": "employee_read_task",
+              "parameters": {"properties": {}, "additionalProperties": False, "type": "object"}}, "type": "function"},
+            {"function": {"parameters": {"additionalProperties": False, "type": "object", "properties": {"seq": {"minimum": 1, "type": "integer"}}, "required": ["seq"]}, "name": "employee_read_message", "description": "Read one current audience-visible message"}, "type": "function"},
+        ]
+        self.assertEqual(canonical_tools(emitted), canonical_tools(issued))
+        self.assertEqual(canonical_tools_digest(emitted), canonical_tools_digest(issued))
+        # A different surface is still a different surface.
+        changed = json.loads(json.dumps(emitted))
+        changed[1]["function"]["parameters"]["properties"]["seq"]["minimum"] = 2
+        self.assertNotEqual(canonical_tools(changed), canonical_tools(issued))
+        extra = json.loads(json.dumps(emitted)) + [emitted[0]]
+        self.assertNotEqual(canonical_tools(extra), canonical_tools(issued))
+        renamed = json.loads(json.dumps(emitted))
+        renamed[0]["function"]["name"] = "employee_other"
+        self.assertNotEqual(canonical_tools(renamed), canonical_tools(issued))
+        dropped = json.loads(json.dumps(emitted))[:1]
+        self.assertNotEqual(canonical_tools(dropped), canonical_tools(issued))
 
     def test_unissued_model_tool_cannot_reach_hermes_dispatch_or_backend_tool(self):
         r = self.run_case("multi_unissued")
