@@ -22,6 +22,41 @@ export function localActivityTime(now:Date,timezone:string) {
   return {day:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(get('weekday')),minute:Number(get('hour'))*60+Number(get('minute')),birthday:`${get('month')}-${get('day')}`}
 }
 const minutes=(time:string)=>Number(time.slice(0,2))*60+Number(time.slice(3,5))
+export interface ActivityWindow { active:boolean; nextDate:string|null; nextWeekday:number|null }
+// Local wall clock of the activity time zone. Plans the daily special board and its preview.
+export function localWallClock(now:Date,timezone:string){
+  const parts=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now)
+  const get=(type:string)=>parts.find(p=>p.type===type)?.value||''
+  return {year:Number(get('year')),month:Number(get('month')),day:Number(get('day')),weekday:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(get('weekday')),minute:Number(get('hour'))*60+Number(get('minute'))}
+}
+const pad2=(value:number)=>String(value).padStart(2,'0')
+// Whether the recurring daily window runs now, and when the next occurrence starts.
+export function activityWindow(a:Activity,now=new Date()):ActivityWindow{
+  const clock=localWallClock(now,a.timezone),days=a.weekdays.length?a.weekdays:[0,1,2,3,4,5,6]
+  const start=a.dailyStart?minutes(a.dailyStart):undefined,end=a.dailyEnd?minutes(a.dailyEnd):undefined
+  let active=false
+  if(start!==undefined&&end!==undefined){
+    if(start<end)active=days.includes(clock.weekday)&&clock.minute>=start&&clock.minute<end
+    else active=(days.includes(clock.weekday)&&clock.minute>=start)||(days.includes((clock.weekday+6)%7)&&clock.minute<end)
+  } else active=days.includes(clock.weekday)
+  const today=Date.UTC(clock.year,clock.month-1,clock.day)
+  let nextDate:string|null=null,nextWeekday:number|null=null
+  for(let offset=0;offset<=14;offset++){
+    const candidate=new Date(today+offset*86400000),weekday=candidate.getUTCDay()
+    if(!days.includes(weekday))continue
+    if(offset===0){
+      if(active)continue
+      if(start!==undefined&&end!==undefined){
+        if(start<end){if(clock.minute>=start)continue}
+        else {if(clock.minute<end)continue}
+      }
+    }
+    nextDate=String(candidate.getUTCFullYear())+'-'+pad2(candidate.getUTCMonth()+1)+'-'+pad2(candidate.getUTCDate())
+    nextWeekday=weekday
+    break
+  }
+  return {active,nextDate,nextWeekday}
+}
 export function activityState(a:Activity,now=new Date()):string {
   if(a.conflict)return 'review'
   if(a.status!=='published')return a.status

@@ -25,6 +25,12 @@
       connecting: "Menghubungkan…",
       error: "Gagal",
       online: "Terhubung",
+      specialBadge: "Promo Harian",
+      normalPrice: "Harga Normal",
+      promoPrice: "Harga Promo",
+      saving: "Hemat",
+      tomorrow: "Besok",
+      preview: "Pratinjau Promo",
     },
     en: {
       pair: "Connect TV",
@@ -46,6 +52,12 @@
       connecting: "Connecting…",
       error: "Failed",
       online: "Connected",
+      specialBadge: "Daily Special",
+      normalPrice: "Regular price",
+      promoPrice: "Special price",
+      saving: "Save",
+      tomorrow: "Tomorrow",
+      preview: "Special preview",
     },
     zh: {
       pair: "连接电视",
@@ -67,6 +79,12 @@
       connecting: "正在连接…",
       error: "失败",
       online: "已连接",
+      specialBadge: "每日特价",
+      normalPrice: "原价",
+      promoPrice: "活动价",
+      saving: "节省",
+      tomorrow: "明日",
+      preview: "特价预告",
     },
   };
   let language = localStorage.getItem("tv.language") || "id",
@@ -497,7 +515,10 @@
       snapshot.settings.activityDisplayType === "badges_only"
     )
       return;
-    const active = snapshot.promotions.filter(eligible),
+    const live = liveSpecial(),
+      active = snapshot.promotions
+        .filter(eligible)
+        .filter((a) => !live || a.id !== live.id),
       batch =
         Math.floor(
           (estimatedTime() || 0) / (snapshot.settings.pageSeconds * 1000),
@@ -507,6 +528,148 @@
       item.append(element("strong", a.name), element("p", promotionText(a)));
       box.append(item);
     }
+    const upcoming = upcomingSpecial();
+    if (upcoming && !live) box.append(previewCard(upcoming));
+  }
+  function liveSpecial() {
+    const list = (snapshot && snapshot.specials) || [];
+    for (const s of list) if (eligible(s)) return s;
+    return null;
+  }
+  function upcomingSpecial() {
+    const list = ((snapshot && snapshot.specials) || []).filter(
+      (s) => s.upcoming,
+    );
+    list.sort((a, b) =>
+      a.upcoming.date < b.upcoming.date
+        ? -1
+        : a.upcoming.date > b.upcoming.date
+          ? 1
+          : 0,
+    );
+    return list[0] || null;
+  }
+  function specialDay(date, timezone) {
+    const key = new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(
+      new Date(),
+    );
+    const tomorrow = new Date(Date.parse(key + "T00:00:00Z") + 86400000);
+    const tomorrowKey = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "UTC",
+    }).format(tomorrow);
+    const locale =
+      language === "zh" ? "zh-CN" : language === "en" ? "en-GB" : "id-ID";
+    return {
+      isTomorrow: date === tomorrowKey,
+      label: new Intl.DateTimeFormat(locale, {
+        timeZone: "UTC",
+        weekday: "long",
+        day: "numeric",
+        month: "short",
+      }).format(new Date(date + "T12:00:00Z")),
+    };
+  }
+  function previewCard(special) {
+    const up = special.upcoming,
+      day = specialDay(up.date, special.timezone || snapshot.store.timezone);
+    const item = element("div", undefined, "promotion-preview");
+    item.append(
+      element(
+        "strong",
+        (day.isTomorrow ? t("tomorrow") + " · " : t("preview") + " · ") +
+          day.label,
+      ),
+    );
+    item.append(
+      element(
+        "p",
+        (special.name ? special.name + " · " : "") +
+          (up.products || [])
+            .map((p) => p.name + " " + money(p.specialPrice))
+            .join(" · "),
+      ),
+    );
+    return item;
+  }
+  let lastSpecialKey = "";
+  function renderSpecials() {
+    const box = $("specials"),
+      live = liveSpecial();
+    const key = live
+      ? live.id +
+        ":" +
+        (live.products || [])
+          .map((p) => p.id + "-" + p.specialPrice + "-" + p.originalPrice)
+          .join(",")
+      : "";
+    const playing = snapshot.screen.isActive;
+    $("content").hidden = playing && !!live;
+    box.hidden = !playing || !live;
+    if (key === lastSpecialKey) return;
+    lastSpecialKey = key;
+    box.replaceChildren();
+    if (!live) return;
+    const head = element("div", undefined, "special-head");
+    head.append(element("span", t("specialBadge"), "special-badge"));
+    head.append(element("h2", live.name || t("specialBadge")));
+    if (live.description)
+      head.append(element("p", live.description, "special-desc"));
+    box.append(head);
+    const products = live.products || [];
+    if (products.length === 1) {
+      // One product per day: show its photo large and give the offer the room.
+      const p = products[0],
+        stage = element("div", undefined, "special-stage"),
+        photo = element("figure", undefined, "special-photo"),
+        copy = element("div", undefined, "special-copy");
+      if (p.image) {
+        const img = element("img");
+        img.alt = p.name;
+        img.src = assetUrl(p.image);
+        img.onerror = () => img.remove();
+        photo.append(img);
+      } else {
+        photo.append(element("strong", p.name.slice(0, 1), "special-initial"));
+      }
+      copy.append(element("h3", p.name));
+      const price = element("p", undefined, "special-price");
+      price.append(element("del", money(p.originalPrice)));
+      price.append(element("strong", money(p.specialPrice)));
+      copy.append(price);
+      if (p.saving > 0)
+        copy.append(
+          element("p", t("saving") + " " + money(p.saving), "special-save"),
+        );
+      stage.append(photo, copy);
+      box.append(stage);
+    }
+    const grid = element("div", undefined, "special-grid");
+    for (const p of live.products || []) {
+      if (products.length === 1) break;
+      const card = element("article", undefined, "special-card");
+      if (p.image) {
+        const img = element("img");
+        img.alt = p.name;
+        img.src = assetUrl(p.image);
+        img.onerror = () => img.remove();
+        card.append(img);
+      }
+      const info = element("div");
+      info.append(element("h3", p.name));
+      const price = element("p", undefined, "special-price");
+      price.append(element("del", money(p.originalPrice)));
+      price.append(element("strong", money(p.specialPrice)));
+      info.append(price);
+      if (p.saving > 0)
+        info.append(
+          element("p", t("saving") + " " + money(p.saving), "special-save"),
+        );
+      card.append(info);
+      grid.append(card);
+    }
+    if (products.length !== 1) box.append(grid);
+    const upcoming = upcomingSpecial();
+    if (upcoming) box.append(previewCard(upcoming));
   }
   function playSlide() {
     clearTimeout(slideTimer);
@@ -717,6 +880,7 @@
         if (audio) audio.pause();
       }
     }
+    renderSpecials();
     renderPromotions();
     updateClock();
   }
@@ -732,6 +896,7 @@
       (online ? t("online") : t("offline")) +
       (!freshPrices() ? " · " + t("stale") : "");
     if (!snapshot.screen.isActive) return;
+    renderSpecials();
     renderPromotions();
     const priceState =
       String(freshPrices()) +
