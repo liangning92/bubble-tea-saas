@@ -54,6 +54,9 @@ def worker(case, root, source_dir=None):
         context["tools"]["employee_update_task"] = {"name": "employee_update_task", "description": "Update only the current authorized task.",
             "parameters": {"type": "object", "properties": {"taskId": {"type": "string"}, "state": {"type": "string"}},
                 "required": ["taskId", "state"], "additionalProperties": False}}
+    if case == "multi_parallel_tools":
+        context["tools"]["employee_read_task"] = {"name": "employee_read_task", "description": "Read the current assigned task.",
+            "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False}}
     source_env_attempts = []
     mutation_denied = []
     if source_dir:
@@ -82,8 +85,17 @@ def worker(case, root, source_dir=None):
             raise httpx.ReadTimeout("synthetic response unknown", request=request)
         if calls == 1:
             channel = "channel-employee-B" if case in {"foreign_tool", "multi_foreign_tool"} else expected_channel
-            delta = {"role": "assistant", "tool_calls": [{"index": 0, "id": "call_sop", "type": "function",
-                     "function": {"name": "manager_finance_export" if case == "multi_unissued" else "employee_read_sop", "arguments": json.dumps({"channelId": channel})}}]}
+            if case == "multi_parallel_tools":
+                # A model may request two issued tools in one round; the runtime has to
+                # serialize both receipts instead of interleaving them on the pipe.
+                delta = {"role": "assistant", "tool_calls": [
+                    {"index": 0, "id": "call_sop", "type": "function",
+                     "function": {"name": "employee_read_sop", "arguments": json.dumps({"channelId": channel})}},
+                    {"index": 1, "id": "call_task", "type": "function",
+                     "function": {"name": "employee_read_task", "arguments": json.dumps({})}}]}
+            else:
+                delta = {"role": "assistant", "tool_calls": [{"index": 0, "id": "call_sop", "type": "function",
+                         "function": {"name": "manager_finance_export" if case == "multi_unissued" else "employee_read_sop", "arguments": json.dumps({"channelId": channel})}}]}
             reason = "tool_calls"
         elif case == "multi_update" and calls == 2:
             delta = {"role": "assistant", "tool_calls": [{"index": 0, "id": "call_update", "type": "function",
@@ -145,19 +157,26 @@ def worker(case, root, source_dir=None):
                     assert actual["messages"][1]["content"] == ticket["sealedUserContent"]
                     assert canonical_tools(actual["tools"]) == canonical_tools(ticket["tools"])
                     if item["turn"] >= 2:
-                        assert json.loads(actual["messages"][-1]["content"]) == self.last_value
+                        tool_messages = [m for m in actual["messages"] if m["role"] == "tool"]
+                        assert json.loads(tool_messages[-1]["content"]) == self.last_value
+                        if case == "multi_parallel_tools":
+                            assert len(tool_messages) == 2
                     return {**self.advance("recordInput", item), "maySend": case != "multi_denied"}
                 def recordResponse(self, item):
                     self.responses.append(item)
                     return self.advance("recordResponse", item)
                 def executeTool(self, item):
-                    assert item["callOrdinal"] == 0
+                    assert item["callOrdinal"] in (0, 1)
                     self.advance("executeTool", item)
                     if item["name"] == "employee_update_task":
                         assert case == "multi_update" and item["toolCallId"] == "call_update"
                         assert item["args"] == {"taskId": "same-employee-task", "state": "awaiting_review"}
                         self.task.update(item["args"])
                         self.last_value = dict(self.task)
+                        return {"traceVersion": self.version, "value": self.last_value, "sources": []}
+                    if item["name"] == "employee_read_task":
+                        assert case == "multi_parallel_tools" and item["callOrdinal"] == 1
+                        self.last_value = {"taskId": "same-employee-task", "state": "running"}
                         return {"traceVersion": self.version, "value": self.last_value, "sources": []}
                     assert item["toolCallId"] == "call_sop"
                     if item["args"] != {"channelId": expected_channel}:
@@ -321,6 +340,18 @@ class RuntimeTest(unittest.TestCase):
         self.assertNotIn("unknown", r)
         self.assertGreaterEqual(r["providerCalls"], 1)
         self.assertTrue(any(e["method"] == "recordInput" for e in r["hostEvents"]))
+
+    def test_parallel_issued_tool_calls_are_serialized_into_ordered_receipts(self):
+        # The real model asked for two issued tools in one round. Without serialized
+        # frames the child raced itself on the trusted pipe and died before any tool
+        # receipt reached the backend.
+        r = self.run_case("multi_parallel_tools")
+        self.assertNotIn("unknown", r)
+        calls = [e["params"]["name"] for e in r["hostEvents"] if e["method"] == "executeTool"]
+        self.assertEqual(sorted(calls), ["employee_read_sop", "employee_read_task"])
+        ordinals = [e["params"]["callOrdinal"] for e in r["hostEvents"] if e["method"] == "executeTool"]
+        self.assertEqual(sorted(ordinals), [0, 1])
+        self.assertGreaterEqual(r["providerCalls"], 2)
 
     def test_tool_surface_comparison_is_order_insensitive_but_still_exact(self):
         from runtime_capture import canonical_tools, canonical_tools_digest
