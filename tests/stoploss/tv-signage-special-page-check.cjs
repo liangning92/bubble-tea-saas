@@ -55,6 +55,14 @@ const server = http.createServer((req, res) => {
     );
     const today = new Date().getDay(),
       other = (today + 3) % 7;
+    const todayKey = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Jakarta",
+    }).format(new Date());
+    const tomorrowKey = new Date(
+      Date.parse(todayKey + "T00:00:00Z") + 86400000,
+    )
+      .toISOString()
+      .slice(0, 10);
     const snapshot = {
       screen: { isActive: true },
       settings: {
@@ -122,7 +130,7 @@ const server = http.createServer((req, res) => {
             },
           ],
           upcoming: {
-            date: "2026-10-23",
+            date: tomorrowKey,
             weekday: 5,
             products: [
               {
@@ -174,8 +182,23 @@ const server = http.createServer((req, res) => {
     const copy = await page.locator(".special-copy").boundingBox();
     assert.ok(photo.width > copy.width, "photo column should dominate");
     assert.ok(photo.height > 200, "photo should be large");
-    await expect(page.locator(".promotion-preview")).toBeVisible();
-    assert.match(await page.locator(".promotion-preview").innerText(), /Besok/);
+    await expect(page.locator(".special-preview")).toBeVisible();
+    assert.match(await page.locator(".special-preview").innerText(), /Besok/);
+    // The same offer on the current day is announced as today's special.
+    snapshot.specials[0].upcoming.date = todayKey;
+    snapshot.version = "b".repeat(64);
+    await page.evaluate(
+      (s) => window.postMessage({ type: "tv-preview", snapshot: s }, location.origin),
+      snapshot,
+    );
+    await expect(page.locator(".special-preview")).toContainText("Hari Ini");
+    snapshot.specials[0].upcoming.date = tomorrowKey;
+    snapshot.version = "c".repeat(64);
+    await page.evaluate(
+      (s) => window.postMessage({ type: "tv-preview", snapshot: s }, location.origin),
+      snapshot,
+    );
+    await expect(page.locator(".special-preview")).toContainText("Besok");
     await page.screenshot({ path: path.join(out, "special-1920.png") });
     // The board keeps every card visible on tablet and phone widths.
     for (const [width, height] of [
@@ -195,7 +218,7 @@ const server = http.createServer((req, res) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     // Outside the offer days the product menu returns and the preview stays visible.
     snapshot.specials[0].weekdays = [other];
-    snapshot.version = "b".repeat(64);
+    snapshot.version = "d".repeat(64);
     await page.evaluate(
       (s) => window.postMessage({ type: "tv-preview", snapshot: s }, location.origin),
       snapshot,
@@ -207,7 +230,7 @@ const server = http.createServer((req, res) => {
     await page.screenshot({ path: path.join(out, "menu-1920.png") });
     // A snapshot without specials keeps the original product-only screen.
     snapshot.specials = [];
-    snapshot.version = "c".repeat(64);
+    snapshot.version = "e".repeat(64);
     await page.evaluate(
       (s) => window.postMessage({ type: "tv-preview", snapshot: s }, location.origin),
       snapshot,
