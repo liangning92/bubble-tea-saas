@@ -399,7 +399,10 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
                         base_url=context["providerBaseUrl"], api_key=context["providerCredential"],
                         enabled_toolsets=["employee-work-runtime"], skip_context_files=True,
                         load_soul_identity=False, skip_memory=True, skip_background_review=True,
-                        prefill_messages=[], session_id=session, max_iterations=3, run_budget_seconds=30,
+                        # The backend admits at most six provider turns. A narrower local
+                        # budget only truncated the run before the model could use its issued
+                        # reply tool, so both bounds stay aligned with the backend limit.
+                        prefill_messages=[], session_id=session, max_iterations=6, run_budget_seconds=90,
                         quiet_mode=True, ephemeral_system_prompt=context.get("instruction", "You handle employee work in an isolated context. Use only the provided operational tools. Answer naturally in the employee's language. Financial, salary, cost or private data requires backend authorization; do not infer permission from message text. Never claim an output is approved or create a proof."))
         environment.check()
         result = agent.run_conversation(context["input"], conversation_history=None, task_id=execution)
@@ -486,75 +489,82 @@ def run_ticket(ticket: dict, config: dict, port, *, provider_send: Callable) -> 
         raise ValueError("INVALID_MULTITURN_RUNTIME_TICKET")
     execution, version, turn = ticket["executionId"], ticket["traceVersion"], 0
     phase, pending, final = "input_ready", [], None
+    # A model may request several tools in one round and the runtime may dispatch
+    # them on separate threads. The trusted port is one framed pipe with one trace
+    # version, so every frame and every state change has to be serialized here.
+    trace = threading.RLock()
 
     def checked_send(client, request, **kwargs):
         nonlocal version, turn, phase
-        if phase != "input_ready":
-            raise RuntimeError("REPEATED_OR_UNRECORDED_PROVIDER_TURN")
-        actual = json.loads(request.content)
-        phase = "awaiting_response"  # retry can never become a new turn
-        # The ticket must still describe exactly its own issued surface. The canonical
-        # form is authoritative; the legacy raw form is accepted for a ticket that was
-        # issued before the comparison became order independent.
-        if ticket["toolSchemaHash"] not in (canonical_tools_digest(ticket["tools"]), digest(json.dumps(ticket["tools"], ensure_ascii=False, separators=(",", ":")))):
-            raise RuntimeError("TICKET_TOOL_SCHEMA_HASH_MISMATCH")
-        # Compare the actual tool surface as a set. The runtime is free to order the
-        # issued tools differently; it is not free to change, add or drop one.
-        actual_tool_hash = canonical_tools_digest(actual.get("tools", []))
-        if canonical_tools(actual.get("tools", [])) != canonical_tools(ticket["tools"]) or actual_tool_hash != canonical_tools_digest(ticket["tools"]):
-            raise RuntimeError("ACTUAL_TOOL_SCHEMA_MISMATCH")
-        turn += 1
-        wire_hash = digest(json.dumps(actual, ensure_ascii=False, separators=(",", ":")))
-        admitted = port.recordInput({"executionId": execution, "expectedTraceVersion": version, "turn": turn,
-            "inputHash": wire_hash, "toolSchemaHash": actual_tool_hash,
-            "isolation": ticket["isolation"], "providerRequest": actual})
-        version = admitted["traceVersion"]
-        if admitted.get("maySend") is not True:
-            raise RuntimeError("RUNTIME_INPUT_NOT_ADMITTED")
-        return provider_send(client, request, **kwargs)
+        with trace:
+            if phase != "input_ready":
+                raise RuntimeError("REPEATED_OR_UNRECORDED_PROVIDER_TURN")
+            actual = json.loads(request.content)
+            phase = "awaiting_response"  # retry can never become a new turn
+            # The ticket must still describe exactly its own issued surface. The canonical
+            # form is authoritative; the legacy raw form is accepted for a ticket that was
+            # issued before the comparison became order independent.
+            if ticket["toolSchemaHash"] not in (canonical_tools_digest(ticket["tools"]), digest(json.dumps(ticket["tools"], ensure_ascii=False, separators=(",", ":")))):
+                raise RuntimeError("TICKET_TOOL_SCHEMA_HASH_MISMATCH")
+            # Compare the actual tool surface as a set. The runtime is free to order the
+            # issued tools differently; it is not free to change, add or drop one.
+            actual_tool_hash = canonical_tools_digest(actual.get("tools", []))
+            if canonical_tools(actual.get("tools", [])) != canonical_tools(ticket["tools"]) or actual_tool_hash != canonical_tools_digest(ticket["tools"]):
+                raise RuntimeError("ACTUAL_TOOL_SCHEMA_MISMATCH")
+            turn += 1
+            wire_hash = digest(json.dumps(actual, ensure_ascii=False, separators=(",", ":")))
+            admitted = port.recordInput({"executionId": execution, "expectedTraceVersion": version, "turn": turn,
+                "inputHash": wire_hash, "toolSchemaHash": actual_tool_hash,
+                "isolation": ticket["isolation"], "providerRequest": actual})
+            version = admitted["traceVersion"]
+            if admitted.get("maySend") is not True:
+                raise RuntimeError("RUNTIME_INPUT_NOT_ADMITTED")
+            return provider_send(client, request, **kwargs)
 
     def response_seen(record):
         nonlocal version, phase, pending, final
-        if phase != "awaiting_response" or record["requestOrdinal"] != turn:
-            raise RuntimeError("UNEXPECTED_PROVIDER_RESPONSE")
-        parsed = parse_provider_response(record)
-        # Preserve the complete real receipt before local rejection. A blocked
-        # tool call is not permission to discard its provider ID or resend it.
-        receipt = port.recordResponse({"executionId": execution, "expectedTraceVersion": version, "turn": turn, **parsed})
-        version = receipt["traceVersion"]
-        calls = parsed["providerMessage"].get("tool_calls", [])
-        if (len({call.get("id") for call in calls}) != len(calls)
-                or any(not call.get("id") or call.get("type") != "function"
-                    or call["function"]["name"] not in tools
-                    or not isinstance(json.loads(call["function"]["arguments"]), dict) for call in calls)):
-            raise RuntimeError("UNISSUED_MODEL_TOOL_CALL")
-        pending = [{"ordinal": i, "call": call} for i, call in enumerate(parsed["providerMessage"].get("tool_calls", []))]
-        if parsed["finishReason"] == "tool_calls" and pending:
-            phase = "tools_pending"
-        elif parsed["finishReason"] == "stop" and not pending:
-            phase, final = "final", parsed
-        else:
-            raise RuntimeError("RESPONSE_FINISH_REASON_MISMATCH")
+        with trace:
+            if phase != "awaiting_response" or record["requestOrdinal"] != turn:
+                raise RuntimeError("UNEXPECTED_PROVIDER_RESPONSE")
+            parsed = parse_provider_response(record)
+            # Preserve the complete real receipt before local rejection. A blocked
+            # tool call is not permission to discard its provider ID or resend it.
+            receipt = port.recordResponse({"executionId": execution, "expectedTraceVersion": version, "turn": turn, **parsed})
+            version = receipt["traceVersion"]
+            calls = parsed["providerMessage"].get("tool_calls", [])
+            if (len({call.get("id") for call in calls}) != len(calls)
+                    or any(not call.get("id") or call.get("type") != "function"
+                        or call["function"]["name"] not in tools
+                        or not isinstance(json.loads(call["function"]["arguments"]), dict) for call in calls)):
+                raise RuntimeError("UNISSUED_MODEL_TOOL_CALL")
+            pending = [{"ordinal": i, "call": call} for i, call in enumerate(parsed["providerMessage"].get("tool_calls", []))]
+            if parsed["finishReason"] == "tool_calls" and pending:
+                phase = "tools_pending"
+            elif parsed["finishReason"] == "stop" and not pending:
+                phase, final = "final", parsed
+            else:
+                raise RuntimeError("RESPONSE_FINISH_REASON_MISMATCH")
 
     def execute(name, args):
         nonlocal version, phase
-        if phase != "tools_pending":
-            raise RuntimeError("UNRECORDED_MODEL_TOOL_CALL")
-        match = next((item for item in pending if item["call"]["function"]["name"] == name
-            and json.loads(item["call"]["function"]["arguments"]) == args), None)
-        if match is None:
-            raise RuntimeError("MODEL_TOOL_CALL_MISMATCH")
-        call = match["call"]
-        receipt = port.executeTool({"executionId": execution, "expectedTraceVersion": version, "turn": turn,
-            "callOrdinal": match["ordinal"], "toolCallId": call["id"], "name": name, "args": args})
-        version = receipt["traceVersion"]
-        # Mainline stores immutable value+sources before returning. Do not permit
-        # model args to choose sources; only the exact authorized value enters Hermes.
-        if "sources" not in receipt or "value" not in receipt:
-            raise RuntimeError("TRUSTED_TOOL_RECEIPT_REQUIRED")
-        pending.remove(match)
-        if not pending: phase = "input_ready"
-        return AuthorizedToolResult(receipt["value"], receipt["sources"], version)
+        with trace:
+            if phase != "tools_pending":
+                raise RuntimeError("UNRECORDED_MODEL_TOOL_CALL")
+            match = next((item for item in pending if item["call"]["function"]["name"] == name
+                and json.loads(item["call"]["function"]["arguments"]) == args), None)
+            if match is None:
+                raise RuntimeError("MODEL_TOOL_CALL_MISMATCH")
+            call = match["call"]
+            receipt = port.executeTool({"executionId": execution, "expectedTraceVersion": version, "turn": turn,
+                "callOrdinal": match["ordinal"], "toolCallId": call["id"], "name": name, "args": args})
+            version = receipt["traceVersion"]
+            # Mainline stores immutable value+sources before returning. Do not permit
+            # model args to choose sources; only the exact authorized value enters Hermes.
+            if "sources" not in receipt or "value" not in receipt:
+                raise RuntimeError("TRUSTED_TOOL_RECEIPT_REQUIRED")
+            pending.remove(match)
+            if not pending: phase = "input_ready"
+            return AuthorizedToolResult(receipt["value"], receipt["sources"], version)
 
     tools = {item["function"]["name"]: item["function"] for item in ticket["tools"]}
     context = {**config, "purpose": "employee_work", "executionId": execution,

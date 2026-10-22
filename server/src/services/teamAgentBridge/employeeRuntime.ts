@@ -142,7 +142,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     async recordInput(raw) {
       const v=employeeRuntimeInputSchema.parse(raw)
       return mutate(v.executionId,v.expectedTraceVersion,async(_tx,s)=>{
-        if(s.phase!=='input'||v.turn!==s.turn+1||v.turn>3) fail('EMPLOYEE_RUNTIME_SEND_ALREADY_RESERVED')
+        if(s.phase!=='input'||v.turn!==s.turn+1||v.turn>6) fail('EMPLOYEE_RUNTIME_SEND_ALREADY_RESERVED')
         const p:any=v.providerRequest, messages=p?.messages
         // Compare the actual tool surface as a set. The runtime is free to order the
         // issued tools differently; it is not free to change, add or drop one.
