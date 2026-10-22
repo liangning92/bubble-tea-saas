@@ -58,6 +58,7 @@ jobs:
       - run: node tests/stoploss/tv-signage-page-check.cjs
       - run: node tests/stoploss/tv-signage-lottery-page-check.cjs
       - run: node tests/stoploss/tv-signage-catalog-page-check.cjs
+      - run: node tests/stoploss/tv-signage-special-page-check.cjs
       - run: node tests/stoploss/tv-signage-admin-page-check.cjs
       - uses: actions/setup-java@v4
         with:
