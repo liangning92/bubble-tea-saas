@@ -30,6 +30,7 @@
       promoPrice: "Harga Promo",
       saving: "Hemat",
       tomorrow: "Besok",
+      today: "Hari Ini",
       preview: "Pratinjau Promo",
     },
     en: {
@@ -57,6 +58,7 @@
       promoPrice: "Special price",
       saving: "Save",
       tomorrow: "Tomorrow",
+      today: "Today",
       preview: "Special preview",
     },
     zh: {
@@ -84,6 +86,7 @@
       promoPrice: "活动价",
       saving: "节省",
       tomorrow: "明日",
+      today: "今日",
       preview: "特价预告",
     },
   };
@@ -557,9 +560,13 @@
     const tomorrowKey = new Intl.DateTimeFormat("en-CA", {
       timeZone: "UTC",
     }).format(tomorrow);
+    const todayKey = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "UTC",
+    }).format(new Date(key + "T00:00:00Z"));
     const locale =
       language === "zh" ? "zh-CN" : language === "en" ? "en-GB" : "id-ID";
     return {
+      isToday: date === todayKey,
       isTomorrow: date === tomorrowKey,
       label: new Intl.DateTimeFormat(locale, {
         timeZone: "UTC",
@@ -569,15 +576,19 @@
       }).format(new Date(date + "T12:00:00Z")),
     };
   }
-  function previewCard(special) {
+  function previewCard(special, className) {
     const up = special.upcoming,
       day = specialDay(up.date, special.timezone || snapshot.store.timezone);
-    const item = element("div", undefined, "promotion-preview");
+    const item = element("div", undefined, className || "promotion-preview");
+    const headline = day.isToday
+      ? t("today")
+      : day.isTomorrow
+        ? t("tomorrow")
+        : t("preview");
     item.append(
       element(
         "strong",
-        (day.isTomorrow ? t("tomorrow") + " · " : t("preview") + " · ") +
-          day.label,
+        headline + " · " + day.label,
       ),
     );
     item.append(
@@ -594,13 +605,16 @@
   let lastSpecialKey = "";
   function renderSpecials() {
     const box = $("specials"),
-      live = liveSpecial();
+      live = liveSpecial(),
+      upcoming = upcomingSpecial();
     const key = live
       ? live.id +
         ":" +
         (live.products || [])
           .map((p) => p.id + "-" + p.specialPrice + "-" + p.originalPrice)
-          .join(",")
+          .join(",") +
+        "|" +
+        (upcoming ? upcoming.id + "-" + upcoming.upcoming.date : "none")
       : "";
     const playing = snapshot.screen.isActive;
     $("content").hidden = playing && !!live;
@@ -668,8 +682,7 @@
       grid.append(card);
     }
     if (products.length !== 1) box.append(grid);
-    const upcoming = upcomingSpecial();
-    if (upcoming) box.append(previewCard(upcoming));
+    if (upcoming) box.append(previewCard(upcoming, "special-preview"));
   }
   function playSlide() {
     clearTimeout(slideTimer);
