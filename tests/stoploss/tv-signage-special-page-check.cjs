@@ -53,8 +53,17 @@ const server = http.createServer((req, res) => {
     await page.goto(
       "http://127.0.0.1:" + server.address().port + "/tv/?preview=1",
     );
-    const today = new Date().getDay(),
-      other = (today + 3) % 7;
+    // The player judges the offer in the store time zone, so the fixture must too.
+    const weekdayName = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Jakarta",
+      weekday: "short",
+    })
+      .formatToParts(new Date())
+      .find((p) => p.type === "weekday").value;
+    const today = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
+      weekdayName,
+    );
+    const other = (today + 3) % 7;
     const todayKey = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Jakarta",
     }).format(new Date());
