@@ -14,6 +14,13 @@ import { EMPLOYEE_RUNTIME_INSTRUCTION, EMPLOYEE_RUNTIME_PROTOCOL, EmployeeRuntim
 const fail = (code = 'EMPLOYEE_RUNTIME_TRACE_DENIED'): never => { throw new TeamError(409, code) }
 const canonical=(v:any):any=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v
 const same=(a:any,b:any)=>hash(canonical(a))===hash(canonical(b))
+/** JSON Schema treats an empty required list exactly like an absent one, and the model
+ * SDK omits it. Normalize that away so an unchanged surface still compares equal. */
+const normalizeSchema=(v:any):any=>Array.isArray(v)?v.map(normalizeSchema):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().filter(k=>!(k==='required'&&Array.isArray(v[k])&&v[k].length===0)).map(k=>[k,normalizeSchema(v[k])])):v
+/** The issued tool surface is a set of name+schema, not a sequence. The runtime may
+ * emit the same backend-issued tools in another order and with its own JSON key order;
+ * only a different surface is a violation. Names are unique, so the order is total. */
+const canonicalTools=(list:any):any[]=>[...(Array.isArray(list)?list:[])].map(normalizeSchema).sort((a:any,b:any)=>{const x=String(a?.function?.name??''),y=String(b?.function?.name??'');return x<y?-1:x>y?1:0})
 // Pinned Hermes parses then compact-serializes model tool arguments between
 // rounds. Compare their JSON value, while preserving every other message field.
 const history=(messages:any[])=>messages.map(m=>m.tool_calls?{...m,tool_calls:m.tool_calls.map((c:any)=>({...c,function:{...c.function,arguments:JSON.parse(c.function.arguments)}}))}:m)
@@ -125,7 +132,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
         if(g.actions.includes('inventory.read')) tools.push(fn('employee_read_inventory','Read authorized book inventory and certified physical-count evidence for any named item; no costs, no writes, ambiguous matches require clarification',{query:{type:'string',minLength:1,maxLength:80}},['query']))
         if(g.actions.includes('messages.send')) tools.push(fn('employee_send_message','Send at most one natural operational reply in this execution to this exact current audience; set expectsReply only for a question requiring new staff facts, not an acknowledgement',{text:{type:'string',minLength:1,maxLength:4000},expectsReply:{type:'boolean'}},['text']))
         const ticket:EmployeeRuntimeTicket={ protocol:EMPLOYEE_RUNTIME_PROTOCOL,executionId,requestId,traceVersion:1,compartmentKey:scope.compartmentKey,audienceHash:scope.audienceHash,
-          inputContextHash:hash(facts),toolSchemaHash:hash(tools),sealedUserContent:JSON.stringify({task:scope.task,capabilities:{replyRoute:'Use employee_send_message for a relevant employee answer or clarification. The final assistant response is an internal report, never automatically posted to the employee. Report actions and blockers honestly.',conversation:'Free operational questions and clarification; not limited to one item or fixed phrases',actions:'Only the issued tools can execute actions. Without an implementing tool, explain that leave/profile/purchase changes have not been performed; never promise completion or approval.',restrictedRequests:'No extra data grant. Explain the access boundary without fetching data or asking for private details.',evidence:'Book stock is not a physical count. A report is not manager acceptance.'},facts:facts.map(f=>f.value)}),instruction:EMPLOYEE_RUNTIME_INSTRUCTION,
+          inputContextHash:hash(facts),toolSchemaHash:hash(canonicalTools(tools)),sealedUserContent:JSON.stringify({task:scope.task,capabilities:{replyRoute:'Use employee_send_message for a relevant employee answer or clarification. The final assistant response is an internal report, never automatically posted to the employee. Report actions and blockers honestly.',conversation:'Free operational questions and clarification; not limited to one item or fixed phrases',actions:'Only the issued tools can execute actions. Without an implementing tool, explain that leave/profile/purchase changes have not been performed; never promise completion or approval.',restrictedRequests:'No extra data grant. Explain the access boundary without fetching data or asking for private details.',evidence:'Book stock is not a physical count. A report is not manager acceptance.'},facts:facts.map(f=>f.value)}),instruction:EMPLOYEE_RUNTIME_INSTRUCTION,
           isolation:{protocol:EMPLOYEE_RUNTIME_PROTOCOL,profile:'employee_work',sessionId:'employee_work_'+hash([executionId,scope.compartmentKey]),compartmentKey:scope.compartmentKey,memoryNamespace:scope.compartmentKey,memoryEnabled:false,contextFilesEnabled:false,auxiliaryModelsEnabled:false,sharedHistoryEnabled:false,builtinToolsEnabled:false},model:'MiniMax-M3.1-Flash',tools }
         const s:State={ticket,grant:g,scope,expiresAt:new Date(Math.min(Date.parse(g.expiresAt),now()+Math.min(deps.maxExecutionMs||60000,120000))).toISOString(),version:1,phase:'input',turn:0,sources:facts,inputs:[],responses:[],tools:[],lastSeq:c.lastSeq}
         await writeTeam(tx,g.storeId,key(executionId),s);await writeTeam(tx,g.storeId,pointer(scope),{executionId})
@@ -137,7 +144,10 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       return mutate(v.executionId,v.expectedTraceVersion,async(_tx,s)=>{
         if(s.phase!=='input'||v.turn!==s.turn+1||v.turn>3) fail('EMPLOYEE_RUNTIME_SEND_ALREADY_RESERVED')
         const p:any=v.providerRequest, messages=p?.messages
-        if(hash(v.isolation)!==hash(s.ticket.isolation)||v.inputHash!==hash(p)||v.toolSchemaHash!==s.ticket.toolSchemaHash||hash(p?.tools)!==s.ticket.toolSchemaHash||p?.model!==s.ticket.model||!Array.isArray(messages)||JSON.stringify(p).length>1000000) fail()
+        // Compare the actual tool surface as a set. The runtime is free to order the
+        // issued tools differently; it is not free to change, add or drop one.
+        const actualTools=hash(canonicalTools(p?.tools))
+        if(hash(v.isolation)!==hash(s.ticket.isolation)||v.inputHash!==hash(p)||v.toolSchemaHash!==actualTools||actualTools!==s.ticket.toolSchemaHash||p?.model!==s.ticket.model||!Array.isArray(messages)||JSON.stringify(p).length>1000000) fail()
         if(s.turn===0){
           const firstUser=messages.findIndex((m:any)=>m.role==='user')
           if(firstUser<1||firstUser!==messages.length-1||messages[firstUser].content!==s.ticket.sealedUserContent||Object.keys(messages[firstUser]).some(k=>!['role','content'].includes(k))||messages.slice(0,firstUser).some((m:any)=>m.role!=='system')||!(deps.approvedSystemHashes.includes(hash(messages.slice(0,firstUser))) || deps.reviewedSystemTemplate && employeeSystemTemplateHash(messages.slice(0,firstUser),deps.reviewedSystemTemplate.isolatedRoot,s.ticket.executionId)===deps.reviewedSystemTemplate.hash)) fail('EMPLOYEE_RUNTIME_UNAPPROVED_SYSTEM_ASSEMBLY')

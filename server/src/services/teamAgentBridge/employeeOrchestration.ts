@@ -92,7 +92,19 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
    await db.$transaction(async(tx:any)=>{await lockTeam(tx,storeId,mappingKey(r.id));const m=await readTeam<any>(tx,storeId,mappingKey(r.id));if(m?.executionId!==ticket.executionId)fail('EMPLOYEE_ORCHESTRATION_MAPPING_CHANGED');await writeTeam(tx,storeId,mappingKey(r.id),{...m,gatewayState:receipt.state})})
    if(receipt.state==='admission_unknown'||receipt.state==='unknown')await deps.runtime.host.markUnknown(ticket.executionId,ticket.traceVersion,'EMPLOYEE_GATEWAY_ADMISSION_UNCONFIRMED')
    return {runtimeExecutionId:ticket.executionId}
-  },readExecution:observed})
+  },readExecution:observed,
+  // Only the persisted runtime decides whether an unfinished reservation can be
+  // released. A stored employee reply is a real answer and is never executed twice;
+  // a missing or unfinished runtime proves that no employee receipt was produced.
+  readAbandoned:async(tx,r)=>{
+   const m=await readTeam<any>(tx,storeId,mappingKey(r.id))
+   if(!m||!m.executionId)return {releasable:true,reason:'NO_RUNTIME_EXECUTION'}
+   const s=await readTeam<any>(tx,storeId,'employeeRuntime.execution.'+m.executionId)
+   if(!s)return {releasable:true,reason:'NO_RUNTIME_EXECUTION'}
+   if((s.tools||[]).some((t:any)=>t.name==='employee_send_message'))return {releasable:false,reason:'OUTBOUND_ALREADY_SENT'}
+   if(s.phase==='complete')return {releasable:false,reason:'RUNTIME_COMPLETED'}
+   return {releasable:true,reason:'RUNTIME_NOT_COMPLETED'}
+  }})
  return {get:continuation.get,reconcile:continuation.reconcile,
   async drain(limit=20) {
    if(deps.enabled!==true)return {processed:0,disabled:true}

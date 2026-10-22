@@ -4,7 +4,7 @@ const assert=require('node:assert/strict'),path=require('node:path'),fs=require(
 const root=path.resolve(__dirname,'../..'),built=n=>require(root+'/server/dist/services/'+n),{PrismaClient}=require(root+'/server/node_modules/@prisma/client');
 const {teamCommunication,readTeam,writeTeam,lockTeam}=built('TeamCommunicationService'),{installEmployeeCutover}=built('teamAgentBridge/employeeCutover'),{employeeRouteKey,employeeGrantKey,assertLegacyConsumer}=built('teamAgentBridge/employeeIntake');
 assert(process.env.BT_TEST_RUN?.startsWith('bt-test-'));const uri=new URL(process.env.DATABASE_URL);assert.equal(uri.hostname,'127.0.0.1');assert.equal(uri.pathname,'/team_test');
-const db=new PrismaClient(),storeId='employee-cutover-fixture',passed=[],owner={id:'cutover-admin',staffId:'cutover-admin-staff',storeId,role:'admin'},limit='2026-10-22T00:14:04.876Z';let count=0;
+const db=new PrismaClient(),storeId='employee-cutover-fixture',passed=[],owner={id:'cutover-admin',staffId:'cutover-admin-staff',storeId,role:'admin'},limit='2026-10-23T10:00:00.000Z';let count=0;
 const check=async(name,fn)=>{await fn();passed.push(name);console.log('PASS '+name)};
 const configCount=()=>db.config.count({where:{storeId}}),auditCount=()=>db.financeAuditLog.count({where:{storeId}});
 const snapshot=async c=>({config:await configCount(),audit:await auditCount(),channel:await readTeam(db,storeId,'channel.'+c.id)});

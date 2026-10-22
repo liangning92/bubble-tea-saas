@@ -13,7 +13,10 @@ const input=z.object({storeId:z.string().min(1),channelId:z.string().uuid(),sour
  * Native owner/permissions are resolved here; no manufactured admin actor or
  * employee login is used to seed the service-owned coordination task. */
 export async function installEmployeeCutover(db:any,raw:z.infer<typeof input>) {
-  const v=input.parse(raw),now=Date.now(),limit=Date.parse('2026-10-22T00:14:04.876Z')
+  // Absolute operator-authorized bound of the renewed isolated employee window.
+  // A configuration or credential renewal can never move it; a new window is a
+  // new reviewed bound, never an extension of the previous one.
+  const v=input.parse(raw),now=Date.now(),limit=Date.parse('2026-10-23T10:00:00.000Z')
   if(Date.parse(v.expiresAt)>limit||Date.parse(v.expiresAt)<=now)fail('EMPLOYEE_CUTOVER_DEADLINE_INVALID')
   return db.$transaction(async(tx:any)=>{
     await lockTeam(tx,v.storeId,'channel.'+v.channelId)
