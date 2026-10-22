@@ -390,3 +390,233 @@ article h3 {
 .catalog-category h2 {font-size:1.12em;font-weight:850;line-height:1.2;margin:0 0 .4em;padding-bottom:.3em;border-bottom:2px solid #f8bfd0;}
 .catalog-categories.catalog-overflow {columns:auto;overflow-y:auto;}
 .catalog-categories.catalog-overflow .catalog-category {break-inside:auto;}
+
+/* Daily special board: replaces the product menu while the offer runs. */
+#specials {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1vmin;
+  padding: 1.2vmin 1.5vw;
+  background: linear-gradient(160deg, #2b1424, #120b17);
+  border: 1px solid #ffffff1f;
+  border-radius: 1.4vmin;
+  overflow: hidden;
+}
+.special-head {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35em;
+  text-align: center;
+}
+.special-badge {
+  font-size: 0.8em;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #ffd27f;
+  border: 1px solid #ffd27f66;
+  border-radius: 2em;
+  padding: 0.2em 1.1em;
+}
+.special-head h2 {
+  margin: 0;
+  font-size: 2.1em;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.special-desc {
+  margin: 0;
+  font-size: 0.95em;
+  color: #ecdff5;
+}
+.special-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17vmin, 1fr));
+  gap: 1.2vmin;
+  overflow: hidden;
+}
+.special-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 54%) minmax(0, 1fr);
+  gap: 2.5vmin;
+  align-items: center;
+  overflow: hidden;
+}
+.special-photo {
+  margin: 0;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff0f;
+  border: 1px solid #ffffff1f;
+  border-radius: 1.4vmin;
+  overflow: hidden;
+}
+.special-photo img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  padding: 1.2vmin;
+}
+.special-initial {
+  font-size: 18vmin;
+  font-weight: 900;
+  color: #ffffff2e;
+}
+.special-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4vmin;
+}
+.special-copy h3 {
+  margin: 0;
+  font-size: 3.1em;
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.special-copy .special-price {
+  font-size: 1.9em;
+  margin: 0.1em 0 0;
+  justify-content: flex-start;
+}
+.special-copy .special-price del {
+  font-size: 0.62em;
+}
+.special-copy .special-price strong {
+  font-size: 1.35em;
+  color: #ffd27f;
+}
+.special-copy .special-save {
+  margin: 0.2em 0 0;
+  font-size: 1.5em;
+  font-weight: 900;
+  color: #9ce5cc;
+}
+.special-card {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5vmin;
+  padding: 1.1vmin;
+  background: #ffffff12;
+  border: 1px solid #ffffff1f;
+  border-radius: 1.1vmin;
+  text-align: center;
+  overflow: hidden;
+}
+.special-card img {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 30vh;
+  object-fit: contain;
+  border-radius: 0.7vmin;
+}
+.special-card h3 {
+  flex: none;
+  margin: 0;
+  font-size: 1.1em;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.special-price {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.6em;
+  margin: 0.15em 0 0;
+  font-size: 1.05em;
+  font-weight: 800;
+}
+.special-price del {
+  font-size: 0.72em;
+  margin: 0;
+}
+.special-price strong {
+  color: #ffd27f;
+  font-size: 1.3em;
+}
+.special-save {
+  flex: none;
+  margin: 0.25em 0 0;
+  color: #9ce5cc;
+  font-size: 0.95em;
+  font-weight: 700;
+}
+.promotion-preview {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.7vmin 1.1vmin;
+  background: #ffd27f1a;
+  border: 1px solid #ffd27f55;
+  border-radius: 1vmin;
+}
+.promotion-preview strong {
+  color: #ffd27f;
+  font-size: 1em;
+}
+.promotion-preview p {
+  margin: 0;
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+aside .promotion-preview {
+  flex: 1 1 100%;
+}
+.creamy_morandi #specials {
+  background: linear-gradient(160deg, #fff4e6, #f2e0ec);
+  color: #39362e;
+  border-color: #39362e22;
+}
+.creamy_morandi .special-desc {
+  color: #4b463c;
+}
+.creamy_morandi .special-card {
+  background: #ffffffb3;
+  border-color: #39362e22;
+}
+.dynamic_vivid #specials {
+  background: linear-gradient(160deg, #3c1d5f, #1b0d2c);
+}
+@media (max-aspect-ratio: 1/1) {
+  .special-head h2 {
+    font-size: 1.5em;
+  }
+  .special-stage {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 1.2vmin;
+  }
+  .special-copy h3 {
+    font-size: 1.7em;
+  }
+  .special-copy .special-price {
+    font-size: 1.3em;
+  }
+  .special-copy .special-save {
+    font-size: 1.1em;
+  }
+  .special-grid {
+    grid-template-columns: repeat(auto-fit, minmax(24vmin, 1fr));
+  }
+  .special-card img {
+    max-height: 22vh;
+  }
+}

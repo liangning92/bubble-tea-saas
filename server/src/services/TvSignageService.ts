@@ -21,6 +21,7 @@ import {
 } from "./ActivityService";
 import {
   activityEligible,
+  activityWindow,
   bestActivityPrice,
   Activity,
 } from "../utils/activities";
@@ -218,8 +219,9 @@ export async function checkPair(id: string, secret: string, db = prisma) {
   if (!device) return { expired: true };
   return { paired: true, deviceId: device.id, token: pairToken(session.id) };
 }
-// Evaluate individual prices with the exact same candidate selector as POS. Conditional
-// activities remain advertisements, not an unconditional product price promise.
+// Evaluate individual prices with the exact same candidate selector as POS. A minimum spend is
+// re-checked against the evaluated item, so a conditional offer only lowers the shown price when
+// that single item already meets it. Member, payment and per-member limits stay advertisements.
 export function displaySpecPrice(
   spec: any,
   product: any,
@@ -243,7 +245,6 @@ export function displaySpecPrice(
   const direct = activities.filter(
     (a) =>
       ["special_price", "percent", "fixed"].includes(a.type) &&
-      !a.rule.minAmount &&
       !a.rule.perMemberLimit &&
       !a.paymentMethods.length &&
       !a.memberOnly &&
@@ -413,6 +414,68 @@ export async function signageSnapshot(screen: any, db = prisma) {
       false,
     ),
   );
+  // Daily special board: the running offer plus the next occurrence, independent of the
+  // product menu so the board can replace the menu while the offer is live.
+  const specialRows = await db.product.findMany({
+    where: { storeId, status: "active", deletedAt: null },
+    include: { specs: true },
+  });
+  const specialProducts = (activity: Activity) =>
+    activity.productIds
+      .map((id) => specialRows.find((p) => p.id === id))
+      .filter((p) => !!p)
+      .map((p) => {
+        const prices = p.specs.map((s) => s.price);
+        const originalPrice = prices.length ? Math.min(...prices) : 0;
+        const specialPrice = activity.rule.price ?? 0;
+        return {
+          id: p.id,
+          name: p.name,
+          image: p.image,
+          originalPrice,
+          specialPrice,
+          saving: Math.max(0, originalPrice - specialPrice),
+        };
+      })
+      .filter((p) => p.originalPrice > 0);
+  const specials = allActivities
+    .filter(
+      (a) =>
+        a.type === "special_price" &&
+        a.showOnTv &&
+        a.status === "published" &&
+        (!a.startsAt || now.getTime() >= Date.parse(a.startsAt)) &&
+        (!a.endsAt || now.getTime() < Date.parse(a.endsAt)),
+    )
+    .sort(
+      (a, b) =>
+        b.priority - a.priority ||
+        Date.parse(a.startsAt || "0") - Date.parse(b.startsAt || "0"),
+    )
+    .map((a) => {
+      const schedule = activityWindow(a, now);
+      const products = specialProducts(a);
+      return {
+        id: a.id,
+        name: a.name,
+        description: a.description,
+        theme: a.theme || "",
+        weekdays: a.weekdays,
+        dailyStart: a.dailyStart,
+        dailyEnd: a.dailyEnd,
+        startsAt: a.startsAt,
+        endsAt: a.endsAt,
+        timezone: a.timezone,
+        products,
+        upcoming: schedule.nextDate
+          ? {
+              date: schedule.nextDate,
+              weekday: schedule.nextWeekday,
+              products,
+            }
+          : null,
+      };
+    });
   const hardware = brandRow ? JSON.parse(brandRow.value) : {},
     assets: any[] = [];
   for (const [url, kind] of [
@@ -471,6 +534,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
     media: screen.isActive ? slides : [],
     music: screen.isActive ? music : [],
     promotions: screen.isActive ? promotions : [],
+    specials: screen.isActive ? specials : [],
     assets: screen.isActive
       ? assets
       : assets.filter((a) => a.url === canonical(logo)),
