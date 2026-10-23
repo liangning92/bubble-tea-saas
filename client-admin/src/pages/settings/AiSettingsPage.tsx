@@ -4,6 +4,7 @@ import type { TeamClient } from '../../../../shared/TeamCommunication'
 import api from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { TeamAiSettings } from './TeamAiSettings'
+import { TeamAgentSettings } from './TeamAgentSettings'
 import { aiSettingsCopy } from './aiSettingsCopy'
 import { TeamManagementDefaults } from './TeamManagementDefaults'
 import { TeamWorkflowSettings } from './TeamWorkflowSettings'
@@ -22,6 +23,7 @@ export function AiSettingsPage() {
   return <div className="max-w-5xl space-y-5" data-testid="ai-settings-page">
     <header><h2 className="text-xl font-semibold">{c.title}</h2></header>
     <TeamAiSettings key={`${user.id}:${user.storeId}`} client={client} identity={{userId:user.id,storeId:user.storeId}} language={i18n.language} />
+    <TeamAgentSettings key={`agent:${user.id}:${user.storeId}`} client={client} language={i18n.language} />
     <TeamWorkflowSettings key={`workflow:${user.id}:${user.storeId}`} client={client} scope={`${user.id}:${user.storeId}`} staffId={user.staff?.id || ''} language={i18n.language} />
     <TeamManagementDefaults key={`management:${user.id}:${user.storeId}`} client={client} scope={`${user.id}:${user.storeId}`} staffId={user.staff?.id || ''} language={i18n.language} />
   </div>

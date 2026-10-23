@@ -77,6 +77,7 @@ export function MediaLibrary({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [preview, setPreview] = useState<MediaAsset | null>(null),
+    [referencesAsset, setReferencesAsset] = useState<MediaAsset | null>(null),
     [references, setReferences] = useState<any[] | null>(null);
   const [rename, setRename] = useState<MediaAsset | null>(null),
     [name, setName] = useState(""),
@@ -260,6 +261,7 @@ export function MediaLibrary({
                       className="btn btn-sm"
                       onClick={() =>
                         void run(async () => {
+                          setReferencesAsset(asset);
                           const r = await mediaApi.references(asset.id);
                           setReferences(r.data.data.list);
                         })
@@ -328,39 +330,101 @@ export function MediaLibrary({
           </AdminDialog>
       )}
       {references !== null && (
-        <div className="card space-y-2" role="status">
-          <h2>{t("media.references")}</h2>
+        <div className="card space-y-3 p-4 bg-amber-50/50 border border-amber-200 rounded-xl" role="status">
+          <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+            <h2 className="font-bold text-gray-900 text-base">
+              {t("media.references")} {referencesAsset ? `(${referencesAsset.name})` : ""}
+            </h2>
+            {references.length > 0 && canWrite && referencesAsset && (
+              <button
+                type="button"
+                className="btn btn-sm bg-red-600 text-white hover:bg-red-700"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await mediaApi.remove(referencesAsset.id, true);
+                    setReferences(null);
+                    setReferencesAsset(null);
+                  })
+                }
+              >
+                {t("media.forceDelete", "解除全部引用并删除")}
+              </button>
+            )}
+          </div>
           {references.length ? (
-            references.map((r: any) => (
-              <div key={r.kind + r.id}>
-                {r.kind === "product" ? (
-                  <Link
-                    className="text-primary"
-                    to={`/products/recipes?productId=${r.id}`}
-                  >
-                    {r.name}
-                  </Link>
-                ) : (
-                  t(
-                    r.id === "hardwareSettings"
-                      ? "media.displayReference"
-                      : r.id === "tv_screen_marketing_config"
-                        ? "media.tvReference"
-                        : "media.otherReference",
-                  )
-                )}
+            <div className="space-y-2">
+              <p className="text-xs text-gray-600">
+                {t("media.referenceHint", "该文件被以下位置引用。您可以点击【解除引用】单个解绑，或进入商品编辑页修改：")}
+              </p>
+              <div className="divide-y divide-gray-200/60 max-h-60 overflow-y-auto">
+                {references.map((r: any) => (
+                  <div key={r.kind + r.id} className="py-2 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 text-gray-700 font-medium">
+                        {r.kind === "product" ? t("media.kindProduct", "商品") : r.kind === "tv" ? "TV" : t("media.kindConfig", "系统配置")}
+                      </span>
+                      {r.kind === "product" ? (
+                        r.isDeleted ? (
+                          <span className="text-gray-500 line-through">
+                            {r.name} <span className="text-xs text-red-500">({t("media.deletedProduct", "已软删除商品")})</span>
+                          </span>
+                        ) : (
+                          <Link
+                            className="text-primary hover:underline font-medium"
+                            to={`/products/${r.id}/edit`}
+                            target="_blank"
+                          >
+                            {r.name}
+                          </Link>
+                        )
+                      ) : (
+                        <span>
+                          {t(
+                            r.id === "hardwareSettings"
+                              ? "media.displayReference"
+                              : r.id === "tv_screen_marketing_config"
+                                ? "media.tvReference"
+                                : "media.otherReference",
+                            r.id
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    {canWrite && referencesAsset && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost text-red-600 hover:bg-red-50 text-xs px-2 py-1"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(async () => {
+                            const res = await mediaApi.unlink(referencesAsset.id, { kind: r.kind, id: r.id });
+                            setReferences(res.data.data.list);
+                          })
+                        }
+                      >
+                        {t("media.unlinkReference", "解除引用")}
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))
+            </div>
           ) : (
-            <p>{t("media.unused")}</p>
+            <p className="text-sm text-gray-600">{t("media.unused")}</p>
           )}
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setReferences(null)}
-          >
-            {t("common.close")}
-          </button>
+          <div className="pt-2 flex justify-end">
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => {
+                setReferences(null);
+                setReferencesAsset(null);
+              }}
+            >
+              {t("common.close")}
+            </button>
+          </div>
         </div>
       )}
       {rename && (
@@ -400,6 +464,7 @@ export function MediaLibrary({
             onClick={() =>
               void run(async () => {
                 const asset = deleting;
+                setReferencesAsset(asset);
                 setDeleting(null);
                 await mediaApi.remove(asset.id);
               })

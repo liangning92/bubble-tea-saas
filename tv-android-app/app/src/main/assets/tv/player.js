@@ -623,6 +623,115 @@
     lastSpecialKey = key;
     box.replaceChildren();
     if (!live) return;
+    const cfg = live.posterConfig;
+    if (cfg && cfg.template === "daily_specials") {
+      box.classList.add("special-poster-board");
+      if (cfg.backgroundColor) box.style.background = cfg.backgroundColor;
+      const posterHead = element("div", undefined, "special-poster-head");
+      const title = element("h1", cfg.headline || live.name || t("specialBadge"), "special-poster-title");
+      if (cfg.themeColor) title.style.color = cfg.themeColor;
+      posterHead.append(title);
+      if (cfg.subheadline || live.description) {
+        posterHead.append(element("p", cfg.subheadline || live.description, "special-poster-sub"));
+      }
+      box.append(posterHead);
+
+      const days = [
+        { day: 1, label: "Senin" },
+        { day: 2, label: "Selasa" },
+        { day: 3, label: "Rabu" },
+        { day: 4, label: "Kamis" },
+        { day: 5, label: "Jumat" },
+        { day: 6, label: "Sabtu" },
+        { day: 0, label: "Minggu" },
+      ];
+      const count = cfg.columns || 5;
+      const displayDays = days.slice(0, count);
+
+      const todayWeekdayName = new Intl.DateTimeFormat("en-GB", {
+        timeZone: live.timezone || snapshot.store.timezone || "Asia/Jakarta",
+        weekday: "short",
+      }).format(new Date());
+      const currentWeekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(todayWeekdayName);
+
+      const cardRow = element("div", undefined, "special-poster-row");
+      const gradients = [
+        "linear-gradient(180deg, #FAD0C4 0%, #FFD1FF 100%)",
+        "linear-gradient(180deg, #FFE5B4 0%, #FFB199 100%)",
+        "linear-gradient(180deg, #D4FC79 0%, #96E6A1 100%)",
+        "linear-gradient(180deg, #FCCB90 0%, #D57EEB 100%)",
+        "linear-gradient(180deg, #FDEB71 0%, #F8D800 100%)",
+        "linear-gradient(180deg, #A8EDEA 0%, #FED6E3 100%)",
+        "linear-gradient(180deg, #E0C3FC 0%, #8EC5FC 100%)",
+      ];
+
+      const prods = live.products || [];
+      displayDays.forEach((d, idx) => {
+        const isActive = cfg.highlightToday !== false && currentWeekday === d.day;
+        const p = prods[idx % (prods.length || 1)] || prods[0] || {
+          name: "YOUME Special",
+          originalPrice: 16000,
+          specialPrice: 12000,
+          saving: 4000,
+        };
+        const card = element("article", undefined, "special-poster-card" + (isActive ? " special-card-active" : ""));
+        card.style.background = isActive
+          ? "linear-gradient(180deg, #FFF0F3 0%, #FFE3E8 100%)"
+          : gradients[idx % gradients.length];
+        if (isActive && cfg.themeColor) {
+          card.style.borderColor = cfg.themeColor;
+          card.style.boxShadow = "0 0 3vmin " + cfg.themeColor + "66";
+        }
+
+        const show = cfg.showFields || {};
+        if (show.productName !== false) {
+          const cardTitle = element("h3", p.name, "special-poster-product-title");
+          if (isActive) cardTitle.style.color = "#9d174d";
+          card.append(cardTitle);
+        }
+
+        if (show.productImage !== false) {
+          const photo = element("figure", undefined, "special-poster-photo");
+          if (p.image) {
+            const img = element("img");
+            img.alt = p.name;
+            img.src = assetUrl(p.image);
+            img.onerror = () => img.remove();
+            photo.append(img);
+          } else {
+            photo.append(element("span", "🥤", "special-poster-emoji"));
+          }
+          card.append(photo);
+        }
+
+        const priceBox = element("div", undefined, "special-poster-price-box");
+        if (show.originalPrice !== false && p.originalPrice > 0) {
+          priceBox.append(element("p", (t("normalPrice") || "Harga Normal") + " : " + money(p.originalPrice), "special-card-normal-price"));
+        }
+        if (show.specialPrice !== false) {
+          const sp = element("p", (t("promoPrice") || "Harga Spesial") + " : " + money(p.specialPrice), "special-card-special-price");
+          if (isActive && cfg.themeColor) sp.style.color = cfg.themeColor;
+          priceBox.append(sp);
+        }
+        if (show.savingAmount !== false && p.saving > 0) {
+          priceBox.append(element("p", (t("saving") || "Hemat") + " : " + money(p.saving), "special-card-saving"));
+        }
+        card.append(priceBox);
+
+        if (show.dayBadge !== false) {
+          const badge = element("div", d.label, "special-card-day-badge");
+          if (isActive && cfg.themeColor) {
+            badge.style.backgroundColor = cfg.themeColor;
+          }
+          card.append(badge);
+        }
+
+        cardRow.append(card);
+      });
+
+      box.append(cardRow);
+      return;
+    }
     const head = element("div", undefined, "special-head");
     head.append(element("span", t("specialBadge"), "special-badge"));
     head.append(element("h2", live.name || t("specialBadge")));

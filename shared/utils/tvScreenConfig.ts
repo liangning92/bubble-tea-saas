@@ -1,5 +1,5 @@
 export interface TvBanner { mediaId?: string; kind?: 'image' | 'video'; url: string; title?: string; subtitle?: string }
-export interface TvSpecial { imageMediaId?: string; productId?: string; autoPrice?: boolean; applicableChannels?: string[]; dayOfWeek: number; productName: string; originalPrice: number; specialPrice: number; tag: string; imageUrl: string; description: string }
+export interface TvSpecial { imageMediaId?: string; productId?: string; autoPrice?: boolean; applicableChannels?: string[]; dayOfWeek: number; productName: string; originalPrice: number; specialPrice: number; tag: string; imageUrl: string; description: string; posterConfig?: any }
 export interface TvPrize { id: string; name: string; code: string; color: string; weight: number }
 export interface TvScreenConfig {
   idleProductsEnabled: boolean; idleProductIds: string[]; idleProducts?: Array<{ id: string; name: string; image: string; price?: number }>

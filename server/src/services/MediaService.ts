@@ -67,10 +67,84 @@ export async function adoptLegacyMedia(storeId: string) {
   }
 }
 export async function mediaReferences(db: any, asset: {id:string;url:string;storeId:string}) {
-  const products=await db.product.findMany({where:{storeId:asset.storeId,OR:[{image:asset.url},{images:{some:{mediaId:asset.id}}}]},select:{id:true,name:true}})
+  const products=await db.product.findMany({where:{storeId:asset.storeId,OR:[{image:asset.url},{images:{some:{mediaId:asset.id}}}]},select:{id:true,name:true,deletedAt:true}})
   const configs=await db.config.findMany({where:{storeId:asset.storeId,OR:[{value:{contains:asset.id}},{value:{contains:asset.url}}]},select:{key:true}})
   const tvRefs=await db.mediaReference.findMany({where:{storeId:asset.storeId,mediaId:asset.id,configKey:{startsWith:'tv.'}}})
-  return [...tvRefs.map((r:any)=>({kind:'tv',id:r.configKey,name:r.configKey})),...products.map((p:any)=>({kind:'product',id:p.id,name:p.name})),...configs.map((c:any)=>({kind:'config',id:c.key,name:c.key}))]
+  return [...tvRefs.map((r:any)=>({kind:'tv',id:r.configKey,name:r.configKey})),...products.map((p:any)=>({kind:'product',id:p.id,name:p.name,isDeleted:!!p.deletedAt})),...configs.map((c:any)=>({kind:'config',id:c.key,name:c.key}))]
+}
+export async function unlinkMediaReference(db: any, asset: {id:string;url:string;storeId:string}, ref: {kind:string;id:string}) {
+  if (ref.kind === 'product') {
+    await db.productImage.deleteMany({ where: { productId: ref.id, mediaId: asset.id } })
+    const remaining = await db.productImage.findMany({
+      where: { productId: ref.id },
+      include: { media: true },
+      orderBy: { position: 'asc' }
+    })
+    for (let i = 0; i < remaining.length; i++) {
+      if (remaining[i].position !== i) {
+        await db.productImage.update({ where: { id: remaining[i].id }, data: { position: i } })
+      }
+    }
+    const product = await db.product.findFirst({ where: { id: ref.id, storeId: asset.storeId } })
+    if (product && (product.image === asset.url || !remaining.length)) {
+      await db.product.update({
+        where: { id: ref.id },
+        data: { image: remaining.length ? remaining[0].media.url : null }
+      })
+    }
+  } else if (ref.kind === 'tv') {
+    await db.mediaReference.deleteMany({ where: { storeId: asset.storeId, mediaId: asset.id, configKey: ref.id } })
+  } else if (ref.kind === 'config') {
+    await db.mediaReference.deleteMany({ where: { storeId: asset.storeId, mediaId: asset.id, configKey: ref.id } })
+    const cfg = await db.config.findUnique({ where: { storeId_key: { storeId: asset.storeId, key: ref.id } } })
+    if (cfg && cfg.value) {
+      try {
+        const val = JSON.parse(cfg.value)
+        if (val && typeof val === 'object') {
+          const cleanObj = (obj: any) => {
+            if (!obj || typeof obj !== 'object') return
+            if (Array.isArray(obj)) {
+              for (let i = obj.length - 1; i >= 0; i--) {
+                const item = obj[i]
+                if (item && typeof item === 'object') {
+                  if (item.mediaId === asset.id || item.imageMediaId === asset.id || item.url === asset.url || item.imageUrl === asset.url) {
+                    obj.splice(i, 1)
+                    continue
+                  }
+                }
+                cleanObj(item)
+              }
+            } else {
+              for (const k of Object.keys(obj)) {
+                if (obj[k] === asset.id || obj[k] === asset.url) {
+                  delete obj[k]
+                } else if (typeof obj[k] === 'object') {
+                  cleanObj(obj[k])
+                }
+              }
+            }
+          }
+          cleanObj(val)
+          await db.config.update({
+            where: { storeId_key: { storeId: asset.storeId, key: ref.id } },
+            data: { value: JSON.stringify(val) }
+          })
+        }
+      } catch {}
+    }
+  }
+}
+export async function forceUnlinkAllMediaReferences(db: any, asset: {id:string;url:string;storeId:string}) {
+  const refs = await mediaReferences(db, asset)
+  for (const ref of refs) {
+    await unlinkMediaReference(db, asset, ref)
+  }
+  await db.productImage.deleteMany({ where: { mediaId: asset.id } })
+  await db.product.updateMany({
+    where: { storeId: asset.storeId, image: asset.url },
+    data: { image: null }
+  })
+  await db.mediaReference.deleteMany({ where: { storeId: asset.storeId, mediaId: asset.id } })
 }
 export async function setProductImages(tx:any,productId:string,storeId:string,ids:string[]) {
   if(ids.length>5 || new Set(ids).size!==ids.length)throw Error('INVALID_PRODUCT_IMAGES')

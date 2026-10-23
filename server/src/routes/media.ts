@@ -6,7 +6,7 @@ import multer from 'multer'
 import { randomUUID } from 'crypto'
 import prisma from '../config/database'
 import { authenticate, AuthRequest } from '../middlewares/auth'
-import { adoptLegacyMedia, mediaReferences, saveMediaFiles } from '../services/MediaService'
+import { adoptLegacyMedia, mediaReferences, saveMediaFiles, unlinkMediaReference, forceUnlinkAllMediaReferences } from '../services/MediaService'
 import { mediaPath } from '../utils/mediaFiles'
 
 const router=Router()
@@ -14,7 +14,7 @@ export function mediaAccess(req:AuthRequest,res:Response,next:NextFunction) {
   const scene=String(req.query.scene||'library')
   if(!['library','product','display','tv'].includes(scene))return res.status(400).json({code:400,message:'INVALID_MEDIA_SCENE'})
   const write=!['GET','HEAD'].includes(req.method)
-  const management=req.method==='PATCH'||req.method==='DELETE'||req.path.endsWith('/references')
+  const management=req.method==='PATCH'||req.method==='DELETE'||req.path.endsWith('/references')||req.path.includes('/unlink')
   const required=management||scene==='library'?'marketing.'+(write?'write':'read'):scene==='product'?'products.'+(write?'write':'read'):scene==='tv'?'marketing.'+(write?'write':'read'):'orders.create'
   const user=req.user!
   const allowed=user.role==='admin'||(user.accessRole?required!==null&&user.accessRole.permissions.includes(required):user.role==='manager'||(!management&&scene==='display'&&user.role==='cashier')||(!management&&!write&&scene==='product'&&['cashier','staff'].includes(user.role)))
@@ -63,11 +63,23 @@ router.get('/:id/references',async(req:AuthRequest,res)=>{
 })
 router.delete('/:id',async(req:AuthRequest,res)=>{
   try {
+    const force=req.query.force==='true'||req.body?.force===true
     const outcome=await prisma.$transaction(async tx=>{
       const asset=await tx.mediaAsset.findFirst({where:{id:req.params.id,storeId:req.user!.storeId}})
       if(!asset)return {status:404}
-      const references=await mediaReferences(tx,asset)
-      if(references.length)return {status:409,references}
+      if(force){
+        await forceUnlinkAllMediaReferences(tx,asset)
+      } else {
+        // Auto-unlink soft-deleted products so trashed items never block deletion
+        const softDeletedProducts=await tx.product.findMany({
+          where:{storeId:asset.storeId,deletedAt:{not:null},OR:[{image:asset.url},{images:{some:{mediaId:asset.id}}}]}
+        })
+        for(const p of softDeletedProducts){
+          await unlinkMediaReference(tx,asset,{kind:'product',id:p.id})
+        }
+        const references=await mediaReferences(tx,asset)
+        if(references.length)return {status:409,references}
+      }
       await tx.mediaAsset.delete({where:{id:asset.id}})
       return {status:200,asset}
     })
@@ -79,6 +91,33 @@ router.delete('/:id',async(req:AuthRequest,res)=>{
       return res.status(409).json({code:409,message:'MEDIA_IN_USE',data:{list:asset?await mediaReferences(prisma,asset):[]}})
     }
     res.status(500).json({code:500,message:'MEDIA_DELETE_FAILED'})
+  }
+})
+router.post('/:id/unlink',async(req:AuthRequest,res)=>{
+  try {
+    const {kind,id}=req.body||{}
+    if(!kind||!id)return res.status(400).json({code:400,message:'INVALID_REFERENCE'})
+    const asset=await prisma.mediaAsset.findFirst({where:{id:req.params.id,storeId:req.user!.storeId}})
+    if(!asset)return res.status(404).json({code:404,message:'MEDIA_NOT_FOUND'})
+    await prisma.$transaction(async tx=>{
+      await unlinkMediaReference(tx,asset,{kind,id})
+    })
+    const remaining=await mediaReferences(prisma,asset)
+    res.json({code:200,data:{list:remaining}})
+  }catch(error:any){
+    res.status(500).json({code:500,message:error.message||'UNLINK_FAILED'})
+  }
+})
+router.post('/:id/unlink-all',async(req:AuthRequest,res)=>{
+  try {
+    const asset=await prisma.mediaAsset.findFirst({where:{id:req.params.id,storeId:req.user!.storeId}})
+    if(!asset)return res.status(404).json({code:404,message:'MEDIA_NOT_FOUND'})
+    await prisma.$transaction(async tx=>{
+      await forceUnlinkAllMediaReferences(tx,asset)
+    })
+    res.json({code:200,data:{list:[]}})
+  }catch(error:any){
+    res.status(500).json({code:500,message:error.message||'UNLINK_FAILED'})
   }
 })
 export {router as mediaRouter}

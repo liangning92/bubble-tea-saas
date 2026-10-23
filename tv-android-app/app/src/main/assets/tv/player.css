@@ -623,3 +623,130 @@ aside .promotion-preview {
     max-height: 22vh;
   }
 }
+
+/* Activity Poster Visual Design (Weekly Daily Specials, Grid, BOGO, etc.) */
+.special-poster-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.5vmin 2vw;
+  background: #121214;
+  border-radius: 1.6vmin;
+  overflow: hidden;
+}
+.special-poster-head {
+  flex: none;
+  text-align: center;
+  padding-bottom: 1.2vmin;
+}
+.special-poster-title {
+  margin: 0;
+  font-size: 3.5vmin;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: #ff4b72;
+  text-shadow: 0 0 20px rgba(255, 75, 114, 0.4);
+}
+.special-poster-sub {
+  margin: 0.4vmin 0 0;
+  font-size: 1.8vmin;
+  font-weight: 600;
+  color: #ffcad4;
+}
+.special-poster-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 1.4vmin;
+  padding: 1vmin 0;
+}
+.special-poster-card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: 1.4vmin;
+  overflow: hidden;
+  box-shadow: 0 0.8vmin 2.5vmin rgba(0, 0, 0, 0.35);
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+  color: #2d3748;
+}
+.special-poster-card.special-card-active {
+  transform: translateY(-1.2vmin) scale(1.04);
+  z-index: 2;
+  box-shadow: 0 1.5vmin 4vmin rgba(255, 75, 114, 0.5);
+  border: 0.3vmin solid #ff4b72;
+}
+.special-poster-product-title {
+  margin: 0;
+  padding: 1.2vmin 0.8vmin 0.4vmin;
+  font-size: 1.6vmin;
+  font-weight: 900;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: #1a202c;
+}
+.special-poster-photo {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  padding: 0.5vmin;
+}
+.special-poster-photo img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  filter: drop-shadow(0 0.8vmin 1.5vmin rgba(0, 0, 0, 0.25));
+}
+.special-poster-emoji {
+  font-size: 8vmin;
+  filter: drop-shadow(0 0.8vmin 1.5vmin rgba(0, 0, 0, 0.25));
+}
+.special-poster-price-box {
+  flex: none;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  padding: 0.8vmin 0.6vmin;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+}
+.special-card-normal-price {
+  margin: 0;
+  font-size: 1.2vmin;
+  color: #718096;
+  text-decoration: line-through;
+}
+.special-card-special-price {
+  margin: 0.2vmin 0;
+  font-size: 1.6vmin;
+  font-weight: 900;
+  color: #e53e3e;
+}
+.special-card-saving {
+  margin: 0;
+  font-size: 1.2vmin;
+  font-weight: 800;
+  color: #276749;
+}
+.special-card-day-badge {
+  flex: none;
+  padding: 0.8vmin 0;
+  font-size: 1.6vmin;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-align: center;
+  background: #4a5568;
+  color: #ffffff;
+}
+

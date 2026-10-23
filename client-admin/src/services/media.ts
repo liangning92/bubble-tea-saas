@@ -51,5 +51,7 @@ export const mediaApi = {
   },
   rename: (id: string, name: string) => api.patch(`/media/${id}`, { name }),
   references: (id: string) => api.get(`/media/${id}/references`),
-  remove: (id: string) => api.delete(`/media/${id}`),
+  remove: (id: string, force = false) => api.delete(`/media/${id}${force ? '?force=true' : ''}`),
+  unlink: (id: string, ref: { kind: string; id: string }) => api.post(`/media/${id}/unlink`, ref),
+  unlinkAll: (id: string) => api.post(`/media/${id}/unlink-all`),
 };

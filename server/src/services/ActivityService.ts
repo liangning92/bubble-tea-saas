@@ -28,7 +28,40 @@ export const activitySchema=z.object({
  name:z.string().trim().min(1).max(150),description:z.string().max(1000).default(''),theme:z.string().max(100).optional(),categoryId:z.string().min(1).max(100).optional(),type:z.enum(ACTIVITY_TYPES),status:z.enum(['draft','published','paused','ended']).default('draft'),priority:z.number().int().min(0).max(1000).default(0),
  startsAt:z.string().datetime({offset:true}).optional(),endsAt:z.string().datetime({offset:true}).optional(),timezone:z.string().default('Asia/Jakarta').refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true}catch{return false}},'Invalid time zone'),
  weekdays:z.array(z.number().int().min(0).max(6)).max(7).default([]),dailyStart:time.optional(),dailyEnd:time.optional(),channels:ids.default([]),paymentMethods:ids.default([]),productIds:ids.default([]),excludedProductIds:ids.default([]),specIds:ids.default([]),memberOnly:z.boolean().default(false),memberLevels:ids.default([]),showOnTv:z.boolean().default(true),
- imageUrl:z.string().max(2048).refine(v=>!v||/^https?:\/\//.test(v)||v.startsWith('/uploads/'),'Invalid image URL').optional(),limit:z.number().int().min(1).max(1000000000).optional(),rule:ruleSchema
+ imageUrl:z.string().max(2048).refine(v=>!v||/^https?:\/\//.test(v)||v.startsWith('/uploads/'),'Invalid image URL').optional(),limit:z.number().int().min(1).max(1000000000).optional(),
+ posterConfig:z.object({
+  template:z.enum(['daily_specials','featured_grid','bogo_duo','lucky_wheel','tiered_milestone']).optional(),
+  headline:z.string().max(100).optional(),
+  subheadline:z.string().max(150).optional(),
+  columns:z.number().int().min(1).max(10).optional(),
+  rows:z.number().int().min(1).max(5).optional(),
+  layoutMode:z.enum(['row_cards','grid','spotlight']).optional(),
+  highlightToday:z.boolean().optional(),
+  themeColor:z.string().max(50).optional(),
+  backgroundColor:z.string().max(50).optional(),
+  showFields:z.object({
+   productImage:z.boolean().optional(),
+   productName:z.boolean().optional(),
+   productSubname:z.boolean().optional(),
+   originalPrice:z.boolean().optional(),
+   specialPrice:z.boolean().optional(),
+   savingAmount:z.boolean().optional(),
+   dayBadge:z.boolean().optional(),
+   discountTag:z.boolean().optional(),
+  }).optional(),
+  cardItems:z.array(z.object({
+   dayOfWeek:z.number().int().min(0).max(6).optional(),
+   dayLabel:z.string().max(50).optional(),
+   productId:z.string().optional(),
+   productName:z.string().optional(),
+   specName:z.string().optional(),
+   imageUrl:z.string().max(2048).optional(),
+   originalPrice:z.number().optional(),
+   specialPrice:z.number().optional(),
+   saving:z.number().optional(),
+   color:z.string().max(50).optional(),
+  })).max(30).optional(),
+ }).optional(),rule:ruleSchema
 }).strict().superRefine((a,ctx)=>{
  const issue=(message:string)=>ctx.addIssue({code:z.ZodIssueCode.custom,message})
  if(a.startsAt&&a.endsAt&&Date.parse(a.endsAt)<=Date.parse(a.startsAt))issue('End must follow start')
@@ -227,7 +260,7 @@ export async function publicActivities(storeId:string,channel=''){
  const availableProducts=new Set(products.map(p=>p.id))
  const rewards=await prisma.rewardCatalog.findMany({where:{storeId,isActive:true,validFrom:{lte:now},validUntil:{gt:now},OR:[{stock:null},{stock:{gt:0}}]}})
  const availableRewards=new Set(rewards.map(r=>r.id))
- const entries=all.filter(a=>(!a.productIds.length||a.productIds.some(id=>availableProducts.has(id)))&&(!a.rule.components?.length||a.rule.components.every(c=>availableProducts.has(c.productId)))&&a.showOnTv&&activityEligible(a,{now,channel},false)&&(!a.rule.rewardIds?.length||a.rule.rewardIds.some(id=>availableRewards.has(id)))&&(a.type!=='lottery'||a.rule.prizes?.some(p=>p.weight>0&&(p.remaining===undefined||p.remaining>0)&&(!p.rewardId||availableRewards.has(p.rewardId))))).map(a=>({id:a.id,version:a.version,name:a.name,description:a.description,summary:activitySummary(a),type:a.type,startsAt:a.startsAt,endsAt:a.endsAt,weekdays:a.weekdays,dailyStart:a.dailyStart,dailyEnd:a.dailyEnd,timezone:a.timezone,channels:a.channels,paymentMethods:a.paymentMethods,memberOnly:a.memberOnly||['member_price','birthday','welcome'].includes(a.type),memberLevels:a.memberLevels,rule:{price:a.rule.price,percent:a.rule.percent,amount:a.rule.amount,minAmount:a.rule.minAmount,maxDiscount:a.rule.maxDiscount,nth:a.rule.nth,buy:a.rule.buy,get:a.rule.get,participants:a.rule.participants,tiers:a.rule.tiers,multiplier:a.rule.multiplier,points:a.rule.points,stampsRequired:a.rule.stampsRequired,couponTrigger:a.rule.couponTrigger,perMemberLimit:a.rule.perMemberLimit,addonNames:a.rule.addonNames},rewardNames:rewards.filter(r=>a.rule.rewardIds?.includes(r.id)).map(r=>r.name),imageUrl:a.imageUrl,products:products.filter(p=>a.productIds.includes(p.id)||a.rule.components?.some(c=>c.productId===p.id)).map(p=>({id:p.id,name:p.name,image:p.image,quantity:a.rule.components?.find(c=>c.productId===p.id)?.quantity,specs:p.specs.filter(s=>!a.specIds.length||a.specIds.includes(s.id)).map(s=>({id:s.id,name:s.name,price:s.price}))}))}))
+ const entries=all.filter(a=>(!a.productIds.length||a.productIds.some(id=>availableProducts.has(id)))&&(!a.rule.components?.length||a.rule.components.every(c=>availableProducts.has(c.productId)))&&a.showOnTv&&activityEligible(a,{now,channel},false)&&(!a.rule.rewardIds?.length||a.rule.rewardIds.some(id=>availableRewards.has(id)))&&(a.type!=='lottery'||a.rule.prizes?.some(p=>p.weight>0&&(p.remaining===undefined||p.remaining>0)&&(!p.rewardId||availableRewards.has(p.rewardId))))).map(a=>({id:a.id,version:a.version,name:a.name,description:a.description,summary:activitySummary(a),type:a.type,startsAt:a.startsAt,endsAt:a.endsAt,weekdays:a.weekdays,dailyStart:a.dailyStart,dailyEnd:a.dailyEnd,timezone:a.timezone,channels:a.channels,paymentMethods:a.paymentMethods,memberOnly:a.memberOnly||['member_price','birthday','welcome'].includes(a.type),memberLevels:a.memberLevels,rule:{price:a.rule.price,percent:a.rule.percent,amount:a.rule.amount,minAmount:a.rule.minAmount,maxDiscount:a.rule.maxDiscount,nth:a.rule.nth,buy:a.rule.buy,get:a.rule.get,participants:a.rule.participants,tiers:a.rule.tiers,multiplier:a.rule.multiplier,points:a.rule.points,stampsRequired:a.rule.stampsRequired,couponTrigger:a.rule.couponTrigger,perMemberLimit:a.rule.perMemberLimit,addonNames:a.rule.addonNames},rewardNames:rewards.filter(r=>a.rule.rewardIds?.includes(r.id)).map(r=>r.name),imageUrl:a.imageUrl,posterConfig:a.posterConfig,products:products.filter(p=>a.productIds.includes(p.id)||a.rule.components?.some(c=>c.productId===p.id)).map(p=>({id:p.id,name:p.name,image:p.image,quantity:a.rule.components?.find(c=>c.productId===p.id)?.quantity,specs:p.specs.filter(s=>!a.specIds.length||a.specIds.includes(s.id)).map(s=>({id:s.id,name:s.name,price:s.price}))}))}))
  return {version:all.reduce((s,a)=>s+a.version+a.used,0),evaluatedAt:now.toISOString(),activities:entries}
 }
 

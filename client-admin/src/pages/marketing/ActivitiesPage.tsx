@@ -29,7 +29,8 @@ import {
   ActivityType,
   ACTIVITY_TYPES,
 } from "../../../../shared/utils/activities";
-import { activityLabel } from "../../../../shared/utils/activityLabels";
+import { activityLabel, languageIndex } from "../../../../shared/utils/activityLabels";
+import { ActivityPosterEditor, DEFAULT_POSTER_CONFIG } from "../../components/marketing/ActivityPosterEditor";
 const LOTTERY_MACARON_COLORS = ["#F8BFD0", "#F6D99B", "#BFE2CE", "#BFDDF1", "#D9C7EC", "#F5C7AF", "#C6DFDF"];
 const empty = {
   name: "",
@@ -54,6 +55,7 @@ const empty = {
   dailyStart: "",
   dailyEnd: "",
   imageUrl: "",
+  posterConfig: undefined as any,
 };
 function wallTime(iso: string, zone: string) {
   if (!iso) return "";
@@ -192,6 +194,7 @@ export function ActivitiesPage() {
       endsAt: wallTime(a.endsAt, a.timezone),
       dailyStart: a.dailyStart || "",
       dailyEnd: a.dailyEnd || "",
+      posterConfig: a.posterConfig || undefined,
     });
     setScope(a.productIds?.length ? "selected" : "all");
     setSpecScope(a.specIds?.length ? "selected" : "all");
@@ -1954,6 +1957,41 @@ export function ActivitiesPage() {
                 "Tampilkan aktivitas di TV",
               )}
             </label>
+            {form.showOnTv && (
+              <div className="border border-red-200 bg-red-50/20 rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-red-100 pb-3">
+                  <div>
+                    <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                      <Monitor className="w-5 h-5 text-red-500" />
+                      {l("海报视觉模版与排版设计", "Poster Visual Template & Layout", "Desain Template Visual Poster")}
+                    </h4>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {l(
+                        "自定义此活动在电视大屏与收银副屏上显示的字段、卡片行列、当天高亮及视觉主题（参考每日特价周历流）",
+                        "Configure fields, card rows/cols, today highlight and themes for TV & customer display",
+                        "Atur kolom, baris kartu, sorotan hari ini dan tema visual untuk TV & layar pelanggan",
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <ActivityPosterEditor
+                  value={form.posterConfig || { ...DEFAULT_POSTER_CONFIG, headline: form.name || "Spesial Harian" }}
+                  onChange={(cfg) => set("posterConfig", cfg)}
+                  activityName={form.name}
+                  activityType={form.type}
+                  products={products
+                    .filter((p: any) => form.productIds.length ? form.productIds.includes(p.id) : true)
+                    .map((p: any) => ({
+                      id: p.id,
+                      name: p.name,
+                      image: p.image,
+                      price: p.specs?.[0]?.price,
+                      specialPrice: form.rule?.price ?? (p.specs?.[0]?.price ? Math.round(p.specs[0].price * 0.8) : 12000),
+                    }))}
+                  language={languageIndex(i18n.language)}
+                />
+              </div>
+            )}
             <label className="block sm:max-w-xs">
               {l("保存后的状态", "Status", "Status")}
               <select

@@ -1,0 +1,189 @@
+const zh = {
+  title: '智能体（Agent）设置',
+  subtitle: '配置 Hermes 自主执行智能体角色、运行节点与业务读写权限。',
+  statusCardTitle: '智能体运行状态',
+  ready: '通信正常 · 已就绪',
+  standby: '待机中 · 节点等待连接',
+  disabled: '已停用',
+  checking: '正在诊断智能体节点…',
+  checkButton: '测试智能体连接',
+  refreshButton: '刷新状态',
+  saveButton: '保存智能体设置',
+  saving: '正在保存…',
+  saved: '智能体设置已成功保存',
+  saveError: '保存智能体设置失败，请检查输入或稍后重试',
+  loadError: '读取智能体设置失败',
+  conflictError: '智能体设置已被其他管理员更新，请刷新后重试',
+  dirtyWarning: '存在未保存的设置更改',
+
+  // 基础设置
+  basicSection: '1. 智能体基础配置',
+  enableSwitch: '启用 Hermes 智能体服务',
+  enableHelp: '开启后，允许系统向配置的 Hermes 节点分发受限任务和专属会话协同。',
+  allChannelsTitle: '全频道允许沟通（不限制频道）',
+  allChannelsDesc: '开启后，无需逐个频道选点授权，所有团队工作频道均自动允许智能体接入协同与回答。',
+  agentName: '智能体身份名称',
+  agentNamePlaceholder: '例如：Hermes AI',
+  agentOrigin: 'Hermes 节点地址 (Origin)',
+  agentOriginHelp: '本地独立回环或受保护网关地址（如 http://host.docker.internal:18643 或 http://127.0.0.1:8642）。',
+  timeout: '单任务单次执行租约（分钟）',
+  timeoutHelp: '单次思考调用最长执行锁定时间（1 - 1440 分钟，防死锁。长期任务会在每天或状态更新时自动持续跟踪）。',
+
+  // 业务能力
+  capabilitiesSection: '2. 智能体执行能力 (Capabilities)',
+  pdcaTitle: '库存比对审计执行器 (STOCK-RO-001 PDCA)',
+  pdcaDesc: '执行计划(P)→执行(D)→核查(C)→处置(A)闭环：比对系统账本与实物盘点证据，生成不可篡改报告。',
+  employeeBridgeTitle: '员工工作协同助理 (Employee Hermes Bridge)',
+  employeeBridgeDesc: '作为专属助理在工作频道中协助员工梳理交接、收集执行障碍并向主管汇报事实。',
+
+  // 权限矩阵（参考员工权限）
+  permissionsSection: '3. 智能体业务板块读写权限（自定义授权）',
+  permissionsSubtitle: '参考员工权限管理，自定义智能体在各业务板块的数据读取与写入/操作范围。',
+  moduleName: '业务板块',
+  readPermission: '允许读取 (Read)',
+  writePermission: '允许写入/操作 (Write)',
+  riskHigh: '高风险操作',
+  riskSafe: '常用安全操作',
+
+  modules: {
+    products: { name: '商品与配方', desc: '读取商品档案、规格配方(BOM)；修改商品信息或售价' },
+    inventory: { name: '库存与物料', desc: '读取实时库存、盘点记录；出入库录入、发起采购或修正账面' },
+    orders: { name: '收银与订单', desc: '查看流水订单、销售统计；创建订单、发起退款或取消' },
+    members: { name: '会员与营销', desc: '查看会员画像、积分明细；发放优惠券、调整会员等级' },
+    finance: { name: '财务与账目', desc: '查阅收支损益与税务报表；录入经营杂费、财务记账' },
+    staff: { name: '人事与排班', desc: '查看员工花名册、出勤工时；生成排班表、薪酬与奖惩' },
+    hygiene: { name: '门店卫生巡检', desc: '查看清洁卫生标准；自动填写巡检打卡与交接报告' },
+    channels: { name: '工作频道沟通', desc: '读取员工业务提问与交流；直接在频道发送解答与跟进消息' }
+  },
+
+  // 安全审计边界
+  boundariesSection: '4. 安全合规底线',
+  humanReview: '管理员人工复核',
+  humanReviewDesc: '智能体提交的最终盘点报告与决策建议必须经管理员复核确认，提交不等于自动验收通过。'
+}
+
+const en: typeof zh = {
+  title: 'Agent Settings (Hermes)',
+  subtitle: 'Configure Hermes autonomous agent roles, gateway origin, and custom module read/write permissions.',
+  statusCardTitle: 'Agent Operational Status',
+  ready: 'Connected · Ready',
+  standby: 'Standby · Node waiting for connection',
+  disabled: 'Disabled',
+  checking: 'Diagnosing agent node…',
+  checkButton: 'Test Agent Connection',
+  refreshButton: 'Refresh Status',
+  saveButton: 'Save Agent Settings',
+  saving: 'Saving…',
+  saved: 'Agent settings saved successfully',
+  saveError: 'Failed to save agent settings. Please check your inputs.',
+  loadError: 'Failed to load agent settings',
+  conflictError: 'Settings were modified by another administrator. Please reload.',
+  dirtyWarning: 'Unsaved changes exist',
+
+  basicSection: '1. Basic Configuration',
+  enableSwitch: 'Enable Hermes Agent Service',
+  enableHelp: 'When enabled, allows assigning bounded audit tasks and employee channel collaboration.',
+  allChannelsTitle: 'Allow All Channels (Unrestricted)',
+  allChannelsDesc: 'When enabled, Hermes participates across all team work channels without manual per-channel setup.',
+  agentName: 'Agent Identity Name',
+  agentNamePlaceholder: 'e.g. Hermes AI',
+  agentOrigin: 'Hermes Origin URL',
+  agentOriginHelp: 'Loopback HTTP or protected gateway origin (e.g. http://host.docker.internal:18643).',
+  timeout: 'Execution Lease Timeout (Minutes)',
+  timeoutHelp: 'Lock duration for a single execution round (1 - 1440 min). Long tasks are tracked continuously across days.',
+
+  capabilitiesSection: '2. Agent Capabilities',
+  pdcaTitle: 'Stock Audit Executor (STOCK-RO-001 PDCA)',
+  pdcaDesc: 'Plan-Do-Check-Act cycle: Comparison between ledger stock and physical count evidence.',
+  employeeBridgeTitle: 'Employee Collaboration Assistant (Employee Hermes Bridge)',
+  employeeBridgeDesc: 'Coordinates operational questions, collects blockers, and reports verified facts to supervisors.',
+
+  permissionsSection: '3. Module Read/Write Permissions (Customizable)',
+  permissionsSubtitle: 'Similar to Staff Permissions, customize which business modules the agent can read and write.',
+  moduleName: 'Business Module',
+  readPermission: 'Allow Read',
+  writePermission: 'Allow Write / Action',
+  riskHigh: 'High Risk',
+  riskSafe: 'Standard Safe',
+
+  modules: {
+    products: { name: 'Products & Recipes', desc: 'Read product catalogs, BOM recipes; modify info or prices' },
+    inventory: { name: 'Inventory & Supplies', desc: 'Read stock, physical counts; record stock in/out, purchase orders' },
+    orders: { name: 'POS & Orders', desc: 'Read orders and sales metrics; create orders, process refunds' },
+    members: { name: 'Members & Marketing', desc: 'View member profiles, points; issue coupons, adjust tiers' },
+    finance: { name: 'Finance & Accounts', desc: 'Read P&L and tax statements; record expenses, ledger updates' },
+    staff: { name: 'Staff & Scheduling', desc: 'View roster, clock-ins; generate schedules, compensation drafts' },
+    hygiene: { name: 'Hygiene & Cleanliness', desc: 'View inspection standards; auto-fill logs and handover reports' },
+    channels: { name: 'Team Communication', desc: 'Read employee inquiries; send responses and task follow-ups' }
+  },
+
+  boundariesSection: '4. Safety & Review Boundary',
+  humanReview: 'Mandatory Human Review',
+  humanReviewDesc: 'Agent final reports and recommendations require supervisor review; submission does not equal acceptance.'
+}
+
+const id: typeof zh = {
+  title: 'Pengaturan Agen (Hermes)',
+  subtitle: 'Konfigurasi peran agen otonom Hermes, origin gateway, dan izin baca/tulis modul kustom.',
+  statusCardTitle: 'Status Operasional Agen',
+  ready: 'Terhubung · Siap',
+  standby: 'Siaga · Menunggu koneksi node',
+  disabled: 'Dinonaktifkan',
+  checking: 'Mendiagnosis node agen…',
+  checkButton: 'Uji Koneksi Agen',
+  refreshButton: 'Segarkan Status',
+  saveButton: 'Simpan Pengaturan Agen',
+  saving: 'Menyimpan…',
+  saved: 'Pengaturan agen berhasil disimpan',
+  saveError: 'Gagal menyimpan pengaturan agen. Periksa masukan Anda.',
+  loadError: 'Gagal memuat pengaturan agen',
+  conflictError: 'Pengaturan diubah oleh administrator lain. Silakan muat ulang.',
+  dirtyWarning: 'Ada perubahan yang belum disimpan',
+
+  basicSection: '1. Konfigurasi Dasar',
+  enableSwitch: 'Aktifkan Layanan Agen Hermes',
+  enableHelp: 'Saat aktif, mengizinkan penugasan tugas audit terbatas dan kolaborasi kanal pegawai.',
+  allChannelsTitle: 'Izinkan Semua Kanal (Tanpa Batasan)',
+  allChannelsDesc: 'Saat aktif, Hermes otomatis dapat merespons di semua kanal kerja tanpa perlu dipilih satu per satu.',
+  agentName: 'Nama Identitas Agen',
+  agentNamePlaceholder: 'misal: Hermes AI',
+  agentOrigin: 'URL Node Hermes (Origin)',
+  agentOriginHelp: 'Origin gateway terlindungi (misal http://host.docker.internal:18643).',
+  timeout: 'Batas Sewa Eksekusi Tunggal (Menit)',
+  timeoutHelp: 'Batas kunci untuk satu putaran panggilan (1 - 1440 mnt). Tugas berhari-hari tetap dilacak otomatis.',
+
+  capabilitiesSection: '2. Kemampuan Eksekusi Agen',
+  pdcaTitle: 'Pelaksana Audit Stok (STOCK-RO-001 PDCA)',
+  pdcaDesc: 'Siklus Plan-Do-Check-Act: Membandingkan buku stok dengan bukti fisik secara hanya-baca.',
+  employeeBridgeTitle: 'Asisten Kolaborasi Pegawai (Employee Hermes Bridge)',
+  employeeBridgeDesc: 'Membantu pertanyaan operasional di kanal kerja, mengumpulkan kendala, dan melapor ke manajer.',
+
+  permissionsSection: '3. Izin Baca/Tulis Modul Bisnis (Dapat Disesuaikan)',
+  permissionsSubtitle: 'Mirip dengan izin pegawai, sesuaikan modul bisnis mana yang dapat dibaca dan ditulis oleh agen.',
+  moduleName: 'Modul Bisnis',
+  readPermission: 'Izin Baca',
+  writePermission: 'Izin Tulis / Tindakan',
+  riskHigh: 'Risiko Tinggi',
+  riskSafe: 'Aman Standar',
+
+  modules: {
+    products: { name: 'Produk & Resep', desc: 'Baca katalog, resep BOM; ubah info produk atau harga' },
+    inventory: { name: 'Inventaris & Bahan', desc: 'Baca stok dan stok opname; catat keluar/masuk, PO' },
+    orders: { name: 'Kasir & Pesanan', desc: 'Baca pesanan dan penjualan; buat pesanan, pengembalian dana' },
+    members: { name: 'Member & Promosi', desc: 'Lihat profil member, poin; kirim kupon, atur level' },
+    finance: { name: 'Keuangan & Laporan', desc: 'Lihat laporan laba rugi dan pajak; catat biaya operasional' },
+    staff: { name: 'Karyawan & Jadwal', desc: 'Lihat data pegawai, absensi; buat draf jadwal kerja' },
+    hygiene: { name: 'Kebersihan & Sanitasi', desc: 'Lihat standar; isi ceklis inspeksi dan laporan serah terima' },
+    channels: { name: 'Komunikasi Tim', desc: 'Baca pertanyaan pegawai; kirim jawaban dan tindak lanjut tugas' }
+  },
+
+  boundariesSection: '4. Batas Keamanan & Peninjauan',
+  humanReview: 'Peninjauan Manusia Wajib',
+  humanReviewDesc: 'Laporan akhir agen memerlukan persetujuan manajer; pengiriman bukan penerimaan otomatis.'
+}
+
+export function teamAgentCopy(lang: string): typeof zh {
+  if (lang.startsWith('en')) return en
+  if (lang.startsWith('id')) return id
+  return zh
+}

@@ -522,12 +522,16 @@ export async function updateProductBom(productId:string,bomItems:{inventoryId:st
 
 // Soft delete product
 export async function deleteProduct(productId: string) {
-  return prisma.product.update({
-    where: { id: productId },
-    data: {
-      deletedAt: new Date(),
-      status: 'inactive'
-    }
+  return prisma.$transaction(async tx => {
+    await tx.productImage.deleteMany({ where: { productId } })
+    return tx.product.update({
+      where: { id: productId },
+      data: {
+        deletedAt: new Date(),
+        status: 'inactive',
+        image: null
+      }
+    })
   })
 }
 

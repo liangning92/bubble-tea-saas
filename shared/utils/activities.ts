@@ -1,12 +1,48 @@
 // Shared deterministic activity evaluation. Amounts are integer IDR; end times are exclusive.
 export const ACTIVITY_TYPES = ['special_price','percent','nth_cup','buy_get','fixed','tiered','bundle','addon','upgrade','gift','member_price','birthday','welcome','coupon','points','stamps','lottery','referral','group'] as const
 export type ActivityType = typeof ACTIVITY_TYPES[number]
+
+export interface ActivityPosterConfig {
+  template?: 'daily_specials' | 'featured_grid' | 'bogo_duo' | 'lucky_wheel' | 'tiered_milestone'
+  headline?: string
+  subheadline?: string
+  columns?: number
+  rows?: number
+  layoutMode?: 'row_cards' | 'grid' | 'spotlight'
+  highlightToday?: boolean
+  themeColor?: string
+  backgroundColor?: string
+  showFields?: {
+    productImage?: boolean
+    productName?: boolean
+    productSubname?: boolean
+    originalPrice?: boolean
+    specialPrice?: boolean
+    savingAmount?: boolean
+    dayBadge?: boolean
+    discountTag?: boolean
+  }
+  cardItems?: Array<{
+    dayOfWeek?: number
+    dayLabel?: string
+    productId?: string
+    productName?: string
+    specName?: string
+    imageUrl?: string
+    originalPrice?: number
+    specialPrice?: number
+    saving?: number
+    color?: string
+  }>
+}
+
 export interface Activity {
   id: string; storeId: string; version: number; name: string; description: string; theme?: string; categoryId?: string
   type: ActivityType; status: 'draft'|'published'|'paused'|'ended'; priority: number
   startsAt?: string; endsAt?: string; timezone: string; weekdays: number[]; dailyStart?: string; dailyEnd?: string
   channels: string[]; paymentMethods: string[]; excludedProductIds?:string[]; productIds: string[]; specIds: string[]; memberOnly: boolean; memberLevels: string[]
   showOnTv: boolean; imageUrl?: string; limit?: number; used: number; conflict?: string; source?: string
+  posterConfig?: ActivityPosterConfig
   rule: { price?: number; percent?: number; amount?: number; minAmount?: number; maxDiscount?: number; nth?: number; buy?: number; get?: number
     components?: {productId:string;specId?:string;quantity:number}[]; tiers?: {minAmount:number;amount:number;percent?:number}[]
     addonNames?: string[]; rewardIds?: string[]; couponId?: string; couponTrigger?:'paid'|'claim'; multiplier?: number; points?: number; stampsRequired?: number

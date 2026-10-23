@@ -467,6 +467,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
         endsAt: a.endsAt,
         timezone: a.timezone,
         products,
+        posterConfig: a.posterConfig,
         upcoming: schedule.nextDate
           ? {
               date: schedule.nextDate,
