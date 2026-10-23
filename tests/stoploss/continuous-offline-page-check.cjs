@@ -236,7 +236,8 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'quiet-expense-qr,offline-
      assert.equal(denied,true);
    } else {
      if(scenario==='gateway-outage') {
-       await context.route('**/api/**',route=>route.fulfill({status:503,json:{message:'Service unavailable'}}));
+       let calls=0;
+       await context.route('**/api/**',route=>route.fulfill({status:calls++%2===0?530:503,json:{message:'Service unavailable'}}));
      } else await offline();
      // Lose all session state, retaining only the browser's durable local data.
      await page.evaluate(()=>{window.name='logged-out';sessionStorage.clear()});await page.goto(origin+'/#/login');await page.reload();

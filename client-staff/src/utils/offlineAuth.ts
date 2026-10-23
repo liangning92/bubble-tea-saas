@@ -11,7 +11,8 @@ export function loginBackend(base: string): string {
 }
 const key = (backend: string, phone: string) => PREFIX + encodeURIComponent(backend) + ':' + encodeURIComponent(phone)
 export function temporaryLoginFailure(error: any): boolean {
-  return !error?.response || [502, 503, 504, 521, 522, 523, 524].includes(error.response.status)
+  const status = error?.response?.status
+  return !error?.response || [502, 503, 504].includes(status) || (status >= 520 && status <= 530)
 }
 async function verifier(password: string, salt: number[]): Promise<number[]> {
   const material = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])

@@ -14,7 +14,7 @@ function context() {
 const user = { id: 'employee-1', phone: '080000000001', name: 'Offline test', role: 'staff', storeId: 'store-1', staffId: 'profile-1', position: 'cashier' }, backend = 'https://staff.example.test/api'
 test('gateway outages permit offline verification; server authentication and rate limits do not', () => {
   const { api } = context()
-  for (const status of [502,503,504,521,522,523,524]) assert.equal(api.temporaryLoginFailure({response:{status}}),true)
+  for (const status of [502,503,504,520,521,522,523,524,525,526,527,530]) assert.equal(api.temporaryLoginFailure({response:{status}}),true)
   for (const status of [400,401,403,404,409,429,500]) assert.equal(api.temporaryLoginFailure({response:{status}}),false)
   assert.equal(api.temporaryLoginFailure(new Error('network down')),true)
 })

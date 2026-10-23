@@ -513,13 +513,14 @@ export async function saveOfflineCredentials(creds: OfflineCredentials): Promise
 
 export async function getOfflineCredentials(phone?:string): Promise<OfflineCredentials | null> {
   let config = await db.config.get(OFFLINE_CREDS_KEY)
-  if(phone&&(!config?.value||JSON.parse(config.value).phone!==phone)) config=await db.config.get(`offline.credentials:${encodeURIComponent(currentBackendIdentity())}:${encodeURIComponent(phone)}`)
-  if (!config?.value) return null
-  try {
-    return JSON.parse(config.value)
-  } catch {
-    return null
+  let parsed: OfflineCredentials | null = null
+  if (config?.value) { try { parsed = JSON.parse(config.value) } catch { parsed = null } }
+  if (phone && (!parsed || parsed.phone !== phone)) {
+    config = await db.config.get(`offline.credentials:${encodeURIComponent(currentBackendIdentity())}:${encodeURIComponent(phone)}`)
+    if (!config?.value) return null
+    try { return JSON.parse(config.value) } catch { return null }
   }
+  return parsed
 }
 
 // A successful authenticated online preparation renews the local 30-day lease.
