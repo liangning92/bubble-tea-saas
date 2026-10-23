@@ -5,6 +5,7 @@ Construct Gateway explicitly with private deployment config; importing starts no
 """
 from __future__ import annotations
 import hashlib
+from contextlib import suppress
 import fcntl
 import hmac
 import http.client
@@ -212,20 +213,32 @@ class Gateway:
             # No raw exception/URL/provider prose is logged or persisted.
             pass
         finally:
-            if child and child.poll() is None:
-                os.killpg(child.pid, signal.SIGTERM)
-                try: child.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    os.killpg(child.pid, signal.SIGKILL); child.wait()
-            if child:
-                child.stdin.close()
-                child.stdout.close()
-            if state == "unknown":
-                try: self._rpc(envelope, "markUnknown", {"executionId": execution, "expectedTraceVersion": version, "code": code}, max(until, time.time()+1))
-                except BaseException: pass
-            with self.lock:
-                self.db.execute("UPDATE admission SET state=?,code=? WHERE id=? AND state='running'", (state, code, execution))
-            self.capacity.release()
+            try:
+                if child and child.poll() is None:
+                    # The child may exit between poll and signal delivery.
+                    with suppress(ProcessLookupError):
+                        os.killpg(child.pid, signal.SIGTERM)
+                    try: child.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        with suppress(ProcessLookupError):
+                            os.killpg(child.pid, signal.SIGKILL)
+                        child.wait()
+            finally:
+                # Buffered stdin.close() may flush a reply to a pipe already closed
+                # by the failed child. Cleanup must still persist uncertainty and
+                # return the slot; otherwise four failures stop all later work.
+                if child:
+                    for pipe in (child.stdin, child.stdout):
+                        with suppress(OSError, ValueError):
+                            pipe.close()
+                if state == "unknown":
+                    try: self._rpc(envelope, "markUnknown", {"executionId": execution, "expectedTraceVersion": version, "code": code}, max(until, time.time()+1))
+                    except BaseException: pass
+                with self.lock:
+                    try:
+                        self.db.execute("UPDATE admission SET state=?,code=? WHERE id=? AND state='running'", (state, code, execution))
+                    finally:
+                        self.capacity.release()
 
     def server(self, host="127.0.0.1", port=0):
         if not ipaddress.ip_address(host).is_loopback:
