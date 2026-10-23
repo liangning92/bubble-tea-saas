@@ -115,7 +115,6 @@ export function LeavePage() {
       loadData()
     } catch (error) {
       console.error('Failed to cancel leave:', error)
-      await dialogs.alert(t('leave.cancelLeaveSuccess'))
     }
   }
 

@@ -44,7 +44,6 @@ export function AttendanceCorrectionPage() {
     reason: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitSuccess, setSubmitSuccess] = useState(false)
 
   const loadData = async () => {
     setIsLoading(true)
@@ -73,12 +72,10 @@ export function AttendanceCorrectionPage() {
     try {
       const response = editingId?await staffApi.editRequest('staff-correction',editingId,{...formData,expectedVersion:editingVersion}):await staffApi.createCorrection(formData)
       if (response.code === 201 || response.code === 200) {
-        setSubmitSuccess(true)
         setFormData({ date: '', originalCheckIn: '', originalCheckOut: '', correctCheckIn: '', correctCheckOut: '', reason: '' })
         setShowForm(false)
         setEditingId(null)
         loadData()
-        setTimeout(() => setSubmitSuccess(false), 2000)
       } else {
         await dialogs.alert(response.message || t('attendance.submitFailed'))
       }
@@ -294,7 +291,6 @@ export function AttendanceCorrectionPage() {
         </div>
       </div>
 
-      {submitSuccess && <div role="status" className="employee-success-toast">{t('attendance.submitSuccess')}</div>}
     </div>
   )
 }

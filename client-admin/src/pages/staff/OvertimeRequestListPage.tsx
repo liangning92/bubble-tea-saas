@@ -70,7 +70,6 @@ export function OvertimeRequestListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        notifyAdmin(t('staff.overtimeApproved'))
         loadData()
       } else {
         notifyAdmin(data.message || t('common.error'))
@@ -97,7 +96,6 @@ export function OvertimeRequestListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        notifyAdmin(t('staff.overtimeRejected'))
         loadData()
       } else {
         notifyAdmin(data.message || t('common.error'))
