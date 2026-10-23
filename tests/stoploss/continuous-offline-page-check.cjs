@@ -36,7 +36,7 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'quiet-expense-qr,offline-
   status=body.orders?200:201;data=body.orders?{results:result}:result[0].data;
  }
  await route.fulfill({status,contentType:'application/json',body:JSON.stringify({data})});});
- await context.addInitScript(({target,scenario})=>{localStorage.setItem('pos-api-url',target);localStorage.setItem('pos_lang','en');localStorage.setItem('pos_language','en');if(!sessionStorage.getItem('pos-auth'))sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',apiUrl:target,user:{id:'u',phone:'synthetic',role:'cashier',storeId:'store',staff:{id:'staff',name:'Synthetic'}}},version:0}));window.calls=[];window.fault='';window.networkOffline=false;Object.defineProperty(navigator,'onLine',{get:()=>!window.networkOffline&&localStorage.getItem('synthetic-network-offline')!=='1'});
+ await context.addInitScript(({target,scenario})=>{localStorage.setItem('pos-api-url',target);localStorage.setItem('pos_lang','en');localStorage.setItem('pos_language','en');if(!sessionStorage.getItem('pos-auth')&&window.name!=='logged-out')sessionStorage.setItem('pos-auth',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',apiUrl:target,user:{id:'u',phone:'synthetic',role:'cashier',storeId:'store',staff:{id:'staff',name:'Synthetic'}}},version:0}));window.calls=[];window.fault='';window.networkOffline=false;Object.defineProperty(navigator,'onLine',{get:()=>!window.networkOffline&&localStorage.getItem('synthetic-network-offline')!=='1'});
  const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put;
  IDBObjectStore.prototype.add=function(...args){if(this.transaction.db.name==='POSOffline'&&this.name==='orders'&&window.fault==='order')throw new DOMException('Synthetic quota','QuotaExceededError');return add.apply(this,args);};
  IDBObjectStore.prototype.put=function(...args){if(this.transaction.db.name==='POSOffline'&&this.name==='config'&&String(args[0]?.key).startsWith('offline.operation:')&&window.fault==='expense')throw new DOMException('Synthetic expense quota','QuotaExceededError');if(this.transaction.db.name==='POSOffline'&&this.name==='config'&&String(args[0]?.key).startsWith('checkout.generation:')&&window.fault==='generation')throw new DOMException('Synthetic quota','QuotaExceededError');return put.apply(this,args);};
@@ -227,7 +227,7 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'quiet-expense-qr,offline-
      const status=await page.evaluate(async()=>{const {default:api}=await import('/src/services/api.ts');try{await api.get('/staff-permissions/me');return 200}catch(e){return e.response?.status}});assert.equal(status,403);
    } else if(scenario==='login-refusal') {
      await context.route('**/api/auth/login',route=>route.fulfill({status:401,json:{message:'Invalid phone or password'}}));
-     await page.evaluate(()=>sessionStorage.clear());await page.goto(origin+'/#/login');await page.reload();
+     await page.evaluate(()=>{window.name='logged-out';sessionStorage.clear()});await page.goto(origin+'/#/login');await page.reload();
      await page.locator('input[type=tel]').fill('synthetic');await page.locator('input[type=password]').fill('test-only-password');await page.getByRole('button',{name:'Login',exact:true}).click();
      await expect(page.getByText('Invalid phone or password',{exact:true})).toBeVisible();await expect(page.locator('input[type=tel]')).toBeVisible();
    } else if(scenario==='permission-isolation') {
@@ -239,7 +239,7 @@ for(const scenario of (process.env.OFFLINE_SCENARIOS||'quiet-expense-qr,offline-
        await context.route('**/api/**',route=>route.fulfill({status:503,json:{message:'Service unavailable'}}));
      } else await offline();
      // Lose all session state, retaining only the browser's durable local data.
-     await page.evaluate(()=>sessionStorage.clear());await page.goto(origin+'/#/login');await page.reload();
+     await page.evaluate(()=>{window.name='logged-out';sessionStorage.clear()});await page.goto(origin+'/#/login');await page.reload();
      await page.locator('input[type=tel]').fill('synthetic');await page.locator('input[type=password]').fill('test-only-password');
      await page.getByRole('button',{name:'Login',exact:true}).click();
      await page.getByText('Synthetic Tea',{exact:true}).first().waitFor();

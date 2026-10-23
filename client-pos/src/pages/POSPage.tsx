@@ -1058,7 +1058,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 获取所有配置 (店铺信息、布局、支付方式、小票设置)
   useEffect(() => {
     if(!user?.storeId)return
-    void Promise.allSettled([fetchShiftData(),fetchExpenseCategories(),posApi.getMyPosExpenses(),posApi.getCashEvents(),posApi.getShifts()])
+    void Promise.allSettled([fetchShiftData(),posApi.getExpenseCategories(),posApi.getMyPosExpenses(),posApi.getCashEvents(),posApi.getShifts()])
     void navigator.storage?.persist?.().catch(()=>false)
   }, [user?.storeId])
 

@@ -24,8 +24,7 @@ export async function enforceAccessV2(req:any,res:any,user:any){
   if(spec.export)access.modes['data.export']='allow'
  }
  const hygieneManager=!user.employeeApp&&spec.permission==='personal.tasks'&&access.id==='manager'
- const posLegacyExpense=!user.employeeApp&&user.role==='cashier'&&(spec.routeKey==='GET /api/expenses'||spec.routeKey==='POST /api/expenses')
- const permission=posLegacyExpense?'pos.expense':hygieneManager?(['GET','HEAD'].includes(req.method)?'hygiene.read':'hygiene.write'):spec.permission
+ const permission=hygieneManager?(['GET','HEAD'].includes(req.method)?'hygiene.read':'hygiene.write'):spec.permission
  const scopeSelf=(spec.personal||user.employeeApp&&spec.routeKey==='GET /api/auth/me')&&!hygieneManager
  if(spec.ownerOnly)return res.status(403).json({code:403,message:'STAFF_ACCESS_OWNER_REQUIRED'})
  if(permission&&access.modes[permission]!=='allow')return res.status(403).json({code:403,message:access.modes[permission]==='approval'?'STAFF_ACCESS_APPROVAL_REQUIRED':'STAFF_ACCESS_PERMISSION_DENIED',permission})
