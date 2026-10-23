@@ -21,7 +21,7 @@ const workRoutes = new Set([
   'GET /api/marketing/discount-rules', 'GET /api/marketing/timed-specials',
   'POST /api/marketing/coupons/verify', 'POST /api/marketing/coupons/:memberCouponId/redeem',
   'POST /api/orders/received-receipts', 'GET /api/pos-cash/offline-work',
-  'POST /api/pos-cash/shifts/offline-operations',
+  'POST /api/pos-cash/shifts/offline-operations', 'GET /api/expenses/categories',
   'GET /api/staff-permissions/approvers', 'GET /api/staff-permissions/approvals',
   'GET /api/staff-permissions/approvals/:id', 'POST /api/staff-permissions/approvals',
   'POST /api/staff-permissions/approvals/:id/onsite',
@@ -40,6 +40,7 @@ export function canUseManagementRoute(user: any, spec: Declaration): boolean {
   if (spec.ownerOnly) return false
   if (user.employeeApp) return isEmployeeAppRoute(spec.routeKey, spec)
   if (spec.personal || workRoutes.has(spec.routeKey)) return true
+  if (user.role === 'cashier' && (spec.routeKey === 'GET /api/expenses' || spec.routeKey === 'POST /api/expenses')) return true
   if (/\/(approve|reject|complete|cancel)$/.test(spec.routeKey) && !spec.routeKey.startsWith('POST /api/orders/')) return false
   if (/\/refund-requests\/[^/]+\/(approve|reject)$/.test(spec.routeKey)) return false
   if (spec.permission && posPermissions.has(spec.permission)) return true

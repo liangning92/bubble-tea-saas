@@ -16,6 +16,7 @@ import { calculateShiftCash, applyHandoverQris, cashWarningFor, CASH_WARNING_PRE
 import { loadShiftSummaryEvidence } from './ShiftSummaryEvidence'
 import { shiftHandoverFinancials } from './ShiftHandoverFinancials'
 import { summarizeShiftPurchases } from './PosExpenseService'
+import { DEFAULT_EXPENSE_CATEGORIES } from './ExpenseService'
 import { manualReceiptsSchema } from './ShiftManualReceipts'
 import { posExpenseSchema, posExpensePaymentSource } from './PosExpenseService'
 
@@ -129,7 +130,8 @@ export async function applyOfflineOperation(storeId:string,body:unknown) {
     result=await tx.cashEvent.create({data:{id:input.id,storeId,staffId:actor.staffId,type:input.data.type==='float'?'cash_in':input.data.type!,amount:input.data.amount!,note:input.data.note,shift:shift.shift,createdAt:at}})
    }else if(input.kind==='expense'){
     const categories=await tx.config.findUnique({where:{storeId_key:{storeId,key:'expense.categories'}}})
-    if(Array.isArray(authorization.expenseCategoryKeys)?!authorization.expenseCategoryKeys.includes(input.data.category):!categories||!JSON.parse(categories.value).some((c:any)=>c.key===input.data.category&&c.posVisible!==false))throw new OfflineOperationError('POS_EXPENSE_CATEGORY_INVALID')
+    const currentCategories=categories?.value?JSON.parse(categories.value):DEFAULT_EXPENSE_CATEGORIES
+    if(!currentCategories.some((c:any)=>c.key===input.data.category&&c.posVisible!==false)&&!(Array.isArray(authorization.expenseCategoryKeys)&&authorization.expenseCategoryKeys.includes(input.data.category)))throw new OfflineOperationError('POS_EXPENSE_CATEGORY_INVALID')
     const paymentSource=posExpensePaymentSource(input.data.paymentSource)
     result=await tx.expense.create({data:{id:input.id,storeId,type:'operational',category:input.data.category,paymentSource,cashSessionId:paymentSource==='drawer_cash'?shift.id:null,cashOccurredAt:paymentSource==='drawer_cash'?at:null,amount:input.data.amount*100,description:input.data.description,date:new Date(new Date(at.getTime()+7*3600000).toISOString().slice(0,10)+'T00:00:00+07:00'),referenceType:'pos_reimbursement',referenceId:actor.id+':'+input.data.requestId,createdAt:at}})
     await tx.financeAuditLog.create({data:{storeId,userId:actor.id,action:'create',entityType:'expense',entityId:result.id,description:'Offline POS purchase',newValue:JSON.stringify({...input.data,source:'pos_reimbursement'})}})
