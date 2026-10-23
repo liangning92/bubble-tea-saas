@@ -380,13 +380,15 @@ export function MediaLibrary({
                         )
                       ) : (
                         <span>
-                          {t(
-                            r.id === "hardwareSettings"
-                              ? "media.displayReference"
-                              : r.id === "tv_screen_marketing_config"
-                                ? "media.tvReference"
-                                : "media.otherReference",
-                            r.id
+                          {String(
+                            t(
+                              r.id === "hardwareSettings"
+                                ? "media.displayReference"
+                                : r.id === "tv_screen_marketing_config"
+                                  ? "media.tvReference"
+                                  : "media.otherReference",
+                              { defaultValue: r.id }
+                            )
                           )}
                         </span>
                       )}

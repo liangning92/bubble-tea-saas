@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { ActivityPosterConfig } from '../../../../shared/utils/activities'
 import { Monitor, LayoutGrid, CheckSquare, Sparkles, Sliders, Eye, Palette } from 'lucide-react'
 
@@ -53,7 +53,7 @@ export function ActivityPosterEditor({
   value,
   onChange,
   activityName = '',
-  activityType = 'special_price',
+  activityType: _activityType = 'special_price',
   products = [],
   language = 0,
 }: ActivityPosterEditorProps) {
