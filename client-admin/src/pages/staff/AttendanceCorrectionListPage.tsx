@@ -70,7 +70,6 @@ export function AttendanceCorrectionListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        notifyAdmin(t('staff.correctionApproved'))
         loadData()
       } else {
         notifyAdmin(data.message || t('common.error'))
@@ -97,7 +96,6 @@ export function AttendanceCorrectionListPage() {
       })
       const data = await res.json()
       if (data.code === 200) {
-        notifyAdmin(t('staff.correctionRejected'))
         loadData()
       } else {
         notifyAdmin(data.message || t('common.error'))

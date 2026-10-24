@@ -77,7 +77,6 @@ export function StaffPointsPage() {
     setRedeeming(reward.id)
     try {
       await staffApi.redeemReward({ rewardId: reward.id })
-      await dialogs.alert(t('staffPoints.redeemSuccess'))
       loadData()
     } catch (error: any) {
       await dialogs.alert(error?.response?.data?.message || t('staffPoints.redeemFailed'))

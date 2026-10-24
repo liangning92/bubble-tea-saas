@@ -252,7 +252,6 @@ export function ExpenseListPage() {
   const handleReimbApprove = async (id: string) => {
     try {
       await reimbursementApi.approve(id)
-      notifyAdmin(t('reimbursement.approved'))
       setSelectedReimbursement(null)
       setReimbActionType(null)
       loadReimbursements()
@@ -270,7 +269,6 @@ export function ExpenseListPage() {
     }
     try {
       await reimbursementApi.reject(id, reimbRejectReason)
-      notifyAdmin(t('reimbursement.rejected'))
       setSelectedReimbursement(null)
       setReimbActionType(null)
       setReimbRejectReason('')
@@ -285,7 +283,6 @@ export function ExpenseListPage() {
   const handleReimbMarkPaid = async (id: string) => {
     try {
       await reimbursementApi.markPaid(id)
-      notifyAdmin(t('reimbursement.markedPaid'))
       setSelectedReimbursement(null)
       setReimbActionType(null)
       loadReimbursements()
