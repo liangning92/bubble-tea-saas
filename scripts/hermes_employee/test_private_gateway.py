@@ -18,6 +18,11 @@ from private_gateway import Gateway
 CHILD = r'''
 import json,sys,time
 first=json.loads(sys.stdin.readline());t=first['ticket'];v=t['traceVersion'];mode=t.get('testMode')
+if mode=='closed_stdin':
+ import os
+ os.close(0)
+ print(json.dumps({'protocol':t['protocol'],'method':'recordInput','params':{'executionId':t['executionId'],'expectedTraceVersion':v}}),flush=True)
+ time.sleep(10);sys.exit()
 if mode=='hang':time.sleep(10);sys.exit()
 if mode!='fake':
  for method,extra in [('recordInput',{}),('recordResponse',{}),('executeTool',{}),('recordOutput',{'providerMessage':{'content':'synthetic report'}})]:
@@ -88,6 +93,18 @@ class TestGateway(unittest.TestCase):
     def test_finished_without_output_is_unknown(self):
         e=self.envelope('fake');self.http('/employee-runs',e);self.assertEqual(self.final(e)['state'],'unknown')
         self.assertEqual([c[0]['method'] for c in self.calls],['markUnknown'])
+
+    def test_closed_child_pipe_releases_capacity_and_records_unknown(self):
+        # One slot makes a cleanup leak observable on the next independent turn.
+        self.gateway.capacity=threading.BoundedSemaphore(1)
+        e=self.envelope('closed_stdin')
+        self.http('/employee-runs',e)
+        self.assertEqual(self.final(e)['state'],'unknown')
+        self.assertEqual(self.http('/employee-runs',e)['state'],'unknown')
+        followup=self.envelope()
+        self.http('/employee-runs',followup)
+        self.assertEqual(self.final(followup)['state'],'complete')
+        self.assertEqual(self.starts.count(e['ticket']['executionId']),1)
 
     def test_deadline_unknown_does_not_restart_on_same_post(self):
         e=self.envelope('hang',seconds=.15);self.http('/employee-runs',e);self.assertEqual(self.final(e)['state'],'unknown')

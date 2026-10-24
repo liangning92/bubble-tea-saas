@@ -1,5 +1,17 @@
 # BUGS
 
+## BUG-HERMES-20261023-01
+Title: Employee gateway leaves crashed child admissions running and leaks execution capacity
+Severity: P1
+Status: FIXED IN SOURCE; DEPLOYMENT UNVERIFIED
+Reproductions: A runtime child closes stdin before a callback reply; closing the buffered parent pipe raises BrokenPipeError again during cleanup.
+Expected: Persist an unknown receipt, release the capacity slot, and never restart the same execution.
+Actual: Cleanup can throw before updating SQLite or releasing capacity, leaving the channel waiting and eventually blocking all four gateway slots.
+Changed Files: scripts/hermes_employee/private_gateway.py; scripts/hermes_employee/test_private_gateway.py
+Regression Test: Real child pipe closure; later independent admission succeeds; same execution never starts twice.
+Validation: New regression failed on the original code with BrokenPipeError during stdin.close(), an indefinitely running SQLite admission, and GATEWAY_EXECUTIONS_STILL_RUNNING at shutdown. All 8 private gateway tests pass after the fix, using real loopback HTTP, SQLite, and subprocess pipes; no real model calls or production writes.
+TEST DECISION: Run the private gateway suite for this Python transport-only change. No UI, API schema, stock data, payment, or Windows POS changes. Real Mac gateway restart and employee conversation acceptance remain unverified because the host is inaccessible from this session.
+
 所有 bug 必须先登记 ID 再进入修复流程。
 
 格式：
