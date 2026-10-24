@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import api, { orderApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
+import { orderDiscountTotal } from '../../../../shared/utils/orderDiscount'
 import { ArrowLeft, Printer, RotateCcw, CheckCircle, Clock, XCircle, Loader2 } from 'lucide-react'
 
 export function OrderDetailPage() {
@@ -70,6 +71,15 @@ export function OrderDetailPage() {
 
   const canRefund = order.status !== 'refunded' && order.status !== 'cancelled'
   const canChangeStatus = ['pending', 'preparing'].includes(order.status)
+  // Settlement breakdown: every discount bucket the store gave away on this order.
+  const discountRows = [
+    { key: 'activity', label: t('orders.activityDiscount'), amount: order.activityDiscountAmount || 0, name: order.activitySource === 'activity' ? order.activityName : null },
+    { key: 'coupon', label: t('orders.couponDiscount'), amount: order.couponDiscountAmount || 0, name: order.activitySource === 'coupon' ? order.activityName : null },
+    { key: 'manual', label: t('orders.manualDiscount'), amount: order.manualDiscountAmount || 0, name: null },
+    { key: 'points', label: t('orders.pointsDiscount'), amount: order.pointsDiscountAmount || 0, name: null }
+  ].filter(row => row.amount > 0)
+  const discountTotal = orderDiscountTotal(order)
+  const taxAmount = order.checkoutTaxAmount ?? 0
 
   return (
     <div>
@@ -111,9 +121,15 @@ export function OrderDetailPage() {
           <div className="card">
             <h2 className="font-semibold text-gray-900 mb-4">{t('orders.items')}</h2>
             <OrderItemsTable items={order.items} amount={(_, index) => formatCurrency(order.items[index].unitPrice * order.items[index].quantity)} />
-           <div className="mt-4 pt-4 border-t flex justify-between text-lg font-bold">
-              <span>{t('common.total')}</span>
-              <span className="text-primary">{formatCurrency(order.totalAmount || order.total)}</span>
+           <div className="mt-4 pt-4 border-t space-y-2" data-testid="order-amount-breakdown">
+              <div className="flex justify-between text-sm text-gray-600"><span>{t('common.total')}</span><span className="tabular-nums">{formatCurrency(order.totalAmount || order.total)}</span></div>
+              {discountRows.map(row => <div key={row.key} className="flex justify-between text-sm text-amber-700 gap-4"><span className="truncate">{row.label}{row.name ? <span className="text-gray-500"> · {row.name}</span> : null}</span><span className="tabular-nums whitespace-nowrap">-{formatCurrency(row.amount)}</span></div>)}
+              {discountTotal > 0 && <div className="flex justify-between text-sm font-semibold text-amber-800"><span>{t('orders.totalDiscount')}</span><span className="tabular-nums">-{formatCurrency(discountTotal)}</span></div>}
+              <div className="flex justify-between text-sm text-gray-600"><span>{t('orders.taxAmount')}</span><span className="tabular-nums">{formatCurrency(taxAmount)}</span></div>
+              <div className="flex justify-between text-lg font-bold pt-2">
+                <span>{t('orders.paidAmount')}</span>
+                <span className="text-primary">{formatCurrency(order.finalAmount ?? order.total)}</span>
+              </div>
             </div>
           </div>
 

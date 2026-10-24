@@ -59,6 +59,18 @@ export function shiftReceiptLayout(data: Record<string, any>) {
   row(counts,'orderCount',label('完成订单记录','Completed orders','Pesanan selesai'),number(evidence.orderCount) ? String(evidence.orderCount) : unknown)
   row(counts,'cupCount',label('商品杯数记录','Item quantity','Jumlah minuman'),number(evidence.cupCount) ? String(evidence.cupCount) : unknown)
   group(counts)
+  const discounts: Row[] = []
+  row(discounts,'activityDiscount',label('活动优惠','Activity discount','Diskon aktivitas'),money(evidence.activityDiscountAmount))
+  row(discounts,'totalDiscount',label('优惠合计','Total discount','Total diskon'),money(evidence.totalDiscountAmount))
+  if(discounts.length)group(discounts,label('优惠记录','DISCOUNTS','DISKON'))
+  if(visible('activityDetails')){
+    const activityOrders=Array.isArray(evidence.activityOrders)?evidence.activityOrders:[]
+    if(activityOrders.length){
+      const details: Row[] = activityOrders.slice(0,10).map((order:any)=>({name:`${order.pickupNumber?'#'+order.pickupNumber:order.orderNumber}${order.activityName?' · '+order.activityName:''}`,value:'-'+money(order.totalDiscountAmount)}))
+      if(activityOrders.length>10)details.push({name:label('其他订单','Other orders','Pesanan lain'),value:String(activityOrders.length-10)})
+      group(details,label('活动订单明细','ACTIVITY ORDERS','DETAIL AKTIVITAS'))
+    }
+  }
   if (visible('expenses')) {
     const purchases = data.purchaseExpenses, expenses: Row[] = []
     if (purchases && number(purchases.total) && Array.isArray(purchases.items)) {

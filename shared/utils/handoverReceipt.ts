@@ -1,7 +1,9 @@
 export const handoverReceiptFields = [
   'storeName', 'sessionId', 'cashierName', 'shiftType', 'openedAt', 'closedAt', 'printedAt',
   'revenue', 'cashReceived', 'expenseAmount', 'openFloat', 'closeCash',
-  'cashReceipts', 'qrisReceipts', 'shopeefoodReceipts', 'gofoodReceipts', 'orderCount', 'cupCount', 'expenses', 'cashierSignature', 'supervisorSignature'
+  'cashReceipts', 'qrisReceipts', 'shopeefoodReceipts', 'gofoodReceipts', 'orderCount', 'cupCount',
+  'activityDiscount', 'totalDiscount', 'activityDetails',
+  'expenses', 'cashierSignature', 'supervisorSignature'
 ] as const
 export type HandoverReceiptField = typeof handoverReceiptFields[number]
 

@@ -16,6 +16,13 @@ export function orderSnapshot(order: Record<string, unknown>): string {
   return canonical({
     ...pick(['storeId','orderNumber','staffId','memberId','channelId','paymentMethod','totalAmount','finalAmount']),
     status: order.status ?? 'completed', discountAmount: order.discountAmount ?? 0,
+    activityDiscountAmount: order.activityDiscountAmount ?? 0,
+    couponDiscountAmount: order.couponDiscountAmount ?? 0,
+    pointsDiscountAmount: order.pointsDiscountAmount ?? 0,
+    manualDiscountAmount: order.manualDiscountAmount ?? 0,
+    activityId: order.activityId ?? null,
+    activityName: order.activityName ?? null,
+    activitySource: order.activitySource ?? null,
     customerCount: order.customerCount ?? 1,
     items: (Array.isArray(order.items) ? order.items : []).map((item: Record<string, unknown>) => canonical({
       productId:item.productId, productName:item.productName, specId:item.specId,

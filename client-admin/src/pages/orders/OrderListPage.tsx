@@ -16,6 +16,7 @@ import { orderApi, channelApi, adminApi, financeApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
 import { exportText, jakartaInput, orderReportHtml } from '../../utils/orderExport'
+import { orderDiscountTotal } from '../../../../shared/utils/orderDiscount'
 import { Loader2, CheckCircle, XCircle, Search } from 'lucide-react'
 
 interface RefundRequest {
@@ -54,14 +55,15 @@ export function OrderListPage() {
   const [endTime, setEndTime] = useState('')
   const [shiftSessionId, setShiftSessionId] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('')
+  const [discountFilter, setDiscountFilter] = useState('')
   const [page, setPage] = useState(1)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState('')
   const startDate = startTime ? new Date(startTime + ':00+07:00').toISOString() : context.startDate
   const endDate = endTime ? new Date(endTime + ':59.999+07:00').toISOString() : context.endDate
   const validRange = !startDate || !endDate || new Date(startDate) <= new Date(endDate)
-  const filters = { storeId: context.storeId, startDate, endDate, status: statusFilter || undefined, channelId: channelFilter || undefined, search: search.trim() || undefined, shiftSessionId: shiftSessionId || undefined, paymentMethod: paymentMethod || undefined }
-  useEffect(() => { setPage(1); setExportError('') }, [context.storeId, startDate, endDate, statusFilter, channelFilter, search, shiftSessionId, paymentMethod])
+  const filters = { storeId: context.storeId, startDate, endDate, status: statusFilter || undefined, channelId: channelFilter || undefined, search: search.trim() || undefined, shiftSessionId: shiftSessionId || undefined, paymentMethod: paymentMethod || undefined, activity: discountFilter === 'activity' ? '1' : undefined, hasDiscount: discountFilter === 'any' ? '1' : undefined }
+  useEffect(() => { setPage(1); setExportError('') }, [context.storeId, startDate, endDate, statusFilter, channelFilter, search, shiftSessionId, paymentMethod, discountFilter])
   useEffect(() => { setShiftSessionId('') }, [context.storeId, startDate, endDate])
   const shiftRangeStart = jakartaInput(startDate).slice(0,10) || new Date().toISOString().slice(0,10)
   const shiftRangeEnd = jakartaInput(endDate).slice(0,10) || shiftRangeStart
@@ -230,7 +232,8 @@ export function OrderListPage() {
         </select>
         <select aria-label={labels.shift} className="input w-36 h-10 text-sm" value={shiftSessionId} title={sessions.find((row: any) => row.id === shiftSessionId) ? shiftLabel(sessions.find((row: any) => row.id === shiftSessionId)) : labels.shift} onChange={e => setShiftSessionId(e.target.value)} disabled={shiftsQuery.isLoading || shiftsQuery.isError}><option value="">{labels.shift}</option>{sessions.map((row: any) => <option key={row.id} value={row.id}>{shiftLabel(row)}</option>)}</select>
         <select aria-label={labels.payment} className="input w-32 h-10 text-sm" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option value="">{labels.payment}</option>{['cash','qris','gopay','ovo','dana','shopeepay','debit','card','member','bca_va','mandiri_va'].map(value => <option key={value} value={value}>{value === 'cash' ? t('uiDesign.cash') : value.toUpperCase()}</option>)}</select>
-        <button className="btn-secondary h-10 px-3 text-sm whitespace-nowrap" onClick={() => { setStartTime(''); setEndTime(''); setShiftSessionId(''); setPaymentMethod(''); setSearch(''); setStatusFilter(''); setChannelFilter('') }}>{labels.reset}</button>
+        <select aria-label={t('orders.discountFilter')} className="input w-40 h-10 text-sm" value={discountFilter} onChange={e => setDiscountFilter(e.target.value)}><option value="">{t('orders.allDiscounts')}</option><option value="activity">{t('orders.activityOnly')}</option><option value="any">{t('orders.anyDiscountOnly')}</option></select>
+        <button className="btn-secondary h-10 px-3 text-sm whitespace-nowrap" onClick={() => { setStartTime(''); setEndTime(''); setShiftSessionId(''); setPaymentMethod(''); setSearch(''); setStatusFilter(''); setChannelFilter(''); setDiscountFilter('') }}>{labels.reset}</button>
         <button className="btn-primary h-10 px-3 text-sm whitespace-nowrap" disabled={exporting || !validRange || isLoading || isError} onClick={handleExport}>{exporting ? labels.loading : labels.export}</button>
       </div>
       <p className="text-xs text-gray-500 mb-3">{labels.timezone}</p>
@@ -250,7 +253,7 @@ export function OrderListPage() {
             <OrderSummaryCards orders={orders} onOpen={order=>navigate(dashboardLink(`/finance/orders/${encodeURIComponent(order.id)}`, { storeId: context.storeId, asOf: context.asOf, startDate: context.startDate, endDate: context.endDate }))}/>
             <div className="hidden md:block overflow-x-auto">
             <table className="w-full min-w-[1100px] table-fixed" data-testid="orders-table">
-              <OrderItemColumns after={[120,180,undefined,128,112,112]} />
+              <OrderItemColumns after={[120,180,undefined,128,140,112,112]} />
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 pr-4 font-medium">{t('shiftHandover.products')}</th>
@@ -259,6 +262,7 @@ export function OrderListPage() {
                   <th className="pb-3 font-medium">{t('orders.date')}</th>
                   <th className="pb-3 font-medium">{t('orders.customer')}</th>
                   <th className="text-right tabular-nums pb-3 font-medium">{t('orders.amount')}</th>
+                  <th className="text-right tabular-nums pb-3 font-medium">{t('orders.discount')}</th>
                   <th className="pb-3 font-medium">{t('orders.payment')}</th>
                   <th className="pb-3 font-medium">{t('orders.status')}</th>
                 </tr>
@@ -290,6 +294,12 @@ export function OrderListPage() {
                             <td rowSpan={items.length} className="py-3 pr-4 text-sm">{formatDateTime(order.createdAt)}</td>
                             <td rowSpan={items.length} className="py-3 pr-4">{order.member?.name || order.staff?.name || '-'}</td>
                             <td rowSpan={items.length} className="text-right tabular-nums py-3 pr-4 font-medium">{formatCurrency(order.finalAmount ?? order.total)}</td>
+                            <td rowSpan={items.length} className="text-right tabular-nums py-3 pr-4" data-testid="order-discount-cell">
+                              {orderDiscountTotal(order) > 0 ? <>
+                                <span className="font-medium text-amber-700">-{formatCurrency(orderDiscountTotal(order))}</span>
+                                {order.activityName && order.activitySource !== 'points' && <p className="text-xs text-gray-500 break-words" title={order.activityName}>{order.activityName}</p>}
+                              </> : <span className="text-gray-400">—</span>}
+                            </td>
                             <td rowSpan={items.length} className="py-3 pr-4 capitalize">{order.paymentMethod==='cash'?t('uiDesign.cash'):order.paymentMethod==='qris'?'QRIS':order.paymentMethod}</td>
                             <td rowSpan={items.length} className="py-3 pr-4"><span className={`badge ${getStatusBadge(order.status)} capitalize`}>{t('orders.'+order.status,{defaultValue:order.status})}</span></td>
                           </>

@@ -1305,6 +1305,13 @@ model Order {
   pickupNumber     String?         // 取餐号/叫号凭据 (如 A01 ~ A99 循环)
   totalAmount      Int // 总金额(分)
   discountAmount   Int             @default(0)
+  activityDiscountAmount Int      @default(0) // 活动优惠金额（统一活动优惠）
+  couponDiscountAmount  Int      @default(0) // 优惠券优惠金额
+  pointsDiscountAmount  Int      @default(0) // 积分抵扣金额
+  manualDiscountAmount  Int      @default(0) // 手动折扣金额
+  activityId        String?         // 命中的活动/优惠券 ID
+  activityName      String?         // 命中的活动/优惠券名称
+  activitySource    String?         // activity | coupon | points（优惠来源）
   finalAmount      Int // 实收金额(分)
   customerCount    Int             @default(1) // 堂食人数
   status           String          @default("pending") // pending | completed | refunded | cancelled | suspended
