@@ -1728,6 +1728,21 @@ function generateShiftReportText(data: any): string {
   separator()
   if (visible('orderCount')) row(label('完成订单记录', 'Completed orders', 'Pesanan selesai'), number(evidence.orderCount) ? String(evidence.orderCount) : unknown)
   if (visible('cupCount')) row(label('商品杯数记录', 'Item quantity', 'Jumlah minuman'), number(evidence.cupCount) ? String(evidence.cupCount) : unknown)
+  if (visible('activityDiscount') || visible('totalDiscount')) {
+    separator()
+    wrap(label('优惠记录', 'DISCOUNTS', 'DISKON'))
+    if (visible('activityDiscount')) money(label('活动优惠', 'Activity discount', 'Diskon aktivitas'), evidence.activityDiscountAmount)
+    if (visible('totalDiscount')) money(label('优惠合计', 'Total discount', 'Total diskon'), evidence.totalDiscountAmount)
+  }
+  if (visible('activityDetails')) {
+    const activityOrders = Array.isArray(evidence.activityOrders) ? evidence.activityOrders : []
+    if (activityOrders.length) {
+      separator()
+      wrap(label('活动订单明细', 'ACTIVITY ORDERS', 'DETAIL AKTIVITAS'))
+      for (const order of activityOrders.slice(0, 10)) money(`${order.pickupNumber ? '#' + order.pickupNumber : order.orderNumber}${order.activityName ? ' · ' + order.activityName : ''}`, order.totalDiscountAmount)
+      if (activityOrders.length > 10) wrap(label('其他订单', 'Other orders', 'Pesanan lain') + ': ' + String(activityOrders.length - 10))
+    }
+  }
   if (visible('expenses')) {
     separator()
     wrap(label('本班钱箱费用', 'SHIFT DRAWER EXPENSES', 'BIAYA LACI SHIFT'))
@@ -2057,19 +2072,22 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
       orderNo: 'NO.', queueNo: '取餐号', date: '日期', time: '时间', channel: '渠道', table: '桌号', cashier: '收银员',
       customer: '顾客', item: '商品名称', qty: '数量', price: '金额', subtotal: '小计:',
       tax: '税费:', discount: '优惠:', total: '总计:', pay: '实付:', change: '找零:',
-      member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ==='
+      member: '会员:', points: '积分抵扣:', thanks: '=== 谢谢惠顾 欢迎光临 ===',
+      activityDiscount: '活动优惠', couponDiscount: '优惠券', pointsDiscount: '积分抵扣', manualDiscount: '手动折扣'
     },
     en: {
       orderNo: 'NO.', queueNo: 'QUEUE NO', date: 'Date', time: 'Time', channel: 'Channel', table: 'Table', cashier: 'Cashier',
       customer: 'Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', subtotal: 'Subtotal:',
       tax: 'Tax:', discount: 'Discount:', total: 'TOTAL:', pay: 'Paid:', change: 'Change:',
-      member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ==='
+      member: 'Member:', points: 'Points:', thanks: '=== THANK YOU ===',
+      activityDiscount: 'Activity', couponDiscount: 'Coupon', pointsDiscount: 'Points', manualDiscount: 'Manual'
     },
     id: {
       orderNo: 'NO.', queueNo: 'NO. ANTREAN', date: 'Tgl', time: 'Jam', channel: 'Kanal', table: 'Meja', cashier: 'Kasir',
       customer: 'Pelanggan', item: 'ITEM', qty: 'QTY', price: 'HARGA', subtotal: 'Subtotal:',
       tax: 'Pajak:', discount: 'Diskon:', total: 'TOTAL:', pay: 'Bayar:', change: 'Kembalian:',
-      member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ==='
+      member: 'Member:', points: 'Poin:', thanks: '=== TERIMA KASIH ===',
+      activityDiscount: 'Promo aktivitas', couponDiscount: 'Kupon', pointsDiscount: 'Poin', manualDiscount: 'Diskon manual'
     }
   }
   const L = i18nMap[lang] || i18nMap.id
@@ -2323,7 +2341,14 @@ async function buildReceiptEscPosBuffer(data: any): Promise<Buffer> {
           if (data.discount && data.discount > 0) {
             const promoName = data.promotionName || data.discountNote || ''
             chunks.push(formatAmountLine(cfg.discountLabel || L.discount, `-${formatRp(data.discount)}`, st))
-            if (cfg.showDiscountDetail !== false && promoName) chunks.push(formatStyledLine(`  [${promoName}]`, st))
+            const discountLines = Array.isArray(data.discountLines) ? data.discountLines : []
+            if (discountLines.length) {
+              for (const entry of discountLines) {
+                const bucket = L[`${entry.key}Discount` as keyof typeof L] || String(entry.key || '')
+                const detail = `${bucket}${entry.name ? ' · ' + entry.name : ''}`
+                chunks.push(formatAmountLine(`  ${truncate(detail, labelWidth - 2)}`, `-${formatRp(entry.amount)}`, { ...st, fontSize: 'small' }))
+              }
+            } else if (cfg.showDiscountDetail !== false && promoName) chunks.push(formatStyledLine(`  [${promoName}]`, st))
           }
           chunks.push(formatAmountLine(cfg.totalLabel || L.total, formatRp(data.total || 0), st))
           break
@@ -2500,7 +2525,11 @@ function generateReceiptText(data: any): string {
       change: '找零:',
       member: '会员:',
       points: '积分抵扣:',
-      thanks: '=== 谢谢惠顾 欢迎光临 ==='
+      thanks: '=== 谢谢惠顾 欢迎光临 ===',
+      activityDiscount: '活动优惠',
+      couponDiscount: '优惠券',
+      pointsDiscount: '积分抵扣',
+      manualDiscount: '手动折扣'
     },
     en: {
       orderNo: 'NO.',
@@ -2520,7 +2549,11 @@ function generateReceiptText(data: any): string {
       change: 'Change:',
       member: 'Member:',
       points: 'Points:',
-      thanks: '=== THANK YOU ==='
+      thanks: '=== THANK YOU ===',
+      activityDiscount: 'Activity',
+      couponDiscount: 'Coupon',
+      pointsDiscount: 'Points',
+      manualDiscount: 'Manual'
     },
     id: {
       orderNo: 'NO.',
@@ -2540,7 +2573,11 @@ function generateReceiptText(data: any): string {
       change: 'Kembalian:',
       member: 'Member:',
       points: 'Poin:',
-      thanks: '=== TERIMA KASIH ==='
+      thanks: '=== TERIMA KASIH ===',
+      activityDiscount: 'Promo aktivitas',
+      couponDiscount: 'Kupon',
+      pointsDiscount: 'Poin',
+      manualDiscount: 'Diskon manual'
     }
   }
   const L = i18nMap[lang] || i18nMap.id
@@ -2824,7 +2861,15 @@ function generateReceiptText(data: any): string {
   lines.push(`${L.tax.padEnd(labelWidth)}${formatRp(data.tax || 0).padStart(valWidth)}`)
   if (data.discount && data.discount > 0) {
     const promoName = data.promotionName || data.discountNote || ''
-    if (data.showPromotionDetail !== false && promoName) {
+    const discountLines = Array.isArray(data.discountLines) ? data.discountLines : []
+    if (discountLines.length) {
+      lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`)
+      for (const entry of discountLines) {
+        const bucket = L[`${entry.key}Discount` as keyof typeof L] || String(entry.key || '')
+        const detail = `${bucket}${entry.name ? ' · ' + entry.name : ''}`
+        lines.push(`  ${detail.slice(0, Math.max(1, labelWidth - 2)).padEnd(labelWidth - 2)}-${formatRp(entry.amount).padStart(valWidth)}`)
+      }
+    } else if (data.showPromotionDetail !== false && promoName) {
       lines.push(`${L.discount.padEnd(labelWidth)}-${formatRp(data.discount).padStart(valWidth)}`)
       lines.push(`  [${promoName}]`)
     } else {

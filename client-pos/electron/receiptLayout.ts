@@ -12,6 +12,12 @@ const labels={
  en:{queue:'QUEUE NO',date:'Date',time:'Time',channel:'Channel',cashier:'Cashier',customer:'Customer',items:'ITEM',qty:'QTY',price:'AMOUNT',subtotal:'Subtotal',tax:'Tax',total:'TOTAL',discount:'Discount',method:'Payment',received:'Paid',change:'Change'},
  id:{queue:'NO. ANTREAN',date:'Tgl',time:'Jam',channel:'Kanal',cashier:'Kasir',customer:'Pelanggan',items:'ITEM',qty:'QTY',price:'HARGA',subtotal:'Subtotal',tax:'Pajak',total:'TOTAL',discount:'Diskon',method:'Metode',received:'Bayar',change:'Kembalian'}
 }
+const discountLabels={
+ zh:{activity:'活动优惠',coupon:'优惠券',points:'积分抵扣',manual:'手动折扣'},
+ en:{activity:'Activity',coupon:'Coupon',points:'Points',manual:'Manual'},
+ id:{activity:'Promo aktivitas',coupon:'Kupon',points:'Poin',manual:'Diskon manual'}
+}
+const discountLabel=(key:unknown,language:unknown)=>(discountLabels[language as keyof typeof discountLabels]||discountLabels.id)[(key as 'activity')||'activity']||String(key||'')
 const row=(name:unknown,value:unknown)=>`<div class="amount"><span>${escape(name)}</span><span>${escape(value)}</span></div>`
 const line=(text:unknown)=>`<div class="line">${escape(text)}</div>`
 function qrSvg(content:string,dots:number):string {
@@ -73,7 +79,7 @@ export function receiptHtml(data:ReceiptLayoutData):string {
    case 'signatures':content=`<div class="signature-grid" style="grid-template-columns:repeat(${Math.min(2,Math.max(1,(c.labels||[]).length))},minmax(0,1fr))">${(c.labels||[]).map((name:unknown)=>`<div><div class="signature-line"></div>${line(name)}</div>`).join('')}</div>`;break
    case 'subtotal':content=row(c.subtotalLabel||L.subtotal,money(data.subtotal));break
    case 'tax':content=row(c.label||(c.rate&&c.showRate!==false?`${L.tax} (${c.rate}%)`:L.tax),money(data.tax));break
-   case 'total':if(data.discount>0){content+=row(c.discountLabel||L.discount,'-'+money(data.discount));if(c.showDiscountDetail!==false&&(data.promotionName||data.discountNote))content+=line(data.promotionName||data.discountNote)}content+=row(c.totalLabel||L.total,money(data.total));break
+   case 'total':if(data.discount>0){content+=row(c.discountLabel||L.discount,'-'+money(data.discount));const lines=Array.isArray(data.discountLines)?data.discountLines:[];if(lines.length)for(const entry of lines)content+=row('  '+discountLabel(entry.key,data.language)+(entry.name?' · '+entry.name:''),'-'+money(entry.amount));else if(c.showDiscountDetail!==false&&(data.promotionName||data.discountNote))content+=line(data.promotionName||data.discountNote)}content+=row(c.totalLabel||L.total,money(data.total));break
    case 'paymentInfo':if(c.showMethod)content+=row(L.method,data.paymentMethod||'');if(c.showReceived)content+=row(L.received,money(data.paidAmount));if(c.showChange)content+=row(L.change,money(data.change));break
    case 'footer':if(c.showDivider)content+='<hr class="dashed"/>';content+=line(c.footerText??data.footer??'');break
    case 'customText':content=line(c.customText??c.text??'');break

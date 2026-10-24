@@ -91,7 +91,7 @@ const createOrderSchema = z.object({
 // GET /api/orders
 const listOrders = async (req: AuthRequest, res: Response) => {
   try {
-    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date, search, productName, shiftSessionId } = req.query
+    const { storeId, status, paymentMethod, channelId, startDate, endDate, page, pageSize, date, search, productName, shiftSessionId, activity, hasDiscount } = req.query
 
     const parsed = z.object({
       startDate: z.union([z.string().datetime({ offset: true }), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(), endDate: z.union([z.string().datetime({ offset: true }), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
@@ -110,6 +110,8 @@ const listOrders = async (req: AuthRequest, res: Response) => {
       search: search as string,
       productName: parsed.data.productName,
       shiftSessionId: parsed.data.shiftSessionId,
+      activity: activity as string,
+      hasDiscount: hasDiscount as string,
       startDate: startDate && /^\d{4}-\d{2}-\d{2}$/.test(String(startDate)) ? String(startDate)+'T00:00:00+07:00' : startDate as string,
       endDate: endDate && /^\d{4}-\d{2}-\d{2}$/.test(String(endDate)) ? String(endDate)+'T23:59:59.999+07:00' : endDate as string,
       date: date as string,

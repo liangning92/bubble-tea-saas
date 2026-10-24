@@ -6,6 +6,7 @@ import { quoteActivities, enqueueActivityGrants, runActivityJobs, reverseActivit
 import { recordOrderConsumption, reverseOrderConsumption } from './OrderConsumptionService'
 import { getActivityPriceRules } from './ActivityPricingService'
 import { activityPrice } from '../utils/activityPricing'
+import { buildDiscountBreakdown } from '../utils/orderDiscount'
 import { findOrderReplay as replayReceipt, encodeOrderReceipt, orderRequestFingerprint, publicOrder } from './OrderReplayService'
 import { netReceivedAmount } from '../utils/refundAllocation'
 import { containsFilter } from '../utils/stringFilter'
@@ -214,6 +215,8 @@ export async function getOrders(params: {
   search?: string
   productName?: string
   shiftSessionId?: string
+  activity?: string
+  hasDiscount?: string
   startDate?: string
   endDate?: string
   date?: string  // Single date for "show orders on this date"
@@ -228,6 +231,8 @@ export async function getOrders(params: {
     paymentMethod,
     channelId,
     search,
+    activity,
+    hasDiscount,
     startDate,
     endDate,
     page = 1,
@@ -246,6 +251,11 @@ export async function getOrders(params: {
   where.status = status || { notIn: ['refunded', 'cancelled'] }
   if (paymentMethod) where.paymentMethod = paymentMethod
   if (channelId) where.channelId = channelId
+  // Settlement filters: only orders that carried an activity discount, or any recorded discount.
+  if (activity === '1' || activity === 'true') where.activityDiscountAmount = { gt: 0 }
+  if (hasDiscount === '1' || hasDiscount === 'true') {
+    where.AND = [...(where.AND || []), { OR: [{ activityDiscountAmount: { gt: 0 } }, { discountAmount: { gt: 0 } }, { pointsDiscountAmount: { gt: 0 } }] }]
+  }
 
   if (params.productName?.trim()) where.items = { some: { productName: containsText(params.productName.trim()) } }
   if (params.shiftSessionId) {
@@ -253,7 +263,7 @@ export async function getOrders(params: {
     if (!session) throw new Error('INVALID_ORDER_SHIFT')
     const until = session.closedAt || new Date()
     const overlapping = await prisma.shiftSession.findMany({ where: { storeId: session.storeId, id: { not: session.id }, openedAt: { lt: until }, OR: [{ closedAt: null }, { closedAt: { gt: session.openedAt } }] } })
-    where.AND = [{ createdAt: { gte: session.openedAt, lt: until } }, ...overlapping.map(other => ({ NOT: { createdAt: { gte: other.openedAt, lt: other.closedAt || until } } }))]
+    where.AND = [...(where.AND || []), { createdAt: { gte: session.openedAt, lt: until } }, ...overlapping.map(other => ({ NOT: { createdAt: { gte: other.openedAt, lt: other.closedAt || until } } }))]
   }
 
   if (search && search.trim()) {
@@ -517,6 +527,18 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
   const finalAmount = totalAmount - (data.discountAmount || 0) - pointsDiscount
   if (finalAmount < 0) throw new Error('DISCOUNT_EXCEEDS_TOTAL')
 
+  // Discount provenance: the winning quote candidate plus manual discounts, persisted so every
+  // settlement surface (admin, receipt, handover) reconciles the same buckets.
+  const appliedDiscount = unifiedQuote?.applied || null
+  const discountBreakdown = buildDiscountBreakdown({
+    applied: appliedDiscount,
+    pointsValue: pointsDiscount,
+    manualDiscountAmount: data.manualDiscountAmount || 0
+  })
+  const activityDiscountAmount = discountBreakdown.lines.find(line => line.key === 'activity')?.amount || 0
+  const couponDiscountAmount = discountBreakdown.lines.find(line => line.key === 'coupon')?.amount || 0
+  const manualDiscountAmount = discountBreakdown.lines.find(line => line.key === 'manual')?.amount || 0
+
   // Add PPN (Indonesian tax 11%) - only if taxEnabled is not explicitly false
   const ppnAmount = unifiedQuote?.offline ? (data.taxEnabled!==false?Math.round(finalAmount*(unifiedQuote.offlineTaxRate??config.indonesia.ppnRate)):0) : data.taxEnabled !== false ? Math.round(finalAmount * config.indonesia.ppnRate) : 0
   const grandTotal = Math.max(0, finalAmount + ppnAmount)
@@ -655,6 +677,13 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
         pickupNumber,
         totalAmount,  // 服务端计算的订单总额（含渠道调价）
         discountAmount: data.discountAmount || 0,
+        activityDiscountAmount,
+        couponDiscountAmount,
+        pointsDiscountAmount: pointsDiscount,
+        manualDiscountAmount,
+        activityId: appliedDiscount?.id || null,
+        activityName: appliedDiscount?.name || null,
+        activitySource: appliedDiscount?.kind || null,
         finalAmount: grandTotal,
         status: data.status || 'completed',
         paymentMethod: data.paymentMethod,
