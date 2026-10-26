@@ -3506,6 +3506,14 @@ const resources = {
       },
       "posReceiptLog": {"otherAction": "Operasi POS lainnya", "order": "Nomor pesanan", "pickup": "Nomor antrean", "notRecorded": "Tidak tercatat", "reason": "Penyebab", "next": "Saran tindakan", "pending": "Struk disiapkan; menunggu hasil cetak", "sent": "Tugas cetak terkirim; kertas belum dikonfirmasi", "failed": "Pencetakan struk belum selesai", "unknown": "Hasil cetak struk belum pasti", "paper-confirmed": "Petugas mengonfirmasi struk tercetak", "unrecorded": "Hasil cetak struk tidak tercatat", "badge_pending": "Menunggu", "badge_sent": "Terkirim", "badge_failed": "Kendala cetak", "badge_unknown": "Perlu diperiksa", "badge_paper-confirmed": "Kertas dikonfirmasi", "badge_unrecorded": "Perlu diperiksa", "paintTimeout": "POS tidak berhasil membuat halaman cetak struk dalam batas waktu. Pencetakan belum selesai. Catatan ini tidak membuktikan printer rusak.", "paintTimeoutNext": "Periksa apakah kertas sudah keluar. Jika belum, cetak ulang dari catatan struk POS. Jika berulang, mulai ulang POS dan hubungi admin. Jangan tagih ulang.", "deliveryTimeout": "POS belum dapat memastikan pengiriman tugas cetak dalam batas waktu; struk mungkin sudah tercetak.", "deliveryTimeoutNext": "Periksa printer dahulu. Konfirmasi di POS jika sudah tercetak; jika belum, cetak ulang agar tidak ganda. Jangan tagih ulang.", "apiUnavailable": "POS ini tidak dapat mengakses fungsi cetak lokal.", "apiUnavailableNext": "Periksa pengaturan cetak di aplikasi POS Windows, lalu periksa kertas sebelum mencetak ulang. Jangan tagih ulang.", "targetUnavailable": "Konfigurasi printer struk yang dapat digunakan tidak ditemukan.", "targetUnavailableNext": "Pilih printer struk di pengaturan POS, periksa sambungannya, lalu cetak ulang. Jangan tagih ulang.", "unknownReason": "Catatan ini tidak memiliki penyebab khusus yang dikenali, sehingga lokasi gangguan belum dapat dipastikan.", "unknownReasonNext": "Periksa kertas dan koneksi printer sebelum cetak ulang. Jika gagal lagi, berikan catatan asli di bawah kepada admin. Jangan tagih ulang.", "pendingNext": "Ini catatan proses, bukan bukti kegagalan. Periksa catatan cetak berikutnya untuk pesanan yang sama. Jika hasil belum ada, periksa kertas sebelum cetak ulang.", "sentNext": "Terkirim belum memastikan kertas keluar. Periksa printer sebelum cetak ulang agar tidak ganda.", "paper-confirmedNext": "Tidak perlu tindakan. Ini konfirmasi petugas, bukan deteksi kertas otomatis.", "unrecordedNext": "Periksa catatan berikutnya untuk pesanan yang sama dan kertas yang keluar. Jangan tagih atau cetak ulang hanya berdasarkan catatan ini."},
       "posMonitor": {
+        "receiptPostedSuccess": "Bukti berhasil diverifikasi dan dibukukan",
+        "receiptPostFailed": "Gagal memverifikasi bukti",
+        "verifyAndPost": "Verifikasi dan bukukan",
+        "confirmDiscardReceipt": "Abaikan bukti ini?",
+        "receiptDiscardedSuccess": "Bukti telah diabaikan",
+        "receiptDiscardFailed": "Gagal mengabaikan bukti",
+        "discardReceipt": "Abaikan",
+
         "logCategory": "Jenis catatan",
         "categoryBehavior": "Perilaku kasir",
         "categoryPrinting": "Catatan cetak",
@@ -7466,6 +7474,14 @@ const resources = {
       },
       "posReceiptLog": {"otherAction": "Other POS operation", "order": "Order", "pickup": "Pickup", "notRecorded": "Not recorded", "reason": "Reason", "next": "What to do", "pending": "Preparing receipt; waiting for print result", "sent": "Print job sent; paper output not confirmed", "failed": "Receipt printing did not complete", "unknown": "Receipt print result is uncertain", "paper-confirmed": "Staff confirmed paper output", "unrecorded": "Receipt print result not recorded", "badge_pending": "Waiting", "badge_sent": "Sent", "badge_failed": "Print issue", "badge_unknown": "Check required", "badge_paper-confirmed": "Paper confirmed", "badge_unrecorded": "Check required", "paintTimeout": "POS could not generate the receipt print page within the time limit. Printing did not complete. This does not establish a printer hardware fault.", "paintTimeoutNext": "Check for paper output first. If none, reprint from POS receipt records. If this repeats, restart POS and contact an administrator. Do not charge again.", "deliveryTimeout": "POS could not confirm print delivery within the time limit; the receipt may already have printed.", "deliveryTimeoutNext": "Check the printer first. Confirm in POS if printed; otherwise reprint to avoid duplicates. Do not charge again.", "apiUnavailable": "This POS cannot access the local printing function.", "apiUnavailableNext": "Check print settings in the Windows POS app, then check paper output before reprinting. Do not charge again.", "targetUnavailable": "No usable receipt printer configuration was found.", "targetUnavailableNext": "Select a receipt printer in POS settings, check its connection, then reprint. Do not charge again.", "unknownReason": "This record has no recognized specific cause, so the fault cannot be determined from it.", "unknownReasonNext": "Check paper output and printer connection before reprinting. If it fails again, give the original record below to an administrator. Do not charge again.", "pendingNext": "This is a progress record, not a failure by itself. Check later print records for the same order. If no result follows, check paper output before reprinting.", "sentNext": "Sent does not confirm paper output. Check the printer before reprinting to avoid duplicates.", "paper-confirmedNext": "No action is needed. This is staff confirmation, not automatic paper detection.", "unrecordedNext": "Check later records for the same order and actual paper output. Do not charge or reprint based on this record alone."},
       "posMonitor": {
+        "receiptPostedSuccess": "Receipt verified and posted",
+        "receiptPostFailed": "Could not verify receipt",
+        "verifyAndPost": "Verify and post",
+        "confirmDiscardReceipt": "Discard this receipt?",
+        "receiptDiscardedSuccess": "Receipt discarded",
+        "receiptDiscardFailed": "Could not discard receipt",
+        "discardReceipt": "Discard",
+
         "logCategory": "Log category",
         "categoryBehavior": "Cashier activity",
         "categoryPrinting": "Printing records",
@@ -12927,6 +12943,14 @@ const resources = {
       },
       "posReceiptLog": {"otherAction": "其他 POS 操作", "order": "订单号", "pickup": "取餐号", "notRecorded": "未记录", "reason": "原因", "next": "处理建议", "pending": "小票正在准备，等待打印结果", "sent": "小票任务已发送，尚未确认出纸", "failed": "小票打印未完成", "unknown": "小票打印结果不确定", "paper-confirmed": "店员已确认小票出纸", "unrecorded": "未记录小票打印结果", "badge_pending": "等待结果", "badge_sent": "已发送", "badge_failed": "打印异常", "badge_unknown": "需核对", "badge_paper-confirmed": "已确认出纸", "badge_unrecorded": "需核对", "paintTimeout": "POS 在规定时间内未能生成小票打印页面（生成超时），因此本次打印未完成。此记录不能证明打印机损坏。", "paintTimeoutNext": "先检查打印机是否已经出纸；若未出纸，在 POS 的小票记录中补打。若反复出现，请重启 POS 并联系管理员。无需再次收款。", "deliveryTimeout": "POS 未能在规定时间内确认打印任务的发送结果；小票可能已经出纸。", "deliveryTimeoutNext": "先到打印机确认是否已出纸，已出纸则在 POS 确认；未出纸再补打，避免重复打印。无需再次收款。", "apiUnavailable": "当前 POS 无法调用本机打印功能。", "apiUnavailableNext": "请在 Windows POS 客户端中检查打印设置，再确认是否出纸后补打。无需再次收款。", "targetUnavailable": "未找到可用的小票打印机配置。", "targetUnavailableNext": "在 POS 设置中选择小票打印机，检查连接后补打。无需再次收款。", "unknownReason": "这条记录没有可识别的具体原因，无法据此确定是哪一处故障。", "unknownReasonNext": "先检查是否出纸及打印机连接；未出纸再补打。如仍失败，将下方原始记录交给管理员排查。无需再次收款。", "pendingNext": "这是打印过程记录，本身不代表失败。请查看同一订单稍后的打印记录；若一直没有结果，先确认是否出纸再决定补打。", "sentNext": "已发送不等于已出纸。请以打印机实际出纸为准，避免重复补打。", "paper-confirmedNext": "本次打印无需处理；此记录表示店员确认，不是系统自动检测出纸。", "unrecordedNext": "请检查同一订单的后续记录及实际出纸情况，勿仅凭此记录重复收款或补打。"},
       "posMonitor": {
+        "receiptPostedSuccess": "凭据已成功核实入账",
+        "receiptPostFailed": "核实入账失败",
+        "verifyAndPost": "核实入账",
+        "confirmDiscardReceipt": "确定要将该凭据作废忽略吗？",
+        "receiptDiscardedSuccess": "凭据已作废",
+        "receiptDiscardFailed": "作废失败",
+        "discardReceipt": "作废/忽略",
+
         "logCategory": "记录类别",
         "categoryBehavior": "收银行为",
         "categoryPrinting": "打印记录",

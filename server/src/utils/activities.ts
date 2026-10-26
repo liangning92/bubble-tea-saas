@@ -2,6 +2,20 @@
 export const ACTIVITY_TYPES = ['special_price','percent','nth_cup','buy_get','fixed','tiered','bundle','addon','upgrade','gift','member_price','birthday','welcome','coupon','points','stamps','lottery','referral','group'] as const
 export type ActivityType = typeof ACTIVITY_TYPES[number]
 
+export type PosterElementKey = 'headline' | 'subheadline' | 'grid' | 'card' | 'image' | 'logo' | 'productName' | 'productSubname' | 'priceBox' | 'originalPrice' | 'specialPrice' | 'savingAmount' | 'dayBadge' | 'discountTag' | 'highlight' | 'footer'
+export interface PosterElementStyle {
+  x?: number; y?: number; width?: number; height?: number
+  fontSize?: number; fontWeight?: number; fontFamily?: 'sans'|'serif'|'mono'
+  lineHeight?: number; letterSpacing?: number; textAlign?: 'left'|'center'|'right'
+  color?: string; backgroundColor?: string; borderColor?: string
+  borderWidth?: number; borderRadius?: number; padding?: number
+  strokeColor?: string; strokeWidth?: number
+  shadowColor?: string; shadowX?: number; shadowY?: number; shadowBlur?: number
+  opacity?: number; rotation?: number; zIndex?: number; visible?: boolean
+  objectFit?: 'cover'|'contain'|'fill'; objectPositionX?: number; objectPositionY?: number
+}
+export type PosterElements = Partial<Record<PosterElementKey, PosterElementStyle>>
+
 export interface PosterDesignConfig {
   // 1. Layout Mode & Grid
   cardLayout?: 'overlay' | 'standard' // 'overlay' = image full bleed with text on image; 'standard' = separate boxes
@@ -9,6 +23,8 @@ export interface PosterDesignConfig {
   rows?: number // 1 or 2 rows
 
   // 2. Spacing & Padding
+  cardGapX?: number
+  cardGapY?: number
   cardGap?: number // px, e.g. 4..48 (default: 16)
   containerPaddingY?: number // px, e.g. 0..48 (default: 16)
   containerPaddingX?: number // px, e.g. 8..64 (default: 24)
@@ -53,6 +69,8 @@ export interface PosterDesignConfig {
   pricePosition?: 'bottom' | 'top' | 'middle'
   badgePosition?: 'bottom_bar' | 'top_pill' | 'top_right_ribbon' | 'bottom_pill' | 'hidden'
   textAlign?: 'center' | 'left' | 'right'
+  headlineFontSize?: number
+  subheadlineFontSize?: number
   titleFontSize?: number // 14..36 (default: 22)
   textShadow?: boolean
   textStroke?: boolean
@@ -75,6 +93,14 @@ export interface PosterDesignConfig {
 }
 
 export interface ActivityPosterConfig {
+  freeform?: boolean
+  canvasWidth?: number
+  canvasHeight?: number
+  elements?: PosterElements
+  logoUrl?: string
+  priceFormat?: 'currency'|'grouped'|'plain'
+  priceLabels?: { originalPrice?:string; specialPrice?:string; savingAmount?:string }
+
   template?: 'daily_specials' | 'featured_grid' | 'bogo_duo' | 'lucky_wheel' | 'tiered_milestone'
   headline?: string
   subheadline?: string
@@ -97,6 +123,10 @@ export interface ActivityPosterConfig {
   }
   cardItems?: Array<{
     id?: string
+    imageMode?: 'auto'|'manual'
+    logoUrl?: string
+    elements?: PosterElements
+    priceLabels?: { originalPrice?:string; specialPrice?:string; savingAmount?:string }
     dayOfWeek?: number
     dayLabel?: string
     productId?: string

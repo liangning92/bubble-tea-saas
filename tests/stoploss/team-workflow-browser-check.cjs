@@ -1,3 +1,4 @@
+const aiPanelFixture=require('./ai-settings-fixture.cjs');
 /* Actual built admin routes. Every API and identity is synthetic; no model transport. */
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
 const root=path.resolve(__dirname,'../..'),{chromium}=require(root+'/node_modules/playwright'),express=require(root+'/server/node_modules/express');
@@ -15,6 +16,7 @@ const passed=[],pageErrors=[],requests=[],external=[],receipts=new Map(),policyW
 const app=express();app.use(express.json());
 app.all('/api/*',(req,res)=>{
  const ok=data=>res.json({code:200,data}),role=req.headers.authorization?.includes('manager')?'manager':'admin';
+ const panelData=aiPanelFixture(req.path);if(panelData!==undefined)return ok(panelData);
  if(req.path==='/api/auth/me')return ok({...user,role});
  if(req.path==='/api/staff-work/my/inbox')return ok({items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}});
  if(req.path==='/api/team/ai/settings')return ok(settings);

@@ -1,3 +1,4 @@
+import { posterImageVariants } from '../utils/posterImageVariants'
 import { getOrCreateStoreChannels } from "./ChannelBootstrap";
 import {
   createHash,
@@ -285,6 +286,7 @@ export async function assetManifest(url: string, kind: string) {
     sha256: known.digest,
   };
 }
+import { activitySummary } from "../utils/activities";
 import { resolveProductImageByRatio, deriveTargetAspectRatio } from "../utils/mediaResolver";
 export function resolveTvProductImage(
   p: any,
@@ -428,7 +430,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
   }
   const display = await publicActivities(storeId, channel.code);
   const promotions = display.activities.filter((a) =>
-    a.posterConfig || activityEligible(
+    activityEligible(
       allActivities.find((x) => x.id === a.id)!,
       { now, channel: channel.code },
       false,
@@ -443,6 +445,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
       images: { include: { media: true }, orderBy: { position: "asc" } },
     },
   });
+  const imageVariants=new Map(await Promise.all(specialRows.map(async p=>[p.id,await posterImageVariants(p,allMediaAssets)] as const)));
   const specialProducts = (activity: Activity) => {
     const targetRatio = deriveTargetAspectRatio(
       activity.posterConfig as any,
@@ -452,19 +455,22 @@ export async function signageSnapshot(screen: any, db = prisma) {
       .map((id) => specialRows.find((p) => p.id === id))
       .filter((p) => !!p)
       .map((p) => {
-        const prices = p.specs.map((s) => s.price);
+        const prices = p.specs.filter(s=>!activity.specIds.length||activity.specIds.includes(s.id)).map((s) => s.price);
         const originalPrice = prices.length ? Math.min(...prices) : 0;
-        const specialPrice = activity.type === "fixed"
-          ? Math.max(0, originalPrice - (activity.rule.amount || 4000))
-          : (activity.rule.price ?? (activity.rule.percent ? Math.round(originalPrice * (100 - activity.rule.percent) / 100) : 0));
+        const specialPrice = activity.type === "special_price" || activity.type === "member_price"
+          ? activity.rule.price
+          : activity.type === "percent" && activity.rule.percent !== undefined
+            ? Math.round(originalPrice * (100 - activity.rule.percent) / 100)
+            : undefined;
         const img = resolveProductImageByRatio(p, targetRatio, allMediaAssets);
         return {
           id: p.id,
           name: p.name,
           image: img,
+          imageVariants: imageVariants.get(p.id),
           originalPrice,
           specialPrice,
-          saving: Math.max(0, originalPrice - specialPrice),
+          saving: specialPrice === undefined ? undefined : Math.max(0, originalPrice - specialPrice),
         };
       })
       .filter((p) => p.originalPrice > 0);
@@ -472,7 +478,10 @@ export async function signageSnapshot(screen: any, db = prisma) {
   const specials = allActivities
     .filter(
       (a) =>
-        ["special_price", "percent", "nth_cup", "fixed"].includes(a.type) &&
+        (["special_price", "percent", "nth_cup", "fixed"].includes(a.type) || !!a.posterConfig) &&
+        (!a.channels.length || a.channels.includes(channel.code)) &&
+        !a.conflict &&
+        (!a.limit || a.used < a.limit) &&
         a.showOnTv &&
         a.status === "published" &&
         (!a.startsAt || now.getTime() >= Date.parse(a.startsAt)) &&
@@ -489,6 +498,13 @@ export async function signageSnapshot(screen: any, db = prisma) {
       return {
         id: a.id,
         name: a.name,
+        type: a.type,
+        rule: a.rule,
+        memberOnly: a.memberOnly,
+        memberLevels: a.memberLevels,
+        paymentMethods: a.paymentMethods,
+        channels: a.channels,
+        summary: activitySummary(a),
         description: a.description,
         theme: a.theme || "",
         weekdays: a.weekdays,
@@ -511,10 +527,12 @@ export async function signageSnapshot(screen: any, db = prisma) {
   const hardware = brandRow ? JSON.parse(brandRow.value) : {},
     assets: any[] = [];
   const specialImages = specials.flatMap((s) => [
+    ...s.products.flatMap((p:any)=>(p.imageVariants||[]).map((v:any)=>({url:v.url,kind:"image"}))),
     ...s.products
       .filter((p: any) => p.image)
       .map((p: any) => ({ url: p.image!, kind: "image" })),
-    ...((s.posterConfig?.cardItems || []) as any[])
+    ...(s.posterConfig?.logoUrl?[{imageUrl:s.posterConfig.logoUrl}]:[]),
+    ...((s.posterConfig?.cardItems || []) as any[]).flatMap(c=>[c,...(c.logoUrl?[{imageUrl:c.logoUrl}]:[])])
       .filter((c: any) => c.imageUrl)
       .map((c: any) => ({ url: c.imageUrl!, kind: "image" })),
   ]);

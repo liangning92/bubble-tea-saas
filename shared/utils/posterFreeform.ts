@@ -1,0 +1,52 @@
+import type { ActivityPosterConfig, PosterElementKey, PosterElementStyle } from './activities';
+import type { PosterInput } from './activityPoster';
+import { posterLayout, choosePosterImage } from './posterLayout';
+const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+const n = (v: number | undefined, f = 0, min = -1000, max = 10000) => Number.isFinite(v) ? Math.max(min, Math.min(max, v!)) : f;
+const color = (v: string | undefined, f = 'transparent') => v && /^(#[\da-f]{3,8}|rgba?\([\d\s.,%]+\)|transparent)$/i.test(v) ? v : f;
+const image = (u: string | undefined) => u && (/^https?:\/\//i.test(u) || u.startsWith('/uploads/')) ? u : '';
+const font = (f: string | undefined) => ({ sans: 'system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif', serif: 'Georgia,serif', mono: 'monospace' }[f || 'sans'] || 'system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif');
+export function renderFreeformPoster(a: PosterInput, options: {
+    language?: number;
+    day: number;
+    aspectRatio?: number;
+    assetUrl?: (s: string) => string;
+    cards: NonNullable<ActivityPosterConfig['cardItems']>;
+    page: number;
+    pages: number;
+}): string {
+    const cfg = { ...a.posterConfig, cardItems: options.cards }, layout = posterLayout(cfg, options.cards.length, options.aspectRatio), lang = options.language ?? 2, l = (zh: string, en: string, id: string) => [zh, en, id][lang] || id, days = [['周日', '周一', '周二', '周三', '周四', '周五', '周六'], ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']][lang];
+    const css = (s: PosterElementStyle, rect: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    }, owner = { x: 0, y: 0 }) => `position:absolute;box-sizing:border-box;left:${rect.x - owner.x}px;top:${rect.y - owner.y}px;width:${rect.width}px;height:${rect.height}px;z-index:${n(s.zIndex, 3, 0, 50)};opacity:${n(s.opacity, 1, 0, 1)};transform:${s.rotation ? `rotate(${n(s.rotation, 0, -180, 180)}deg)` : "none"};padding:${n(s.padding, 0, 0, 300)}px;border:${n(s.borderWidth, 0, 0, 30)}px solid ${color(s.borderColor)};border-radius:${n(s.borderRadius, 0, 0, 300)}px;background:${color(s.backgroundColor)};color:${color(s.color, '#ffffff')};font-size:${n(s.fontSize, 22, 0, 300)}px;font-weight:${n(s.fontWeight, 400, 100, 900)};font-family:${font(s.fontFamily || cfg.designConfig?.fontStyle)};line-height:${n(s.lineHeight, 1.2, .5, 4)};letter-spacing:${n(s.letterSpacing, 0, -100, 100)}px;text-align:${['left','center','right'].includes(s.textAlign||'')?s.textAlign:'left'};-webkit-text-stroke:${n(s.strokeWidth, 0, 0, 30)}px ${color(s.strokeColor)};paint-order:stroke fill;text-shadow:${n(s.shadowX)}px ${n(s.shadowY)}px ${n(s.shadowBlur, 0, 0, 300)}px ${color(s.shadowColor)};box-shadow:${n(s.shadowX)}px ${n(s.shadowY)}px ${n(s.shadowBlur, 0, 0, 300)}px ${color(s.shadowColor)};${s.visible === false ? 'display:none;' : ''}`;
+    const amount = (v: number) => cfg.priceFormat === 'plain' ? String(Math.round(v)) : cfg.priceFormat === 'grouped' ? Math.round(v).toLocaleString('id-ID') : 'Rp ' + Math.round(v).toLocaleString('id-ID');
+    const root = { x: 0, y: 0 }, global = (key: PosterElementKey, text: string) => { const layer = layout.layers.find(x => x.key === key && x.cardIndex === undefined)!; return `<div class="element text" data-element-key="${key}" style="${css(layer.style, layer.rect)}">${esc(text)}</div>`; };
+    const grid = layout.layers.find(x => x.key === 'grid')!, cardHTML = options.cards.map((c, i) => {
+        const card = layout.cards[i], cardLayer = layout.layers.find(x => x.key === 'card' && x.cardIndex === i)!, active = cfg.highlightToday !== false && c.dayOfWeek !== undefined && options.day === c.dayOfWeek, p = a.products?.find(p => p.id === c.productId);
+        const original = c.originalPrice ?? p?.price ?? p?.originalPrice ?? p?.specs?.[0]?.price, special = c.specialPrice ?? p?.specialPrice ?? (['special_price', 'member_price'].includes(a.type || '') ? a.rule?.price : a.type === 'percent' && original !== undefined && a.rule?.percent !== undefined ? Math.round(original * (100 - a.rule.percent) / 100) : undefined), saving = original !== undefined && special !== undefined ? Math.max(0, original - special) : undefined;
+        const labels = { originalPrice: l('原价', 'Normal price', 'Harga Normal'), specialPrice: l('活动价', 'Special price', 'Harga Spesial'), savingAmount: l('节省', 'Save', 'Hemat'), ...cfg.priceLabels, ...c.priceLabels };
+        const text: Partial<Record<PosterElementKey, string>> = { productName: c.productName ?? p?.name ?? '', productSubname: c.specName || '', originalPrice: original === undefined ? '' : `${labels.originalPrice}${labels.originalPrice ? ' : ' : ''}${amount(original)}`, specialPrice: special === undefined ? '' : `${labels.specialPrice}${labels.specialPrice ? ' : ' : ''}${amount(special)}`, savingAmount: saving === undefined ? '' : `${labels.savingAmount}${labels.savingAmount ? ' : ' : ''}${amount(saving)}`, dayBadge: c.dayLabel ?? (c.dayOfWeek !== undefined ? days[c.dayOfWeek] : ''), discountTag: original && special !== undefined && special < original ? `-${Math.round((original - special) / original * 100)}%` : '' };
+        const fields: Partial<Record<PosterElementKey, keyof NonNullable<ActivityPosterConfig['showFields']>>> = { image: 'productImage', productName: 'productName', productSubname: 'productSubname', originalPrice: 'originalPrice', specialPrice: 'specialPrice', savingAmount: 'savingAmount', dayBadge: 'dayBadge', discountTag: 'discountTag' };
+        const children = layout.layers.filter(x => x.cardIndex === i && x.key !== 'card').map(layer => {
+            const key = layer.key, style = { ...layer.style };
+            if (style.visible === false || key === 'highlight' && !active || fields[key] && cfg.showFields?.[fields[key]!] === false)
+                return '';
+            if (key === 'dayBadge' && active)
+                style.backgroundColor = c.activeColor || cfg.designConfig?.highlightColor || cfg.themeColor || '#ff5d89';
+            const base = `data-element-key="${key}" data-card-index="${i + options.page * ((cfg.columns || 5) * (cfg.designConfig?.rows || cfg.rows || 1))}" style="${css(style, layer.rect, card)}"`;
+            if (key === 'image' || key === 'logo') {
+                const variant = key === 'image' ? choosePosterImage(p, c, layer.rect.width / Math.max(1, layer.rect.height)) : undefined, url = image(key === 'logo' ? (c.logoUrl || cfg.logoUrl) : variant?.url), source = url ? (options.assetUrl ? options.assetUrl(url) : url) : '';
+                return `<div class="element photo" ${base}>${source ? `<img src="${esc(source)}" alt="${esc(key === 'logo' ? 'Logo' : text.productName)}" data-image-width="${variant?.width || ''}" data-image-height="${variant?.height || ''}" style="object-fit:${['cover','contain','fill'].includes(style.objectFit||cfg.designConfig?.imageFit||'')?(style.objectFit||cfg.designConfig?.imageFit):'cover'};object-position:${n(style.objectPositionX, 50, 0, 100)}% ${n(style.objectPositionY, 50, 0, 100)}%">` : `<span class="missing">${esc(l('未选择图片', 'Choose an image', 'Pilih gambar'))}</span>`}</div>`;
+            }
+            if (key === 'priceBox' || key === 'highlight')
+                return `<div class="element shape" ${base}></div>`;
+            return text[key] ? `<div class="element text ${key === 'dayBadge' ? 'badge' : ''}" ${base}>${esc(text[key])}</div>` : '';
+        }).join('');
+        return `<article data-element-key="card" data-card-index="${i}" class="free-card" style="${css(cardLayer.style, card, grid.rect)};z-index:${active ? 20 : n(cardLayer.style.zIndex, 3, 0, 19)}">${children}</article>`;
+    }).join('');
+    const footer = [a.description, a.dailyStart && a.dailyEnd ? `${a.dailyStart}–${a.dailyEnd}` : '', a.memberOnly ? l('仅限会员', 'Members only', 'Khusus anggota') : '', a.paymentMethods?.join('/'), options.pages > 1 ? `${options.page + 1}/${options.pages}` : ''].filter(Boolean).join(' · ');
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;height:100%;width:100%;overflow:hidden;background:${color(cfg.backgroundColor, '#121214')};--u:min(${100 / layout.width}vw,${100 / layout.height}vh)}body{display:flex;align-items:center;justify-content:center}.canvas{position:relative;overflow:hidden;width:${layout.width}px;height:${layout.height}px;background:${color(cfg.backgroundColor, '#121214')};font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}.element{margin:0;overflow:hidden;overflow-wrap:anywhere}.text{white-space:pre-wrap}.badge{display:flex;align-items:center;justify-content:center}.photo img{display:block;width:100%;height:100%}.missing{display:flex;height:100%;align-items:center;justify-content:center;color:#94a3b8;font:20px system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}.free-card{overflow:visible}</style></head><body><div class="canvas">${global('headline', cfg.headline ?? a.name ?? '')}${global('subheadline', cfg.subheadline ?? '')}<section data-element-key="grid" style="${css(grid.style, grid.rect, root)};overflow:visible">${cardHTML}</section>${global('footer', footer)}</div></body></html>`.replace(/(<style>[\s\S]*?<\/style>|style="[^"]*")/g, css => css.replace(/(-?[\d.]+)px\b/g, (_, value) => `calc(${value} * var(--u))`));
+}

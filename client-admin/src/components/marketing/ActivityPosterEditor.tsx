@@ -1,3 +1,8 @@
+import { PosterElementInspector, type PosterSelection } from './PosterElementInspector'
+import { PosterCanvasEditor } from './PosterCanvasEditor'
+import { renderActivityPoster, defaultPosterCards, DEFAULT_POSTER_DESIGN, type PosterInput } from '../../../../shared/utils/activityPoster'
+import { MediaPicker } from '../MediaLibrary'
+import { receiptMediaUrl } from '../../services/api'
 import { useState } from 'react'
 import { ActivityPosterConfig, PosterDesignConfig } from '../../../../shared/utils/activities'
 import {
@@ -30,9 +35,11 @@ export interface ActivityPosterEditorProps {
     id: string
     name: string
     image?: string
+    imageVariants?: Array<{url:string;width?:number;height?:number}>
     price?: number
     specialPrice?: number
   }>
+  activity?: PosterInput
   language?: number // 0 = zh, 1 = en, 2 = id
 }
 
@@ -46,68 +53,7 @@ export const DEFAULT_DAYS = [
   { day: 0, labelZh: '周日', labelEn: 'Sun', labelId: 'Minggu', defaultColor: '#FCE7F3', activeColor: '#FDF2F8', titleColor: '#9D174D' },
 ]
 
-export const DEFAULT_DESIGN_CONFIG: PosterDesignConfig = {
-  cardLayout: 'overlay', // Default to modern full-bleed overlay as requested
-  layoutGridMode: 'single_row',
-  rows: 1,
-  cardGap: 14,
-  containerPaddingY: 16,
-  containerPaddingX: 20,
-  cardPadding: 0,
-  cardBorderRadius: 16,
-
-  imageBleed: true,
-  imageHeightRatio: 75,
-  imageFit: 'cover',
-  imageBorderRadius: 16,
-  imagePadding: 0,
-  imageBgColor: 'transparent',
-
-  cardShadow: 'medium',
-  cardBorderWidth: 1,
-  cardBorderColor: 'rgba(255, 255, 255, 0.4)',
-  cardBorderStyle: 'solid',
-  overlayGradientOpacity: 70,
-
-  priceBoxBg: 'rgba(255, 255, 255, 0.95)',
-  priceBoxTextColor: '#dc2626',
-  priceBoxBorderColor: 'transparent',
-  priceBoxRadius: 12,
-  priceBoxShadow: 'medium',
-  themePreset: 'pastel',
-
-  headlineColor: '#FF4B72',
-  subheadlineColor: '#ffcad4',
-  titleColor: '#ffffff',
-  priceColor: '#FF2E63',
-  normalPriceColor: 'rgba(255, 255, 255, 0.85)',
-  savingColor: '#f472b6',
-  dayBadgeBg: 'rgba(71, 85, 105, 0.95)',
-  dayBadgeColor: '#ffffff',
-
-  titlePosition: 'overlay',
-  pricePosition: 'bottom',
-  badgePosition: 'bottom_bar',
-  textAlign: 'center',
-  titleFontSize: 24,
-  textShadow: true,
-  textStroke: true,
-  textStrokeWidth: 1,
-  textStrokeColor: 'rgba(255, 46, 99, 0.85)',
-  textGlow: true,
-  priceStyle: 'list',
-  priceFontSize: 36,
-  normalPriceFontSize: 13,
-  savingFontSize: 13,
-  dayBadgeFontSize: 20,
-  dayBadgeStyle: 'footer_bar',
-  fontStyle: 'serif',
-  textUppercase: false,
-
-  highlightMode: 'popout',
-  highlightColor: '#FF2E63',
-  highlightScale: 1.04,
-}
+export const DEFAULT_DESIGN_CONFIG: PosterDesignConfig = DEFAULT_POSTER_DESIGN
 
 export const THEME_PRESETS = [
   {
@@ -174,8 +120,8 @@ export const THEME_PRESETS = [
 
 export const DEFAULT_POSTER_CONFIG: ActivityPosterConfig = {
   template: 'daily_specials',
-  headline: 'Spesial Es Krim Mingguan',
-  subheadline: 'Hemat Rp 4.000 Setiap Hari Senin - Jumat',
+  headline: '',
+  subheadline: '',
   columns: 5,
   rows: 1,
   layoutMode: 'row_cards',
@@ -199,6 +145,7 @@ export function ActivityPosterEditor({
   value,
   onChange,
   activityName = '',
+  activity = {},
   activityType: _activityType = 'special_price',
   products = [],
   language = 0,
@@ -220,20 +167,37 @@ export function ActivityPosterEditor({
 
   const design = config.designConfig || DEFAULT_DESIGN_CONFIG
 
-  const [activeTab, setActiveTab] = useState<'cards' | 'positions' | 'colors' | 'effects' | 'image' | 'spacing'>('cards')
+  const [activeTab, setActiveTab] = useState<'cards' | 'positions' | 'colors' | 'effects' | 'image' | 'spacing' | 'elements'>('elements')
+  const [elementSelection, setElementSelection] = useState<PosterSelection>({key:'productName'})
+  const [imageCard, setImageCard] = useState<number | null>(null)
+  const [previewPage, setPreviewPage] = useState(0)
+  const [previewRatio, setPreviewRatio] = useState('16 / 9')
+  const [history, setHistory] = useState<ActivityPosterConfig[]>([])
+  const [future, setFuture] = useState<ActivityPosterConfig[]>([])
   const [previewDay, setPreviewDay] = useState<number>(1) // Default preview Monday (Senin)
 
   const update = (patch: Partial<ActivityPosterConfig>) => {
-    onChange({ ...config, ...patch })
+    setHistory(h => [...h.slice(-29), config])
+    setFuture([])
+    onChange({ ...config, cardItems: currentCards, ...patch })
   }
 
   const updateDesign = (patch: Partial<PosterDesignConfig>) => {
-    update({
-      designConfig: {
-        ...design,
-        ...patch,
-      },
-    })
+    const elements={...config.elements}
+    const bind=(key:string,element:string,field:string)=>{if((patch as any)[key]!==undefined)(elements as any)[element]={...(elements as any)[element],[field]:(patch as any)[key]}}
+    for(const [key,element] of [['headlineFontSize','headline'],['subheadlineFontSize','subheadline'],['titleFontSize','productName'],['normalPriceFontSize','originalPrice'],['priceFontSize','specialPrice'],['savingFontSize','savingAmount'],['dayBadgeFontSize','dayBadge']])bind(key,element,'fontSize')
+    for(const [key,element] of [['headlineColor','headline'],['subheadlineColor','subheadline'],['titleColor','productName'],['normalPriceColor','originalPrice'],['priceColor','specialPrice'],['savingColor','savingAmount'],['dayBadgeColor','dayBadge']])bind(key,element,'color')
+    for(const [key,element,field] of [['imageFit','image','objectFit'],['imageBorderRadius','image','borderRadius'],['cardBorderWidth','card','borderWidth'],['cardBorderColor','card','borderColor'],['cardBorderRadius','card','borderRadius'],['priceBoxBg','priceBox','backgroundColor'],['priceBoxRadius','priceBox','borderRadius'],['dayBadgeBg','dayBadge','backgroundColor'],['highlightColor','highlight','borderColor']])bind(key,element,field)
+    const set=(key:string,style:any)=>{(elements as any)[key]={...(elements as any)[key],...style}}
+    if(patch.cardGap!==undefined){patch={...patch,cardGapX:patch.cardGap,cardGapY:patch.cardGap}}
+    for(const [field,element,target] of [['cardPadding','card','padding'],['imagePadding','image','padding'],['imageHeightRatio','image','height'],['imageBgColor','image','backgroundColor'],['fontStyle','productName','fontFamily'],['priceBoxBorderColor','priceBox','borderColor']])bind(field,element,target)
+    if(patch.textAlign)for(const key of ['productName','productSubname','originalPrice','specialPrice','savingAmount'])set(key,{textAlign:patch.textAlign})
+    if(patch.titlePosition)set('productName',{y:patch.titlePosition==='bottom'?66:5})
+    if(patch.pricePosition){const top=patch.pricePosition==='top'?25:patch.pricePosition==='middle'?55:78;set('priceBox',{y:top-1});for(const [i,key] of ['originalPrice','specialPrice','savingAmount'].entries())set(key,{y:top+i*3})}
+    if(patch.badgePosition)set('dayBadge',{visible:patch.badgePosition!=='hidden',y:patch.badgePosition.startsWith('top')?0:88.5})
+    if(patch.textStroke!==undefined||patch.textStrokeWidth!==undefined||patch.textStrokeColor!==undefined)for(const key of ['productName','specialPrice','savingAmount'])set(key,{strokeWidth:(patch.textStroke??design.textStroke)?(patch.textStrokeWidth??design.textStrokeWidth??2):0,strokeColor:patch.textStrokeColor??design.textStrokeColor??'#ffffff'})
+    if(patch.highlightColor)set('highlight',{backgroundColor:patch.highlightColor})
+    update({designConfig:{...design,...patch},...(config.freeform?{elements}:{})})
   }
 
   const updateField = (field: keyof NonNullable<ActivityPosterConfig['showFields']>, checked: boolean) => {
@@ -247,25 +211,17 @@ export function ActivityPosterEditor({
 
   // Resolves the list of cards: user-defined cards or derived from DEFAULT_DAYS
   const resolveCards = (): Array<any> => {
-    if (config.cardItems && config.cardItems.length > 0) {
+    if (config.cardItems !== undefined) {
       return config.cardItems
     }
-    const cols = config.columns || 5
-    return DEFAULT_DAYS.slice(0, cols).map((d) => ({
-      id: `card_day_${d.day}`,
-      dayOfWeek: d.day,
-      dayLabel: [d.labelZh, d.labelEn, d.labelId][language] || d.labelId,
-      productName: '',
-      color: d.defaultColor,
-      activeColor: d.activeColor,
-      titleColor: d.titleColor,
-    }))
+    return defaultPosterCards({...activity,products,posterConfig:config}).map((card,i)=>({...card,color:card.color||DEFAULT_DAYS[i%7].defaultColor}))
   }
 
   const currentCards = resolveCards()
 
   // 1. Add a card / column freely
   const handleAddCard = () => {
+    if (currentCards.length >= 30) return
     const nextIdx = currentCards.length + 1
     const def = DEFAULT_DAYS[(nextIdx - 1) % DEFAULT_DAYS.length]
     const newCard = {
@@ -273,9 +229,7 @@ export function ActivityPosterEditor({
       dayOfWeek: def.day,
       dayLabel: `${l('卡片', 'Card', 'Item')} #${nextIdx}`,
       productName: '',
-      originalPrice: 16000,
-      specialPrice: 12000,
-      saving: 4000,
+
       color: def.defaultColor,
       activeColor: def.activeColor,
       titleColor: def.titleColor,
@@ -283,17 +237,16 @@ export function ActivityPosterEditor({
     const nextList = [...currentCards, newCard]
     update({
       cardItems: nextList,
-      columns: nextList.length,
+      columns: Math.max(1, Math.min(10, nextList.length)),
     })
   }
 
   // 2. Delete a card
   const handleDeleteCard = (index: number) => {
-    if (currentCards.length <= 1) return
     const nextList = currentCards.filter((_, i) => i !== index)
     update({
       cardItems: nextList,
-      columns: nextList.length,
+      columns: Math.max(1, Math.min(10, nextList.length)),
     })
   }
 
@@ -311,21 +264,26 @@ export function ActivityPosterEditor({
   // 4. Change a card field
   const handleCardFieldChange = (index: number, patch: any) => {
     const nextList = [...currentCards]
-    nextList[index] = { ...nextList[index], ...patch }
+    const elements={...nextList[index].elements}
+    if(patch.color!==undefined)elements.card={...elements.card,backgroundColor:patch.color}
+    if(patch.titleColor!==undefined)elements.productName={...elements.productName,color:patch.titleColor}
+    if(patch.pillBg!==undefined)elements.priceBox={...elements.priceBox,backgroundColor:patch.pillBg}
+    nextList[index] = { ...nextList[index], ...patch,...(config.freeform?{elements}:{}) }
     update({ cardItems: nextList })
   }
 
   // 5. Select product from catalog for a card
   const handleProductSelect = (index: number, prodId: string) => {
     const selectedProd = products.find((p) => p.id === prodId)
-    if (!selectedProd) return
+    if (!selectedProd) { handleCardFieldChange(index, {productId:undefined}); return }
 
-    const origPrice = selectedProd.price || 16000
-    const specPrice = selectedProd.specialPrice !== undefined ? selectedProd.specialPrice : Math.max(0, origPrice - 4000)
-    const saving = origPrice - specPrice
+    const origPrice = selectedProd.price
+    const specPrice = selectedProd.specialPrice
+    const saving = origPrice !== undefined && specPrice !== undefined ? Math.max(0, origPrice - specPrice) : undefined
     const imgUrl = selectedProd.image || ''
 
     handleCardFieldChange(index, {
+      imageMode: 'auto',
       productId: selectedProd.id,
       productName: selectedProd.name,
       imageUrl: imgUrl,
@@ -377,18 +335,17 @@ export function ActivityPosterEditor({
   }
 
   const rowCount = design.rows || config.rows || 1
-  const colScale = currentCards.length >= 7 ? 0.76 : (currentCards.length >= 6 ? 0.85 : 1)
 
   return (
     <div className="space-y-6">
       {/* Top Banner / Studio Control Header */}
-      <div className="bg-gradient-to-r from-red-50 via-pink-50 to-amber-50 border border-pink-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shadow-md">
             <Monitor className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-black text-gray-900 text-base flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 text-base flex flex-wrap items-center gap-2">
               {l('自由海报设计工作室 · 全元素自主可控', 'Freeform Poster Design Studio · Fully Customizable', 'Studio Desain Poster Layar Bebas')}
               <span className="px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700 font-bold border border-red-200">
                 {l('自由添加行/列 · 胶囊色彩 · 位置随心移', 'Freely Add Rows/Cols, Capsule Colors & Positions', 'Tambah Baris/Kolom & Bebas Atur')}
@@ -406,7 +363,7 @@ export function ActivityPosterEditor({
 
         <button
           type="button"
-          onClick={() => onChange(DEFAULT_POSTER_CONFIG)}
+          onClick={() => update({ ...DEFAULT_POSTER_CONFIG, headline: activityName, cardItems: currentCards })}
           className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-600 hover:bg-white flex items-center gap-1.5 transition-colors shadow-sm"
           title={l('恢复推荐设计预设', 'Reset to Recommended', 'Reset ke Pengaturan Default')}
         >
@@ -415,6 +372,15 @@ export function ActivityPosterEditor({
         </button>
       </div>
 
+      <div className="rounded-xl border bg-white p-3 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="btn-secondary" disabled={!history.length} onClick={()=>{const prior=history[history.length-1];setFuture(f=>[config,...f]);setHistory(h=>h.slice(0,-1));onChange(prior)}}>{l('撤销','Undo','Urungkan')}</button>
+          <button type="button" className="btn-secondary" disabled={!future.length} onClick={()=>{setHistory(h=>[...h,config]);onChange(future[0]);setFuture(f=>f.slice(1))}}>{l('重做','Redo','Ulangi')}</button>
+          <label className="flex items-center gap-2 text-sm">{l('设计起点','Starting layout','Tata letak awal')}<select className="input w-auto" value={config.template} onChange={e=>{const template=e.target.value as ActivityPosterConfig['template'];const rows=template==='featured_grid'?2:1;update({template,columns:template==='bogo_duo'?2:template==='lucky_wheel'?3:5,rows,designConfig:{...design,rows}})}}>{[['daily_specials',l('每日周历','Daily calendar','Kalender harian')],['featured_grid',l('商品展架','Product grid','Kisi produk')],['bogo_duo',l('买赠活动','Buy and get','Beli dan gratis')],['lucky_wheel',l('抽奖宣传','Lottery promotion','Promosi undian')],['tiered_milestone',l('阶梯优惠','Tiered offer','Promo bertingkat')]].map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
+          <label className="text-sm flex items-center gap-2">{l('每行列数','Columns per row','Kolom per baris')}<input type="number" min={1} max={10} className="input w-20" value={config.columns||5} onChange={e=>update({columns:Math.max(1,Math.min(10,Number(e.target.value)))})}/></label>
+        </div>
+        <p className="text-xs text-gray-500">{l('先选商品和优惠，再调整海报内容、版式与效果。每个活动独立保存，卡片最多30张；超出画布容量自动分页。','Choose products and rules, then edit content, layout and effects. Each activity saves its own design. Up to 30 cards with automatic pagination.','Pilih produk dan aturan, lalu atur konten, tata letak dan efek. Desain tersimpan per aktivitas. Maksimal 30 kartu dengan halaman otomatis.')}</p>
+      </div>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Design Controls Studio Tabs */}
         <div className="lg:col-span-5 space-y-4">
@@ -494,6 +460,8 @@ export function ActivityPosterEditor({
             </button>
           </div>
 
+          <button type="button" className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold ${activeTab==='elements'?'bg-sky-50 border-sky-400 text-sky-800':'bg-white'}`} onClick={()=>setActiveTab('elements')}>{l('图层与自由编辑','Layers & free positioning','Lapisan & posisi bebas')}</button>
+          {activeTab==='elements'&&<PosterElementInspector value={{...config,cardItems:currentCards}} onChange={update} selection={elementSelection} onSelect={setElementSelection} language={language}/>}
           {/* TAB 1: CARDS & ROWS (Add/Delete/Reorder Columns & Rows) */}
           {activeTab === 'cards' && (
             <div className="space-y-4">
@@ -506,7 +474,7 @@ export function ActivityPosterEditor({
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-bold text-red-600">
-                      {rowCount} {l('行', 'Row(s)', 'Baris')} × {currentCards.length} {l('列', 'Cols', 'Kolom')}
+                      {rowCount} {l('行', 'Row(s)', 'Baris')} × {config.columns || 5} {l('列', 'Cols', 'Kolom')}
                     </span>
                   </div>
                 </div>
@@ -516,8 +484,7 @@ export function ActivityPosterEditor({
                   <button
                     type="button"
                     onClick={() => {
-                      update({ rows: 1 })
-                      updateDesign({ rows: 1 })
+                      update({ rows: 1, designConfig:{...design,rows:1} })
                     }}
                     className={`p-2.5 rounded-xl border font-bold text-center transition-all ${
                       rowCount === 1
@@ -530,8 +497,7 @@ export function ActivityPosterEditor({
                   <button
                     type="button"
                     onClick={() => {
-                      update({ rows: 2 })
-                      updateDesign({ rows: 2 })
+                      update({ rows: 2, designConfig:{...design,rows:2} })
                     }}
                     className={`p-2.5 rounded-xl border font-bold text-center transition-all ${
                       rowCount === 2
@@ -624,14 +590,14 @@ export function ActivityPosterEditor({
                   </button>
                 </div>
 
-                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-1">
                   {currentCards.map((card, idx) => {
-                    const fallbackProd = products[idx % (products.length || 1)]
+                    const fallbackProd = products.find(p => p.id === card.productId)
                     const currentProdId = card.productId || fallbackProd?.id || ''
                     const currentImg = card.imageUrl || fallbackProd?.image || ''
-                    const currentName = card.productName || fallbackProd?.name || ''
-                    const currentOrig = card.originalPrice || fallbackProd?.price || 16000
-                    const currentSpec = card.specialPrice !== undefined ? card.specialPrice : (fallbackProd?.specialPrice || 12000)
+                    const currentName = card.productName ?? fallbackProd?.name ?? ''
+                    const currentOrig = card.originalPrice ?? fallbackProd?.price ?? ''
+                    const currentSpec = card.specialPrice !== undefined ? card.specialPrice : (fallbackProd?.specialPrice ?? '')
                     const currentLabel = card.dayLabel || `Day ${idx + 1}`
 
                     return (
@@ -640,13 +606,13 @@ export function ActivityPosterEditor({
                         className="p-3 rounded-xl border border-gray-200 bg-gray-50/80 space-y-2.5 hover:border-gray-300 transition-colors relative"
                       >
                         {/* Header: Label, Reorder, Delete */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
                             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: card.color || '#FFC4C4' }} />
                             <span className="text-[11px] font-mono text-gray-400 font-bold">#{idx + 1}</span>
                             <input
                               type="text"
-                              className="input text-xs font-black py-0.5 px-1.5 w-32 bg-white border border-gray-300 rounded"
+                              className="input text-xs font-black py-0.5 px-1.5 min-w-0 w-full max-w-32 bg-white border border-gray-300 rounded"
                               value={currentLabel}
                               title={l('自定义此卡片标签文字', 'Custom label text', 'Ubah teks label')}
                               onChange={(e) => handleCardFieldChange(idx, { dayLabel: e.target.value })}
@@ -675,7 +641,7 @@ export function ActivityPosterEditor({
                             </button>
                             <button
                               type="button"
-                              disabled={currentCards.length <= 1}
+                              disabled={false}
                               onClick={() => handleDeleteCard(idx)}
                               className="p-1 rounded bg-white border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed ml-1"
                               title={l('删除这一列', 'Delete Column', 'Hapus Kolom')}
@@ -700,7 +666,7 @@ export function ActivityPosterEditor({
                           )}
 
                           <select
-                            className="input flex-1 text-xs py-1.5 px-2 bg-white font-medium"
+                            className="input flex-1 min-w-0 text-xs py-1.5 px-2 bg-white font-medium"
                             value={currentProdId}
                             onChange={(e) => handleProductSelect(idx, e.target.value)}
                           >
@@ -714,7 +680,7 @@ export function ActivityPosterEditor({
                         </div>
 
                         {/* Editable Name & Price Overrides */}
-                        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-gray-200/60 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-gray-200/60 text-xs">
                           <div className="col-span-1">
                             <label className="text-[10px] text-gray-500 block mb-0.5">{l('品名文案', 'Name Override', 'Nama')}</label>
                             <input
@@ -731,7 +697,7 @@ export function ActivityPosterEditor({
                               type="number"
                               className="input w-full text-xs py-1 px-1.5 bg-white font-mono"
                               value={currentOrig}
-                              onChange={(e) => handleCardFieldChange(idx, { originalPrice: Number(e.target.value) })}
+                              onChange={(e) => handleCardFieldChange(idx, { originalPrice: e.target.value === '' ? undefined : Number(e.target.value) })}
                             />
                           </div>
 
@@ -741,17 +707,27 @@ export function ActivityPosterEditor({
                               type="number"
                               className="input w-full text-xs py-1 px-1.5 bg-white font-mono font-bold text-red-600"
                               value={currentSpec}
-                              onChange={(e) => handleCardFieldChange(idx, { specialPrice: Number(e.target.value) })}
+                              onChange={(e) => handleCardFieldChange(idx, { specialPrice: e.target.value === '' ? undefined : Number(e.target.value) })}
                             />
                           </div>
                         </div>
 
+                        <details className="rounded-lg border p-2 text-xs bg-white">
+                          <summary className="cursor-pointer font-semibold">{l('图片、星期与更多内容','Image, day & more','Gambar, hari & lainnya')}</summary>
+                          <div className="grid gap-2 pt-3">
+                            <label>{l('高亮星期（只影响海报）','Highlight day (visual only)','Hari sorotan (visual saja)')}<select className="input" aria-label={l('高亮星期','Highlight day','Hari sorotan')} value={card.dayOfWeek ?? ''} onChange={e=>handleCardFieldChange(idx,{dayOfWeek:e.target.value===''?undefined:Number(e.target.value)})}><option value="">{l('无','None','Tidak ada')}</option>{DEFAULT_DAYS.map(day=><option key={day.day} value={day.day}>{[day.labelZh,day.labelEn,day.labelId][language]}</option>)}</select></label>
+                            <label>{l('副标题 / 规格','Subtitle / size','Subjudul / ukuran')}<input className="input" value={card.specName ?? ''} onChange={e=>handleCardFieldChange(idx,{specName:e.target.value})}/></label>
+                            <label>{l('图片地址','Image URL','URL gambar')}<input className="input" value={card.imageUrl ?? ''} onChange={e=>handleCardFieldChange(idx,{imageUrl:e.target.value,imageMode:'manual'})}/></label>
+                            <button type="button" className="btn-secondary" onClick={()=>setImageCard(idx)}>{l('从素材库选择图片','Choose image from library','Pilih gambar dari pustaka')}</button>
+                            <button type="button" className="btn-secondary" disabled={currentCards.length>=30} onClick={()=>{const list=[...currentCards];list.splice(idx+1,0,{...card,id:crypto.randomUUID()});update({cardItems:list})}}>{l('复制此卡片','Duplicate card','Salin kartu')}</button>
+                          </div>
+                        </details>
                         {/* Individual Card Color Overrides */}
-                        <div className="flex items-center justify-between pt-1 text-[11px] text-gray-500 border-t border-gray-200/40">
+                        <div className="flex flex-wrap gap-2 items-center justify-between pt-1 text-[11px] text-gray-500 border-t border-gray-200/40">
                           <span className="font-semibold">{l('单独微调此卡片色彩:', 'Card Color Overrides:', 'Warna Khusus Kartu:')}</span>
                           <div className="flex items-center gap-2">
                             <label className="flex items-center gap-1 cursor-pointer" title={l('卡片底色', 'Card Background', 'Warna Latar')}>
-                              <span className="text-[10px]">底色</span>
+                              <span className="text-[10px]">{l("底色","Background","Latar")}</span>
                               <input
                                 type="color"
                                 className="w-5 h-5 rounded cursor-pointer border"
@@ -760,7 +736,7 @@ export function ActivityPosterEditor({
                               />
                             </label>
                             <label className="flex items-center gap-1 cursor-pointer" title={l('品名文字颜色', 'Title Text Color', 'Warna Judul')}>
-                              <span className="text-[10px]">字色</span>
+                              <span className="text-[10px]">{l("字色","Text","Teks")}</span>
                               <input
                                 type="color"
                                 className="w-5 h-5 rounded cursor-pointer border"
@@ -769,7 +745,7 @@ export function ActivityPosterEditor({
                               />
                             </label>
                             <label className="flex items-center gap-1 cursor-pointer" title={l('胶囊底色', 'Capsule Bg', 'Warna Kapsul')}>
-                              <span className="text-[10px]">胶囊</span>
+                              <span className="text-[10px]">{l("胶囊","Pill","Kapsul")}</span>
                               <input
                                 type="color"
                                 className="w-5 h-5 rounded cursor-pointer border"
@@ -1478,6 +1454,7 @@ export function ActivityPosterEditor({
                 {l('字号尺寸与间距边距', 'Font Sizes & Spacing', 'Ukuran Font & Jarak')}
               </label>
 
+              <div className="grid grid-cols-2 gap-3">{([['headlineFontSize',l('主标题字号','Headline size','Ukuran judul utama'),55],['subheadlineFontSize',l('副标题字号','Subheadline size','Ukuran subjudul'),23]] as const).map(([key,label,defaultValue])=><label key={key} className="text-xs">{label}<input type="number" className="input" min={8} max={100} value={design[key]??defaultValue} onChange={e=>updateDesign({[key]:Math.max(8,Math.min(100,Number(e.target.value)))})}/></label>)}</div>
               {/* Card Gap */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
@@ -1601,377 +1578,44 @@ export function ActivityPosterEditor({
               </div>
             </div>
           )}
+          <details className="bg-white border rounded-xl p-3">
+            <summary className="font-semibold text-sm cursor-pointer">{l('高级尺寸与显示设置','Advanced sizes & visibility','Ukuran & tampilan lanjutan')}</summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
+              {([
+                ['normalPriceFontSize',l('原价字号','Original price size','Ukuran harga normal'),14,8,40],
+                ['savingFontSize',l('节省金额字号','Savings size','Ukuran hemat'),13,8,40],
+                ['dayBadgeFontSize',l('标签字号','Badge size','Ukuran label'),20,8,48],
+                ['containerPaddingX',l('画布左右留白','Canvas side padding','Jarak sisi kanvas'),20,0,100],
+                ['containerPaddingY',l('画布上下留白','Canvas vertical padding','Jarak vertikal kanvas'),16,0,100],
+                ['cardPadding',l('卡片内边距','Card padding','Jarak dalam kartu'),0,0,50],
+                ['imagePadding',l('图片留白','Image padding','Jarak gambar'),0,0,50],
+                ['imageBorderRadius',l('图片圆角','Image corners','Sudut gambar'),16,0,50],
+                ['cardBorderWidth',l('边框粗细','Border width','Tebal bingkai'),1,0,12],
+                ['highlightScale',l('当天放大倍数','Today scale','Skala hari ini'),1.04,1,1.15],
+              ] as const).map(([key,label,defaultValue,min,max])=><label className="text-xs" key={key}>{label}<input type="number" className="input" min={min} max={max} step={key==='highlightScale'?0.01:1} value={design[key]??defaultValue} onChange={e=>updateDesign({[key]:Math.max(min,Math.min(max,Number(e.target.value)))})}/></label>)}
+              <label className="text-xs">{l('字体','Font family','Jenis font')}<select className="input" value={design.fontStyle||'sans'} onChange={e=>updateDesign({fontStyle:e.target.value as PosterDesignConfig['fontStyle']})}><option value="sans">Sans</option><option value="serif">Serif</option><option value="mono">Mono</option></select></label>
+              <label className="text-xs">{l('价格框阴影','Price box shadow','Bayangan kotak harga')}<select className="input" value={design.priceBoxShadow||'medium'} onChange={e=>updateDesign({priceBoxShadow:e.target.value as PosterDesignConfig['priceBoxShadow']})}><option value="none">{l('无','None','Tidak ada')}</option><option value="soft">{l('柔和','Soft','Lembut')}</option><option value="medium">{l('中等','Medium','Sedang')}</option></select></label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.showFields?.productSubname!==false} onChange={e=>updateField('productSubname',e.target.checked)}/>{l('显示规格副标题','Show size subtitle','Tampilkan subjudul ukuran')}</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!config.showFields?.discountTag} onChange={e=>updateField('discountTag',e.target.checked)}/>{l('显示折扣角标','Show discount tag','Tampilkan label diskon')}</label>
+            </div>
+          </details>
         </div>
 
-        {/* Right Column: 16:9 TV Simulation Live Canvas (WYSIWYG) */}
-        <div className="lg:col-span-7 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-bold text-gray-800">
-              <Eye className="w-4 h-4 text-indigo-500" />
-              <span>{l('电视大屏 16:9 实时海报画布 (所见即所得)', '16:9 TV Screen Live Canvas (WYSIWYG)', 'Kanvas Layar TV 16:9')}</span>
+        <div className="lg:col-span-7 min-w-0">
+          <div className="lg:sticky lg:top-20 space-y-3">
+            <div className="flex flex-wrap justify-between gap-2 items-center">
+              <h4 className="font-semibold flex gap-2"><Eye size={16}/>{l('实际播放预览','Playback preview','Pratinjau pemutaran')}</h4>
+              <select className="input w-auto text-xs" aria-label={l('画布比例','Canvas ratio','Rasio kanvas')} value={previewRatio} onChange={e=>{setPreviewRatio(e.target.value);if(config.freeform){const parts=e.target.value.split('/').map(Number);update({canvasWidth:parts[0]===9?1080:parts[0]===1?1080:1920,canvasHeight:parts[0]===9?1920:1080})}}}><option value="16 / 9">16:9</option><option value="9 / 16">9:16</option><option value="1 / 1">1:1</option></select>
             </div>
-            {/* Interactive Day Switcher */}
-            <div className="flex items-center gap-1 text-xs">
-              <span className="text-gray-500 mr-1">{l('切换测试高亮:', 'Test Active:', 'Uji Sorotan:')}</span>
-              {currentCards.map((c, idx) => (
-                <button
-                  key={c.id || idx}
-                  type="button"
-                  onClick={() => setPreviewDay(c.dayOfWeek ?? idx)}
-                  className={`px-2 py-0.5 rounded text-xs font-bold transition-all ${
-                    previewDay === (c.dayOfWeek ?? idx)
-                      ? 'bg-red-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {c.dayLabel || `#${idx + 1}`}
-                </button>
-              ))}
-            </div>
-          </div>
+            <div className="flex flex-wrap gap-1">{DEFAULT_DAYS.map(day=><button type="button" className={`px-2 py-1 rounded text-xs ${previewDay===day.day?'bg-red-600 text-white':'bg-gray-100'}`} key={day.day} onClick={()=>setPreviewDay(day.day)}>{[day.labelZh,day.labelEn,day.labelId][language]}</button>)}</div>
+            <PosterCanvasEditor language={language} page={previewPage} title={l('活动海报预览','Activity poster preview','Pratinjau poster aktivitas')} value={{...config,cardItems:currentCards}} selection={elementSelection} onSelect={setElementSelection} onBegin={()=>{setHistory(h=>[...h.slice(-29),config]);setFuture([])}} onDirectChange={onChange} aspectRatio={config.freeform?`${config.canvasWidth||1920} / ${config.canvasHeight||1080}`:previewRatio} html={renderActivityPoster({...activity,name:activityName,posterConfig:{...config,cardItems:currentCards},products},{language,day:previewDay,assetUrl:receiptMediaUrl,page:previewPage,aspectRatio:Number(previewRatio.split('/')[0])/Number(previewRatio.split('/')[1])})}/>
 
-          {/* 16:9 Screen Box */}
-          <div
-            className="w-full rounded-2xl shadow-2xl overflow-hidden border border-gray-800 flex flex-col justify-between transition-all duration-300 select-none relative"
-            style={{
-              aspectRatio: '16 / 9',
-              backgroundColor: config.backgroundColor || '#121214',
-              color: '#ffffff',
-              padding: `${(design.containerPaddingY ?? 16) * 0.7}px ${(design.containerPaddingX ?? 20) * 0.7}px`,
-            }}
-          >
-            {/* Top Header */}
-            <div className="text-center pt-1 pb-1.5 flex-shrink-0">
-              <h2
-                className="font-black tracking-tight"
-                style={{
-                  fontSize: `${(design.titleFontSize ?? 22) * 1.15}px`,
-                  color: design.headlineColor || design.highlightColor || config.themeColor || '#FF4B72',
-                  textShadow: '0 2px 10px rgba(0,0,0,0.8)',
-                }}
-              >
-                {(config.headline || activityName || 'Spesial Es Krim Mingguan').replace(/\s*\([^)]*daily_specials[^)]*\)\s*$/i, '').trim()}
-              </h2>
-              <p
-                className="font-bold tracking-wide mt-0.5"
-                style={{
-                  fontSize: `${Math.max(11, (design.titleFontSize ?? 22) * 0.55)}px`,
-                  color: design.subheadlineColor || '#ffcad4',
-                }}
-              >
-                {(config.subheadline && !config.subheadline.includes('由AI助手')) ? config.subheadline : 'Hemat Rp 4.000 Setiap Hari Senin - Jumat'}
-              </p>
-            </div>
-
-            {/* Middle: Cards Grid (Supports 1 row or 2 rows!) */}
-            <div
-              className={`flex-1 min-h-0 pt-1 pb-2 px-0.5 w-full mx-auto ${
-                rowCount === 2
-                  ? 'grid grid-rows-2 grid-flow-col'
-                  : 'flex items-stretch justify-center'
-              }`}
-              style={{
-                gap: `${(design.cardGap ?? 14) * 0.7}px`,
-              }}
-            >
-              {currentCards.map((card, idx) => {
-                const isActive = config.highlightToday && previewDay === (card.dayOfWeek ?? idx)
-                const fallbackProd = products[idx % (products.length || 1)]
-
-                const productName = card.productName || fallbackProd?.name || 'YOUME Special'
-                const productImage = card.imageUrl || fallbackProd?.image
-                const origPrice = card.originalPrice || fallbackProd?.price || 16000
-                const specPrice = card.specialPrice !== undefined ? card.specialPrice : (fallbackProd?.specialPrice || 12000)
-                const saving = origPrice - specPrice
-                const dayText = card.dayLabel || `#${idx + 1}`
-
-                const cardBg = card.color || '#ffffff'
-                const cardActiveBg = card.activeColor || '#ffe4e6'
-                const titleColor = card.titleColor || design.titleColor || '#ffffff'
-                const priceColor = card.priceColor || design.priceColor || '#FF2E63'
-                const pillBg = card.pillBg || design.priceBoxBg || 'rgba(255, 255, 255, 0.95)'
-                const badgeBg = card.badgeBg || design.dayBadgeBg || 'rgba(71, 85, 105, 0.95)'
-
-                const show = config.showFields || {}
-                const titlePos = design.titlePosition ?? 'overlay'
-                const pricePos = design.pricePosition ?? 'bottom'
-                const badgePos = design.badgePosition ?? 'bottom_bar'
-                const highlightMode = design.highlightMode ?? 'popout'
-                const highlightScale = design.highlightScale ?? 1.04
-                const highlightColor = design.highlightColor || config.themeColor || '#FF2E63'
-                const isOverlay = design.cardLayout === 'overlay' || titlePos === 'overlay'
-                const isSerif = (design.fontStyle ?? 'serif') === 'serif'
-
-                // Card dynamic transforms and shadows
-                let cardTransform = ''
-                let cardShadowStyle = design.cardShadow === 'none' ? 'none' : '0 2px 8px rgba(0,0,0,0.2)'
-                let cardBorderStyle = design.cardBorderStyle === 'none'
-                  ? 'none'
-                  : `${design.cardBorderWidth ?? 1}px ${design.cardBorderStyle || 'solid'} ${design.cardBorderColor || 'rgba(255, 255, 255, 0.4)'}`
-
-                if (isActive) {
-                  if (highlightMode === 'popout') {
-                    cardTransform = `translateY(-6px) scale(${highlightScale})`
-                    cardShadowStyle = `0 12px 30px ${highlightColor}88`
-                    cardBorderStyle = `3px solid ${highlightColor}`
-                  } else if (highlightMode === 'glow') {
-                    cardShadowStyle = `0 0 25px ${highlightColor}cc`
-                    cardBorderStyle = `2px solid ${highlightColor}`
-                  } else if (highlightMode === 'border_only') {
-                    cardBorderStyle = `3px solid ${highlightColor}`
-                  } else if (highlightMode === 'ribbon') {
-                    cardShadowStyle = `0 8px 24px rgba(0,0,0,0.3)`
-                  }
-                }
-
-                return (
-                  <div
-                    key={card.id || idx}
-                    onClick={() => setPreviewDay(card.dayOfWeek ?? idx)}
-                    className="flex-1 min-h-0 flex flex-col justify-between overflow-hidden cursor-pointer transition-all duration-300 relative select-none"
-                    style={{
-                      borderRadius: `${(design.cardBorderRadius ?? 16) * 0.7}px`,
-                      background: isActive ? cardActiveBg : cardBg,
-                      transform: cardTransform,
-                      boxShadow: cardShadowStyle,
-                      border: cardBorderStyle,
-                      zIndex: isActive ? 20 : 1,
-                    }}
-                  >
-                    {/* Ribbon Tag if in ribbon mode or badgePosition is top_right_ribbon */}
-                    {(badgePos === 'top_right_ribbon' || (isActive && highlightMode === 'ribbon')) && (
-                      <div
-                        className="absolute top-1.5 right-1.5 px-2 py-0.5 rounded-full text-[9px] font-black text-white shadow-md z-30 uppercase tracking-wider"
-                        style={{ backgroundColor: highlightColor }}
-                      >
-                        {isActive ? 'HARI INI' : dayText}
-                      </div>
-                    )}
-
-                    {/* Top Pill Badge if badgePosition is top_pill */}
-                    {badgePos === 'top_pill' && show.dayBadge !== false && (
-                      <div className="pt-1.5 px-2 text-center z-20 flex justify-center">
-                        <span
-                          className="px-2.5 py-0.5 rounded-full text-[9px] font-bold text-white shadow"
-                          style={{ backgroundColor: isActive ? highlightColor : badgeBg }}
-                        >
-                          {dayText}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* LAYOUT A: FULL-BLEED OVERLAY MODE */}
-                    {isOverlay ? (
-                      <>
-                        <div
-                          className="relative w-full flex-1 min-h-0 flex flex-col justify-between overflow-hidden"
-                          style={{
-                            borderRadius: `${(design.cardBorderRadius ?? 16) * 0.7}px ${(design.cardBorderRadius ?? 16) * 0.7}px 0 0`,
-                            backgroundColor: design.imageBgColor || 'transparent',
-                          }}
-                        >
-                          {/* Background Drink Image */}
-                          {productImage ? (
-                            <img
-                              src={productImage}
-                              alt={productName}
-                              className="absolute inset-0 w-full h-full"
-                              style={{
-                                objectFit: design.imageFit ?? 'cover',
-                              }}
-                            />
-                          ) : (
-                            <div className="absolute inset-0 flex items-center justify-center text-3xl opacity-40">🥤</div>
-                          )}
-
-                          {/* Anti-glare gradient scrim overlay */}
-                          <div
-                            className="absolute inset-0 pointer-events-none"
-                            style={{
-                              background: `linear-gradient(180deg, rgba(0,0,0,${((design.overlayGradientOpacity ?? 70) * 0.7) / 100}) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,${((design.overlayGradientOpacity ?? 70) * 1.1) / 100}) 100%)`,
-                            }}
-                          />
-
-                          {/* Floating Product Title (Overlay Top or Center) */}
-                          {show.productName !== false && (
-                            <div
-                              className={`relative z-10 px-1 ${
-                                titlePos === 'overlay' ? 'pt-2 text-center' : 'pt-1 text-center'
-                              }`}
-                            >
-                              <h3
-                                className="font-black leading-tight tracking-tight line-clamp-2"
-                                style={{
-                                  fontSize: `${Math.max(10, (design.titleFontSize ?? 24) * 0.48 * colScale)}px`,
-                                  color: titleColor,
-                                  textShadow: design.textGlow !== false
-                                    ? `0 2px 6px rgba(0,0,0,0.95), 0 0 10px ${design.textStrokeColor || 'rgba(255,46,99,0.85)'}`
-                                    : '0 2px 5px rgba(0,0,0,0.95)',
-                                  WebkitTextStroke: design.textStroke !== false
-                                    ? `${design.textStrokeWidth ?? 1}px ${design.textStrokeColor || 'rgba(255, 46, 99, 0.85)'}`
-                                    : 'none',
-                                }}
-                              >
-                                {productName}
-                              </h3>
-                            </div>
-                          )}
-
-                          {/* Floating Price Section (Positioned by pricePos: bottom, middle, top) */}
-                          <div
-                            className={`relative z-10 px-2 ${
-                              pricePos === 'top'
-                                ? 'pt-1.5 order-first'
-                                : pricePos === 'middle'
-                                ? 'my-auto py-1'
-                                : 'pb-1.5'
-                            }`}
-                          >
-                            {design.priceStyle === 'pill' ? (
-                              <div
-                                className="py-1 px-1.5 backdrop-blur-md text-center shadow-md flex flex-col items-center justify-center gap-0.5"
-                                style={{
-                                  backgroundColor: pillBg,
-                                  borderRadius: `${design.priceBoxRadius ?? 12}px`,
-                                }}
-                              >
-                                {show.originalPrice !== false && (
-                                  <p
-                                    className="font-bold line-through leading-none text-[8px]"
-                                    style={{ color: design.normalPriceColor || '#64748b' }}
-                                  >
-                                    Normal: {origPrice.toLocaleString('id-ID')}
-                                  </p>
-                                )}
-                                {show.specialPrice !== false && (
-                                  <p
-                                    className="font-black leading-none text-[11px]"
-                                    style={{ color: priceColor }}
-                                  >
-                                    Rp {specPrice.toLocaleString('id-ID')}
-                                  </p>
-                                )}
-                              </div>
-                            ) : (
-                              /* 3-Line List Overlay Format */
-                              <div
-                                className="text-left font-bold text-white text-[9px] leading-tight space-y-0.5"
-                                style={{ textShadow: '0 1px 4px rgba(0,0,0,0.95), 0 0 4px rgba(0,0,0,0.8)' }}
-                              >
-                                {show.originalPrice !== false && (
-                                  <p style={{ color: design.normalPriceColor || 'rgba(255, 255, 255, 0.85)' }}>
-                                    Harga Normal : {origPrice.toLocaleString('id-ID')}
-                                  </p>
-                                )}
-                                {show.specialPrice !== false && (
-                                  <p className="font-black text-[10px]" style={{ color: priceColor }}>
-                                    Harga Spesial : {specPrice.toLocaleString('id-ID')}
-                                  </p>
-                                )}
-                                {show.savingAmount !== false && saving > 0 && (
-                                  <p className="font-extrabold text-[9px]" style={{ color: design.savingColor || '#f472b6' }}>
-                                    Hemat : {saving.toLocaleString('id-ID')}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Bottom Weekday Footer Block */}
-                        {badgePos === 'bottom_bar' && show.dayBadge !== false && (
-                          <div
-                            className="w-full py-1.5 text-center transition-all select-none flex-shrink-0"
-                            style={{
-                              fontSize: `${Math.max(10, (design.dayBadgeFontSize ?? 20) * 0.55 * colScale)}px`,
-                              backgroundColor: isActive ? highlightColor : badgeBg,
-                              color: design.dayBadgeColor || '#ffffff',
-                              fontFamily: isSerif ? 'serif' : 'sans-serif',
-                              fontWeight: isActive ? 900 : 700,
-                              letterSpacing: '0.04em',
-                            }}
-                          >
-                            {dayText}
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      /* LAYOUT B: STANDARD BOXED STACK */
-                      <>
-                        {titlePos === 'top' && show.productName !== false && (
-                          <div className="pt-2 pb-1 px-1.5 text-center min-h-[40px] flex items-center justify-center">
-                            <h3
-                              className="font-black leading-tight tracking-tight line-clamp-2"
-                              style={{
-                                fontSize: `${(design.titleFontSize ?? 22) * 0.55 * colScale}px`,
-                                color: isActive ? highlightColor : titleColor,
-                              }}
-                            >
-                              {productName}
-                            </h3>
-                          </div>
-                        )}
-
-                        {/* Middle Product Photo */}
-                        <div
-                          className="flex-1 min-h-0 mx-1.5 my-0.5 rounded-lg overflow-hidden flex items-center justify-center relative bg-white/40"
-                          style={{
-                            height: `${design.imageHeightRatio ?? 65}%`,
-                            borderRadius: `${(design.imageBorderRadius ?? 12) * 0.7}px`,
-                          }}
-                        >
-                          {show.productImage !== false && productImage ? (
-                            <img
-                              src={productImage}
-                              alt={productName}
-                              className="w-full h-full"
-                              style={{
-                                objectFit: design.imageFit ?? 'cover',
-                              }}
-                            />
-                          ) : (
-                            <span className="text-2xl">🥤</span>
-                          )}
-                        </div>
-
-                        {/* Bottom Price Box */}
-                        <div
-                          className="mx-1.5 mb-1.5 p-1 rounded-lg text-center flex flex-col justify-center"
-                          style={{
-                            backgroundColor: pillBg,
-                            borderRadius: `${design.priceBoxRadius ?? 12}px`,
-                          }}
-                        >
-                          {show.originalPrice !== false && (
-                            <p className="font-bold text-slate-500 line-through leading-none text-[8px]">
-                              {origPrice.toLocaleString('id-ID')}
-                            </p>
-                          )}
-                          {show.specialPrice !== false && (
-                            <p className="font-black text-[11px] leading-tight" style={{ color: priceColor }}>
-                              Rp {specPrice.toLocaleString('id-ID')}
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Bottom Weekday Bar */}
-                        {badgePos === 'bottom_bar' && show.dayBadge !== false && (
-                          <div
-                            className="py-1 text-center font-bold text-[10px] text-white"
-                            style={{ backgroundColor: isActive ? highlightColor : badgeBg }}
-                          >
-                            {dayText}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+            {currentCards.length>(config.columns||5)*rowCount&&<button type="button" className="btn-secondary" onClick={()=>setPreviewPage(p=>p+1)}>{l('预览下一页','Preview next page','Pratinjau halaman berikutnya')}</button>}
+            <p className="text-xs text-gray-500">{l('与电视和副屏共用同一渲染器。海报编辑不会修改优惠规则；发布后按实际活动时间播放。','Uses the same renderer as TV and customer displays. Poster edits do not change pricing rules; playback follows the activity schedule.','Renderer sama dengan TV dan layar pelanggan. Desain tidak mengubah aturan harga; tayang mengikuti jadwal aktivitas.')}</p>
           </div>
         </div>
       </div>
+      {imageCard!==null&&<MediaPicker scene="tv" imagesOnly max={1} onClose={()=>setImageCard(null)} onSelect={assets=>{if(assets[0])handleCardFieldChange(imageCard,{imageUrl:assets[0].url,imageMode:'manual'});setImageCard(null)}}/>}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { posterPrice } from '../../../../shared/utils/activityPoster'
 import { formatNumber } from '../../utils/numberDisplay'
 import { confirmAdmin } from '../../components/AdminFeedback'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -1958,7 +1959,7 @@ export function ActivitiesPage() {
               )}
             </label>
             {form.showOnTv && (
-              <div className="border border-red-200 bg-red-50/20 rounded-xl p-5 space-y-4">
+              <div className="border border-red-200 bg-red-50/20 rounded-xl p-2 sm:p-5 space-y-4">
                 <div className="flex items-center justify-between border-b border-red-100 pb-3">
                   <div>
                     <h4 className="font-bold text-gray-900 flex items-center gap-2">
@@ -1977,6 +1978,7 @@ export function ActivitiesPage() {
                 <ActivityPosterEditor
                   value={form.posterConfig || { ...DEFAULT_POSTER_CONFIG, headline: form.name || "Spesial Harian" }}
                   onChange={(cfg) => set("posterConfig", cfg)}
+                  activity={{...form}}
                   activityName={form.name}
                   activityType={form.type}
                   products={(form.productIds && form.productIds.length > 0
@@ -1984,21 +1986,14 @@ export function ActivitiesPage() {
                     : products
                   )
                     .map((p: any) => {
-                      const orig = p.specs?.[0]?.price || 16000;
-                      let spec = form.rule?.price;
-                      if (spec === undefined) {
-                        if (form.type === "fixed") {
-                          spec = Math.max(0, orig - (form.rule?.amount || 4000));
-                        } else if (form.type === "percent") {
-                          spec = Math.round(orig * (100 - (form.rule?.percent || 20)) / 100);
-                        } else {
-                          spec = Math.round(orig * 0.8);
-                        }
-                      }
+                      const specs = p.specs?.filter((spec:any)=>!form.specIds.length||form.specIds.includes(spec.id))||[];
+                      const orig = specs.length ? Math.min(...specs.map((spec:any)=>spec.price)) : undefined;
+                      const spec = posterPrice(form,{name:p.name,price:orig});
                       return {
                         id: p.id,
                         name: p.name,
                         image: p.image,
+                        imageVariants: p.imageVariants,
                         price: orig,
                         specialPrice: spec,
                       };

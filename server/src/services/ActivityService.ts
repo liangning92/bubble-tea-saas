@@ -1,3 +1,5 @@
+import { posterImageVariants } from '../utils/posterImageVariants'
+import { activityPosterSchema } from '../utils/activityPosterSchema'
 import { resolveProductImageByRatio, deriveTargetAspectRatio } from '../utils/mediaResolver'
 import { generateCouponCode } from '../utils/couponCode'
 import {hasDesignatedTv} from './TvDeviceRegistry'
@@ -30,39 +32,7 @@ export const activitySchema=z.object({
  startsAt:z.string().datetime({offset:true}).optional(),endsAt:z.string().datetime({offset:true}).optional(),timezone:z.string().default('Asia/Jakarta').refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true}catch{return false}},'Invalid time zone'),
  weekdays:z.array(z.number().int().min(0).max(6)).max(7).default([]),dailyStart:time.optional(),dailyEnd:time.optional(),channels:ids.default([]),paymentMethods:ids.default([]),productIds:ids.default([]),excludedProductIds:ids.default([]),specIds:ids.default([]),memberOnly:z.boolean().default(false),memberLevels:ids.default([]),showOnTv:z.boolean().default(true),
  imageUrl:z.string().max(2048).refine(v=>!v||/^https?:\/\//.test(v)||v.startsWith('/uploads/'),'Invalid image URL').optional(),limit:z.number().int().min(1).max(1000000000).optional(),
- posterConfig:z.object({
-  template:z.enum(['daily_specials','featured_grid','bogo_duo','lucky_wheel','tiered_milestone']).optional(),
-  headline:z.string().max(100).optional(),
-  subheadline:z.string().max(150).optional(),
-  columns:z.number().int().min(1).max(10).optional(),
-  rows:z.number().int().min(1).max(5).optional(),
-  layoutMode:z.enum(['row_cards','grid','spotlight']).optional(),
-  highlightToday:z.boolean().optional(),
-  themeColor:z.string().max(50).optional(),
-  backgroundColor:z.string().max(50).optional(),
-  showFields:z.object({
-   productImage:z.boolean().optional(),
-   productName:z.boolean().optional(),
-   productSubname:z.boolean().optional(),
-   originalPrice:z.boolean().optional(),
-   specialPrice:z.boolean().optional(),
-   savingAmount:z.boolean().optional(),
-   dayBadge:z.boolean().optional(),
-   discountTag:z.boolean().optional(),
-  }).optional(),
-  cardItems:z.array(z.object({
-   dayOfWeek:z.number().int().min(0).max(6).optional(),
-   dayLabel:z.string().max(50).optional(),
-   productId:z.string().optional(),
-   productName:z.string().optional(),
-   specName:z.string().optional(),
-   imageUrl:z.string().max(2048).optional(),
-   originalPrice:z.number().optional(),
-   specialPrice:z.number().optional(),
-   saving:z.number().optional(),
-   color:z.string().max(50).optional(),
-  })).max(30).optional(),
- }).optional(),rule:ruleSchema
+ posterConfig:activityPosterSchema.optional(),rule:ruleSchema
 }).strict().superRefine((a,ctx)=>{
  const issue=(message:string)=>ctx.addIssue({code:z.ZodIssueCode.custom,message})
  if(a.startsAt&&a.endsAt&&Date.parse(a.endsAt)<=Date.parse(a.startsAt))issue('End must follow start')
@@ -312,9 +282,10 @@ export async function publicActivities(storeId:string,channel=''){
   prisma.mediaAsset.findMany({ where: { storeId, kind: 'image' } }),
   prisma.rewardCatalog.findMany({ where: { storeId, isActive: true, validFrom: { lte: now }, validUntil: { gt: now }, OR: [{ stock: null }, { stock: { gt: 0 } }] } })
  ])
+ const imageVariants=new Map(await Promise.all(products.map(async p=>[p.id,await posterImageVariants(p,mediaAssets)] as const)))
  const availableProducts=new Set(products.map(p=>p.id))
  const availableRewards=new Set(rewards.map(r=>r.id))
- const entries=all.filter(a=>(!a.productIds.length||a.productIds.some(id=>availableProducts.has(id)))&&(!a.rule.components?.length||a.rule.components.every(c=>availableProducts.has(c.productId)))&&a.showOnTv&&(activityEligible(a,{now,channel},false)||(a.posterConfig&&activityState(a,now)==='active'))&&(!a.rule.rewardIds?.length||a.rule.rewardIds.some(id=>availableRewards.has(id)))&&(a.type!=='lottery'||a.rule.prizes?.some(p=>p.weight>0&&(p.remaining===undefined||p.remaining>0)&&(!p.rewardId||availableRewards.has(p.rewardId))))).map(a=>{
+ const entries=all.filter(a=>(!a.productIds.length||a.productIds.some(id=>availableProducts.has(id)))&&(!a.rule.components?.length||a.rule.components.every(c=>availableProducts.has(c.productId)))&&a.showOnTv&&activityEligible(a,{now,channel},false)&&(!a.rule.rewardIds?.length||a.rule.rewardIds.some(id=>availableRewards.has(id)))&&(a.type!=='lottery'||a.rule.prizes?.some(p=>p.weight>0&&(p.remaining===undefined||p.remaining>0)&&(!p.rewardId||availableRewards.has(p.rewardId))))).map(a=>{
   const actProds = products.filter(p=>a.productIds.includes(p.id)||a.rule.components?.some(c=>c.productId===p.id))
   const first16x9 = actProds[0] ? resolveImage16x9(actProds[0], mediaAssets) : null
   return {
@@ -330,7 +301,7 @@ export async function publicActivities(storeId:string,channel=''){
       const img9x16 = resolveProductImageByRatio(p, '9:16', mediaAssets)
       const primaryImg = resolveProductImageByRatio(p, targetRatio, mediaAssets) || p.image || img16x9 || img9x16
       return {
-        id:p.id,name:p.name,image:primaryImg,image16x9:img16x9||p.image,image9x16:img9x16||p.image,quantity:a.rule.components?.find(c=>c.productId===p.id)?.quantity,
+        id:p.id,name:p.name,imageVariants:imageVariants.get(p.id),image:primaryImg,image16x9:img16x9||p.image,image9x16:img9x16||p.image,quantity:a.rule.components?.find(c=>c.productId===p.id)?.quantity,
         specs:p.specs.filter(s=>!a.specIds.length||a.specIds.includes(s.id)).map(s=>({id:s.id,name:s.name,price:s.price}))
       }
     })

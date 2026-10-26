@@ -1,3 +1,4 @@
+const aiPanelFixture=require('./ai-settings-fixture.cjs');
 /* Built admin application with synthetic auth and an in-process mocked API only. */
 const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
 const root=path.resolve(__dirname,'../..'),{chromium}=require(root+'/node_modules/playwright'),express=require(root+'/server/node_modules/express');
@@ -7,6 +8,7 @@ let failSave=false,checkMode='ok',writes=0,checks=0,legacyReads=0;const passed=[
 const app=express();app.use(express.json());
 app.all('/api/*',(req,res)=>{
  const ok=data=>res.json({code:200,data});
+ const panelData=aiPanelFixture(req.path);if(panelData!==undefined)return ok(panelData);
  if(req.path==='/api/team/workflow/defaults'&&req.method==='GET')return ok({version:0,enabled:false,ownerStaffId:null});
  if(req.path==='/api/team/ai/settings'&&req.method==='GET')return ok(state);
  if(req.path==='/api/team/ai/settings'&&req.method==='PUT'){
@@ -79,12 +81,12 @@ let server,browser;async function pass(name,fn){await fn();passed.push(name);con
  await context.close();
  state={...state,model:'MiniMax-M3',keyConfigured:true,enabled:true,connection:null};fs.mkdirSync(out+'/screenshots/verified',{recursive:true});
  for(const language of ['zh','id','en'])for(const [label,viewport]of [['desktop',{width:1440,height:1000}],['phone',{width:390,height:844}],...(language==='zh'?[['tablet',{width:768,height:1024}]]:[])]){
-  await pass(language+' '+label+' actual built page: four actionable areas without static introductions or horizontal overflow',async()=>{
+  await pass(language+' '+label+' actual built page: model and workflow areas retained alongside Agent and memory panels without horizontal overflow',async()=>{
    const {page,context}=await open(language,viewport),main=page.getByTestId('ai-settings-page'),area=page.getByTestId('team-ai-settings');
-   assert.equal(await main.locator('section').count(),4);assert.equal(await area.locator('section').count(),2);
+   assert.equal(await main.locator('section').count(),10);assert.equal(await main.getByTestId('team-agent-settings').locator('section').count(),5);assert(await main.getByTestId('agent-memory-panel').isVisible());assert.equal(await area.locator('section').count(),2);
    assert.equal(await main.locator('#ai-capabilities, #ai-boundaries').count(),0);
    assert.equal(await main.getByText(({zh:'查看原有权限草稿',id:'Lihat draf izin tersimpan',en:'Previously saved permission draft'})[language],{exact:true}).count(),0);
-   assert.equal(await main.locator('h4, dl').count(),0,'removed static capability cards and approval table must not be rendered');
+   assert.equal(await area.locator('h4, dl').count(),0,'removed static capability cards and approval table must not be rendered');
    assert.equal(await area.locator('select').count(),1);assert.equal(await area.getByRole('checkbox').count(),2);
    const headings=({zh:['模型连接','连接状态与费用','员工来信处理许可','门店团队工作自动处理'],id:['Koneksi model','Status koneksi dan biaya','Izin pemrosesan pesan pegawai','Koordinasi kerja toko'],en:['Model connection','Connection status and costs','Incoming employee-message permissions','Store work coordination']})[language];
    assert.deepEqual(await main.locator('section > h3, section > div > h3').allTextContents(),headings);
