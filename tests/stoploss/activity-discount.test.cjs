@@ -99,3 +99,10 @@ test('handover prints every triggering order with a unique order number, includi
   const source=fs.readFileSync('server/src/services/ShiftSummaryEvidence.ts','utf8')
   assert.equal(source.includes('.slice(0, 20)'),false,'API must not silently truncate settlement evidence')
 })
+
+test('unclassified historical discounts remain explicit and are never guessed as activity or manual',()=>{
+  const {unclassifiedDiscount}=load('shared/utils/orderDiscount.ts')
+  assert.equal(unclassifiedDiscount(14000,[4000,0,0,0]),10000)
+  assert.equal(unclassifiedDiscount(4000,[4000,0,0,0]),0)
+  assert.equal(unclassifiedDiscount(0,[4000]),0)
+})

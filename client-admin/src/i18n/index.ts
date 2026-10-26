@@ -1271,6 +1271,7 @@ const resources = {
       "orders": {
         "orderDetail": "Detail Pesanan",
         "discount": "Diskon",
+        "otherDiscount": "Diskon lama tanpa klasifikasi",
         "discountFilter": "Filter diskon",
         "allDiscounts": "Semua pesanan",
         "activityOnly": "Hanya promo aktivitas",
@@ -6448,6 +6449,7 @@ const resources = {
         "orderNumber": "Order Number",
         "orderDetail": "Order Detail",
         "discount": "Discount",
+        "otherDiscount": "Unclassified historical discount",
         "discountFilter": "Discount filter",
         "allDiscounts": "All orders",
         "activityOnly": "Activity discounts only",
@@ -10136,6 +10138,7 @@ const resources = {
         "orderNumber": "订单号",
         "orderDetail": "订单详情",
         "discount": "优惠",
+        "otherDiscount": "历史未分类优惠",
         "discountFilter": "优惠筛选",
         "allDiscounts": "全部订单",
         "activityOnly": "仅活动优惠",
