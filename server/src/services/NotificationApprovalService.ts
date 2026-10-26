@@ -236,6 +236,8 @@ export async function projectInventoryAwareness(db:any,input:ActorInput) {
     if(!a.active||a.status!=='open')return []
     const event=`inventory-alert:${a.id}:${a.occurrenceAt||a.firstSeen}:${a.severity}`
     const url='/inventory/alerts?alert='+encodeURIComponent(a.id)
-    return [{event,kind:'business_reminder',title:'库存异常待处理 / Peringatan stok',url,adminUrl:url,pending:true,createdAt:a.occurrenceAt||a.firstSeen,domain:'inventory',objectId:a.id,status:a.status}]
+    const material=a.detail?.inventoryName||a.detail?.name||'库存 / Stock'
+    const title=material+' · '+(a.type==='data_incomplete'?'资料待补 / Missing data / Data belum lengkap':'库存异常 / Stock alert / Peringatan stok')
+    return [{event,kind:'business_reminder',title,url,adminUrl:url,pending:true,createdAt:a.occurrenceAt||a.firstSeen,domain:'inventory',objectId:a.id,status:'pending'}]
   })
 }

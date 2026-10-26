@@ -70,13 +70,13 @@ test('inventory notices respect live store and employee access; reading does not
  const {projectInventoryAwareness}=await import('../src/services/NotificationApprovalService')
  const {notificationInbox}=await import('../src/services/NotificationInboxService')
  const f=await fixture(),user=await prisma.user.create({data:{storeId:f.store.id,phone:randomUUID(),password:'synthetic-disabled',role:'admin'}})
- const event={id:'inventoryAlert:synthetic',active:true,status:'open',firstSeen:new Date().toISOString(),severity:'warning'}
+ const event={id:'inventoryAlert:synthetic',detail:{inventoryName:f.material.name},active:true,status:'open',firstSeen:new Date().toISOString(),severity:'warning'}
  const key=event.id;await prisma.config.create({data:{storeId:f.store.id,key,category:'inventory_alert_events',value:JSON.stringify(event)}})
  const actor={id:user.id,storeId:f.store.id,employeeApp:false}
  expect(await projectInventoryAwareness(prisma,{...actor,employeeApp:true})).toEqual([])
  expect(await projectInventoryAwareness(prisma,{...actor,storeId:'foreign'})).toEqual([])
  const inbox=notificationInbox(prisma,{inventory:projectInventoryAwareness,approvals:async()=>[],trainingRelevant:async()=>false})
- let result=await inbox.read(actor);expect(result.items).toHaveLength(1);expect(result.counts.unread).toBe(1)
+ let result=await inbox.read(actor);expect(result.items).toHaveLength(1);expect(result.counts.unread).toBe(1);expect(result.items[0].title).toContain(f.material.name);expect(result.items[0].status).toBe('pending')
  await inbox.markRead(actor,result.items[0].id);result=await inbox.read(actor);expect(result.counts.unread).toBe(0);expect(result.items[0].pending).toBe(true)
  expect(JSON.parse((await prisma.config.findUniqueOrThrow({where:{storeId_key:{storeId:f.store.id,key}}})).value).status).toBe('open')
  await prisma.config.update({where:{storeId_key:{storeId:f.store.id,key}},data:{value:JSON.stringify({...event,active:false,status:'resolved'})}})
