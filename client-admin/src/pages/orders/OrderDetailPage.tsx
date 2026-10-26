@@ -123,7 +123,7 @@ export function OrderDetailPage() {
             <OrderItemsTable items={order.items} amount={(_, index) => formatCurrency(order.items[index].unitPrice * order.items[index].quantity)} />
            <div className="mt-4 pt-4 border-t space-y-2" data-testid="order-amount-breakdown">
               <div className="flex justify-between text-sm text-gray-600"><span>{t('common.total')}</span><span className="tabular-nums">{formatCurrency(order.totalAmount || order.total)}</span></div>
-              {discountRows.map(row => <div key={row.key} className="flex justify-between text-sm text-amber-700 gap-4"><span className="truncate">{row.label}{row.name ? <span className="text-gray-500"> · {row.name}</span> : null}</span><span className="tabular-nums whitespace-nowrap">-{formatCurrency(row.amount)}</span></div>)}
+              {discountRows.map(row => <div key={row.key} className="flex justify-between text-sm text-amber-700 gap-4"><span className="min-w-0 flex-1 break-words">{row.label}{row.name ? <span className="text-gray-500"> · {row.name}</span> : null}</span><span className="tabular-nums whitespace-nowrap">-{formatCurrency(row.amount)}</span></div>)}
               {discountTotal > 0 && <div className="flex justify-between text-sm font-semibold text-amber-800"><span>{t('orders.totalDiscount')}</span><span className="tabular-nums">-{formatCurrency(discountTotal)}</span></div>}
               <div className="flex justify-between text-sm text-gray-600"><span>{t('orders.taxAmount')}</span><span className="tabular-nums">{formatCurrency(taxAmount)}</span></div>
               <div className="flex justify-between text-lg font-bold pt-2">

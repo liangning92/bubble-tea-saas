@@ -1,7 +1,7 @@
 const {chromium,expect}=require('@playwright/test'),assert=require('node:assert/strict');
 (async()=>{const origin=process.env.PROFILE_ORIGIN||'http://127.0.0.1:5191';const browser=await chromium.launch();try{
 const context=await browser.newContext({serviceWorkers:'block'});await context.addInitScript(()=>{sessionStorage.setItem('auth-storage',JSON.stringify({state:{token:'synthetic-only',isAuthenticated:true,user:{id:'owner',storeId:'a',role:'admin',staff:null}},version:0}));localStorage.setItem('bubble-tea-language','zh');window.print=()=>{}});
-const requests=[],errors=[];const row={id:'o',orderNumber:'TEST-0000',createdAt:'2026-10-12T01:00:00Z',items:[{productName:'珍珠奶茶',quantity:2}],finalAmount:24000,netAmount:20000,paymentMethod:'cash',status:'completed'};
+const requests=[],errors=[];const row={id:'o',orderNumber:'TEST-0000',createdAt:'2026-10-12T01:00:00Z',items:[{productName:'珍珠奶茶',quantity:2}],totalAmount:28000,discountAmount:4000,activityDiscountAmount:4000,activityName:'周一至周五冰淇淋活动 · Promo Spesial Es Krim (Senin - Jumat)',activitySource:'activity',finalAmount:24000,netAmount:20000,paymentMethod:'cash',status:'completed'};
 await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());if(url.protocol==='http:'&&url.origin!==origin)return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();requests.push(url);let data={list:[]};
  if(req.method()!=='GET')throw Error('Read-only export test attempted mutation');
  if(url.pathname==='/api/stores')data={list:[{id:'a',name:'Synthetic store'}]};
@@ -16,6 +16,7 @@ await page.getByLabel('搜索订单',{exact:true}).fill('珍珠');await page.get
 await page.getByRole('button',{name:'下一页',exact:true}).click();await expect.poll(()=>requests.some(u=>u.pathname==='/api/orders'&&u.searchParams.get('page')==='2'&&u.searchParams.get('search')==='珍珠'&&u.searchParams.get('shiftSessionId')==='s'&&u.searchParams.get('paymentMethod')==='cash')).toBe(true);
 assert.equal(requests.filter(u=>u.pathname==='/api/orders').at(-1).searchParams.get('startDate'),'2026-10-12T01:00:00.000Z');
 const popupPromise=page.waitForEvent('popup');await page.getByRole('button',{name:'导出 PDF',exact:true}).click();const popup=await popupPromise;await expect(popup.locator('tbody tr')).toHaveCount(125);assert.ok((await popup.locator('thead').innerText()).includes('数量'));
+await page.setViewportSize({width:390,height:844});await expect(page.getByTestId('order-card-discount')).toContainText('4.000');await expect(page.getByTestId('order-card-discount')).toContainText(row.activityName);assert.equal(await page.getByTestId('order-card-discount').evaluate(el=>el.scrollWidth<=el.clientWidth),true,'long activity name fits the mobile card');await page.setViewportSize({width:1365,height:900});
 await page.getByLabel('结束时间').fill('2026-10-11T16:00');await page.getByRole('alert').filter({hasText:/结束时间/}).waitFor();assert.equal(await page.getByRole('button',{name:'导出 PDF',exact:true}).isDisabled(),true);assert.deepEqual(errors,[]);
 console.log('PASS real admin order filters: combined search/shift/payment/WIB/pagination, full 125-order export via actual export-data endpoint, quantity column, invalid range and no runtime errors');
 }finally{await browser.close()}})().catch(error=>{console.error(error);process.exitCode=1});
