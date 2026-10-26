@@ -395,6 +395,7 @@ router.get('/consumption-analysis', authenticate, authorize('admin', 'manager'),
       startDate: startDate as string,
       endDate: endDate as string,
       varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold as string) : alertConfig.varianceWarningPercent,
+      latest: req.query.latest === 'true',
       varianceCriticalThreshold: alertConfig.varianceCriticalPercent,
       category: category as string
     })
@@ -426,6 +427,7 @@ router.get('/anomaly-summary', authenticate, authorize('admin', 'manager'), asyn
       startDate: startDate as string,
       endDate: endDate as string,
       varianceThreshold: varianceThreshold ? parseFloat(varianceThreshold as string) : alertConfig.varianceWarningPercent,
+      latest: req.query.latest === 'true',
       varianceCriticalThreshold: alertConfig.varianceCriticalPercent,
       category: category as string
     })

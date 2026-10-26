@@ -225,3 +225,17 @@ export async function approvalNoticeRelevant(db: any, storeId: string, reminder:
   const current = await project(db, { id: reminder.userId, storeId }, await nodes(db, storeId, { domain: reminder.domain, objectId: reminder.objectId }))
   return current.some(notice => notice.id === reminder.id && notice.event === reminder.event && notice.kind === reminder.kind && notice.domain === reminder.domain && notice.objectId === reminder.objectId && notice.url === reminder.url && notice.adminUrl === reminder.adminUrl && notice.title === reminder.title)
 }
+
+/** Read-only inventory projection uses the same live route grants as the source page. */
+export async function projectInventoryAwareness(db:any,input:ActorInput) {
+  const actor=await currentActor(db,input)
+  if(!actor||actor.employeeApp||!routeAllowed(actor,'GET /api/inventory/alert-center'))return []
+  const rows=await db.config.findMany({where:{storeId:actor.storeId,category:'inventory_alert_events'}})
+  return rows.flatMap((row:any)=>{
+    let a:any;try{a=JSON.parse(row.value)}catch{return []}
+    if(!a.active||a.status!=='open')return []
+    const event=`inventory-alert:${a.id}:${a.occurrenceAt||a.firstSeen}:${a.severity}`
+    const url='/inventory/alerts?alert='+encodeURIComponent(a.id)
+    return [{event,kind:'business_reminder',title:'库存异常待处理 / Peringatan stok',url,adminUrl:url,pending:true,createdAt:a.occurrenceAt||a.firstSeen,domain:'inventory',objectId:a.id,status:a.status}]
+  })
+}

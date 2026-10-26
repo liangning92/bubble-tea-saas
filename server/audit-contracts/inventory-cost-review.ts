@@ -12,7 +12,7 @@ export function inventoryCostReview(db:any){
   await updateProductBom(product.id,[{inventoryId:inv.id,quantity:25,unit:'g'}])
   expect(await calculateProductCost(product.id)).toBe(250)
   expect((await getProductCostDetail(product.id))!.costPrice).toBe(250)
-  expect((await getProductBomDetail(product.id))!.totalBomCost).toBe(250)
+  expect((await getProductBomDetail(product.id,s.id))!.totalBomCost).toBe(250)
   const sale=await createOrder({storeId:s.id,orderNumber:key,staffId:'synthetic',paymentMethod:'cash',taxEnabled:false,items:[{productId:product.id,productName:'Tea',specId:spec.id,specName:'Regular',quantity:1,unitPrice:1000}]})
   expect(JSON.parse((await db.orderConsumptionSnapshot.findUniqueOrThrow({where:{orderId:sale.id}})).materials)[0].quantity).toBeCloseTo(0.025,9)
   expect(sale.items[0].bomCost).toBe(250);expect((await db.inventory.findUnique({where:{id:inv.id}})).currentStock).toBe(2)

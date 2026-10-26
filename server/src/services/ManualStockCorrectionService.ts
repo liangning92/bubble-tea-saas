@@ -1,3 +1,4 @@
+import {actualInventorySince} from './ActualInventoryPolicy'
 import prisma from '../config/database'
 import { createHash, randomUUID } from 'crypto'
 import { alignInventoryBatches, consumeInventoryBatches, availableBatches } from './InventoryBatchService'
@@ -27,7 +28,8 @@ async function root(db: any, storeId: string, type: Direction, id: string) {
 }
 async function snapshot(db: any, storeId: string, type: Direction, row: any) {
   const note = parse(row.note), since = await unifiedInventorySince(db, storeId)
-  const internal = note.stockEffect === 'internal_transfer' || !note.stockEffect && row.reason === 'withdrawal' && since && row.createdAt >= since
+  const actualSince = await actualInventorySince(db, storeId)
+  const internal = note.stockEffect === 'internal_transfer' || !note.stockEffect && row.reason === 'withdrawal' && since && row.createdAt >= since && (!actualSince || row.createdAt < actualSince)
   return { logId: row.id, inventoryId: row.inventoryId, materialName: row.inventory.name, unit: row.inventory.unit, quantity: row.quantity,
     totalAmount: type === 'stock_in' ? row.totalAmount : Number(note.totalAmount ?? Math.round(row.quantity * Number(note.unitCost ?? row.inventory.avgCost))),
     unitCost: type === 'stock_in' ? row.unitCost : Number(note.unitCost ?? row.inventory.avgCost),

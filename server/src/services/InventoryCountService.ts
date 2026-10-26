@@ -1,3 +1,4 @@
+import {actualInventorySince,ACTUAL_CALIBRATED_PREFIX} from './ActualInventoryPolicy'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {expandProcessInputs} from './ProcessRecipeService'
 import {unifiedInventorySince,CALIBRATED_PREFIX} from './UnifiedInventoryService'
@@ -17,7 +18,7 @@ async function people(counts:any[],storeId:string){
   prisma.config.findMany({where:{storeId,key:{startsWith:'inventoryPackage:'}}})
  ])
  const equivalents=new Map<string,any[]>()
- if(await unifiedInventorySince(prisma,storeId)){
+ if(await unifiedInventorySince(prisma,storeId)&&!await actualInventorySince(prisma,storeId)){
   const outputs=await prisma.inventory.findMany({where:{storeId,type:'semi_finished',processRecipeId:{not:null}}})
   for(const output of outputs){
    try{
@@ -63,7 +64,8 @@ async function recordObservation(tx:any,countItemId:string,countedQty:number,cou
   const observedAt=new Date(),key=COUNT_OBSERVATION_PREFIX+countItemId
   const boundary=await captureCountBoundary(tx,item.inventoryId)
   const unifiedSince=await unifiedInventorySince(tx,context.storeId)
-  const value=JSON.stringify({version:unifiedSince?4:3,scope:unifiedSince?'whole_store_raw_equivalent':'legacy',boundary,countId:context.countId,systemQty:context.expectedStock,countedQty,actor:countedBy,observedAt:observedAt.toISOString(),ledgerUnit:item.inventory.unit})
+  const actualSince=await actualInventorySince(tx,context.storeId)
+  const value=JSON.stringify({version:actualSince?5:unifiedSince?4:3,scope:actualSince?'warehouse':unifiedSince?'whole_store_raw_equivalent':'legacy',boundary,countId:context.countId,systemQty:context.expectedStock,countedQty,actor:countedBy,observedAt:observedAt.toISOString(),ledgerUnit:item.inventory.unit})
   await tx.config.upsert({where:{storeId_key:{storeId:context.storeId,key}},create:{storeId:context.storeId,key,value,category:'inventory'},update:{value}})
   return tx.inventoryCountItem.update({where:{id:countItemId},data:{systemQty:context.expectedStock,countedQty,variance,countedAt:observedAt,countedBy,note:note?.trim()||null}})
 }
@@ -93,8 +95,10 @@ export async function completeInventoryCount(countId:string,staffId:string,store
    if(item.inventory.storeId!==storeId)throw new Error('COUNT_ITEM_STORE_MISMATCH')
    const recorded=await tx.config.findUnique({where:{storeId_key:{storeId,key:COUNT_OBSERVATION_PREFIX+item.id}}})
    const observation=recorded?JSON.parse(recorded.value):null
-   if(!observation||![1,2,3,4].includes(observation.version)||observation.countId!==countId||observation.systemQty!==item.systemQty||observation.countedQty!==item.countedQty||observation.actor!==item.countedBy||observation.observedAt!==item.countedAt!.toISOString()||observation.ledgerUnit!==item.inventory.unit)throw new Error('COUNT_REOBSERVATION_REQUIRED')
+   if(!observation||![1,2,3,4,5].includes(observation.version)||observation.countId!==countId||observation.systemQty!==item.systemQty||observation.countedQty!==item.countedQty||observation.actor!==item.countedBy||observation.observedAt!==item.countedAt!.toISOString()||observation.ledgerUnit!==item.inventory.unit)throw new Error('COUNT_REOBSERVATION_REQUIRED')
    if(await tx.inventoryCountItem.findFirst({where:{inventoryId:item.inventoryId,countedAt:{not:null},inventoryCount:{storeId,status:'completed',updatedAt:{gte:item.countedAt!}}}}))throw new Error('COUNT_REOBSERVATION_REQUIRED')
+   const actualSince=await actualInventorySince(tx,storeId)
+   if(actualSince&&observation.version!==5)throw Error('COUNT_REOBSERVATION_REQUIRED')
    const variance=item.countedQty!-item.systemQty
    if(item.variance===null||!Number.isFinite(item.variance)||Math.abs(variance-item.variance)>1e-7||!Number.isFinite(variance))throw new Error('INVALID_COUNT_OBSERVATION')
    if(observation.version===4){
@@ -108,6 +112,10 @@ export async function completeInventoryCount(countId:string,staffId:string,store
      await tx.stockOutLog.create({data:{inventoryId:item.inventoryId,quantity:-correction,reason:'count_adjustment',note:JSON.stringify({version:1,countId,countItemId:item.id,kind:'late-estimate-in-count',actor:staffId})}})
     }
     const key=CALIBRATED_PREFIX+item.inventoryId,value=item.countedAt!.toISOString()
+    await tx.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,value,category:'inventory'},update:{value}})
+   }
+   if(observation.version===5){
+    const key=ACTUAL_CALIBRATED_PREFIX+item.inventoryId,value=item.countedAt!.toISOString()
     await tx.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,value,category:'inventory'},update:{value}})
    }
    if(!variance)continue

@@ -14,6 +14,7 @@ export interface InboxItem {
 }
 // Injected adapters also allow the real database/HTTP contract to be tested without a push transport.
 export interface InboxSources {
+  inventory?(db:any,actor:InboxActor):Promise<any[]>
   approvals(db: any, actor: InboxActor): Promise<any[]>
   trainingRelevant(db: any, storeId: string, reminder: any, staffId: string): Promise<boolean>
 }
@@ -72,6 +73,7 @@ export async function projectManagementOwnerTodos(db: any, a: InboxActor): Promi
 export function notificationInbox(db: any = prisma, sources?: InboxSources) {
   const adapters = async (): Promise<InboxSources> => sources || {
     approvals: (await import('./NotificationApprovalService.js')).projectApprovalAwareness,
+    inventory: (await import('./NotificationApprovalService.js')).projectInventoryAwareness,
     trainingRelevant: (await import('./TrainingLibraryStore.js')).trainingUpdateRelevant
   }
   async function collect(actor: InboxActor) {
@@ -111,7 +113,7 @@ export function notificationInbox(db: any = prisma, sources?: InboxSources) {
         ...(r.trainingUpdate ? { trainingUpdate: r.trainingUpdate } : {}) })
     }
     const baseline = await readWork(a.storeId, 'approval.notice.baseline', db)
-    for (const entry of projected) {
+    for (const entry of [...projected,...(ports.inventory?await ports.inventory(db,{...a,employeeApp:actor.employeeApp}):[])]) {
       if (!entry?.event || entry.userId && entry.userId !== a.id) continue
       const existing = persisted.get(entry.event), id = entry.id || existing?.id || digest(`${a.id}:${entry.event}`)
       const marker = await readWork(a.storeId, readKey(a.id, id), db)

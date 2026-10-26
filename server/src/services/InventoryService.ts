@@ -1,3 +1,4 @@
+import {actualInventorySince} from './ActualInventoryPolicy'
 import { manualCorrectionMetadata } from './ManualStockCorrectionService'
 import {unifiedInventorySince,CALIBRATED_PREFIX} from './UnifiedInventoryService'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
@@ -211,7 +212,7 @@ export async function stockOut(data: StockOperation, db:any=prisma) {
     const saved=data.inputUnit?await tx.config.findUnique({where:{storeId_key:{storeId,key:`inventoryPackage:${inventoryId}`}}}):null
     const quantity=convertQuantity(data.quantity,data.inputUnit||inventory.unit,inventory.unit,saved?validatePackage(JSON.parse(saved.value),inventory.unit):null)
     if(reason==='other'&&!note?.trim())throw Error('OUT_REASON_REQUIRED')
-    const internalIssue=reason==='withdrawal'&&!!(await unifiedInventorySince(tx,storeId))
+    const internalIssue=reason==='withdrawal'&&!!(await unifiedInventorySince(tx,storeId))&&!await actualInventorySince(tx,storeId)
     if(await unifiedInventorySince(tx,storeId)){if(['sold','adjust'].includes(reason||''))throw Error('USE_SALE_OR_COUNT_WORKFLOW')}
     if (!internalIssue && inventory.currentStock < quantity) {
       throw new Error('Insufficient stock')
@@ -605,6 +606,7 @@ export interface ConsumptionAnalysisFilter {
   startDate: string
   endDate: string
   varianceThreshold?: number      // 差异百分比阈值，默认10%
+  latest?: boolean
   varianceCriticalThreshold?: number
   category?: string              // 原料分类过滤
 }

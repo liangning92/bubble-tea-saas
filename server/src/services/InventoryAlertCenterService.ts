@@ -17,6 +17,7 @@ export interface InventoryAlertEvent {
     status: 'open' | 'handled' | 'resolved';
     active: boolean;
     detail: any;
+    occurrenceAt?: string;
     firstSeen: string;
     lastSeen: string;
     resolvedAt?: string;
@@ -128,7 +129,7 @@ export async function refreshInventoryAlerts(storeId: string, now = new Date()) 
             }
             catch { }
             const reopen = !previous?.active || rank[candidate.severity] > rank[previous.severity];
-            const event: InventoryAlertEvent = { ...previous, ...candidate, id: key, active: true, status: reopen ? 'open' : previous?.status === 'handled' ? 'handled' : 'open', firstSeen: previous?.firstSeen || now.toISOString(), lastSeen: now.toISOString(), ...(reopen ? { handledAt: undefined, handledBy: undefined, handleNote: undefined, resolvedAt: undefined } : {}) };
+            const event: InventoryAlertEvent = { ...previous, ...candidate, id: key, occurrenceAt: reopen?now.toISOString():previous?.occurrenceAt||previous?.firstSeen||now.toISOString(), active: true, status: reopen ? 'open' : previous?.status === 'handled' ? 'handled' : 'open', firstSeen: previous?.firstSeen || now.toISOString(), lastSeen: now.toISOString(), ...(reopen ? { handledAt: undefined, handledBy: undefined, handleNote: undefined, resolvedAt: undefined } : {}) };
             await tx.config.upsert({ where: { storeId_key: { storeId, key } }, create: { storeId, key, category: CATEGORY, value: JSON.stringify(event) }, update: { value: JSON.stringify(event) } });
         }
         for (const record of current)

@@ -1,3 +1,4 @@
+import {actualInventorySince} from './ActualInventoryPolicy';
 import {unifiedInventorySince} from './UnifiedInventoryService';
 import {salesInventoryForecast} from './SalesInventoryForecastService';
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
@@ -12,7 +13,7 @@ export async function inventoryForecast(storeId: string, days = 30, now = new Da
         throw Error('INVALID_FORECAST_DAYS');
     const {startOfDay,addDays,dayCount}=await inventoryBusinessCalendar(storeId,db);
     const settings = await getInventoryAlertConfig(storeId), end = startOfDay(now), windowStart = addDays(end, -days);
-    if(await unifiedInventorySince(db,storeId))return salesInventoryForecast(db,storeId,days,now,settings);
+    if(await actualInventorySince(db,storeId)||await unifiedInventorySince(db,storeId))return salesInventoryForecast(db,storeId,days,now,settings);
     const config = await db.config.findUnique({ where: { storeId_key: { storeId, key: FLOW_CUTOVER_KEY } } });
     const cutover = config ? new Date(config.value) : null;
     const reasons = cutover ? ACTUAL_OUT_REASONS : ['sold', 'refund_unprepared'];

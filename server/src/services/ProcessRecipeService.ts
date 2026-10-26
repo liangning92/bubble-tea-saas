@@ -1,3 +1,4 @@
+import {actualInventorySince} from './ActualInventoryPolicy'
 import {unifiedInventorySince} from './UnifiedInventoryService'
 import {createHash, randomUUID} from 'crypto'
 import {consumeInventoryBatches} from './InventoryBatchService'
@@ -79,7 +80,7 @@ export async function executeRecipe(recipeId:string,multiplier=1,staffId?:string
   const expanded=(await Promise.all(inputs.map(i=>expandProcessInputs(tx,storeId,i.inventoryId!,i.quantity*multiplier,[recipe.id])))).flat()
   const materials=new Map<string,any>()
   for(const item of expanded){const old=materials.get(item.inventoryId);materials.set(item.inventoryId,{...item,quantity:item.quantity+(old?.quantity||0)})}
-  const internalProcessing=!!(await unifiedInventorySince(tx,storeId))
+  const internalProcessing=!!(await actualInventorySince(tx,storeId)||await unifiedInventorySince(tx,storeId))
   let totalInputCost=0
   for(const item of materials.values()){
    const inv=await tx.inventory.findFirstOrThrow({where:{id:item.inventoryId,storeId}})

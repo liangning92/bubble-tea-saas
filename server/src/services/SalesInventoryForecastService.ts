@@ -1,3 +1,4 @@
+import {actualInventorySince,ACTUAL_CALIBRATED_PREFIX} from './ActualInventoryPolicy'
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {validatePackage} from '../utils/inventoryUnits'
@@ -5,6 +6,7 @@ import {CALIBRATED_PREFIX} from './UnifiedInventoryService'
 /** Demand comes from closed business-day sales, never from batch issues or processing. */
 export async function salesInventoryForecast(db:any,storeId:string,days:number,now:Date,settings:any){
  const {startOfDay,addDays,dayCount}=await inventoryBusinessCalendar(storeId,db)
+ const actualSince=await actualInventorySince(db,storeId),calibrationPrefix=actualSince?ACTUAL_CALIBRATED_PREFIX:CALIBRATED_PREFIX
  const end=startOfDay(now),windowStart=addDays(end,-days)
  const flow=await db.config.findUnique({where:{storeId_key:{storeId,key:'employee_inventory_flow_started_at'}}})
  const begun=flow?new Date(flow.value):end
@@ -17,7 +19,7 @@ export async function salesInventoryForecast(db:any,storeId:string,days:number,n
   db.orderConsumptionSnapshot.findMany({where:{storeId,createdAt:{gte:evidenceStart,lt:end}}}),
   db.stockOutLog.findMany({where:{inventory:{storeId},reason:{in:['loss','expired']},createdAt:{gte:start,lt:end}}}),
   db.purchaseOrder.findMany({where:{storeId,status:{in:['pending','approved','awaiting_receipt']}},include:{items:true}}),
-  db.config.findMany({where:{storeId,OR:[{key:{startsWith:CALIBRATED_PREFIX}},{key:{startsWith:'inventoryPackage:'}}]}})
+  db.config.findMany({where:{storeId,OR:[{key:{startsWith:calibrationPrefix}},{key:{startsWith:'inventoryPackage:'}}]}})
  ])
  const uncovered=await db.order.count({where:{storeId,status:{in:['paid','completed']},createdAt:{gte:start,lt:end},id:{notIn:snapshots.map((s:any)=>s.orderId)}}})
  const samples=new Map<string,Date>(materials.map((mat:any)=>{const created=mat.createdAt||start,day=startOfDay(created),full=created>day?addDays(day,1):day;return [mat.id,new Date(Math.max(start.getTime(),full.getTime()))]}))
@@ -39,7 +41,7 @@ export async function salesInventoryForecast(db:any,storeId:string,days:number,n
   const recipeComplete=!incomplete&&(!use||use.unit===mat.unit)
   const totalUsage=recipeComplete?Math.max(0,use?.quantity||0):0
   const dailyUsage=historyDays&&recipeComplete?totalUsage/historyDays:0
-  const calibratedAt=metadata.find((m:any)=>m.key===CALIBRATED_PREFIX+mat.id)?.value||null
+  const calibratedAt=metadata.find((m:any)=>m.key===calibrationPrefix+mat.id)?.value||null
   const predictionAvailable=historyDays>=7&&recipeComplete&&!!calibratedAt&&mode!=='self_produced'
   const dynamicSafetyStock=predictionAvailable?dailyUsage*settings.lowStockWarningDays:0
   const effectiveSafetyStock=Math.max(mat.safetyStock||0,mat.minStock||0,dynamicSafetyStock)

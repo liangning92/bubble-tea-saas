@@ -527,28 +527,28 @@ export function InventoryPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="inventory-responsive-table w-full">
+            <table className="inventory-stock-table w-full">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
-                  <th className="py-3 pr-4 font-medium w-1/4">
+                  <th className="py-3 pr-4 font-medium">
                     {t("inventory.itemName") || "Name"}
                   </th>
-                  <th className="py-3 px-2 font-medium w-24">
+                  <th className="py-3 px-2 font-medium">
                     {t("inventory.category") || "Category"}
                   </th>
-                  <th className="py-3 px-2 font-medium text-right w-24">
+                  <th className="py-3 px-2 font-medium text-right">
                     {t("inventoryUnified.estimate") || "Stock"}
                   </th>
-                  <th className="py-3 px-2 font-medium text-right w-20">
+                  <th className="py-3 px-2 font-medium text-right">
                     {t("inventory.unit") || "Unit"}
                   </th>
-                  <th className="py-3 px-2 font-medium text-right w-24">
+                  <th className="py-3 px-2 font-medium text-right">
                     {t("inventory.avgCost") || "Cost"}
                   </th>
-                  <th className="py-3 px-2 font-medium text-right w-24">
+                  <th className="py-3 px-2 font-medium text-right">
                     {t("inventory.safetyStock") || "Safety"}
                   </th>
-                  <th className="py-3 pl-4 font-medium text-center w-32">
+                  <th className="py-3 pl-4 font-medium text-center">
                     {t("common.actions") || "Actions"}
                   </th>
                 </tr>

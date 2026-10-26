@@ -51,5 +51,8 @@ export async function loadDashboardPendingActions(db: PrismaClient, storeId: str
       actions.push({ key: 'cash', count: 1, to: `/finance/revenue/shifts/${encodeURIComponent(session.id)}?${range}` })
     }
   }
+  const inventoryAlerts=await db.config.findMany({where:{storeId,category:'inventory_alert_events'},select:{value:true}})
+  const active=inventoryAlerts.filter(row=>{try{const a=JSON.parse(row.value);return a.active&&a.status==='open'}catch{return false}}).length
+  actions.push({key:'inventory',count:active,to:'/inventory/alerts'})
   return { actions, total: actions.reduce((sum, action) => sum + action.count, 0), timestamp: now.toISOString() }
 }
