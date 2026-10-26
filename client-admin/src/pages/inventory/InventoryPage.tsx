@@ -555,6 +555,7 @@ export function InventoryPage() {
               <tbody>
                 {filteredInventory.map((item: any) => {
                   const isLow = isLowItem(item);
+                  const unverified = item.actualStockPolicy && item.calibrationRequired;
                   return (
                     <tr
                       key={item.id}
@@ -587,8 +588,9 @@ export function InventoryPage() {
                         <span
                           className={`font-bold ${isLow && !item.calibrationRequired ? "text-red-600" : "text-gray-900"}`}
                         >
-                          {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):consumptionQuantity(item.currentStock,i18n.language,3)}{item.calibrationRequired&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
+                          {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):unverified?'—':consumptionQuantity(item.currentStock,i18n.language,3)}{item.calibrationRequired&&!unverified&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
                         </span>
+                        {unverified&&<details className="mt-1 text-xs text-gray-500"><summary className="cursor-pointer text-amber-700">{t("inventoryUnified.calibrate")}</summary>{t("inventoryUnified.legacyBalance")}: {consumptionQuantity(item.currentStock,i18n.language)} {item.unit}</details>}
                       </td>
                       <td
                         data-label={t("inventory.unit")}
@@ -1126,15 +1128,15 @@ export function InventoryPage() {
               <label className="block">
                 {t("inventoryUnits.input")}
                 <select className="input w-full" value={stockForm.inputUnit || defaultInventoryInputUnit(selectedItem)} onChange={e => setStockForm({ ...stockForm, inputUnit: e.target.value })}>
-                  {inventoryInputUnits(selectedItem).map(unit => <option key={unit}>{unit}</option>)}
+                  {inventoryInputUnits(selectedItem).map(unit => <option key={unit} value={unit}>{unit==='bag'?t('inventoryUnified.packageBag'):unit}</option>)}
                 </select>
               </label>
               <p>
-                {t("inventoryUnified.estimate")}: {consumptionQuantity(Number(selectedItem.currentStock),i18n.language)}{" "}
+                {t(selectedItem.actualStockPolicy&&selectedItem.calibrationRequired?"inventoryUnified.legacyBalance":"inventoryUnified.estimate")}: {consumptionQuantity(Number(selectedItem.currentStock),i18n.language)}{" "}
                 {selectedItem.unit}
               </p>
               <p>
-                {t("inventoryFlow.afterStock")}:{" "}
+                {t(selectedItem.actualStockPolicy&&selectedItem.calibrationRequired?"inventoryUnified.legacyAfter":"inventoryFlow.afterStock")}:{" "}
                 {consumptionQuantity(selectedItem.currentStock - (stockOutPurpose==='withdrawal'&&selectedItem.unifiedStock?0:inventoryLedgerQuantity(Number(stockForm.quantity) || 0, selectedItem, stockForm.inputUnit || defaultInventoryInputUnit(selectedItem))),i18n.language)}{" "}
                 {selectedItem.unit}
               </p>
