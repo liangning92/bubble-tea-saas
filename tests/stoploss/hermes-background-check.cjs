@@ -60,7 +60,7 @@ async function main(){
  await db.hygieneArea.create({data:{storeId,name:'Synthetic counter',code:'counter'}});
  await check('hygiene assignment creates pending task and audit; never fabricates completion',async()=>{
   const task=await db.$transaction(tx=>executeBusinessTool(tx,grant,scope,'employee_manage_hygiene',{action:'create_task',name:'Clean counter',areaCode:'counter',staffId:employee.staffId,date:'2026-10-27'},'synthetic-hygiene'));
-  assert.equal(task.status,'pending');assert.equal(task.completedAt,null);assert.equal(task.staffId,employee.staffId);assert.equal(await db.hygieneTaskLog.count({where:{taskId:task.id,performedBy:'agent:'+agentId}}),1);
+  const savedTask=await db.hygieneTask.findFirst({where:{storeId,name:'Clean counter'}});assert.equal(task.operationRecorded,true);Object.assign(task,savedTask);assert.equal(task.status,'pending');assert.equal(task.completedAt,null);assert.equal(task.staffId,employee.staffId);assert.equal(await db.hygieneTaskLog.count({where:{taskId:task.id,performedBy:'agent:'+agentId}}),1);
   const own=await executeBusinessTool(db,grant,scope,'employee_manage_hygiene',{action:'list_tasks'},'synthetic-hygiene-read');assert.equal(own.length,1);
  });
  const shift=await db.shift.create({data:{storeId,key:'hermes-bg-shift',name:'Synthetic morning',startTime:'09:00',endTime:'17:00',color:'#888888'}});
@@ -78,6 +78,13 @@ async function main(){
   const value={name:'Cup',avgCost:22,grossMargin:99,salary:1000,password:'never-visible',nested:[{phone:'private',currentStock:7}]};
   assert.deepEqual(await visibleBusinessData(db,grant,scope,value),{name:'Cup',nested:[{currentStock:7}]});
   const admin=await visibleBusinessData(db,grant,{...scope,audienceStaffIds:[owner.staffId],requesterStaffId:owner.staffId},value);assert.equal(admin.avgCost,22);assert.equal(admin.salary,1000);assert.equal(admin.password,undefined);
+ });
+ await check('authorized stock mutation hides its balance from an audience without inventory visibility',async()=>{
+  const denied=await db.user.create({data:{id:'no-inventory-user',storeId,phone:'08911118003',password:'synthetic',role:'staff',staff:{create:{id:'no-inventory-staff',storeId,name:'No inventory',employeeNumber:'no-inventory'}}}});
+  await db.config.create({data:{storeId,key:'staff.access.policy',category:'staff',value:JSON.stringify({roles:[{id:'limited',permissions:['personal.messages']}],assignments:[{staffId:'no-inventory-staff',roleId:'limited'}]})}});
+  const result=await db.$transaction(tx=>executeBusinessTool({...tx,$transaction:fn=>fn(tx)},grant,{...scope,audienceStaffIds:['no-inventory-staff'],requesterStaffId:'no-inventory-staff'},'employee_manage_inventory',{action:'stock_out',inventoryId:item.id,quantity:1,reason:'loss'},'synthetic-hidden-balance'));
+  assert.equal(result.ok,true);assert.equal(result.operationRecorded,true);assert.equal(result.currentStock,undefined);assert.equal((await db.inventory.findUnique({where:{id:item.id}})).currentStock,6);
+  await db.config.delete({where:{storeId_key:{storeId,key:'staff.access.policy'}}});
  });
  await check('disable, permission change and no-expiry authorization are controlled by saved settings',async()=>{
   const service=agentSettingsService(db);settings=await service.saveSettings(owner,{...settings,expiresAt:null,permissions:{...settings.permissions,inventory:{read:true,write:false}}});
