@@ -21,7 +21,7 @@ export function PosterElementInspector({ value, onChange, selection, onSelect, l
 }) {
     const l = (zh: string, en: string, id: string) => [zh, en, id][language] || zh, key = selection.key, isCanvas = CANVAS_ELEMENTS.includes(key), index = isCanvas ? undefined : selection.cardIndex, style = posterElementStyle(value, key, isCanvas?undefined:index??0), [pick, setPick] = useState(false);
     const patch = (change: Partial<PosterElementStyle>) => {
-        const emit=(next:ActivityPosterConfig)=>onChange(['originalPrice','specialPrice','savingAmount'].includes(key)&&(change.fontSize!==undefined||change.lineHeight!==undefined||change.strokeWidth!==undefined)?setPosterPriceSpacing(next,posterPriceGaps(value,index??0),index):next);
+        const emit=(next:ActivityPosterConfig)=>{if(['originalPrice','specialPrice','savingAmount'].includes(key)&&(change.fontSize!==undefined||change.lineHeight!==undefined||change.strokeWidth!==undefined)){if(index!==undefined)next=setPosterPriceSpacing(next,posterPriceGaps(value,index),index);else for(let i=0;i<(value.cardItems?.length||0);i++)next=setPosterPriceSpacing(next,posterPriceGaps(value,i),i);}onChange(next);};
         if (index === undefined) {
             const cardItems=value.cardItems?.map(c=>{const own={...c.elements?.[key]};for(const field of Object.keys(change))delete (own as any)[field];return {...c,...(key==='dayBadge'&&change.backgroundColor!==undefined?{activeColor:change.backgroundColor}:{}),elements:{...c.elements,[key]:own}}});
             emit({ ...value, cardItems, freeform: true, elements: { ...value.elements, [key]: { ...value.elements?.[key], ...change } } });

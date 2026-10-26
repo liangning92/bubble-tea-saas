@@ -56,3 +56,5 @@ test('two price gaps measure actual separation, preserve independent card scope 
 });
 
 test('canvas padding insets every canvas layer without rewriting user positions',()=>{const padded=controls.applyPosterDesignPatch(editable,{containerPaddingX:60,containerPaddingY:40});const layout=posterLayout(padded,2),headline=layout.layers.find(l=>l.key==='headline'),grid=layout.layers.find(l=>l.key==='grid');assert.equal(headline.owner.x,60);assert.equal(headline.owner.y,40);assert.equal(grid.owner.x,60);assert.equal(grid.owner.height,1000);assert.equal(padded.elements?.headline,undefined);});
+
+test('today popout composes with the user card rotation',()=>{const config={...editable,elements:{card:{rotation:12}},designConfig:{highlightMode:'popout',highlightScale:1.1}};assert.ok(render({posterConfig:config},{day:1}).includes('transform:rotate(12deg) scale(1.1)'));});
