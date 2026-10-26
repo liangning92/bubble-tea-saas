@@ -1,3 +1,4 @@
+import {correctedConsumptionSnapshots} from './ConsumptionEvidenceService'
 import {actualInventorySince} from './ActualInventoryPolicy'
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar'
 import {unifiedInventorySince} from './UnifiedInventoryService'
@@ -62,7 +63,7 @@ export async function physicalInventoryVariance(filter:{storeId:string;startDate
     }
    }
    if((unifiedSince||actualSince)&&supported){
-    const snapshots=await tx.orderConsumptionSnapshot.findMany({where:{storeId:filter.storeId,createdAt:{gt:opening!.countedAt!,lte:closing!.countedAt!}}})
+    const snapshots=await correctedConsumptionSnapshots(tx,{storeId:filter.storeId,createdAt:{gt:opening!.countedAt!,lte:closing!.countedAt!}})
     for(const snapshot of snapshots){
      if(snapshot.reversedAt)continue
      if(JSON.parse(snapshot.issues).length)recipeIncomplete=true

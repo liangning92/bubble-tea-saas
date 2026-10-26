@@ -84,3 +84,16 @@ test('inventory notices respect live store and employee access; reading does not
 })
 
 test('existing employee and admin forms receive physical stock preview metadata',async()=>{const f=await fixture();const row=(await getInventory({storeId:f.store.id})).find((r:any)=>r.id===f.material.id);expect(row.actualStockPolicy).toBe(true);expect(row.unifiedStock).toBe(false);expect(row.currentStock).toBe(1000);await f.issue(10);expect((await getInventory({storeId:f.store.id}))[0].currentStock).toBe(990)});
+
+test('audited historical theory correction is counted once, preserves original snapshots and stock, and follows reversals',async()=>{
+ const {appendConsumptionCorrection,correctedConsumptionSnapshots}=await import('../src/services/ConsumptionEvidenceService')
+ const f=await fixture(),order=await f.sale(3),source=await prisma.orderConsumptionSnapshot.findUniqueOrThrow({where:{orderId:order.id}}),delta=[{inventoryId:f.material.id,name:f.material.name,unit:'pcs',quantity:2}]
+ await expect(prisma.$transaction(tx=>appendConsumptionCorrection(tx,f.store.id,source.id,[{...delta[0],quantity:-4}],'Invalid negative','synthetic-batch'))).rejects.toThrow('INVALID_THEORY_CORRECTION')
+ await prisma.$transaction(tx=>appendConsumptionCorrection(tx,f.store.id,source.id,delta,'Synthetic verified missing cups','synthetic-batch'))
+ await prisma.$transaction(tx=>appendConsumptionCorrection(tx,f.store.id,source.id,delta,'Synthetic verified missing cups','synthetic-batch'))
+ let snapshots=await correctedConsumptionSnapshots(prisma,{storeId:f.store.id});expect(JSON.parse(snapshots[0].materials)[0].quantity).toBe(5)
+ expect((await prisma.orderConsumptionSnapshot.findUniqueOrThrow({where:{id:source.id}})).materials).toBe(source.materials);expect(await f.balance()).toBe(1000)
+ await expect(prisma.$transaction(tx=>appendConsumptionCorrection(tx,f.store.id,source.id,[{...delta[0],quantity:4}],'Changed correction','synthetic-batch'))).rejects.toThrow('THEORY_CORRECTION_CONFLICT')
+ await expect(prisma.$transaction(tx=>appendConsumptionCorrection(tx,'foreign',source.id,delta,'Foreign','synthetic-batch'))).rejects.toThrow('CONSUMPTION_SOURCE_NOT_FOUND')
+ await prisma.$transaction(tx=>reverseOrderConsumption(tx,order.id));snapshots=await correctedConsumptionSnapshots(prisma,{storeId:f.store.id});expect(snapshots[0].reversedAt).not.toBeNull();expect(JSON.parse(snapshots[0].materials)[0].quantity).toBe(3);expect(await f.balance()).toBe(1000)
+})

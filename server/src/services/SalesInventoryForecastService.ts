@@ -1,3 +1,4 @@
+import {correctedConsumptionSnapshots} from './ConsumptionEvidenceService'
 import {actualInventorySince,ACTUAL_CALIBRATED_PREFIX} from './ActualInventoryPolicy'
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
@@ -16,7 +17,7 @@ export async function salesInventoryForecast(db:any,storeId:string,days:number,n
  const evidenceStart=new Date(Math.max(begun.getTime(),Math.min(start.getTime(),addDays(end,-settings.stagnantDays).getTime())))
  const [materials,snapshots,losses,orders,metadata]=await Promise.all([
   db.inventory.findMany({where:{storeId,OR:[{type:{not:'semi_finished'}},{processRecipeId:null}]},orderBy:{name:'asc'}}),
-  db.orderConsumptionSnapshot.findMany({where:{storeId,createdAt:{gte:evidenceStart,lt:end}}}),
+  correctedConsumptionSnapshots(db,{storeId,createdAt:{gte:evidenceStart,lt:end}}),
   db.stockOutLog.findMany({where:{inventory:{storeId},reason:{in:['loss','expired']},createdAt:{gte:start,lt:end}}}),
   db.purchaseOrder.findMany({where:{storeId,status:{in:['pending','approved','awaiting_receipt']}},include:{items:true}}),
   db.config.findMany({where:{storeId,OR:[{key:{startsWith:calibrationPrefix}},{key:{startsWith:'inventoryPackage:'}}]}})

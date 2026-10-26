@@ -1,3 +1,4 @@
+import {correctedConsumptionSnapshots} from './ConsumptionEvidenceService'
 import {inventoryProductionComparison} from './InventoryProductionComparison';
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy';
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
@@ -27,7 +28,7 @@ export async function employeeConsumption(filter: {
         return { list: [], cutover: cutover?.toISOString() || null, legacyOnly: true, segments: [{ basis: 'legacy', start: start.toISOString(), end: end.toISOString() }] };
     const effectiveStart = new Date(Math.max(start.getTime(), cutover.getTime()));
     const inventory = await db.inventory.findMany({ where: { storeId: filter.storeId }, orderBy: { name: 'asc' } });
-    const snapshots = await db.orderConsumptionSnapshot.findMany({ where: { storeId: filter.storeId, createdAt: { gte: effectiveStart, lte: end } } });
+    const snapshots = await correctedConsumptionSnapshots(db,{storeId:filter.storeId,createdAt:{gte:effectiveStart,lte:end}});
     const logs = await db.stockOutLog.findMany({ where: { inventory: { storeId: filter.storeId }, createdAt: { gte: effectiveStart, lte: end }, reason: { in: ['withdrawal', 'loss', 'expired', 'other', 'transfer', 'process'] } } });
     const uncovered = await db.order.count({ where: { storeId: filter.storeId, status: { in: ['completed', 'paid'] }, createdAt: { gte: effectiveStart, lte: end }, id: { notIn: snapshots.map((s: any) => s.orderId) } } });
     const materials = new Map<string, {
