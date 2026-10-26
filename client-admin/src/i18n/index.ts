@@ -115,7 +115,6 @@ const resources = {
         "narrowDates": "Sebagian catatan mungkin belum dimuat. Persempit rentang tanggal untuk mencari riwayat penyesuaian."
       },
 "media": {
-    "name": "Nama berkas", "delete": "Hapus berkas",
     "title": "Pustaka media",
     "limits": "Gambar maksimal 5MB; video dan audio 50MB; sepuluh berkas per unggahan.",
     "search": "Cari nama media",
@@ -4583,7 +4582,6 @@ const resources = {
         "narrowDates": "Some records may not be loaded. Narrow the date range to find historical adjustments."
       },
 "media": {
-    "name": "File name", "delete": "Delete file",
     "title": "Media library",
     "limits": "Images up to 5MB; video and audio up to 50MB; ten files per batch.",
     "search": "Search media names",
@@ -8988,7 +8986,6 @@ const resources = {
         "narrowDates": "当前记录可能尚未完整加载，请缩小日期范围查询历史调整。"
       },
 "media": {
-    "name": "文件名称", "delete": "删除文件",
     "title": "媒体库",
     "limits": "图片最大 5MB；视频、音频最大 50MB；每批最多十个文件。",
     "search": "搜索素材名称",
