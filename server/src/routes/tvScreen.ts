@@ -1,4 +1,5 @@
 import {legacyTvDefaults} from '../services/TvSignageService'
+import { resolveProductImageByRatio } from '../utils/mediaResolver'
 import { saveMediaConfig } from '../services/MediaService'
 import { Router } from 'express'
 import { z } from 'zod'
@@ -23,10 +24,11 @@ router.get('/config',access,run(async req=>{
  const storeId=store(req);await ensureMigrated(storeId)
  const row=await prisma.config.findUnique({where:{storeId_key:{storeId,key}}});const cfg=await legacyTvDefaults(storeId,normalizeTvConfig(row?JSON.parse(row.value):undefined))
  const display=await publicActivities(storeId),activities=await listActivities(storeId),now=new Date()
+ const mediaAssets=await prisma.mediaAsset.findMany({where:{storeId,kind:'image'},select:{id:true,name:true,url:true}})
  const lottery=activities.find(a=>a.type==='lottery'&&activityEligible(a,{now,channel:''},false))
- const dailySpecials=display.activities.filter(a=>a.type==='special_price').flatMap(a=>a.products.map(p=>({productId:p.id,dayOfWeek:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Intl.DateTimeFormat('en',{timeZone:a.timezone,weekday:'short'}).format(now)),productName:p.name,originalPrice:p.specs[0]?.price||0,specialPrice:a.rule.price||0,tag:a.name,imageUrl:a.imageUrl||p.image||'',description:a.description,posterConfig:a.posterConfig})))
- const products=cfg.idleProductsEnabled?await prisma.product.findMany({where:{storeId,status:'active',image:{not:null},...(cfg.idleProductIds.length?{id:{in:cfg.idleProductIds}}:{})},select:{id:true,name:true,image:true,specs:{select:{price:true}}},orderBy:[{name:'asc'},{id:'asc'}]}):[]
- const idleProducts=products.filter(p=>!!p.image?.trim()).map(p=>({id:p.id,name:p.name,image:p.image!,...(p.specs.length?{price:Math.min(...p.specs.map(s=>s.price))}:{})}))
+ const dailySpecials=display.activities.filter(a=>['special_price','percent','nth_cup','fixed'].includes(a.type)).flatMap(a=>a.products.map(p=>({productId:p.id,dayOfWeek:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Intl.DateTimeFormat('en',{timeZone:a.timezone,weekday:'short'}).format(now)),productName:p.name,originalPrice:p.specs[0]?.price||0,specialPrice:a.rule.price||(a.type==='fixed'?Math.max(0,(p.specs[0]?.price||0)-(a.rule.amount||4000)):Math.round((p.specs[0]?.price||0)*(a.rule.percent?(100-a.rule.percent)/100:0.8))),tag:a.name,imageUrl:(p as any).image16x9||p.image||a.imageUrl||'',description:a.description,posterConfig:a.posterConfig})))
+ const products=cfg.idleProductsEnabled?await prisma.product.findMany({where:{storeId,status:'active',...(cfg.idleProductIds.length?{id:{in:cfg.idleProductIds}}:{})},include:{specs:{select:{price:true}},images:{include:{media:true},orderBy:{position:'asc'}}},orderBy:[{name:'asc'},{id:'asc'}]}):[]
+ const idleProducts=products.map(p=>({id:p.id,name:p.name,image:resolveProductImageByRatio(p, '16:9', mediaAssets)||p.image||'',...(p.specs.length?{price:Math.min(...p.specs.map(s=>s.price))}:{})})).filter(p=>!!p.image)
  const displayToken=req.user&&['admin','manager'].includes(req.user.role)?jwt.sign({purpose:'tv-display',storeId},env.jwt.secret,{expiresIn:'30d'}):undefined
  return {...cfg,idleProducts,dailySpecials,lottery:lottery?{enabled:true,triggerMinOrderAmount:lottery.rule.minAmount||0,title:lottery.name,subtitle:lottery.description,prizes:displayPrizes(lottery.rule.prizes)}: {...cfg.lottery,enabled:false,prizes:[]},activePromotions:display.activities,activityVersion:display.version,evaluatedAt:display.evaluatedAt,...(displayToken?{displayToken}:{})}
 }))

@@ -7,7 +7,7 @@ import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
 import { recordTeamAgentReply } from './teamAgentBridge/events'
-import { assertLegacyConsumer } from './teamAgentBridge/employeeIntake'
+import { assertLegacyConsumer, employeeRouteKey } from './teamAgentBridge/employeeIntake'
 import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentDirectChannelAccess, teamAgentTaskAuthority, teamAgentOutbound } from './teamAgentBridge/identity'
 import { enqueueTeamTaskReminder } from './TeamTaskReminderService'
 
@@ -94,8 +94,23 @@ async function identity(db: DB, actor: TeamActor) {
   return employee
 }
 async function activeMembers(db: DB, storeId: string, ids: string[]) {
-  const members = await db.staff.findMany({ where: { id: { in: ids }, storeId, status: 'active' }, select: { id: true, name: true } })
-  if (members.length !== new Set(ids).size) fail(403, 'TEAM_MEMBER_UNAVAILABLE')
+  const staffIds = ids.filter(id => !id.startsWith('agent:'))
+  const agentIds = ids.filter(id => id.startsWith('agent:')).map(id => id.slice(6))
+  const members = staffIds.length > 0
+    ? await db.staff.findMany({ where: { id: { in: staffIds }, storeId, status: 'active' }, select: { id: true, name: true } })
+    : []
+  if (members.length !== new Set(staffIds).size) fail(403, 'TEAM_MEMBER_UNAVAILABLE')
+  for (const agentId of agentIds) {
+    const grantRow = await db.config.findUnique({ where: { storeId_key: { storeId, key: 'externalAgent.teamBridge.v1.grant.' + agentId } } })
+    if (!grantRow) fail(403, 'TEAM_MEMBER_UNAVAILABLE')
+    try {
+      const g = JSON.parse(grantRow.value)
+      if (g.revoked || (g.expiresAt && Date.parse(g.expiresAt) <= Date.now())) fail(403, 'TEAM_MEMBER_UNAVAILABLE')
+      members.push({ id: 'agent:' + g.agentId, name: g.displayName || 'Hermes AI' })
+    } catch {
+      fail(403, 'TEAM_MEMBER_UNAVAILABLE')
+    }
+  }
   return members
 }
 async function audit(db: DB, a: TeamActor, id: string, action: string, detail: unknown) {
@@ -144,7 +159,7 @@ async function messageRows(db: DB, storeId: string, id: string, after: number, l
     ...(until !== undefined ? { lte: prefix + pad(until) } : {}) } }, orderBy: { key: 'asc' }, take: limit }))
     .map((r: any) => JSON.parse(r.value))
 }
-export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused'; updatedAt: string }
+export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused'; updatedAt: string; detail?: string }
 /** Read-only source status. Never project a colleague's job or an audit-only history floor. */
 export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel, messages: any[]) {
   const member = c.members.find(m => m.staffId === a.staffId)
@@ -169,6 +184,49 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
     else if (j.status === 'processing') state = 'processing'
     else if (['queued', 'retry_wait'].includes(j.status)) state = paused ? 'paused' : 'queued'
     if (state) output.set(m.id, { state, updatedAt: j.updatedAt })
+  }
+
+  // Hermes team agent bridge projection:
+  const continuationKey = `team.communication.employeeContinuation.channel.${c.id}`
+  const continuationRow = await db.config.findUnique({ where: { storeId_key: { storeId: a.storeId, key: continuationKey } } })
+  if (continuationRow) {
+    try {
+      const cont = JSON.parse(continuationRow.value)
+      let activeDetail: string | undefined
+      if (cont.active?.runtimeExecutionId) {
+        const execRow = await db.config.findUnique({ where: { storeId_key: { storeId: a.storeId, key: `team.communication.employeeRuntime.execution.${cont.active.runtimeExecutionId}` } } })
+        if (execRow) {
+          try {
+            const exec = JSON.parse(execRow.value)
+            const lastTool = exec.tools?.at(-1)
+            if (exec.phase === 'tools' || (exec.phase === 'input' && lastTool)) {
+              if (lastTool?.name === 'employee_read_inventory') activeDetail = 'AI正在查询库存...'
+              else if (lastTool?.name === 'employee_send_message') activeDetail = 'AI正在生成回复...'
+              else activeDetail = 'AI正在处理中...'
+            } else if (exec.phase === 'final') {
+              activeDetail = 'AI正在整理回复...'
+            } else {
+              activeDetail = 'AI正在思考分析...'
+            }
+          } catch {}
+        }
+      }
+      for (const m of own) {
+        if (output.has(m.id)) continue
+        if (cont.active?.event?.sourceSeq === m.seq) {
+          output.set(m.id, { state: 'processing', updatedAt: cont.active.startedAt || new Date().toISOString(), detail: activeDetail || 'AI正在处理' })
+        } else if (Array.isArray(cont.queue) && cont.queue.some((q: any) => q.sourceSeq === m.seq)) {
+          output.set(m.id, { state: 'queued', updatedAt: new Date().toISOString(), detail: 'AI待处理' })
+        } else if (Number.isInteger(cont.lastConsumedSeq) && cont.lastConsumedSeq >= m.seq) {
+          const hasReply = messages.some((msg: any) => msg.channelId === c.id && msg.seq > m.seq && (msg.ai || msg.agent || String(msg.authorId).startsWith('agent:')))
+          if (hasReply) {
+            output.set(m.id, { state: 'replied', updatedAt: new Date().toISOString(), detail: 'AI回复已保存' })
+          } else if (cont.fault?.code && !cont.active) {
+            output.set(m.id, { state: 'needs_review', updatedAt: cont.fault.at || new Date().toISOString(), detail: '问题已保存，待复核' })
+          }
+        }
+      }
+    } catch {}
   }
   return output
 }
@@ -196,7 +254,16 @@ export function teamCommunication(db: DB = prisma) {
     },
     async directory(a: TeamActor) {
       await identity(db, a)
-      return db.staff.findMany({ where: { storeId: a.storeId, status: 'active' }, select: { id: true, name: true }, orderBy: { name: 'asc' }, take: 1000 })
+      const staff = await db.staff.findMany({ where: { storeId: a.storeId, status: 'active' }, select: { id: true, name: true }, orderBy: { name: 'asc' }, take: 1000 })
+      const grantRows = await db.config.findMany({ where: { storeId: a.storeId, key: { startsWith: 'externalAgent.teamBridge.v1.grant.' } } })
+      const agents = grantRows.map((r: any) => {
+        try {
+          const g = JSON.parse(r.value)
+          if (!g.revoked) return { id: 'agent:' + g.agentId, name: g.displayName || 'Hermes AI' }
+        } catch {}
+        return null
+      }).filter(Boolean) as { id: string; name: string }[]
+      return [...staff, ...agents]
     },
     async channels(a: TeamActor, administration = false) {
       await identity(db, a)
@@ -243,6 +310,76 @@ export function teamCommunication(db: DB = prisma) {
           round: v.kind === 'meeting' ? { id: randomUUID(), title: v.title, fromSeq: 1, startedAt: now, participants: ids } : null }
         await write(tx, a.storeId, channelKey(c.id), c)
         await write(tx, a.storeId, requestKey, { hash: creationHash, channel: c })
+
+        // Auto-configure agent bridge if channel includes an agent member
+        const agentMember = ids.find(id => id.startsWith('agent:'))
+        if (agentMember) {
+          const agentId = agentMember.slice(6)
+          const grantRow = await tx.config.findUnique({ where: { storeId_key: { storeId: a.storeId, key: 'externalAgent.teamBridge.v1.grant.' + agentId } } })
+          if (grantRow) {
+            const grant = JSON.parse(grantRow.value)
+            const taskId = randomUUID(), task = { taskId, version: 1 }
+            const expiresAt = grant.expiresAt || new Date(Date.now() + 365 * 86400000).toISOString()
+            const native: TeamTask = {
+              id: taskId,
+              channelId: c.id,
+              roundId: taskId,
+              minuteVersion: 1,
+              actionIndex: 0,
+              text: 'Hermes: coordinate operational questions in this conversation; report facts, blockers and evidence for manager review.',
+              ownerId: agentMember,
+              reviewerId: a.staffId,
+              dueDate: expiresAt.slice(0, 10),
+              deadlineAt: expiresAt,
+              sourceSeq: [],
+              fromSeq: 1,
+              status: 'assigned',
+              version: 1,
+              createdAt: now,
+              updatedAt: now,
+              audienceIds: ids.filter(id => !id.startsWith('agent:')),
+              evidenceRequired: 'Actual message/tool/provider receipts and explicit unresolved facts.',
+              acceptanceCriteria: 'Manager checks evidence.',
+              events: [{ action: 'service_agent_delegate', by: 'service:employee-cutover', at: now, note: 'Dedicated AI executor.', sourceSeq: [] }]
+            }
+            await write(tx, a.storeId, `task.${c.id}.${taskId}`, native)
+            await tx.config.upsert({
+              where: { storeId_key: { storeId: a.storeId, key: 'externalAgent.teamBridge.v1.channel.' + c.id } },
+              create: { storeId: a.storeId, key: 'externalAgent.teamBridge.v1.channel.' + c.id, category: 'staff', value: JSON.stringify({ agentId, task }) },
+              update: { value: JSON.stringify({ agentId, task }) }
+            })
+            const route = {
+              version: 1,
+              agentId,
+              task,
+              sourceStaffId: a.staffId,
+              fromSeq: 1,
+              enabled: true,
+              paused: false,
+              expiresAt
+            }
+            await tx.config.upsert({
+              where: { storeId_key: { storeId: a.storeId, key: employeeRouteKey(c.id) } },
+              create: { storeId: a.storeId, key: employeeRouteKey(c.id), category: 'staff', value: JSON.stringify(route) },
+              update: { value: JSON.stringify(route) }
+            })
+            let grantDirty = false
+            if (!grant.channelIds) grant.channelIds = []
+            if (!grant.channelIds.includes(c.id)) { grant.channelIds.push(c.id); grantDirty = true }
+            if (!grant.staffIds) grant.staffIds = []
+            for (const id of ids) {
+              if (!id.startsWith('agent:') && !grant.staffIds.includes(id)) {
+                grant.staffIds.push(id)
+                grantDirty = true
+              }
+            }
+            if (grantDirty) {
+              grant.version = (grant.version || 1) + 1
+              await tx.config.update({ where: { id: grantRow.id }, data: { value: JSON.stringify(grant) } })
+            }
+          }
+        }
+
         await teamAgentChannelCreated(tx, a, c)
         await audit(tx, a, c.id, 'create', { kind: c.kind, members: ids })
         return c
@@ -366,7 +503,10 @@ export function teamCommunication(db: DB = prisma) {
     },
     async receipts(a: TeamActor, id: string) {
       const { c } = await channel(db, a, id)
-      return Promise.all(c.members.map(async m => ({ staffId: m.staffId, ...(await read(db, a.storeId, `read.${id}.${m.staffId}`) || { seq: 0 }) })))
+      const routeRow = await db.config.findUnique({ where: { storeId_key: { storeId: a.storeId, key: employeeRouteKey(id) } } })
+      const route = routeRow ? JSON.parse(routeRow.value) : null
+      const agentMembers = route?.agentId ? [{ staffId: 'agent:' + route.agentId }] : []
+      return Promise.all([...c.members, ...agentMembers].map(async m => ({ staffId: m.staffId, ...(await read(db, a.storeId, `read.${id}.${m.staffId}`) || { seq: 0 }) })))
     },
     async updateMembers(a: TeamActor, id: string, input: unknown) {
       const v = z.object({ expectedVersion: z.number().int().positive(), members: z.array(staffId).min(1).max(100), ownerId: staffId, archived: z.boolean() }).strict().parse(input)

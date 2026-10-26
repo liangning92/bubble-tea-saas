@@ -1,4 +1,5 @@
 import { POSRiskSummary, DrawerLogDetails, RemovedItemDetails } from '../components/POSRiskSummary'
+import { notifyAdmin } from '../components/AdminFeedback'
 import { formatNumber } from '../utils/numberDisplay'
 import {useStoreDateSettings} from '../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod,queryInstantRange} from '../utils/queryPeriods'
@@ -263,7 +264,47 @@ export function POSMonitorPage() {
 
       {!!unposted.length && <section role="alert" className="mb-6 rounded-xl border border-red-300 bg-red-50 p-4">
         <h2 className="font-bold text-red-800">{t('posMonitor.unpostedReceipts')} · {unposted.length} · Rp {unposted.reduce((sum:number,row:any)=>sum+row.grandTotal,0).toLocaleString('id-ID', { maximumFractionDigits: 0 })}</h2>
-        <ul className="mt-2 text-sm space-y-1">{unposted.map((row:any)=><li key={row.id} className="border-b last:border-0 py-3"><OrderItemsTable items={row.items} /><span className="text-xs text-gray-500">{row.orderNumber}</span> · Rp {row.grandTotal.toLocaleString('id-ID', { maximumFractionDigits: 0 })} · {row.paymentMethod} · {row.staffName || row.staffId} · {new Date(row.occurredAt).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})}{row.cashTender && <span className="ml-2">{t('posMonitor.receivedCash')}: Rp {row.cashTender.receivedCash.toLocaleString('id-ID', { maximumFractionDigits: 0 })} · {t('posMonitor.changeGiven')}: Rp {row.cashTender.changeGiven.toLocaleString('id-ID', { maximumFractionDigits: 0 })}</span>}{row.failureReason && <span className="ml-2 text-red-700">{t('posMonitor.'+(RECEIPT_REASON_KEYS[String(row.failureReason).split(':')[0]] || 'receiptNeedsReview'))}</span>}</li>)}</ul>
+        <ul className="mt-2 text-sm space-y-3">{unposted.map((row:any)=><li key={row.id} className="border-b last:border-0 py-3 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex-1 min-w-[280px]">
+            <OrderItemsTable items={row.items} />
+            <div className="mt-1">
+              <span className="text-xs font-mono font-bold text-gray-700">{row.orderNumber}</span> · Rp {row.grandTotal.toLocaleString('id-ID', { maximumFractionDigits: 0 })} · {row.paymentMethod} · {row.staffName || row.staffId} · {new Date(row.occurredAt).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})}
+              {row.cashTender && <span className="ml-2 text-gray-600">{t('posMonitor.receivedCash')}: Rp {row.cashTender.receivedCash.toLocaleString('id-ID', { maximumFractionDigits: 0 })} · {t('posMonitor.changeGiven')}: Rp {row.cashTender.changeGiven.toLocaleString('id-ID', { maximumFractionDigits: 0 })}</span>}
+              {row.failureReason && <span className="ml-2 font-medium text-red-700">{t('posMonitor.'+(RECEIPT_REASON_KEYS[String(row.failureReason).split(':')[0]] || 'receiptNeedsReview'))}</span>}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={async () => {
+                try {
+                  await orderApi.postReceivedReceipt(row.id)
+                  notifyAdmin(t('posMonitor.receiptPostedSuccess', '凭据已成功核实入账'))
+                  refreshAll()
+                } catch (e: any) {
+                  notifyAdmin(e.response?.data?.message || t('posMonitor.receiptPostFailed', '核实入账失败'))
+                }
+              }}
+              className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+            >
+              {t('posMonitor.verifyAndPost', '核实入账')}
+            </button>
+            <button
+              onClick={async () => {
+                if (!window.confirm(t('posMonitor.confirmDiscardReceipt', '确定要将该凭据作废忽略吗？'))) return
+                try {
+                  await orderApi.discardReceivedReceipt(row.id)
+                  notifyAdmin(t('posMonitor.receiptDiscardedSuccess', '凭据已作废'))
+                  refreshAll()
+                } catch (e: any) {
+                  notifyAdmin(e.response?.data?.message || t('posMonitor.receiptDiscardFailed', '作废失败'))
+                }
+              }}
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              {t('posMonitor.discardReceipt', '作废/忽略')}
+            </button>
+          </div>
+        </li>)}</ul>
       </section>}
       {/* Stats Row */}
       <p className="mb-4 text-sm text-gray-600">{t('posMonitor.behaviorPurpose')}</p>

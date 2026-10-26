@@ -16,7 +16,8 @@ export interface EmployeeRuntimeTicket {
   protocol: typeof EMPLOYEE_RUNTIME_PROTOCOL; executionId: string; requestId: string; traceVersion: number;
   compartmentKey: string; audienceHash: string; inputContextHash: string; toolSchemaHash: string;
   sealedUserContent: string; instruction: string; isolation: EmployeeRuntimeIsolation;
-  model: 'MiniMax-M3.1-Flash'; tools: { type: 'function'; function: { name: string; description: string; parameters: unknown } }[]
+  model: 'MiniMax-M3.1-Flash'; tools: { type: 'function'; function: { name: string; description: string; parameters: unknown } }[];
+  isAdmin?: boolean
 }
 /** Real complete SDK wire, not ticket.providerRequest. Host validates the approved
  * isolated launcher/system assembly, first user bytes, tool schema and every later

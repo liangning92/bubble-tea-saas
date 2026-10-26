@@ -22,13 +22,17 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
   }
   const uuid=z.string().uuid()
   router.post('/rpc',async(req,res)=>{
+    let v:any
     try{
-      const a=await access(req,'callback'),v=z.object({executionId:uuid,method:z.enum(['recordInput','recordResponse','executeTool','recordOutput','markUnknown']),params:z.record(z.unknown())}).strict().parse(req.body)
+      const a=await access(req,'callback'); v=z.object({executionId:uuid,method:z.enum(['recordInput','recordResponse','executeTool','recordOutput','markUnknown']),params:z.record(z.unknown())}).strict().parse(req.body)
       if(v.executionId!==a.executionId||v.params.executionId!==a.executionId)throw Error('EMPLOYEE_INGRESS_UNAUTHORIZED')
       const host=a.runtime.host
       const result=v.method==='markUnknown' ? await host.markUnknown(a.executionId,z.number().int().positive().parse(v.params.expectedTraceVersion),z.string().regex(/^[A-Z0-9_]{1,100}$/).parse(v.params.code)) : await host[v.method](v.params as any)
       res.json({result:result??null})
-    }catch{res.status(403).json({error:'EMPLOYEE_RUNTIME_RPC_DENIED'})}
+    }catch(error:any){
+      console.error('[EmployeeRuntimeHttp] RPC error in', v?.method, error?.message || error, error?.stack)
+      res.status(403).json({error:'EMPLOYEE_RUNTIME_RPC_DENIED'})
+    }
   })
   router.post('/v1/chat/completions',async(req,res)=>{
     let admission:Awaited<ReturnType<Runtime['provider']['claim']>>|undefined,runtime:Runtime|undefined
@@ -45,6 +49,9 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
         const live=await access(req,'provider');if(live.executionId!==a.executionId)throw Error('EMPLOYEE_INGRESS_UNAUTHORIZED')
         await runtime!.provider.assertFresh(admission!.executionId,admission!.turn,admission!.inputHash,request)
       },Math.min(admission.deadlineAt,Date.parse(a.expiresAt)))
+      if (!raw?.choices?.[0]?.message) {
+        console.error('[EmployeeRuntimeHttp] Invalid MiniMax response:', JSON.stringify(raw))
+      }
       await runtime.provider.settle(a.executionId,admission.turn,admission.inputHash,{state:'response',value:raw})
       if(p.stream===true){
         const choice=raw?.choices?.[0],message=choice?.message
@@ -54,7 +61,8 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
         res.setHeader('Content-Type','text/event-stream')
         res.end('data: '+JSON.stringify({...base,choices:[{index:0,delta:{role:'assistant',content:message.content??null,...(calls?{tool_calls:calls}:{})},finish_reason:null}]})+'\n\ndata: '+JSON.stringify({...base,choices:[{index:0,delta:{},finish_reason:choice.finish_reason}]})+'\n\ndata: [DONE]\n\n')
       }else res.json(raw)
-    }catch{
+    }catch(err:any){
+      console.error('[EmployeeRuntimeHttp] completions error:', err?.message || err, err?.stack)
       if(admission&&runtime)try{await runtime.provider.settle(admission.executionId,admission.turn,admission.inputHash,{state:'unknown'})}catch{/* A known saved receipt is never overwritten by a late failure. */}
       if(!res.headersSent)res.status(409).json({error:'EMPLOYEE_PROVIDER_UNCONFIRMED_NO_RETRY'})
     }

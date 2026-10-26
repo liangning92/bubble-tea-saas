@@ -285,11 +285,25 @@ export async function assetManifest(url: string, kind: string) {
     sha256: known.digest,
   };
 }
+import { resolveProductImageByRatio, deriveTargetAspectRatio } from "../utils/mediaResolver";
+export function resolveTvProductImage(
+  p: any,
+  orientation: "landscape" | "portrait" | "16:9" | "9:16" | "1:1" = "landscape",
+  mediaAssets?: any[],
+): string | null {
+  const targetRatio: "16:9" | "9:16" | "1:1" =
+    orientation === "portrait" || orientation === "9:16"
+      ? "9:16"
+      : orientation === "1:1"
+        ? "1:1"
+        : "16:9";
+  return resolveProductImageByRatio(p, targetRatio, mediaAssets);
+}
 export async function signageSnapshot(screen: any, db = prisma) {
   const storeId = screen.storeId,
     now = new Date(),
     settings = screenSettings.parse(JSON.parse(screen.config));
-  const [store, defaultsRow, oldRow, brandRow, channels, allActivities] =
+  const [store, defaultsRow, oldRow, brandRow, channels, allActivities, allMediaAssets] =
     await Promise.all([
       db.store.findUnique({ where: { id: storeId } }),
       db.config.findUnique({
@@ -305,6 +319,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
         rows.filter((c) => c.status === "active"),
       ),
       listActivities(storeId),
+      db.mediaAsset.findMany({ where: { storeId, kind: "image" } }),
     ]);
   if (!store) throw Error("TV_STORE_NOT_FOUND");
   let effective = settings;
@@ -351,7 +366,12 @@ export async function signageSnapshot(screen: any, db = prisma) {
         ? { id: { in: effective.selectedProductIds } }
         : {}),
     },
-    include: { specs: true, category: true, channelPrices: true },
+    include: {
+      specs: true,
+      category: true,
+      channelPrices: true,
+      images: { include: { media: true }, orderBy: { position: "asc" } },
+    },
     orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
   });
   const errors: string[] = [],
@@ -373,7 +393,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
         id: p.id,
         name: p.name,
         description: p.description,
-        image: p.image,
+        image: resolveTvProductImage(p, effective.orientation, allMediaAssets),
         categoryId: p.categoryId,
         category: p.category.name,
         specs,
@@ -408,7 +428,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
   }
   const display = await publicActivities(storeId, channel.code);
   const promotions = display.activities.filter((a) =>
-    activityEligible(
+    a.posterConfig || activityEligible(
       allActivities.find((x) => x.id === a.id)!,
       { now, channel: channel.code },
       false,
@@ -418,30 +438,41 @@ export async function signageSnapshot(screen: any, db = prisma) {
   // product menu so the board can replace the menu while the offer is live.
   const specialRows = await db.product.findMany({
     where: { storeId, status: "active", deletedAt: null },
-    include: { specs: true },
+    include: {
+      specs: true,
+      images: { include: { media: true }, orderBy: { position: "asc" } },
+    },
   });
-  const specialProducts = (activity: Activity) =>
-    activity.productIds
+  const specialProducts = (activity: Activity) => {
+    const targetRatio = deriveTargetAspectRatio(
+      activity.posterConfig as any,
+      effective.orientation,
+    );
+    return activity.productIds
       .map((id) => specialRows.find((p) => p.id === id))
       .filter((p) => !!p)
       .map((p) => {
         const prices = p.specs.map((s) => s.price);
         const originalPrice = prices.length ? Math.min(...prices) : 0;
-        const specialPrice = activity.rule.price ?? 0;
+        const specialPrice = activity.type === "fixed"
+          ? Math.max(0, originalPrice - (activity.rule.amount || 4000))
+          : (activity.rule.price ?? (activity.rule.percent ? Math.round(originalPrice * (100 - activity.rule.percent) / 100) : 0));
+        const img = resolveProductImageByRatio(p, targetRatio, allMediaAssets);
         return {
           id: p.id,
           name: p.name,
-          image: p.image,
+          image: img,
           originalPrice,
           specialPrice,
           saving: Math.max(0, originalPrice - specialPrice),
         };
       })
       .filter((p) => p.originalPrice > 0);
+  };
   const specials = allActivities
     .filter(
       (a) =>
-        a.type === "special_price" &&
+        ["special_price", "percent", "nth_cup", "fixed"].includes(a.type) &&
         a.showOnTv &&
         a.status === "published" &&
         (!a.startsAt || now.getTime() >= Date.parse(a.startsAt)) &&
@@ -479,6 +510,14 @@ export async function signageSnapshot(screen: any, db = prisma) {
     });
   const hardware = brandRow ? JSON.parse(brandRow.value) : {},
     assets: any[] = [];
+  const specialImages = specials.flatMap((s) => [
+    ...s.products
+      .filter((p: any) => p.image)
+      .map((p: any) => ({ url: p.image!, kind: "image" })),
+    ...((s.posterConfig?.cardItems || []) as any[])
+      .filter((c: any) => c.imageUrl)
+      .map((c: any) => ({ url: c.imageUrl!, kind: "image" })),
+  ]);
   for (const [url, kind] of [
     ...slides,
     ...music,
@@ -488,6 +527,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
     ...promotions
       .filter((p) => p.imageUrl)
       .map((p) => ({ url: p.imageUrl!, kind: "image" })),
+    ...specialImages,
   ].map((m) => [m.url, m.kind])) {
     try {
       const asset = await assetManifest(url, kind);
@@ -505,6 +545,11 @@ export async function signageSnapshot(screen: any, db = prisma) {
   for (const p of menu) if (p.image) p.image = canonical(p.image);
   for (const p of promotions)
     if (p.imageUrl) p.imageUrl = canonical(p.imageUrl);
+  for (const s of specials) {
+    for (const p of s.products) {
+      if (p.image) p.image = canonical(p.image);
+    }
+  }
   const logo = hardware.storeLogo || "";
   if (logo) {
     try {

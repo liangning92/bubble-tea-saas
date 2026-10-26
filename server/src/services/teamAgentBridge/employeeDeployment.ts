@@ -26,7 +26,7 @@ export function createEmployeeDeployment(db:any,config:EmployeeDeploymentConfig)
   }
   // The gateway serves one execution for at most 120 seconds; give the execution the
   // same bounded window so a full multi-turn conversation is not cut off mid-flight.
-  const runtime=createEmployeeRuntime(db,{enabled:true,storeId:config.storeId,resolveGrant,approvedSystemHashes:[],reviewedSystemTemplate:config.reviewedSystemTemplate,maxExecutionMs:100000,
+  const runtime=createEmployeeRuntime(db,{enabled:true,storeId:config.storeId,resolveGrant,approvedSystemHashes:[],reviewedSystemTemplate:config.reviewedSystemTemplate,maxExecutionMs:240000,
     tasks:{assert:async(tx,g,task,channelId)=>{
       const row=await tx.config.findUnique({where:{storeId_key:{storeId:g.storeId,key:employeeRouteKey(channelId!)}}})
       const route=employeeRouteSchema.parse(row&&JSON.parse(row.value))

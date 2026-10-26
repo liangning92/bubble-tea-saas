@@ -33,9 +33,10 @@ export function createTeamAgentBridge(db: any, deps: BridgeDependencies) {
       if(authorized.delegatedDirect&&!['messages.read','messages.send'].includes(action))denied()
       if(authorized.delegatedDirect&&action==='messages.send'){
         const sourcePrefix='team.communication.message.'+channelId+'.'
-        const rows=await database.config.findMany({where:{storeId:g.storeId,key:{startsWith:sourcePrefix,gte:sourcePrefix+String(authorized.fromSeq).padStart(12,'0')},value:{contains:'"authorId":'+JSON.stringify(authorized.sourceStaffId)}},orderBy:{key:'desc'},take:1,select:{value:true}})
-        const source=rows[0]&&JSON.parse(rows[0].value)
-        if(!source||source.authorId!==authorized.sourceStaffId||source.channelId!==channelId||source.seq<authorized.fromSeq||source.seq>authorized.channel.lastSeq||source.ai||source.agent||typeof source.text!=='string'||!source.text.trim())denied()
+        const allowedStaffIds = [authorized.sourceStaffId, ...authorized.channel.members.map((m: any) => m.staffId)]
+        const rows=await database.config.findMany({where:{storeId:g.storeId,key:{startsWith:sourcePrefix,gte:sourcePrefix+String(authorized.fromSeq).padStart(12,'0')}},orderBy:{key:'desc'},take:5,select:{value:true}})
+        const validSource = rows.map((r: any) => { try { return JSON.parse(r.value) } catch { return null } }).find((s: any) => s && allowedStaffIds.includes(s.authorId) && !s.ai && !s.agent && typeof s.text === 'string' && s.text.trim())
+        if(!validSource||validSource.channelId!==channelId||validSource.seq<authorized.fromSeq||validSource.seq>authorized.channel.lastSeq)denied()
       }
       if (task) await communicationScope(database,deps,fresh,task,authorized.channel)
       return authorized
