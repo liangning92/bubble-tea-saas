@@ -12,7 +12,6 @@ import { useAuthStore } from "../../stores/auth";
 import { inventoryApi, configApi, processRecipeApi } from "../../services/api";
 import {
   formatCurrency,
-  formatStockDisplay,
   formatItemName,
 } from "../../utils/helpers";
 import {
@@ -477,7 +476,7 @@ export function InventoryPage() {
             {alerts.slice(0, 10).map((item: any) => (
               <span key={item.id} className="badge badge-error">
                 {formatItemName(item, i18n.language)}:{" "}
-                {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}{item.calibrationRequired&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
+                {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):consumptionQuantity(item.currentStock,i18n.language,3)+' '+item.unit}{item.calibrationRequired&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
               </span>
             ))}
             {alerts.length > 10 && (
@@ -588,7 +587,7 @@ export function InventoryPage() {
                         <span
                           className={`font-bold ${isLow && !item.calibrationRequired ? "text-red-600" : "text-gray-900"}`}
                         >
-                          {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):formatStockDisplay(item.currentStock, item.unit)}{item.calibrationRequired&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
+                          {item.type==='semi_finished'&&item.processRecipeId?t('inventoryProcessing.virtual'):consumptionQuantity(item.currentStock,i18n.language,3)}{item.calibrationRequired&&<p className="text-xs text-amber-700 mt-1">{t('inventoryUnified.calibrate')}</p>}
                         </span>
                       </td>
                       <td
@@ -607,14 +606,7 @@ export function InventoryPage() {
                         data-label={t("inventory.safetyStock")}
                         className="py-3 px-2 text-right text-gray-500"
                       >
-                        {Number(
-                          (
-                            item.effectiveSafetyStock ??
-                            item.safetyStock ??
-                            0
-                          ).toFixed(0),
-                        )}{" "}
-                        {item.unit}
+                        {consumptionQuantity(item.effectiveSafetyStock ?? item.safetyStock ?? 0,i18n.language,3)}
                       </td>
                       <td
                         data-label={t("common.actions")}
