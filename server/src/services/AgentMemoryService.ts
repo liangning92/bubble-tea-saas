@@ -66,7 +66,7 @@ async function writeMemory(db:any,storeId:string,memory:AgentMemory){
 }
 /** Learn from actual receipts, not a model's assertion of success. No raw business payload is copied into the store-wide experience index. */
 export async function recordAgentExperience(db:any,g:BridgeGrant,scope:CommunicationScope,name:string,args:any,value:any) {
- if(value===undefined||value===null||!await enabled(db,g,true)||name.includes('memory')||name==='employee_send_message'||name.startsWith('employee_read_'))return
+ if(value===undefined||value===null||!await enabled(db,g,true)||name.includes('memory')||name==='employee_remember_rule'||name==='employee_send_message'||name.startsWith('employee_read_'))return
  const action=typeof args?.action==='string'?args.action:'execute',outcome=value?.ok===false||value?.success===false?'blocked':'succeeded'
  const code=typeof value?.code==='string'&&/^[A-Z0-9_]{1,100}$/.test(value.code)?value.code:undefined
  const id=hash([name,action,outcome,code]),key=experiencePrefix(g.agentId)+id

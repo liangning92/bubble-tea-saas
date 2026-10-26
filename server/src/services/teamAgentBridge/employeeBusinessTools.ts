@@ -49,9 +49,11 @@ export async function executeBusinessTool(db:any,g:BridgeGrant,scope:Communicati
     }else deny('EMPLOYEE_BUSINESS_ACTION_INVALID')
     result={ok:true,inventoryId:result.id,currentStock:result.currentStock,unit:result.unit,operationId}
   }else if(name==='employee_manage_hygiene'){
+    if(v.action==='list_areas'&&!await audienceAllows(db,g,scope,'hygiene.read'))return {ok:false,code:'EMPLOYEE_HYGIENE_NOT_VISIBLE'}
     if(v.action==='list_areas')result=await db.hygieneArea.findMany({where:{storeId},select:{code:true,name:true},orderBy:{code:'asc'},take:100})
     else if(v.action==='list_tasks'){
       const all=await audienceAllows(db,g,scope,'hygiene.read')
+      if(!all&&!await audienceAllows(db,g,scope,'personal.tasks'))return {ok:false,code:'EMPLOYEE_HYGIENE_NOT_VISIBLE'}
       result=await db.hygieneTask.findMany({where:{storeId,...(v.date?{date:v.date}:{}),...(all?(v.staffId?{staffId:v.staffId}:{}):{staffId:scope.requesterStaffId||'__none__'})},select:{id:true,name:true,staffId:true,areaCode:true,date:true,time:true,status:true,priority:true,dueTime:true,completedAt:true,photoUrl:true},orderBy:{createdAt:'desc'},take:50})
     }else if(v.action==='create_task'){
       if(!v.name||!v.areaCode||!v.date||!v.staffId)return {ok:false,code:'EMPLOYEE_HYGIENE_DETAILS_REQUIRED',message:'Ask for the required missing details before performing this operation.'}
@@ -66,6 +68,7 @@ export async function executeBusinessTool(db:any,g:BridgeGrant,scope:Communicati
       result={ok:true,taskId:v.taskId,staffId:v.staffId}
     }else deny('EMPLOYEE_BUSINESS_ACTION_INVALID')
   }else if(name==='employee_manage_staff'){
+    if(v.action==='list_staff'&&!await audienceAllows(db,g,scope,'staff.read'))return {ok:false,code:'EMPLOYEE_STAFF_NOT_VISIBLE'}
     if(v.action==='list_staff')result=await db.staff.findMany({where:{storeId,status:'active'},select:{id:true,name:true,employeeNumber:true,position:true},orderBy:{name:'asc'},take:100})
     else if(v.action==='set_schedule'){
       if(!v.staffId||!v.date||!v.shift)return {ok:false,code:'EMPLOYEE_SCHEDULE_DETAILS_REQUIRED',message:'Ask for the required missing details before performing this operation.'}
@@ -79,5 +82,7 @@ export async function executeBusinessTool(db:any,g:BridgeGrant,scope:Communicati
     }else deny('EMPLOYEE_BUSINESS_ACTION_INVALID')
   }else deny('EMPLOYEE_BUSINESS_TOOL_INVALID')
   await db.financeAuditLog.create({data:{storeId,userId:actor,action:'update',entityType:'hermes_business_operation',entityId:operationId,description:name+':'+v.action,newValue:JSON.stringify({agentId:g.agentId,requesterStaffId:scope.requesterStaffId,action:v.action,operationId})}})
+  const visiblePermission=name==='employee_manage_inventory'?'inventory.read':name==='employee_manage_staff'?'staff.read':'hygiene.read'
+  if(!(name==='employee_manage_hygiene'&&v.action==='list_tasks')&&!await audienceAllows(db,g,scope,visiblePermission))return {ok:true,operationRecorded:true,message:'The authorized operation was recorded. Business details are not visible to this audience.'}
   return visibleBusinessData(db,g,scope,result)
 }
