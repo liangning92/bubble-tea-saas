@@ -97,3 +97,19 @@ test('audited historical theory correction is counted once, preserves original s
  await expect(prisma.$transaction(tx=>appendConsumptionCorrection(tx,'foreign',source.id,delta,'Foreign','synthetic-batch'))).rejects.toThrow('CONSUMPTION_SOURCE_NOT_FOUND')
  await prisma.$transaction(tx=>reverseOrderConsumption(tx,order.id));snapshots=await correctedConsumptionSnapshots(prisma,{storeId:f.store.id});expect(snapshots[0].reversedAt).not.toBeNull();expect(JSON.parse(snapshots[0].materials)[0].quantity).toBe(3);expect(await f.balance()).toBe(1000)
 })
+
+
+test('expiry alerts ignore historical nanounit FIFO residue but retain real expired stock',async()=>{
+ const {calculateInventoryAlerts}=await import('../src/services/InventoryAlertCenterService')
+ const f=await fixture('g');await prisma.inventory.update({where:{id:f.material.id},data:{shelfLife:30}})
+ const now=new Date(),past=new Date(now.getTime()-86400000),future=new Date(now.getTime()+365*86400000)
+ const batch=(batchNumber:string,quantity:number,expiryDate:Date|null)=>prisma.batch.create({data:{inventoryId:f.material.id,batchNumber,quantity,unitCost:100,expiryDate}})
+ await batch('known-future',1000-0.01-4.4e-9,future)
+ const missing=await batch('floating-missing',1.4e-9,null),expired=await batch('floating-expired',3e-9,past),real=await batch('real-expired',0.01,past)
+ const rows=(await calculateInventoryAlerts(f.store.id,now)).filter(a=>a.type==='expiry_missing'||a.type==='expiry_batch')
+ expect(rows.some(a=>a.resourceId===missing.id||a.resourceId===expired.id)).toBe(false)
+ expect(rows.some(a=>a.type==='expiry_missing'&&a.detail.inventoryId===f.material.id)).toBe(false)
+ expect(rows.some(a=>a.type==='expiry_batch'&&a.resourceId===real.id)).toBe(true)
+ expect(await f.balance()).toBe(1000)
+ expect((await prisma.batch.findUniqueOrThrow({where:{id:missing.id}})).quantity).toBe(1.4e-9)
+})

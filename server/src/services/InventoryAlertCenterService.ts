@@ -28,6 +28,8 @@ export interface InventoryAlertEvent {
 type Candidate = Pick<InventoryAlertEvent, 'type' | 'resourceId' | 'severity' | 'detail'>;
 const keyFor = (type: string, resource: string) => 'inventoryAlert:' + createHash('sha256').update(type + ':' + resource).digest('hex');
 const rank = { info: 0, warning: 1, critical: 2 };
+// Historical FIFO arithmetic can leave nanounit residues; these are not actionable batches.
+const ALERT_QUANTITY_EPSILON = 1e-8;
 export async function calculateInventoryAlerts(storeId: string, now = new Date()): Promise<Candidate[]> {
     const {startOfDay,addDays,endOfDay,formatDate}=await inventoryBusinessCalendar(storeId);
     await refreshStoreConsumptionDays(storeId,now);
@@ -74,7 +76,7 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
         if (settings.enableDataAlert && inventoryUsageMode(material)==='tracked' && row.noUsageHistory && row.currentStock > 0)
             add('data_incomplete', row.inventoryId + ':history', 'info', { ...detail, reason: 'no_history' });
         if (settings.enableExpiryAlert) {
-            const batches = availableBatches(material.batches, material.currentStock).filter(b => b.quantity > 0);
+            const batches = availableBatches(material.batches, material.currentStock).filter(b => b.quantity > ALERT_QUANTITY_EPSILON);
             for (const batch of batches) {
                 const batchDetail = { ...detail, batchId: batch.id, batchNumber: batch.batchNumber, quantity: batch.quantity, expiryDate: batch.expiryDate?.toISOString() || null };
                 if (batch.expiryDate && batch.expiryDate <= endOfDay(addDays(now, settings.expiryWarningDays)))
@@ -83,7 +85,7 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
                     add('expiry_missing', batch.id, 'info', batchDetail);
             }
             const untracked = Math.max(0, material.currentStock - batches.reduce((sum, b) => sum + b.quantity, 0));
-            if (material.shelfLife > 0 && untracked > 1e-9)
+            if (material.shelfLife > 0 && untracked > ALERT_QUANTITY_EPSILON)
                 add('expiry_missing', row.inventoryId, 'info', { ...detail, quantity: untracked, batchId: null, expiryDate: null });
         }
     }
