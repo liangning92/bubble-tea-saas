@@ -5,6 +5,7 @@ Construct Gateway explicitly with private deployment config; importing starts no
 """
 from __future__ import annotations
 import hashlib
+from contextlib import suppress
 import fcntl
 import hmac
 import http.client
@@ -39,13 +40,15 @@ def private_url(value):
 class Gateway:
     def __init__(self, *, journal, bearer, backend_rpc_url, python=None, repository=None,
                  hermes_source=None, hermes_sha=None, isolated_root=None, provider_base_url=None,
-                 command_factory=None, max_seconds=120):
+                 command_factory=None, max_seconds=86400):
         if not bearer or len(bearer) < 32:
             raise ValueError("GATEWAY_BEARER_REQUIRED")
         self.bearer, self.rpc_url = bearer, private_url(backend_rpc_url)
         self.root, self.provider = isolated_root, provider_base_url
-        self.max_seconds = min(max_seconds, 120)
+        self.max_seconds = min(max_seconds, 86400)
         self.lock, self.capacity = threading.Lock(), threading.BoundedSemaphore(4)
+        self.stopping = threading.Event()
+        self.children = {}
         # One live gateway owns a journal. A second process cannot relabel a
         # still-running child's admission as interrupted and start competing work.
         self.journal_lock = os.open(str(journal)+'.lock', os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW, 0o600)
@@ -89,6 +92,7 @@ class Gateway:
         return {"executionId": execution, "state": row[0], **({"code": row[1]} if row[1] else {})}
 
     def admit(self, envelope):
+        if self.stopping.is_set(): raise ValueError("GATEWAY_STOPPING")
         if set(envelope) != {"ticket", "deadlineAt", "callbackCredential", "providerCredential"}:
             raise ValueError("INVALID_ENVELOPE")
         ticket = envelope["ticket"]
@@ -164,6 +168,10 @@ class Gateway:
             child = subprocess.Popen(self.command_factory(envelope), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                 text=True, encoding="utf-8", env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"}, start_new_session=True,
                 cwd=self.root)
+            with self.lock:
+                self.children[execution] = child
+            if self.stopping.is_set():
+                raise ValueError("GATEWAY_STOPPING")
             config = {"isolatedRoot": self.root, "homePath": str(Path(self.root)/"homes"/hashlib.sha256(execution.encode()).hexdigest()), "hermesSource": self.hermes_source,
                 "hermesExpectedSha": self.hermes_sha, "providerBaseUrl": self.provider, "providerCredential": envelope["providerCredential"]}
             child.stdin.write(json.dumps({"ticket": ticket, "config": config})+"\n"); child.stdin.flush()
@@ -212,20 +220,41 @@ class Gateway:
             # No raw exception/URL/provider prose is logged or persisted.
             pass
         finally:
-            if child and child.poll() is None:
+            try:
+                if child and child.poll() is None:
+                    # The child may exit between poll and signal delivery.
+                    with suppress(ProcessLookupError):
+                        os.killpg(child.pid, signal.SIGTERM)
+                    try: child.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        with suppress(ProcessLookupError):
+                            os.killpg(child.pid, signal.SIGKILL)
+                        child.wait()
+            finally:
+                # Buffered stdin.close() may flush a reply to a pipe already closed
+                # by the failed child. Cleanup must still persist uncertainty and
+                # return the slot; otherwise four failures stop all later work.
+                if child:
+                    for pipe in (child.stdin, child.stdout):
+                        with suppress(OSError, ValueError):
+                            pipe.close()
+                if state == "unknown":
+                    try: self._rpc(envelope, "markUnknown", {"executionId": execution, "expectedTraceVersion": version, "code": code}, max(until, time.time()+1))
+                    except BaseException: pass
+                with self.lock:
+                    try:
+                        self.db.execute("UPDATE admission SET state=?,code=? WHERE id=? AND state='running'", (state, code, execution))
+                    finally:
+                        self.capacity.release()
+                        self.children.pop(execution, None)
+
+    def interrupt(self):
+        self.stopping.set()
+        with self.lock:
+            children = list(self.children.values())
+        for child in children:
+            with suppress(ProcessLookupError):
                 os.killpg(child.pid, signal.SIGTERM)
-                try: child.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    os.killpg(child.pid, signal.SIGKILL); child.wait()
-            if child:
-                child.stdin.close()
-                child.stdout.close()
-            if state == "unknown":
-                try: self._rpc(envelope, "markUnknown", {"executionId": execution, "expectedTraceVersion": version, "code": code}, max(until, time.time()+1))
-                except BaseException: pass
-            with self.lock:
-                self.db.execute("UPDATE admission SET state=?,code=? WHERE id=? AND state='running'", (state, code, execution))
-            self.capacity.release()
 
     def server(self, host="127.0.0.1", port=0):
         if not ipaddress.ip_address(host).is_loopback:
@@ -249,6 +278,7 @@ class Gateway:
                 except BaseException:
                     return self.respond(409, {"error": "ADMISSION_REJECTED"})
             def do_GET(self):
+                if self.path == "/health": return self.respond(200, {"status": "ok", "protocol": "employee_work_trace_v1"})
                 if not self.allowed(): return self.respond(401, {"error": "UNAUTHORIZED"})
                 try:
                     if not self.path.startswith("/employee-runs/"): raise KeyError()

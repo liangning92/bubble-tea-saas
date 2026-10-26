@@ -41,7 +41,7 @@ async function main(){
  });
  await check('concurrent input admits only one HTTP reservation; restart preserves unknown without resend',async()=>{
   const t=await begin(),p=wire(t),results=await Promise.allSettled([input(make(),t,p),input(make(),t,p)]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
-  await make().recover(t.executionId);assert.equal((await make().inspect(t.executionId)).phase,'unknown');await assert.rejects(()=>input(make(),t,p,3));await assert.rejects(begin);
+  await make().recover(t.executionId);assert.equal((await make().inspect(t.executionId)).phase,'unknown');await assert.rejects(()=>input(make(),t,p,3));const separate=await begin();assert.notEqual(separate.executionId,t.executionId);await make().recover(separate.executionId);
   // No recovery shortcut: fixture removes the compartment pointer solely to test independent executions.
   await writeTeam(db,storeId,'employeeRuntime.context.'+scope.compartmentKey,{executionId: t.executionId});
  });
@@ -100,15 +100,45 @@ async function main(){
   assert.equal((await runtime.inspect(t.executionId)).phase,'unknown');const saved=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(saved.responses.length,2);assert.equal(saved.responses[1].providerRequestId,'synthetic-provider-2');assert.equal(saved.tools.length,1);assert.equal((await readTeam(db,storeId,'channel.'+channel.id)).lastSeq,before.lastSeq+1);
   await assert.rejects(()=>input(runtime,t,p,blocked.traceVersion,3));
  });
- await check('restricted employee questions are redacted without obtaining financial or private records',async()=>{
+ await check('free-form questions remain intact without granting financial tools',async()=>{
   task.version++;const question=await teamCommunication(db).send(staff,channel.id,{requestId:randomUUID(),text:'今天营业额多少？'});
   const s={kind:'conversation',channelId:channel.id,messageId:question.id,seq:question.seq};scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));
-  const t=await make().host.begin(grant,scope,[s]);assert(!t.sealedUserContent.includes(question.text));assert(t.sealedUserContent.includes('Restricted-data request'));assert(!t.tools.some(x=>/finance|revenue|salary|staff_create|leave_submit/.test(x.function.name)));await make().recover(t.executionId);
+  const t=await make().host.begin(grant,scope,[s]);assert(t.sealedUserContent.includes(question.text));assert(!t.sealedUserContent.includes('Restricted-data request'));assert(!t.tools.some(x=>/finance|revenue|salary|staff_create|leave_submit/.test(x.function.name)));await make().recover(t.executionId);
+ });
+ await check('denied business write is a tool receipt and the model can still answer allowed parts',async()=>{
+  const original=[...grant.actions];grant.actions.push('marketing.read');
+  const settings=built('AgentSettingsService').defaultAgentSettings();settings.enabled=true;settings.permissions.marketing={read:true,write:false};await writeTeam(db,storeId,'ai.agent.settings',settings);
+  try{
+   const t=await next(),runtime=make(),p=wire(t);assert(t.tools.some(x=>x.function.name==='employee_manage_marketing'));
+   let v=(await input(runtime,t,p)).traceVersion;const call={id:'denied-marketing-write',type:'function',function:{name:'employee_manage_marketing',arguments:JSON.stringify({action:'create_campaign',name:'Must not be created'})}},assistant={role:'assistant',content:null,tool_calls:[call]};
+   v=(await response(runtime,t,v,assistant)).traceVersion;const result=await runtime.host.executeTool({executionId:t.executionId,expectedTraceVersion:v,turn:1,callOrdinal:0,toolCallId:call.id,name:call.function.name,args:JSON.parse(call.function.arguments)});v=result.traceVersion;
+   assert.equal(result.value.ok,false);assert.equal((await runtime.inspect(t.executionId)).phase,'input');assert.equal(await db.campaign.count({where:{storeId,name:'Must not be created'}}),0);
+   p.messages.push({...assistant,content:''},{role:'tool',content:JSON.stringify(result.value),tool_call_id:call.id});v=(await input(runtime,t,p,v,2)).traceVersion;
+   const final={role:'assistant',content:'I can explain the promotion options. Creating a campaign requires the store operator to enable that action.'};v=(await response(runtime,t,v,final,2)).traceVersion;
+   await runtime.host.recordOutput({executionId:t.executionId,expectedTraceVersion:v,providerRequestId:'synthetic-provider-2',providerMessage:final});assert.equal((await runtime.inspect(t.executionId)).phase,'complete');
+   const saved=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId),send=saved.tools.find(x=>x.name==='employee_send_message');assert(send);const actual=await readTeam(db,storeId,'message.'+channel.id+'.'+String(send.value.seq).padStart(12,'0'));assert.equal(actual.text,final.content);
+   const exchange=await built('teamAgentBridge/employeeRuntimeSources').readEmployeeRuntimeSource(db,grant,scope,{kind:'employee_exchange',executionId:t.executionId,questionMessageId:send.value.messageId});assert.equal(exchange.value.previousQuestion.text,final.content);assert(exchange.value.employeeFacts.length);
+  }finally{grant.actions=original;await db.config.delete({where:{storeId_key:{storeId,key:'team.communication.ai.agent.settings'}}})}
+ });
+ await check('persistent memory survives new tasks and runtime instances, accepts correction, and honors operator deletion',async()=>{
+  const original=[...grant.actions];grant.actions.push('memory.read','memory.write');const settings=built('AgentSettingsService').defaultAgentSettings();settings.enabled=true;await writeTeam(db,storeId,'ai.agent.settings',settings);
+  const grantKey='externalAgent.teamBridge.v1.grant.'+agentId,previousGrant=await db.config.findUnique({where:{storeId_key:{storeId,key:grantKey}}});await db.config.upsert({where:{storeId_key:{storeId,key:grantKey}},create:{storeId,key:grantKey,category:'staff',value:JSON.stringify(grant)},update:{value:JSON.stringify(grant)}});
+  const remember=async(t,runtime,text,supersedesId)=>{const p=wire(t);let v=(await input(runtime,t,p)).traceVersion;const args={kind:'preference',text,...(supersedesId?{supersedesId}:{})},call={id:'remember-'+t.executionId,type:'function',function:{name:'employee_store_memory',arguments:JSON.stringify(args)}},assistant={role:'assistant',content:null,tool_calls:[call]};v=(await response(runtime,t,v,assistant)).traceVersion;
+   const stored=await runtime.host.executeTool({executionId:t.executionId,expectedTraceVersion:v,turn:1,callOrdinal:0,toolCallId:call.id,name:call.function.name,args});assert.equal(stored.value.ok,true);v=stored.traceVersion;
+   p.messages.push({...assistant,content:''},{role:'tool',tool_call_id:call.id,content:JSON.stringify(stored.value)});v=(await input(runtime,t,p,v,2)).traceVersion;const final={role:'assistant',content:'Preference saved for future conversations.'};v=(await response(runtime,t,v,final,2)).traceVersion;await runtime.host.recordOutput({executionId:t.executionId,expectedTraceVersion:v,providerRequestId:'synthetic-provider-2',providerMessage:final});return stored.value.memoryId};
+  try{
+   const first=await next(),id=await remember(first,make(),'MEMORY_SENTINEL_INITIAL');
+   const rebuilt=make(),second=await next();assert(second.sealedUserContent.includes('MEMORY_SENTINEL_INITIAL'));const corrected=await remember(second,rebuilt,'MEMORY_SENTINEL_CORRECTED',id);
+   const third=await next();assert(third.sealedUserContent.includes('MEMORY_SENTINEL_CORRECTED'));assert(!third.sealedUserContent.includes('MEMORY_SENTINEL_INITIAL'));await make().recover(third.executionId);
+   const service=built('AgentMemoryService').agentMemoryService(db),list=await service.list(owner),memory=list.memories.find(m=>m.id===corrected);assert(memory);assert.equal(memory.confirmed,false);await service.update(owner,corrected,{expectedVersion:memory.version,status:'archived'});
+   const fourth=await next();assert(!fourth.sealedUserContent.includes('MEMORY_SENTINEL_CORRECTED'));await make().recover(fourth.executionId);
+   await assert.rejects(()=>built('AgentMemoryService').readAgentMemories(db,grant,{...scope,audienceStaffIds:[owner.staffId]}),/AGENT_MEMORY_SCOPE_DENIED/);
+  }finally{grant.actions=original;await db.config.delete({where:{storeId_key:{storeId,key:'team.communication.ai.agent.settings'}}});if(previousGrant)await db.config.update({where:{storeId_key:{storeId,key:grantKey}},data:{value:previousGrant.value}});else await db.config.delete({where:{storeId_key:{storeId,key:grantKey}}})}
  });
  await check('private HTTP relay matches reserved SDK input, persists provider receipt and never resends duplicate',async()=>{
   const express=require(root+'/server/node_modules/express'),{createEmployeeRuntimeHttp}=built('teamAgentBridge/employeeRuntimeHttp');
   const t=await next(),runtime=make(),p=wire(t);await input(runtime,t,p);await writeTeam(db,storeId,'ai.settings',{version:7});let sends=0;
-  const app=express();app.use(express.json({limit:'2mb'}));app.use(createEmployeeRuntimeHttp({enabled:true,resolve:async(token,kind)=>token==='synthetic-execution-provider-only'&&kind==='provider'?{executionId:t.executionId,expiresAt:new Date(Date.now()+60000).toISOString(),runtime}:null,transport:async(s,v,request,before)=>{assert.equal(s,storeId);assert.equal(v,7);assert.equal(request.reasoning_effort,'low');assert.equal(request.stream,false);assert(!('max_tokens'in request));await before();sends++;return{id:'synthetic-http-provider-receipt',choices:[{finish_reason:'stop',message:{role:'assistant',content:'Fakta belum lengkap; belum ada perubahan data.'}}]}}}));
+  const app=express();app.use(express.json({limit:'2mb'}));app.use(createEmployeeRuntimeHttp({enabled:true,resolve:async(token,kind)=>token==='synthetic-execution-provider-only'&&kind==='provider'?{executionId:t.executionId,expiresAt:new Date(Date.now()+60000).toISOString(),runtime}:null,transport:async(s,v,request,before)=>{assert.equal(s,storeId);assert.equal(v,7);assert(!('reasoning_effort'in request));assert.equal(request.stream,false);assert(!('max_tokens'in request));await before();sends++;return{id:'synthetic-http-provider-receipt',choices:[{finish_reason:'stop',message:{role:'assistant',content:'Fakta belum lengkap; belum ada perubahan data.'}}]}}}));
   const server=await new Promise(resolve=>{const x=app.listen(0,'127.0.0.1',()=>resolve(x))});try{
    const url='http://127.0.0.1:'+server.address().port+'/v1/chat/completions',headers={authorization:'Bearer synthetic-execution-provider-only','content-type':'application/json'};
    assert.equal((await fetch(url,{method:'POST',headers,body:JSON.stringify({...p,model:'unapproved'})})).status,409);assert.equal(sends,0);
@@ -135,17 +165,18 @@ async function main(){
   const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'employee-real-child-')));let server,calls=0;
   try{
    const runtime=createEmployeeRuntime(db,{...deps,approvedSystemHashes:[],reviewedSystemTemplate:{hash:template.hash,isolatedRoot:root},maxExecutionMs:120000});
+   const realItem=await db.inventory.create({data:{storeId,name:'Actual Hermes synthetic cups',category:'supplies',unit:'pcs',currentStock:10,avgCost:2}});grant.actions.push('inventory.write');
    task.version++;scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));const t=await runtime.host.begin(grant,scope,[source]);
-   server=http.createServer((req,res)=>{if(req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({object:'list',data:[{id:t.model,object:'model'}]}));return}let body='';req.on('data',b=>body+=b);req.on('end',()=>{calls++;const p=JSON.parse(body);assert.equal(req.method,'POST');assert.equal(req.url,'/v1/chat/completions');assert.equal(p.model,t.model);assert(!body.includes('MANAGER_SECRET_SENTINEL'));
+   server=http.createServer((req,res)=>{if(req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({object:'list',data:[{id:t.model,object:'model'}]}));return}let body='';req.on('data',b=>body+=b);req.on('end',()=>{calls++;const p=JSON.parse(body);assert.equal(req.method,'POST');assert.equal(req.url,'/api/internal/employee-hermes/v1/chat/completions');assert.equal(p.model,t.model);assert(!body.includes('MANAGER_SECRET_SENTINEL'));
     let delta,reason;
-    if(calls===1){delta={role:'assistant',tool_calls:[{index:0,id:'real-read',type:'function',function:{name:'employee_read_message',arguments:JSON.stringify({seq:m.seq})}}]};reason='tool_calls'}
+    if(calls===1){delta={role:'assistant',tool_calls:[{index:0,id:'real-read',type:'function',function:{name:'employee_manage_inventory',arguments:JSON.stringify({action:'stock_out',inventoryId:realItem.id,quantity:1,reason:'loss',note:'Synthetic Hermes native ledger test'})}}]};reason='tool_calls'}
     else if(calls===2){delta={role:'assistant',tool_calls:[{index:0,id:'real-send',type:'function',function:{name:'employee_send_message',arguments:JSON.stringify({text:'Mohon konfirmasi petugas pemeriksa penutup mesin.'})}}]};reason='tool_calls'}
     else{delta={role:'assistant',content:'Pertanyaan tersimpan. Menunggu jawaban staf, belum dianggap selesai.'};reason='stop'}
     const chunk={id:'synthetic-real-hermes-'+calls,object:'chat.completion.chunk',created:1,model:t.model,choices:[{index:0,delta,finish_reason:null}]};res.writeHead(200,{'content-type':'text/event-stream'});res.end('data: '+JSON.stringify(chunk)+'\n\ndata: '+JSON.stringify({...chunk,choices:[{index:0,delta:{},finish_reason:reason}]})+'\n\ndata: [DONE]\n\n');
    })});await new Promise(r=>server.listen(0,'127.0.0.1',r));
-   const config={python:process.env.EMPLOYEE_HERMES_PYTHON,hermesSource:process.env.EMPLOYEE_HERMES_SOURCE,hermesExpectedSha:template.hermesSha,repository:require('node:fs').realpathSync(path.resolve(__dirname,'../..')),isolatedRoot:root,providerBaseUrl:'http://127.0.0.1:'+server.address().port+'/v1',providerCredential:'synthetic-no-real-model-credential',deadlineAt:new Date(Date.now()+110000).toISOString(),diagnosticSink:b=>require('node:fs').appendFileSync('/tmp/employee-synthetic-child-diagnostic.log',b)};
+   const config={python:process.env.EMPLOYEE_HERMES_PYTHON,hermesSource:process.env.EMPLOYEE_HERMES_SOURCE,hermesExpectedSha:template.hermesSha,repository:require('node:fs').realpathSync(path.resolve(__dirname,'../..')),isolatedRoot:root,providerBaseUrl:'http://127.0.0.1:'+server.address().port+'/api/internal/employee-hermes/v1',providerCredential:'synthetic-no-real-model-credential',deadlineAt:new Date(Date.now()+110000).toISOString(),diagnosticSink:b=>require('node:fs').appendFileSync('/tmp/employee-synthetic-child-diagnostic.log',b)};
    const result=await runEmployeeRuntimeChild(t,runtime.host,config);const state=await runtime.inspect(t.executionId);
-   assert.equal(result.state,'complete',JSON.stringify({result,state,calls}));assert.equal(calls,3);assert.equal(state.turn,3);
+   assert.equal(result.state,'complete',JSON.stringify({result,state,calls}));assert.equal(calls,3);assert.equal(state.turn,3);assert.equal((await db.inventory.findUnique({where:{id:realItem.id}})).currentStock,9);assert.equal(await db.stockOutLog.count({where:{inventoryId:realItem.id}}),1);
    const saved=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(saved.phase,'complete');assert.equal(saved.tools.length,2);assert.equal(saved.inputs.length,3);assert.equal(saved.responses.length,3);
    const rebuilt=createEmployeeRuntime(db,{...deps,approvedSystemHashes:[],reviewedSystemTemplate:{hash:template.hash,isolatedRoot:root}});await rebuilt.recover(t.executionId);assert.equal((await rebuilt.inspect(t.executionId)).phase,'complete');assert.equal(calls,3);
   }finally{if(server)await new Promise(r=>server.close(r));await fs.rm(root,{recursive:true,force:true})}

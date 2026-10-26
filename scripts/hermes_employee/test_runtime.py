@@ -385,7 +385,8 @@ class RuntimeTest(unittest.TestCase):
         r = self.run_case("multi_unissued")
         self.assertTrue(r["unknown"])
         self.assertEqual(r["providerCalls"], 1)
-        self.assertEqual([e["method"] for e in r["hostEvents"]], ["recordInput"])
+        self.assertEqual([e["method"] for e in r["hostEvents"]], ["recordInput", "recordResponse"])
+        self.assertFalse(any(e["method"] in {"executeTool", "recordOutput"} for e in r["hostEvents"]))
 
 
 if __name__ == "__main__":

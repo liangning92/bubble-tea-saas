@@ -26,7 +26,7 @@ export function createEmployeeDeployment(db:any,config:EmployeeDeploymentConfig)
   }
   // The gateway serves one execution for at most 120 seconds; give the execution the
   // same bounded window so a full multi-turn conversation is not cut off mid-flight.
-  const runtime=createEmployeeRuntime(db,{enabled:true,storeId:config.storeId,resolveGrant,approvedSystemHashes:[],reviewedSystemTemplate:config.reviewedSystemTemplate,maxExecutionMs:240000,
+  const runtime=createEmployeeRuntime(db,{enabled:true,storeId:config.storeId,resolveGrant,approvedSystemHashes:[],reviewedSystemTemplate:config.reviewedSystemTemplate,maxExecutionMs:600000,
     tasks:{assert:async(tx,g,task,channelId)=>{
       const row=await tx.config.findUnique({where:{storeId_key:{storeId:g.storeId,key:employeeRouteKey(channelId!)}}})
       const route=employeeRouteSchema.parse(row&&JSON.parse(row.value))
@@ -37,8 +37,14 @@ export function createEmployeeDeployment(db:any,config:EmployeeDeploymentConfig)
       const native=await readTeam<TeamTask>(tx,g.storeId,`task.${channelId}.${task.taskId}`)
       if(!native||native.version!==task.version||!['assigned','accepted','submitted','changes_requested'].includes(native.status))throw Error('EMPLOYEE_DEPLOYMENT_TASK_DENIED')
     }},readAttachment:async()=>{throw Error('EMPLOYEE_ATTACHMENTS_NOT_ENABLED')}})
+  const gatewayClient=async()=>{
+    const settings=await readTeam<any>(db,config.storeId,'ai.agent.settings')
+    const selected=settings?.agentOrigin
+    const origin=selected&&selected!=='http://127.0.0.1:8642'?selected:config.gateway.origin
+    return createEmployeeGatewayClient({...config.gateway,origin})
+  }
   const credentialKey=(id:string)=>'employeeRuntime.credential.'+id
-  const orchestration=createEmployeeOrchestration(db,{enabled:true,storeId:config.storeId,runtime,gateway:createEmployeeGatewayClient(config.gateway),
+  const orchestration=createEmployeeOrchestration(db,{enabled:true,storeId:config.storeId,runtime,gateway:{start:async envelope=>(await gatewayClient()).start(envelope),get:async executionId=>(await gatewayClient()).get(executionId)},
     issueCredentials:async(ticket,scope)=>{
       await runtime.inspect(ticket.executionId)
       const execution=await readTeam<any>(db,config.storeId,'employeeRuntime.execution.'+ticket.executionId)

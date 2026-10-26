@@ -135,6 +135,8 @@ const resources = {
     "deselect": "Batalkan pilihan",
     "choose": "Pilih dari pustaka media",
     "rename": "Ubah nama",
+    "name": "Nama berkas",
+    "delete": "Hapus berkas",
     "references": "Digunakan di",
     "name": "Nama file",
     "delete": "Hapus file",

@@ -1,3 +1,5 @@
+import {readAgentMemories,readAgentExperiences,agentMemoryFingerprint} from '../AgentMemoryService'
+import { visibleBusinessData, visibleScheduleStaff } from './employeeAccess'
 import { createHash } from 'crypto'
 import { TeamError, readTeam, TeamChannel, TeamTask } from '../TeamCommunicationService'
 import { managementPrivateText } from '../TeamManagementContext'
@@ -39,10 +41,22 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
   if (!c || c.archived || c.members.some(m => m.staffId !== 'agent:' + grant.agentId && !scope.audienceStaffIds.includes(m.staffId))) deny()
   await assertDataAudience(db, grant, scope, 'operational')
   let value: unknown
-  if (source.kind === 'conversation') {
+  if(source.kind==='employee_execution_outcome'){
+    const prior=await readTeam<any>(db,grant.storeId,'employeeRuntime.execution.'+source.executionId)
+    if(!prior||!['complete','unknown'].includes(prior.phase)||source.channelId!==scope.channelId||prior.scope?.channelId!==scope.channelId||prior.scope?.task?.taskId!==scope.task.taskId||prior.scope?.compartmentKey!==scope.compartmentKey||prior.grant?.agentId!==grant.agentId)deny()
+    value={executionId:source.executionId,phase:prior.phase,fault:prior.fault?.code,operations:(prior.tools||[]).filter((t:any)=>!t.name.includes('memory')).map((t:any)=>({tool:t.name,receipt:t.value,mutating:t.mutating})),note:'Stored prior-operation receipts. Do not repeat an already recorded mutation. Re-query live records before continuing unfinished work.'}
+  }else if(source.kind==='agent_memory'){
+    const memory=(await readAgentMemories(db,grant,scope,'',500)).find(m=>m.id===source.id)
+    if(!memory||memory.version!==source.version||agentMemoryFingerprint(memory)!==source.fingerprint)deny()
+    value={id:memory.id,kind:memory.kind,text:memory.text,confirmed:memory.confirmed,createdAt:memory.createdAt,source:memory.source,note:'Persistent memory, not a live business observation. Recheck current records before acting.'}
+  }else if(source.kind==='operation_experience_evidence'){
+    const experience=await readAgentExperiences(db,grant,scope)
+    if(employeeRuntimeDigest(experience)!==source.fingerprint)deny()
+    value={experience,note:'Historical tool outcomes. Learn from failure patterns; verify current data and authority.'}
+  }else if (source.kind === 'conversation') {
     if (!grant.actions.includes('messages.read') || source.channelId !== scope.channelId) deny()
     const message = await readTeam<any>(db, grant.storeId, `message.${c.id}.${String(source.seq).padStart(12, '0')}`)
-    if (!message || message.id !== source.messageId || message.seq !== source.seq || message.files?.length ||
+    if (!message || message.id !== source.messageId || message.seq !== source.seq ||
       message.seq < fromSeq || c.members.some(m => m.fromSeq > message.seq)) deny()
     if (message.agent || message.authorId === 'agent:' + grant.agentId) {
       value = { messageId: message.id, seq: message.seq, authorStaffId: message.authorId, role: 'assistant', text: typeof message.text === 'string' ? message.text : '', createdAt: message.createdAt }
@@ -51,7 +65,7 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
       const author = await db.staff.findFirst({ where: { id: message.authorId, storeId: grant.storeId, status: 'active' }, select: { id: true, userId: true, user: { select: { id: true, storeId: true, role: true } } } })
       if (!author?.userId || author.user?.id !== author.userId || author.user?.storeId !== grant.storeId || typeof message.text !== 'string') deny()
       const isAdmin = author.user?.role === 'admin' || author.user?.role === 'manager'
-      value = { messageId: message.id, seq: message.seq, authorStaffId: author.id, role: 'user', ...(isAdmin ? { text: message.text } : employeeVisibleQuestion(message.text)), createdAt: message.createdAt }
+      value = { messageId: message.id, seq: message.seq, authorStaffId: author.id, role: 'user', text: message.text.trim()||'An attachment was shared without text. Ask what should be checked; attachment contents have not been loaded.', ...(message.files?.length?{attachmentCount:message.files.length,attachmentAccess:'not_loaded'}:{}), createdAt: message.createdAt }
     }
   } else if (source.kind === 'employee_task') {
     if (!grant.actions.includes('tasks.read') || source.taskId !== scope.task.taskId || source.version !== scope.task.version) deny()
@@ -66,18 +80,19 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
       select: { user: { select: { role: true } } }
     }) : null
     const isRequesterAdmin = requester?.user?.role === 'admin' || requester?.user?.role === 'manager'
-    if (!isRequesterAdmin && employeeRuntimePrivate(JSON.stringify(value))) deny()
+    // Native task audience and source checks above determine visibility, not keywords.
   } else if(source.kind==='employee_exchange') {
     const prior=await readTeam<any>(db,grant.storeId,'employeeRuntime.execution.'+source.executionId)
-    if(!prior||prior.phase!=='complete'||prior.scope?.channelId!==scope.channelId||prior.scope?.task?.taskId!==scope.task.taskId)deny()
-    const send=prior.tools?.find((t:any)=>t.name==='employee_send_message'&&t.value?.messageId===source.questionMessageId&&t.value.expectsReply===true)
+    if(!prior||!['complete','unknown'].includes(prior.phase)||prior.scope?.compartmentKey!==scope.compartmentKey||prior.scope?.channelId!==scope.channelId||prior.scope?.task?.taskId!==scope.task.taskId)deny()
+    const send=prior.tools?.find((t:any)=>t.name==='employee_send_message'&&t.value?.messageId===source.questionMessageId)
     const message=send&&await readTeam<any>(db,grant.storeId,`message.${c.id}.${String(send.value.seq).padStart(12,'0')}`)
     const call=prior.responses?.flatMap((r:any)=>r.providerMessage?.tool_calls||[]).find((x:any)=>x.id===send?.toolCallId)
     let args:any;try{args=call&&JSON.parse(call.function.arguments)}catch{deny()}
-    if(!message||message.id!==source.questionMessageId||message.seq<fromSeq||message.authorId!=='agent:'+grant.agentId||message.agent?.agentId!==grant.agentId||args?.expectsReply!==true||message.text!==args.text)deny()
+    const final=prior.responses?.at(-1);const actualText=call?args?.text:final?.finishReason==='stop'?final.providerMessage?.content:undefined
+    if(!message||message.id!==source.questionMessageId||message.seq<fromSeq||message.authorId!=='agent:'+grant.agentId||message.agent?.agentId!==grant.agentId||message.text!==actualText)deny()
     const refs:CommunicationSource[]=prior.sources.flatMap((s:any)=>s.source.kind==='conversation'?[s.source]:s.source.kind==='employee_exchange'?(s.value?.employeeSources||[]):[])
-    const unique=[...new Map(refs.map(s=>[employeeRuntimeDigest(s),s])).values()]
-    if(!unique.length||unique.length>50||unique.some(s=>s.kind!=='conversation'))deny()
+    const unique=[...new Map(refs.map(s=>[employeeRuntimeDigest(s),s])).values()].slice(0,50)
+    if(!unique.length||unique.some(s=>s.kind!=='conversation'))deny()
     const facts=[];for(const ref of unique)facts.push((await readEmployeeRuntimeSource(db,grant,scope,ref)).value)
     value={employeeSources:unique,employeeFacts:facts,previousQuestion:{messageId:message.id,seq:message.seq,text:message.text},note:'Prior question and employee facts only; earlier inventory readings are not current observations.'}
   } else if(source.kind==='inventory_evidence') {
@@ -87,11 +102,11 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
     value=evidence
   } else if(source.kind==='schedule_evidence') {
     if(!grant.actions.includes('schedule.read'))deny()
-    const evidence=await readEmployeeScheduleEvidence(db,grant.storeId,source.query)
+    const evidence=await readEmployeeScheduleEvidence(db,grant.storeId,source.query,await visibleScheduleStaff(db,grant,scope))
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence
   } else if(source.kind==='marketing_evidence') {
-    if(!grant.actions.includes('marketing.write'))deny()
+    if(!grant.actions.includes('marketing.write')&&!(grant.actions.includes('marketing.read')&&['list_active','query_products'].includes(source.action)))deny()
     const evidence=await readEmployeeMarketingEvidence(db,grant.storeId,source.action,source.fingerprint)
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence
@@ -101,7 +116,7 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence
   } else if(source.kind==='finance_evidence') {
-    if(!grant.actions.includes('finance.write'))deny()
+    if(!grant.actions.includes('finance.write')&&!(grant.actions.includes('finance.read')&&['query_revenue_summary','list_recent_expenses'].includes(source.action)))deny()
     const evidence=await readEmployeeFinanceEvidence(db,grant.storeId,source.action,source.fingerprint)
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence
@@ -130,6 +145,7 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
     // its actual publication/audience/version resolver; attachments likewise denied.
     deny()
   }
+  value=await visibleBusinessData(db,grant,scope,value)
   return { source: structuredClone(source), fingerprint: employeeRuntimeDigest(value), value }
 }
 
@@ -142,10 +158,10 @@ function isFuzzyMatch(a: string, b: string): boolean {
   return compactA.includes(compactB) || compactB.includes(compactA)
 }
 
-export async function readEmployeeScheduleEvidence(db: any, storeId: string, query: string) {
+export async function readEmployeeScheduleEvidence(db: any, storeId: string, query: string, allowedStaffIds?:string[]) {
   const q = (query || '').trim()
   const allStaff = await db.staff.findMany({
-    where: { storeId },
+    where: { storeId, ...(allowedStaffIds?{id:{in:allowedStaffIds}}:{}) },
     select: { id: true, name: true, employeeNumber: true, position: true }
   })
   const matched = allStaff.filter((st: any) =>

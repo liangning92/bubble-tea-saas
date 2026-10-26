@@ -49,7 +49,7 @@ export async function enqueueEmployeeIntake(db:any,storeId:string,c:TeamChannel,
     if(route.fromSeq!==access.fromSeq||access.delegatedDirect&&access.sourceStaffId!==route.sourceStaffId)throw Error('EMPLOYEE_ROUTE_BINDING_CHANGED')
     const task=await readTeam<TeamTask>(db,storeId,`task.${c.id}.${route.task.taskId}`)
     if(!task||task.channelId!==c.id||task.version!==route.task.version||!['assigned','accepted','submitted','changes_requested'].includes(task.status)||task.agentTask?.state==='accepted')throw Error('EMPLOYEE_ROUTE_TASK_UNAVAILABLE')
-    if(typeof message.text!=='string'||!message.text.trim()||message.files?.length)throw Error('EMPLOYEE_ROUTE_TEXT_REQUIRED')
+    if(typeof message.text!=='string'||(!message.text.trim()&&!message.files?.length))throw Error('EMPLOYEE_ROUTE_TEXT_REQUIRED')
   }catch(error:any){
     // Stable non-sensitive categories only. No grant, source text, stack or secret.
     reason=reason||(/^(EMPLOYEE_ROUTE_[A-Z_]+)$/.test(error?.message||'')?error.message:'EMPLOYEE_ROUTE_AUTHORIZATION_FAILED')
