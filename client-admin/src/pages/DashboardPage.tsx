@@ -334,6 +334,7 @@ export function DashboardPage() {
           <PageHelp>{t('dashboardNavigation.safetyStockNotice')}</PageHelp>
           {dashboard?.inventory?.lowStockItems?.length > 0 ? (
             <div className="space-y-2">
+              {dashboard.inventory.calibrationRequired&&<p className="text-sm text-amber-700">{t('inventoryUnified.pending')}</p>}
               {dashboard.inventory.lowStockItems.slice(0, 5).map((item: any) => (
                 <div
                   key={item.id}
@@ -362,7 +363,7 @@ export function DashboardPage() {
               ))}
             </div>
           ) : (
-            <p className="text-center text-gray-500 py-8">{t('dashboard.noLowStockItems')}</p>
+            <p className="text-center text-gray-500 py-8">{t(dashboard?.inventory?.calibrationRequired?'inventoryUnified.pending':'dashboard.noLowStockItems')}</p>
           )}
         </div>
       </div>

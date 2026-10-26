@@ -1,4 +1,4 @@
-import { loadDashboardPendingActions } from '../services/DashboardPendingActions'
+import { loadDashboardPendingActions, dashboardInventoryStatus } from '../services/DashboardPendingActions'
 import {inventoryForecast} from '../services/InventoryForecastService'
 import { loadStoreDateSettings } from '../utils/storeDateSettings'
 import { revenuePeriodRange } from '../utils/revenueDateRange'
@@ -346,7 +346,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
     const monthProfit = monthRevenue - monthCost
 
     // ============ 库存预警 ============
-    const lowStockItems = (await inventoryForecast(storeId)).filter(i=>i.currentStock<=i.effectiveSafetyStock).map(i=>({id:i.id,name:i.name,currentStock:i.currentStock,unit:i.unit,safetyStock:i.effectiveSafetyStock}))
+    const inventoryStatus = dashboardInventoryStatus(await inventoryForecast(storeId))
 
     // ============ 员工情况 ============
     const staffList = await prisma.staff.findMany({
@@ -439,10 +439,7 @@ router.get('/dashboard', authenticate, authorize('admin', 'manager'), async (req
           profit: monthProfit,
           goalProgress
         },
-        inventory: {
-          lowStockCount: lowStockItems.length,
-          lowStockItems
-        },
+        inventory: inventoryStatus,
         staff: {
           checkedIn: todayAttendance,
           total: totalStaff,

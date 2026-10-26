@@ -10,3 +10,12 @@ test('malformed cash warning evidence is not silently omitted',async()=>{const {
 test('refund-reconciled handovers no longer remain in dashboard pending actions',async()=>{const {db}=database();db.reviews=new Map([['s/1',{cashWarning:{status:'resolved'}}]]);const result=await loadDashboardPendingActions(db,'owned');assert.equal(result.total,2);assert.equal(result.actions.some(a=>a.key==='cash'),false)});
 
 test('inventory pending summary is omitted when the caller cannot read inventory',async()=>{const {db}=database();const original=db.config.findMany;db.config.findMany=async q=>{assert.notEqual(q.where.category,'inventory_alert_events');return original(q)};const result=await loadDashboardPendingActions(db,'owned',new Date(),false);assert.equal(result.actions.find(a=>a.key==='inventory').count,0)});
+
+const {dashboardInventoryStatus}=loaded.exports;
+test('unverified warehouse balances are excluded from low-stock alerts and keep the total unknown',()=>{
+ const rows=[{id:'legacy',name:'Legacy powder',unit:'kg',currentStock:19,effectiveSafetyStock:20,calibrationRequired:true},{id:'known-low',name:'Verified cups',unit:'pcs',currentStock:2,effectiveSafetyStock:10,calibrationRequired:false},{id:'known-safe',name:'Verified stock',unit:'g',currentStock:20,effectiveSafetyStock:10}];
+ const result=dashboardInventoryStatus(rows);assert.equal(result.calibrationRequired,true);assert.equal(result.lowStockCount,null);assert.deepEqual(Array.from(result.lowStockItems,x=>x.id),['known-low']);assert.equal(rows[0].currentStock,19);
+});
+test('verified zero stock remains actionable and a fully verified total is available',()=>{
+ const result=dashboardInventoryStatus([{id:'empty',name:'Empty',unit:'pcs',currentStock:0,effectiveSafetyStock:0,calibrationRequired:false},{id:'safe',name:'Safe',unit:'kg',currentStock:30,effectiveSafetyStock:20}]);assert.equal(result.calibrationRequired,false);assert.equal(result.lowStockCount,1);assert.equal(result.lowStockItems[0].id,'empty');
+});

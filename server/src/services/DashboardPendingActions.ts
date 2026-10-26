@@ -56,3 +56,11 @@ export async function loadDashboardPendingActions(db: PrismaClient, storeId: str
   actions.push({key:'inventory',count:active,to:'/inventory/alerts'})
   return { actions, total: actions.reduce((sum, action) => sum + action.count, 0), timestamp: now.toISOString() }
 }
+
+
+/** Unknown warehouse balances are data gaps, never verified low stock or healthy stock. */
+export function dashboardInventoryStatus(forecasts:any[]) {
+  const calibrationRequired=forecasts.some(row=>row.calibrationRequired===true)
+  const lowStockItems=forecasts.filter(row=>row.calibrationRequired!==true&&row.currentStock<=row.effectiveSafetyStock).map(row=>({id:row.id,name:row.name,currentStock:row.currentStock,unit:row.unit,safetyStock:row.effectiveSafetyStock}))
+  return {lowStockCount:calibrationRequired?null:lowStockItems.length,lowStockItems,calibrationRequired}
+}
