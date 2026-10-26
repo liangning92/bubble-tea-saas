@@ -3461,7 +3461,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           </div>
 
           {/* 右侧：工具栏 + 窗口控制按钮 */}
-          <div className="flex w-full md:w-auto md:flex-1 min-w-0 items-center gap-1.5">
+          <div className="pos-header-actions flex w-full md:w-auto md:flex-1 min-w-0 items-center gap-1.5 md:pl-4">
             {selectedChannel && (() => {
               // 构建工具栏按钮数组
               const toolbarButtons: Array<{
