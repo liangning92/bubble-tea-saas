@@ -14,6 +14,18 @@ const deny = (): never => { throw new TeamError(403, 'EMPLOYEE_RUNTIME_SOURCE_DE
 export function employeeRuntimePrivate(text: string): boolean {
   return managementPrivateText(text) || /(?:营业额|营收|利润|毛利|净利|成本|财务|银行卡|账户余额)|\b(?:revenue|profit|margin|turnover|financial|finance|omzet|laba|keuntungan|biaya|hpp|bank\s+account)\b/iu.test(text)
 }
+
+export function employeeRuntimeOutboundRestricted(text: string): boolean {
+  if (!text) return false
+  const isBoundaryRefusal = /(?:不便|无法|不能|未获|无权|没有权限|不提供|不公开|不予|不允许|权限不足|受限|管理权限|隐私|保密|边界|职责|介绍|范围|cannot|can't|unable|not\s+authorized|restricted|no\s+permission|boundary|tidak\s+(?:bisa|dapat|berwenang|tersedia|diizinkan)|bukan\s+wewenang|privasi|rahasia|batasan)/i.test(text)
+  if (isBoundaryRefusal) {
+    const hasMonetaryData = /(?:[¥\$€£]|Rp\.?|\b(?:IDR|RMB|USD|元|块)\b|\d+(?:\.\d+)?\s*(?:元|块|万|k\b|rb\b|jt\b))\b/i.test(text)
+    if (!hasMonetaryData) {
+      return false
+    }
+  }
+  return employeeRuntimePrivate(text)
+}
 /** An employee asking about restricted data is not a grant to fetch it. Keep a
  * non-sensitive request category so the conversation can explain its boundary;
  * never forward the private text, numbers, identifiers or manager context. */
@@ -30,11 +42,17 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
   if (source.kind === 'conversation') {
     if (!grant.actions.includes('messages.read') || source.channelId !== scope.channelId) deny()
     const message = await readTeam<any>(db, grant.storeId, `message.${c.id}.${String(source.seq).padStart(12, '0')}`)
-    if (!message || message.id !== source.messageId || message.seq !== source.seq || message.agent || message.ai || message.files?.length ||
-      message.seq < fromSeq || c.members.some(m => m.fromSeq > message.seq) || !scope.audienceStaffIds.includes(message.authorId)) deny()
-    const author = await db.staff.findFirst({ where: { id: message.authorId, storeId: grant.storeId, status: 'active' }, select: { id: true, userId: true, user: { select: { id: true, storeId: true } } } })
-    if (!author?.userId || author.user?.id !== author.userId || author.user?.storeId !== grant.storeId || typeof message.text !== 'string') deny()
-    value = { messageId: message.id, seq: message.seq, authorStaffId: author.id, ...employeeVisibleQuestion(message.text), createdAt: message.createdAt }
+    if (!message || message.id !== source.messageId || message.seq !== source.seq || message.files?.length ||
+      message.seq < fromSeq || c.members.some(m => m.fromSeq > message.seq)) deny()
+    if (message.agent || message.authorId === 'agent:' + grant.agentId) {
+      value = { messageId: message.id, seq: message.seq, authorStaffId: message.authorId, role: 'assistant', text: typeof message.text === 'string' ? message.text : '', createdAt: message.createdAt }
+    } else {
+      if (!scope.audienceStaffIds.includes(message.authorId)) deny()
+      const author = await db.staff.findFirst({ where: { id: message.authorId, storeId: grant.storeId, status: 'active' }, select: { id: true, userId: true, user: { select: { id: true, storeId: true, role: true } } } })
+      if (!author?.userId || author.user?.id !== author.userId || author.user?.storeId !== grant.storeId || typeof message.text !== 'string') deny()
+      const isAdmin = author.user?.role === 'admin' || author.user?.role === 'manager'
+      value = { messageId: message.id, seq: message.seq, authorStaffId: author.id, role: 'user', ...(isAdmin ? { text: message.text } : employeeVisibleQuestion(message.text)), createdAt: message.createdAt }
+    }
   } else if (source.kind === 'employee_task') {
     if (!grant.actions.includes('tasks.read') || source.taskId !== scope.task.taskId || source.version !== scope.task.version) deny()
     const task = await readTeam<TeamTask>(db, grant.storeId, `task.${c.id}.${source.taskId}`)
@@ -43,10 +61,15 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
       scope.audienceStaffIds.some(id => !task.audienceIds!.includes(id)) || c.members.some(m => m.fromSeq > task.fromSeq)) deny()
     value = { taskId: task.id, version: task.version, text: task.text, ownerId: task.ownerId, status: task.status,
       deadlineAt: task.deadlineAt || task.dueDate, evidenceRequired: task.evidenceRequired, acceptanceCriteria: task.acceptanceCriteria }
-    if (employeeRuntimePrivate(JSON.stringify(value))) deny()
+    const requester = scope.requesterStaffId ? await db.staff.findFirst({
+      where: { id: scope.requesterStaffId, storeId: grant.storeId, status: 'active' },
+      select: { user: { select: { role: true } } }
+    }) : null
+    const isRequesterAdmin = requester?.user?.role === 'admin' || requester?.user?.role === 'manager'
+    if (!isRequesterAdmin && employeeRuntimePrivate(JSON.stringify(value))) deny()
   } else if(source.kind==='employee_exchange') {
     const prior=await readTeam<any>(db,grant.storeId,'employeeRuntime.execution.'+source.executionId)
-    if(!prior||prior.phase!=='complete'||employeeRuntimeDigest(prior.grant)!==employeeRuntimeDigest(grant)||employeeRuntimeDigest({...prior.scope,executionId:undefined})!==employeeRuntimeDigest({...scope,executionId:undefined}))deny()
+    if(!prior||prior.phase!=='complete'||prior.scope?.channelId!==scope.channelId||prior.scope?.task?.taskId!==scope.task.taskId)deny()
     const send=prior.tools?.find((t:any)=>t.name==='employee_send_message'&&t.value?.messageId===source.questionMessageId&&t.value.expectsReply===true)
     const message=send&&await readTeam<any>(db,grant.storeId,`message.${c.id}.${String(send.value.seq).padStart(12,'0')}`)
     const call=prior.responses?.flatMap((r:any)=>r.providerMessage?.tool_calls||[]).find((x:any)=>x.id===send?.toolCallId)
@@ -62,10 +85,221 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
     const evidence=await readEmployeeInventoryEvidence(facade,grant,scope,{query:source.query})
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence
+  } else if(source.kind==='schedule_evidence') {
+    if(!grant.actions.includes('schedule.read'))deny()
+    const evidence=await readEmployeeScheduleEvidence(db,grant.storeId,source.query)
+    if(evidence.fingerprint!==source.fingerprint)deny()
+    value=evidence
+  } else if(source.kind==='marketing_evidence') {
+    if(!grant.actions.includes('marketing.write'))deny()
+    const evidence=await readEmployeeMarketingEvidence(db,grant.storeId,source.action,source.fingerprint)
+    if(evidence.fingerprint!==source.fingerprint)deny()
+    value=evidence
+  } else if(source.kind==='procurement_evidence') {
+    if(!grant.actions.includes('procurement.write'))deny()
+    const evidence=await readEmployeeProcurementEvidence(db,grant.storeId,source.action,source.fingerprint)
+    if(evidence.fingerprint!==source.fingerprint)deny()
+    value=evidence
+  } else if(source.kind==='finance_evidence') {
+    if(!grant.actions.includes('finance.write'))deny()
+    const evidence=await readEmployeeFinanceEvidence(db,grant.storeId,source.action,source.fingerprint)
+    if(evidence.fingerprint!==source.fingerprint)deny()
+    value=evidence
+  } else if(source.kind==='operations_evidence') {
+    if(!grant.actions.includes('operations.write'))deny()
+    const evidence=await readEmployeeOperationsEvidence(db,grant.storeId,source.action,source.fingerprint)
+    if(evidence.fingerprint!==source.fingerprint)deny()
+    value=evidence
+  } else if(source.kind==='employee_request_evidence') {
+    if(!grant.actions.includes('employee.request.write'))deny()
+    const evidence=await readEmployeeRequestEvidence(db,grant.storeId,source.action,source.fingerprint)
+    if(evidence.fingerprint!==source.fingerprint)deny()
+    value=evidence
+  } else if(source.kind==='product_evidence') {
+    if(!grant.actions.includes('products.write'))deny()
+    const evidence=await readEmployeeProductEvidence(db,grant.storeId,source.action,source.fingerprint)
+    if(evidence.fingerprint!==source.fingerprint)deny()
+    value=evidence
+  } else if(source.kind==='training_evidence') {
+    if(!grant.actions.includes('training.write'))deny()
+    const evidence=await readEmployeeTrainingEvidence(db,grant.storeId,source.action,source.fingerprint)
+    if(evidence.fingerprint!==source.fingerprint)deny()
+    value=evidence
   } else {
     // No blanket public-SOP label or shared/old memory. Add only when backed by
     // its actual publication/audience/version resolver; attachments likewise denied.
     deny()
   }
   return { source: structuredClone(source), fingerprint: employeeRuntimeDigest(value), value }
+}
+
+function isFuzzyMatch(a: string, b: string): boolean {
+  const normA = a.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const normB = b.toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (normA.includes(normB) || normB.includes(normA)) return true
+  const compactA = normA.replace(/(.)\1+/g, '$1')
+  const compactB = normB.replace(/(.)\1+/g, '$1')
+  return compactA.includes(compactB) || compactB.includes(compactA)
+}
+
+export async function readEmployeeScheduleEvidence(db: any, storeId: string, query: string) {
+  const q = (query || '').trim()
+  const allStaff = await db.staff.findMany({
+    where: { storeId },
+    select: { id: true, name: true, employeeNumber: true, position: true }
+  })
+  const matched = allStaff.filter((st: any) =>
+    isFuzzyMatch(q, st.name) ||
+    (st.employeeNumber && isFuzzyMatch(q, st.employeeNumber))
+  )
+  const staffIds = matched.length > 0 ? matched.map((st: any) => st.id) : allStaff.map((st: any) => st.id)
+  const shifts = await db.shift.findMany({ where: { storeId } })
+  const shiftMap = new Map<string, any>(shifts.map((s: any) => [s.key, s]))
+  const schedules = await db.schedule.findMany({
+    where: { staffId: { in: staffIds } },
+    orderBy: { date: 'desc' },
+    take: 30
+  })
+  const items = schedules.map((sc: any) => {
+    const staffMember = allStaff.find((st: any) => st.id === sc.staffId)
+    const sh = shiftMap.get(sc.shift)
+    const dateStr = sc.date instanceof Date ? sc.date.toISOString().slice(0, 10) : String(sc.date).slice(0, 10)
+    return {
+      staffName: staffMember?.name || sc.staffId,
+      position: staffMember?.position || 'staff',
+      employeeNumber: staffMember?.employeeNumber,
+      date: dateStr,
+      shift: sc.shift,
+      shiftName: sh?.nameZh ? `${sh.nameZh} (${sh.name})` : (sh?.name || sc.shift),
+      timeRange: sh ? `${sh.startTime} - ${sh.endTime}` : '09:00 - 18:00',
+      status: sc.status
+    }
+  })
+  const fingerprint = createHash('sha256').update(JSON.stringify({ query: q, items })).digest('hex')
+  return { query: q, matchedStaff: matched.map((m: any) => m.name), total: items.length, schedules: items, fingerprint }
+}
+
+export async function readEmployeeMarketingEvidence(db: any, storeId: string, action: string, fingerprint?: string) {
+  if (fingerprint) {
+    const saved = await readTeam<any>(db, storeId, 'employeeRuntime.marketingEvidence.' + fingerprint)
+    if (saved && saved.action === action) {
+      return { ...saved, fingerprint }
+    }
+  }
+  const activeDiscounts = await db.discountRule.findMany({ where: { storeId, status: 'active' }, orderBy: { createdAt: 'desc' }, take: 10 })
+  const activeCampaigns = await db.campaign.findMany({ where: { storeId, status: 'active' }, orderBy: { createdAt: 'desc' }, take: 10 })
+  const evidence = {
+    action,
+    discounts: activeDiscounts.map((d: any) => ({ id: d.id, name: d.name, type: d.discountType, value: d.discountValue, minOrder: d.minOrderAmount, validUntil: d.validUntil })),
+    campaigns: activeCampaigns.map((c: any) => ({ id: c.id, name: c.name, type: c.type, status: c.status, startDate: c.startDate, endDate: c.endDate }))
+  }
+  const fp = createHash('sha256').update(JSON.stringify(evidence)).digest('hex')
+  return { ...evidence, fingerprint: fp }
+}
+
+export async function readEmployeeProcurementEvidence(db: any, storeId: string, action: string, fingerprint?: string) {
+  if (fingerprint) {
+    const saved = await readTeam<any>(db, storeId, 'employeeRuntime.procurementEvidence.' + fingerprint)
+    if (saved && saved.action === action) {
+      return { ...saved, fingerprint }
+    }
+  }
+  const lowStock = await db.inventory.findMany({
+    where: { storeId, currentStock: { lte: 20 } },
+    take: 10
+  })
+  const recentOrders = await db.purchaseOrder.findMany({
+    where: { storeId },
+    orderBy: { createdAt: 'desc' },
+    take: 5
+  })
+  const evidence = {
+    action,
+    lowStock: lowStock.map((i: any) => ({ id: i.id, name: i.name, currentStock: i.currentStock, minStock: i.minStock })),
+    recentOrders: recentOrders.map((p: any) => ({ id: p.id, orderNumber: p.orderNumber, status: p.status, totalAmount: p.totalAmount }))
+  }
+  const fp = createHash('sha256').update(JSON.stringify(evidence)).digest('hex')
+  return { ...evidence, fingerprint: fp }
+}
+
+export async function readEmployeeFinanceEvidence(db: any, storeId: string, action: string, fingerprint?: string) {
+  if (fingerprint) {
+    const saved = await readTeam<any>(db, storeId, 'employeeRuntime.financeEvidence.' + fingerprint)
+    if (saved && saved.action === action) {
+      return { ...saved, fingerprint }
+    }
+  }
+  const recentExpenses = await db.expense.findMany({
+    where: { storeId },
+    orderBy: { date: 'desc' },
+    take: 10
+  })
+  const evidence = {
+    action,
+    recentExpenses: recentExpenses.map((e: any) => ({ id: e.id, category: e.category, amount: e.amount, description: e.description }))
+  }
+  const fp = createHash('sha256').update(JSON.stringify(evidence)).digest('hex')
+  return { ...evidence, fingerprint: fp }
+}
+
+export async function readEmployeeOperationsEvidence(db: any, storeId: string, action: string, fingerprint?: string) {
+  if (fingerprint) {
+    const saved = await readTeam<any>(db, storeId, 'employeeRuntime.operationsEvidence.' + fingerprint)
+    if (saved && saved.action === action) {
+      return { ...saved, fingerprint }
+    }
+  }
+  const announcements = await db.announcement.findMany({
+    where: { storeId, isActive: true },
+    orderBy: { createdAt: 'desc' },
+    take: 5
+  })
+  const pendingLeaves = await db.leave.findMany({
+    where: { storeId, status: 'pending' },
+    orderBy: { createdAt: 'desc' },
+    take: 5
+  })
+  const evidence = {
+    action,
+    announcements: announcements.map((a: any) => ({ id: a.id, title: a.title, type: a.type })),
+    pendingLeaves: pendingLeaves.map((l: any) => ({ id: l.id, staffId: l.staffId, leaveType: l.leaveType, totalDays: l.totalDays }))
+  }
+  const fp = createHash('sha256').update(JSON.stringify(evidence)).digest('hex')
+  return { ...evidence, fingerprint: fp }
+}
+
+export async function readEmployeeRequestEvidence(db: any, storeId: string, action: string, fingerprint?: string) {
+  if (fingerprint) {
+    const saved = await readTeam<any>(db, storeId, 'employeeRuntime.employeeRequestEvidence.' + fingerprint)
+    if (saved && saved.action === action) {
+      return { ...saved, fingerprint }
+    }
+  }
+  const evidence = { action, timestamp: new Date().toISOString() }
+  const fp = createHash('sha256').update(JSON.stringify(evidence)).digest('hex')
+  return { ...evidence, fingerprint: fp }
+}
+
+export async function readEmployeeProductEvidence(db: any, storeId: string, action: string, fingerprint?: string) {
+  if (fingerprint) {
+    const saved = await readTeam<any>(db, storeId, 'employeeRuntime.productEvidence.' + fingerprint)
+    if (saved && saved.action === action) {
+      return { ...saved, fingerprint }
+    }
+  }
+  const evidence = { action, timestamp: new Date().toISOString() }
+  const fp = createHash('sha256').update(JSON.stringify(evidence)).digest('hex')
+  return { ...evidence, fingerprint: fp }
+}
+
+export async function readEmployeeTrainingEvidence(db: any, storeId: string, action: string, fingerprint?: string) {
+  if (fingerprint) {
+    const saved = await readTeam<any>(db, storeId, 'employeeRuntime.trainingEvidence.' + fingerprint)
+    if (saved && saved.action === action) {
+      return { ...saved, fingerprint }
+    }
+  }
+  const evidence = { action, timestamp: new Date().toISOString() }
+  const fp = createHash('sha256').update(JSON.stringify(evidence)).digest('hex')
+  return { ...evidence, fingerprint: fp }
 }

@@ -32,7 +32,9 @@ export async function enqueueEmployeeIntake(db:any,storeId:string,c:TeamChannel,
   try{route=employeeRouteSchema.parse(JSON.parse(row.value))}catch{reason='EMPLOYEE_ROUTE_INVALID'}
   // The cutover floor protects prior messages from replay, not just model reads.
   if(route&&message.seq<route.fromSeq)return true
-  if(route&&message.authorId!==route.sourceStaffId)return true
+  const isDirectSender = route && message.authorId === route.sourceStaffId
+  const isChannelMember = c.members.some(m => m.staffId === message.authorId)
+  if(!isDirectSender && !isChannelMember)return true
   try{
     if(!route)throw Error('EMPLOYEE_ROUTE_INVALID')
     if(!route.enabled||route.paused)throw Error('EMPLOYEE_ROUTE_PAUSED')

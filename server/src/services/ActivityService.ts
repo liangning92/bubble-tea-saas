@@ -1,4 +1,5 @@
-import {generateCouponCode} from '../utils/couponCode'
+import { resolveProductImageByRatio, deriveTargetAspectRatio } from '../utils/mediaResolver'
+import { generateCouponCode } from '../utils/couponCode'
 import {hasDesignatedTv} from './TvDeviceRegistry'
 import { deductInventory } from './OrderService'
 import { config as environment } from '../config/env'
@@ -255,12 +256,86 @@ export async function enqueueActivityGrants(tx:any,order:any,quote:Awaited<Retur
  await putRecord(tx,order.storeId,ACTIVITY_PREFIX+'order.'+order.id,{signature:quote.signature,applied:quote.applied,couponId:quote.couponId,memberId:order.memberId,paidAmount:quote.finalAmount,items:quote.items,entitlementIds:grants.map(g=>g.id)})
  return grants
 }
+function resolveImage16x9(p: any, assets: any[]): string | null {
+  const cleanName = (p.name || '').trim().toLowerCase().replace(/[\s\-_]+/g, '')
+  if (p.images && p.images.length > 0) {
+    const exact = p.images.find((img: any) => {
+      if (!img.media) return false
+      const mn = (img.media.name || '').toLowerCase()
+      return /_16x9|16:9|16x9|landscape|horizontal/i.test(mn) && (mn.includes(cleanName) || cleanName.includes(mn.replace(/_?16x9.*/, '')))
+    })
+    if (exact) return exact.media.url
+    const any16x9 = p.images.find((img: any) =>
+      img.media && (/_16x9|16:9|16x9|landscape|horizontal/i.test(img.media.name) || /_16x9|16:9|16x9/i.test(img.media.url))
+    )
+    if (any16x9) return any16x9.media.url
+  }
+  if (assets && assets.length > 0) {
+    const matched = assets.find((m: any) => {
+      const mName = (m.name || '').trim().toLowerCase().replace(/[\s\-_]+/g, '')
+      return mName.includes('16x9') && (mName.includes(cleanName) || cleanName.includes(mName.replace('16x9', '')))
+    })
+    if (matched) return matched.url
+  }
+  return p.image || null
+}
+
+function resolveImage9x16(p: any, assets: any[]): string | null {
+  const cleanName = (p.name || '').trim().toLowerCase().replace(/[\s\-_]+/g, '')
+  if (p.images && p.images.length > 0) {
+    const exact = p.images.find((img: any) => {
+      if (!img.media) return false
+      const mn = (img.media.name || '').toLowerCase()
+      return /_9x16|9:16|9x16|portrait|vertical/i.test(mn) && (mn.includes(cleanName) || cleanName.includes(mn.replace(/_?9x16.*/, '')))
+    })
+    if (exact) return exact.media.url
+  }
+  if (assets && assets.length > 0) {
+    const matched = assets.find((m: any) => {
+      const mName = (m.name || '').trim().toLowerCase().replace(/[\s\-_]+/g, '')
+      return mName.includes('9x16') && (mName.includes(cleanName) || cleanName.includes(mName.replace('9x16', '')))
+    })
+    if (matched) return matched.url
+  }
+  if (p.image) return p.image
+  return null
+}
+
 export async function publicActivities(storeId:string,channel=''){
- const now=new Date(),all=await listActivities(storeId),products=await prisma.product.findMany({where:{storeId,status:'active',deletedAt:null},include:{specs:true}})
+ const now=new Date()
+ const [all, products, mediaAssets, rewards] = await Promise.all([
+  listActivities(storeId),
+  prisma.product.findMany({
+    where: { storeId, status: 'active', deletedAt: null },
+    include: { specs: true, images: { include: { media: true }, orderBy: { position: 'asc' } } }
+  }),
+  prisma.mediaAsset.findMany({ where: { storeId, kind: 'image' } }),
+  prisma.rewardCatalog.findMany({ where: { storeId, isActive: true, validFrom: { lte: now }, validUntil: { gt: now }, OR: [{ stock: null }, { stock: { gt: 0 } }] } })
+ ])
  const availableProducts=new Set(products.map(p=>p.id))
- const rewards=await prisma.rewardCatalog.findMany({where:{storeId,isActive:true,validFrom:{lte:now},validUntil:{gt:now},OR:[{stock:null},{stock:{gt:0}}]}})
  const availableRewards=new Set(rewards.map(r=>r.id))
- const entries=all.filter(a=>(!a.productIds.length||a.productIds.some(id=>availableProducts.has(id)))&&(!a.rule.components?.length||a.rule.components.every(c=>availableProducts.has(c.productId)))&&a.showOnTv&&activityEligible(a,{now,channel},false)&&(!a.rule.rewardIds?.length||a.rule.rewardIds.some(id=>availableRewards.has(id)))&&(a.type!=='lottery'||a.rule.prizes?.some(p=>p.weight>0&&(p.remaining===undefined||p.remaining>0)&&(!p.rewardId||availableRewards.has(p.rewardId))))).map(a=>({id:a.id,version:a.version,name:a.name,description:a.description,summary:activitySummary(a),type:a.type,startsAt:a.startsAt,endsAt:a.endsAt,weekdays:a.weekdays,dailyStart:a.dailyStart,dailyEnd:a.dailyEnd,timezone:a.timezone,channels:a.channels,paymentMethods:a.paymentMethods,memberOnly:a.memberOnly||['member_price','birthday','welcome'].includes(a.type),memberLevels:a.memberLevels,rule:{price:a.rule.price,percent:a.rule.percent,amount:a.rule.amount,minAmount:a.rule.minAmount,maxDiscount:a.rule.maxDiscount,nth:a.rule.nth,buy:a.rule.buy,get:a.rule.get,participants:a.rule.participants,tiers:a.rule.tiers,multiplier:a.rule.multiplier,points:a.rule.points,stampsRequired:a.rule.stampsRequired,couponTrigger:a.rule.couponTrigger,perMemberLimit:a.rule.perMemberLimit,addonNames:a.rule.addonNames},rewardNames:rewards.filter(r=>a.rule.rewardIds?.includes(r.id)).map(r=>r.name),imageUrl:a.imageUrl,posterConfig:a.posterConfig,products:products.filter(p=>a.productIds.includes(p.id)||a.rule.components?.some(c=>c.productId===p.id)).map(p=>({id:p.id,name:p.name,image:p.image,quantity:a.rule.components?.find(c=>c.productId===p.id)?.quantity,specs:p.specs.filter(s=>!a.specIds.length||a.specIds.includes(s.id)).map(s=>({id:s.id,name:s.name,price:s.price}))}))}))
+ const entries=all.filter(a=>(!a.productIds.length||a.productIds.some(id=>availableProducts.has(id)))&&(!a.rule.components?.length||a.rule.components.every(c=>availableProducts.has(c.productId)))&&a.showOnTv&&(activityEligible(a,{now,channel},false)||(a.posterConfig&&activityState(a,now)==='active'))&&(!a.rule.rewardIds?.length||a.rule.rewardIds.some(id=>availableRewards.has(id)))&&(a.type!=='lottery'||a.rule.prizes?.some(p=>p.weight>0&&(p.remaining===undefined||p.remaining>0)&&(!p.rewardId||availableRewards.has(p.rewardId))))).map(a=>{
+  const actProds = products.filter(p=>a.productIds.includes(p.id)||a.rule.components?.some(c=>c.productId===p.id))
+  const first16x9 = actProds[0] ? resolveImage16x9(actProds[0], mediaAssets) : null
+  return {
+    id:a.id,version:a.version,name:a.name,description:a.description,summary:activitySummary(a),type:a.type,startsAt:a.startsAt,endsAt:a.endsAt,weekdays:a.weekdays,dailyStart:a.dailyStart,dailyEnd:a.dailyEnd,timezone:a.timezone,channels:a.channels,paymentMethods:a.paymentMethods,memberOnly:a.memberOnly||['member_price','birthday','welcome'].includes(a.type),memberLevels:a.memberLevels,
+    rule:{price:a.rule.price,percent:a.rule.percent,amount:a.rule.amount,minAmount:a.rule.minAmount,maxDiscount:a.rule.maxDiscount,nth:a.rule.nth,buy:a.rule.buy,get:a.rule.get,participants:a.rule.participants,tiers:a.rule.tiers,multiplier:a.rule.multiplier,points:a.rule.points,stampsRequired:a.rule.stampsRequired,couponTrigger:a.rule.couponTrigger,perMemberLimit:a.rule.perMemberLimit,addonNames:a.rule.addonNames},
+    rewardNames:rewards.filter(r=>a.rule.rewardIds?.includes(r.id)).map(r=>r.name),
+    imageUrl: first16x9 || a.imageUrl,
+    imageUrl16x9: first16x9 || a.imageUrl,
+    posterConfig:a.posterConfig,
+    products:actProds.map(p=>{
+      const targetRatio = deriveTargetAspectRatio(a.posterConfig, 'landscape')
+      const img16x9 = resolveProductImageByRatio(p, '16:9', mediaAssets)
+      const img9x16 = resolveProductImageByRatio(p, '9:16', mediaAssets)
+      const primaryImg = resolveProductImageByRatio(p, targetRatio, mediaAssets) || p.image || img16x9 || img9x16
+      return {
+        id:p.id,name:p.name,image:primaryImg,image16x9:img16x9||p.image,image9x16:img9x16||p.image,quantity:a.rule.components?.find(c=>c.productId===p.id)?.quantity,
+        specs:p.specs.filter(s=>!a.specIds.length||a.specIds.includes(s.id)).map(s=>({id:s.id,name:s.name,price:s.price}))
+      }
+    })
+  }
+ })
  return {version:all.reduce((s,a)=>s+a.version+a.used,0),evaluatedAt:now.toISOString(),activities:entries}
 }
 

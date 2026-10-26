@@ -403,7 +403,7 @@ export type TeamAgentModelTransport = (storeId: string, configVersion: number, r
 export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: boolean; fetch?: typeof fetch; toolProfile?: 'stock_readonly'|'employee_work' } = {}): TeamAgentModelTransport {
   return async (storeId, configVersion, request, beforeSend, deadlineAt) => {
     if (options.enabled !== true) denied('AGENT_MODEL_RELAY_DISABLED')
-    const toolNames = options.toolProfile === 'employee_work' ? ['employee_read_message','employee_read_task','employee_read_inventory','employee_send_message'] : ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report']
+    const toolNames = options.toolProfile === 'employee_work' ? ['employee_read_message','employee_read_task','employee_read_inventory','employee_read_schedule','employee_manage_marketing','employee_manage_procurement','employee_manage_finance','employee_manage_operations','employee_submit_request','employee_manage_product','employee_manage_training','employee_remember_rule','employee_send_message'] : ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report']
     if (Object.keys(request).some(k => !['model', 'stream', 'reasoning_effort', 'reasoning_split', 'messages', 'tools', 'tool_choice'].includes(k)) ||
       !request.tools.every(t => t?.type === 'function' && toolNames.includes(t.function?.name)) ||
       request.model !== 'MiniMax-M3.1-Flash' || request.stream !== false || request.reasoning_effort !== 'low' || request.reasoning_split !== true ||
@@ -424,7 +424,11 @@ export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: bo
       headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify(request) }) }
     catch { return denied('AGENT_MODEL_PROVIDER_OUTCOME_UNKNOWN', 502) }
     // Do not forward error bodies, headers or diagnostics that could contain secrets.
-    if (!response.ok) return denied('AGENT_MODEL_PROVIDER_REJECTED_OR_UNKNOWN', 502)
+    if (!response.ok) {
+      const errBody = await response.text().catch(() => '')
+      console.error('[TeamAiService] MiniMax rejected with status:', response.status, errBody)
+      return denied('AGENT_MODEL_PROVIDER_REJECTED_OR_UNKNOWN', 502)
+    }
     let raw: string
     try { raw = await response.text() } catch { return denied('AGENT_MODEL_PROVIDER_OUTCOME_UNKNOWN', 502) }
     try { return JSON.parse(raw) } catch { return denied('AGENT_MODEL_PROVIDER_INVALID_JSON', 502) }

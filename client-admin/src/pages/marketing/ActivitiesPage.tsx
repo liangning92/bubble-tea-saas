@@ -1979,15 +1979,30 @@ export function ActivitiesPage() {
                   onChange={(cfg) => set("posterConfig", cfg)}
                   activityName={form.name}
                   activityType={form.type}
-                  products={products
-                    .filter((p: any) => form.productIds.length ? form.productIds.includes(p.id) : true)
-                    .map((p: any) => ({
-                      id: p.id,
-                      name: p.name,
-                      image: p.image,
-                      price: p.specs?.[0]?.price,
-                      specialPrice: form.rule?.price ?? (p.specs?.[0]?.price ? Math.round(p.specs[0].price * 0.8) : 12000),
-                    }))}
+                  products={(form.productIds && form.productIds.length > 0
+                    ? form.productIds.map((id: string) => products.find((p: any) => p.id === id)).filter(Boolean)
+                    : products
+                  )
+                    .map((p: any) => {
+                      const orig = p.specs?.[0]?.price || 16000;
+                      let spec = form.rule?.price;
+                      if (spec === undefined) {
+                        if (form.type === "fixed") {
+                          spec = Math.max(0, orig - (form.rule?.amount || 4000));
+                        } else if (form.type === "percent") {
+                          spec = Math.round(orig * (100 - (form.rule?.percent || 20)) / 100);
+                        } else {
+                          spec = Math.round(orig * 0.8);
+                        }
+                      }
+                      return {
+                        id: p.id,
+                        name: p.name,
+                        image: p.image,
+                        price: orig,
+                        specialPrice: spec,
+                      };
+                    })}
                   language={languageIndex(i18n.language)}
                 />
               </div>

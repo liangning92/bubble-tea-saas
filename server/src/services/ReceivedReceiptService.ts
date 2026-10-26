@@ -36,3 +36,51 @@ export async function markReceivedReceiptFailure(storeId:string, orderNumber:str
   const row = await prisma.config.findUnique({where:{storeId_key:{storeId,key:RECEIVED_RECEIPT_PREFIX+orderNumber}}})
   if (row) await prisma.config.update({where:{id:row.id},data:{value:JSON.stringify({...JSON.parse(row.value),failureReason:reason.slice(0,200),lastAttemptAt:new Date().toISOString()})}})
 }
+
+export async function postReceivedReceipt(storeId: string, receiptId: string, actorId: string, actorName: string) {
+  const row = await prisma.config.findFirst({ where: { id: receiptId, storeId, category: 'pos_receipt_pending' } })
+  if (!row) throw new Error('RECEIPT_NOT_FOUND')
+  const { receipt } = JSON.parse(row.value)
+  const existing = await prisma.order.findUnique({ where: { orderNumber: receipt.orderNumber } })
+  let order = existing
+  if (!order) {
+    const OrderService = require('./OrderService')
+    order = await OrderService.createOrder(receipt.request, { actorId, storeId, allowCreate: true, validateActivityPricing: false, occurredAt: new Date(receipt.occurredAt) })
+  }
+  await prisma.config.update({ where: { id: row.id }, data: { category: 'pos_receipt_posted' } })
+  await prisma.pOSActionLog.create({
+    data: {
+      storeId,
+      staffId: actorId,
+      staffName: actorName,
+      sessionId: 'admin_post:' + receipt.orderNumber,
+      action: 'received_receipt_posted',
+      entityId: receipt.orderNumber,
+      description: `管理员手动核实入账: ${receipt.orderNumber} · Rp ${receipt.grandTotal}`,
+      metadata: JSON.stringify({ orderNumber: receipt.orderNumber, totalAmount: receipt.grandTotal, postedBy: actorName }),
+      severity: 'info'
+    }
+  })
+  return order
+}
+
+export async function discardReceivedReceipt(storeId: string, receiptId: string, actorId: string, actorName: string) {
+  const row = await prisma.config.findFirst({ where: { id: receiptId, storeId, category: 'pos_receipt_pending' } })
+  if (!row) throw new Error('RECEIPT_NOT_FOUND')
+  const { receipt } = JSON.parse(row.value)
+  await prisma.config.update({ where: { id: row.id }, data: { category: 'pos_receipt_discarded' } })
+  await prisma.pOSActionLog.create({
+    data: {
+      storeId,
+      staffId: actorId,
+      staffName: actorName,
+      sessionId: 'admin_discard:' + receipt.orderNumber,
+      action: 'received_receipt_discarded',
+      entityId: receipt.orderNumber,
+      description: `管理员作废凭据: ${receipt.orderNumber} · Rp ${receipt.grandTotal}`,
+      metadata: JSON.stringify({ orderNumber: receipt.orderNumber, discardedBy: actorName }),
+      severity: 'warning'
+    }
+  })
+  return { id: receiptId, orderNumber: receipt.orderNumber, discarded: true }
+}
