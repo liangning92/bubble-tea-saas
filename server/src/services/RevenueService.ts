@@ -1,6 +1,7 @@
 import { DEFAULT_TIMEZONE, calendarParts } from '../utils/storeDateSettings'
 import { loadOnlineHandoverRevenue } from './ShiftHandoverFinancials'
 import {netReceivedAmount} from '../utils/refundAllocation'
+import {orderDiscountTotal} from '../utils/orderDiscount'
 import {requireVerifiedReceiptIncome} from './ReceiptFinancialEvidenceService'
 import prisma from '../config/database'
 import { RECEIVED_RECEIPT_PREFIX } from './ReceivedReceiptService'
@@ -75,7 +76,14 @@ export async function getRevenueSummary(storeId: string, startDate: Date, endDat
     revenue: totalRevenue,
     orderRevenue,shopeefood,gofood,onlineDateBasis:'closedAt',
     orders: totalOrders,
-    avgOrderValue
+    avgOrderValue,
+    // Settlement view: what the store gave away in the selected period.
+    activityDiscount: orders.reduce((sum, o) => sum + (o.activityDiscountAmount || 0), 0),
+    couponDiscount: orders.reduce((sum, o) => sum + (o.couponDiscountAmount || 0), 0),
+    pointsDiscount: orders.reduce((sum, o) => sum + (o.pointsDiscountAmount || 0), 0),
+    manualDiscount: orders.reduce((sum, o) => sum + (o.manualDiscountAmount || 0), 0),
+    totalDiscount: orders.reduce((sum, o) => sum + orderDiscountTotal(o), 0),
+    activityOrderCount: orders.filter(o => (o.activityDiscountAmount || 0) > 0).length
   }
 }
 
@@ -118,22 +126,24 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
   await requireVerifiedReceiptIncome(orders)
 
   // Group by date
-  const dailyMap: Record<string, { revenue: number; orders: number }> = {}
+  const dailyMap: Record<string, { revenue: number; orders: number; activityDiscount: number; totalDiscount: number }> = {}
 
   for (const order of orders) {
     const dateStr = businessCalendarDate(order.createdAt,timezone)
     if (!dailyMap[dateStr]) {
-      dailyMap[dateStr] = { revenue: 0, orders: 0 }
+      dailyMap[dateStr] = { revenue: 0, orders: 0, activityDiscount: 0, totalDiscount: 0 }
     }
     dailyMap[dateStr].revenue += netReceivedAmount(order)
     dailyMap[dateStr].orders += 1
+    dailyMap[dateStr].activityDiscount += order.activityDiscountAmount || 0
+    dailyMap[dateStr].totalDiscount += orderDiscountTotal(order)
   }
 
   const handovers=await loadOnlineHandoverRevenue(prisma,storeId,startDate,endDate,timezone)
   const orderDaily=new Map(Object.entries(dailyMap).map(([day,value])=>[day,value.revenue]))
   for (const row of handovers) {
     const day=businessCalendarDate(row.closedAt,timezone)
-    dailyMap[day] ||= {revenue:0,orders:0}
+    dailyMap[day] ||= {revenue:0,orders:0,activityDiscount:0,totalDiscount:0}
     dailyMap[day].revenue += row.shopeefood+row.gofood
   }
   return Object.entries(dailyMap)
@@ -141,6 +151,8 @@ export async function getDailyRevenue(storeId: string, startDate: Date, endDate:
       date,
       revenue: data.revenue,
       orders: data.orders,
+      activityDiscount: data.activityDiscount,
+      totalDiscount: data.totalDiscount,
       avgOrderValue: data.orders > 0 ? Math.round((orderDaily.get(date) || 0) / data.orders) : 0
     }))
     .sort((a, b) => a.date.localeCompare(b.date))

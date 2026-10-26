@@ -15,6 +15,8 @@ export interface ShiftEvidence {
   qrisReceipts: number | null
   orderCount: number | null
   orderReceipts: number | null
+  activityDiscountAmount: number | null
+  totalDiscountAmount: number | null
 }
 
 export function ShiftSummaryEvidence({ evidence, openFloat, storeId, showValues = true, visibleFields = {} }: { evidence?: ShiftEvidence; openFloat?: number | null; storeId?: string | null; showValues?: boolean; visibleFields?: Record<string, boolean | undefined> }) {
@@ -38,6 +40,8 @@ export function ShiftSummaryEvidence({ evidence, openFloat, storeId, showValues 
         ['qrisReceipts', evidence?.qrisReceipts], ['receipts', evidence?.orderReceipts]
       ].filter(([key]) => visibleFields[String(key)] !== false).map(([key, value]) => <div key={String(key)}><dt>{t(`shiftEvidence.${key}`)}</dt><dd className="font-semibold">{money(key !== 'openingFloat' && locallyUncertain ? null : typeof value === 'number' ? value : null)}</dd></div>)}
       {visibleFields.orders !== false && <div><dt>{t('shiftEvidence.orders')}</dt><dd className="font-semibold">{locallyUncertain ? t('shiftEvidence.unknown') : evidence?.orderCount ?? t('shiftEvidence.unknown')}</dd></div>}
+      {visibleFields.activityDiscount !== false && typeof evidence?.activityDiscountAmount==='number' && <div><dt>{t('shiftEvidence.activityDiscount')}</dt><dd className="font-semibold text-amber-700">{money(evidence.activityDiscountAmount)}</dd></div>}
+      {visibleFields.totalDiscount !== false && typeof evidence?.totalDiscountAmount==='number' && <div><dt>{t('shiftEvidence.totalDiscount')}</dt><dd className="font-semibold text-amber-700">{money(evidence.totalDiscountAmount)}</dd></div>}
       {visibleFields.expected !== false && <div><dt>{t('pos.expectedCash')}</dt><dd className="font-semibold">{t('shiftEvidence.unknown')}</dd></div>}
     </dl>}
     <p className="text-xs mt-3">{t('shiftEvidence.manualCloseNotice')}</p>

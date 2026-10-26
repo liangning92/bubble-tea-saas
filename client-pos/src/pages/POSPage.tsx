@@ -25,6 +25,7 @@ import { expenseCategoryName, visibleInPos } from '../../../shared/utils/expense
 import { cartAuditSnapshot } from '../utils/cartAudit'
 import { resolveHandoverReceiptItems } from '../../../shared/utils/handoverReceipt'
 import { activityPrice, ActivityPriceRule } from '../../../shared/utils/activityPricing'
+import { buildDiscountBreakdown } from '../../../shared/utils/orderDiscount'
 import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplayState } from '../../../shared/utils/customerDisplayAppearance'
 import type { CustomerLayoutColumn } from '../../../shared/components/CustomerDisplayLayout'
 import type { CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
@@ -3197,6 +3198,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     const target = printerTarget('receipt')
     if (!target) {audit('failed','PRINTER_TARGET_UNAVAILABLE');return false}
     try {
+      // Same buckets as the backend order record, so the printed receipt reconciles with settlement.
+      const discountBreakdown = buildDiscountBreakdown({ applied: currentQuote?.applied || null, pointsValue: pointsDiscount, manualDiscountAmount })
       const payload = {
         orderNum,
         pickupNumber: orderData?.pickupNumber,
@@ -3243,7 +3246,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         })),
         subtotal,
         tax,
-        discount: discountAmount,
+        // The receipt must reconcile: subtotal - discount + tax = total, so every discount bucket counts.
+        discount: discountAmount + pointsDiscount + manualDiscountAmount,
+        discountLines: discountBreakdown.lines.map(line => ({ key: line.key, amount: line.amount, name: line.name || undefined })),
         discountNote: (appliedPromotion && !isManualDiscount)
           ? appliedPromotion.name
           : (isManualDiscount && discountAmount > 0 ? t('pos.manualDiscount', '手动折扣') : undefined),
