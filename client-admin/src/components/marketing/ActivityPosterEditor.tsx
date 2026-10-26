@@ -515,7 +515,7 @@ export function ActivityPosterEditor({
                   </label>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-bold text-red-600">
-                      {rowCount} {l('行', 'Row(s)', 'Baris')} × {currentCards.length} {l('列', 'Cols', 'Kolom')}
+                      {rowCount} {l('行', 'Row(s)', 'Baris')} × {config.columns || 5} {l('列', 'Cols', 'Kolom')}
                     </span>
                   </div>
                 </div>
@@ -647,13 +647,13 @@ export function ActivityPosterEditor({
                         className="p-3 rounded-xl border border-gray-200 bg-gray-50/80 space-y-2.5 hover:border-gray-300 transition-colors relative"
                       >
                         {/* Header: Label, Reorder, Delete */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 flex-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-1 min-w-0">
                             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: card.color || '#FFC4C4' }} />
                             <span className="text-[11px] font-mono text-gray-400 font-bold">#{idx + 1}</span>
                             <input
                               type="text"
-                              className="input text-xs font-black py-0.5 px-1.5 w-32 bg-white border border-gray-300 rounded"
+                              className="input text-xs font-black py-0.5 px-1.5 min-w-0 w-full max-w-32 bg-white border border-gray-300 rounded"
                               value={currentLabel}
                               title={l('自定义此卡片标签文字', 'Custom label text', 'Ubah teks label')}
                               onChange={(e) => handleCardFieldChange(idx, { dayLabel: e.target.value })}
@@ -707,7 +707,7 @@ export function ActivityPosterEditor({
                           )}
 
                           <select
-                            className="input flex-1 text-xs py-1.5 px-2 bg-white font-medium"
+                            className="input flex-1 min-w-0 text-xs py-1.5 px-2 bg-white font-medium"
                             value={currentProdId}
                             onChange={(e) => handleProductSelect(idx, e.target.value)}
                           >
@@ -721,7 +721,7 @@ export function ActivityPosterEditor({
                         </div>
 
                         {/* Editable Name & Price Overrides */}
-                        <div className="grid grid-cols-3 gap-2 pt-1 border-t border-gray-200/60 text-xs">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-gray-200/60 text-xs">
                           <div className="col-span-1">
                             <label className="text-[10px] text-gray-500 block mb-0.5">{l('品名文案', 'Name Override', 'Nama')}</label>
                             <input
@@ -764,7 +764,7 @@ export function ActivityPosterEditor({
                           </div>
                         </details>
                         {/* Individual Card Color Overrides */}
-                        <div className="flex items-center justify-between pt-1 text-[11px] text-gray-500 border-t border-gray-200/40">
+                        <div className="flex flex-wrap gap-2 items-center justify-between pt-1 text-[11px] text-gray-500 border-t border-gray-200/40">
                           <span className="font-semibold">{l('单独微调此卡片色彩:', 'Card Color Overrides:', 'Warna Khusus Kartu:')}</span>
                           <div className="flex items-center gap-2">
                             <label className="flex items-center gap-1 cursor-pointer" title={l('卡片底色', 'Card Background', 'Warna Latar')}>
@@ -1619,6 +1619,27 @@ export function ActivityPosterEditor({
               </div>
             </div>
           )}
+          <details className="bg-white border rounded-xl p-3">
+            <summary className="font-semibold text-sm cursor-pointer">{l('高级尺寸与显示设置','Advanced sizes & visibility','Ukuran & tampilan lanjutan')}</summary>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
+              {([
+                ['normalPriceFontSize',l('原价字号','Original price size','Ukuran harga normal'),14,8,40],
+                ['savingFontSize',l('节省金额字号','Savings size','Ukuran hemat'),13,8,40],
+                ['dayBadgeFontSize',l('标签字号','Badge size','Ukuran label'),20,8,48],
+                ['containerPaddingX',l('画布左右留白','Canvas side padding','Jarak sisi kanvas'),20,0,100],
+                ['containerPaddingY',l('画布上下留白','Canvas vertical padding','Jarak vertikal kanvas'),16,0,100],
+                ['cardPadding',l('卡片内边距','Card padding','Jarak dalam kartu'),0,0,50],
+                ['imagePadding',l('图片留白','Image padding','Jarak gambar'),0,0,50],
+                ['imageBorderRadius',l('图片圆角','Image corners','Sudut gambar'),16,0,50],
+                ['cardBorderWidth',l('边框粗细','Border width','Tebal bingkai'),1,0,12],
+                ['highlightScale',l('当天放大倍数','Today scale','Skala hari ini'),1.04,1,1.15],
+              ] as const).map(([key,label,defaultValue,min,max])=><label className="text-xs" key={key}>{label}<input type="number" className="input" min={min} max={max} step={key==='highlightScale'?0.01:1} value={design[key]??defaultValue} onChange={e=>updateDesign({[key]:Math.max(min,Math.min(max,Number(e.target.value)))})}/></label>)}
+              <label className="text-xs">{l('字体','Font family','Jenis font')}<select className="input" value={design.fontStyle||'sans'} onChange={e=>updateDesign({fontStyle:e.target.value as PosterDesignConfig['fontStyle']})}><option value="sans">Sans</option><option value="serif">Serif</option><option value="mono">Mono</option></select></label>
+              <label className="text-xs">{l('价格框阴影','Price box shadow','Bayangan kotak harga')}<select className="input" value={design.priceBoxShadow||'medium'} onChange={e=>updateDesign({priceBoxShadow:e.target.value as PosterDesignConfig['priceBoxShadow']})}><option value="none">{l('无','None','Tidak ada')}</option><option value="soft">{l('柔和','Soft','Lembut')}</option><option value="medium">{l('中等','Medium','Sedang')}</option></select></label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.showFields?.productSubname!==false} onChange={e=>updateField('productSubname',e.target.checked)}/>{l('显示规格副标题','Show size subtitle','Tampilkan subjudul ukuran')}</label>
+              <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={!!config.showFields?.discountTag} onChange={e=>updateField('discountTag',e.target.checked)}/>{l('显示折扣角标','Show discount tag','Tampilkan label diskon')}</label>
+            </div>
+          </details>
         </div>
 
         <div className="lg:col-span-7 min-w-0">

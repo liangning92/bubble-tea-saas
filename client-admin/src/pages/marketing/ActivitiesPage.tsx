@@ -1959,7 +1959,7 @@ export function ActivitiesPage() {
               )}
             </label>
             {form.showOnTv && (
-              <div className="border border-red-200 bg-red-50/20 rounded-xl p-5 space-y-4">
+              <div className="border border-red-200 bg-red-50/20 rounded-xl p-2 sm:p-5 space-y-4">
                 <div className="flex items-center justify-between border-b border-red-100 pb-3">
                   <div>
                     <h4 className="font-bold text-gray-900 flex items-center gap-2">
