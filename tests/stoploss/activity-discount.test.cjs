@@ -72,3 +72,37 @@ test('handover receipt lists the shift discount totals and the orders that trigg
   assert.ok(html.includes('2.000'));assert.ok(html.includes('3.500'))
   assert.ok(html.includes('ACTIVITY ORDERS'));assert.ok(html.includes('Happy Hour'));assert.ok(html.includes('#A01'))
 })
+
+test('historical recovery uses the sale-time server snapshot and never changes money',()=>{
+  const {historicalOrderDiscount}=load('server/src/utils/historicalOrderDiscount.ts')
+  const order={totalAmount:40000,discountAmount:11000,finalAmount:29000,checkoutTaxAmount:0}
+  const snapshot={applied:{id:'old-activity',name:'Sale-time name',kind:'activity',discount:10000},paidAmount:30000,items:[{quantity:2,unitPrice:20000}]}
+  const recovered=historicalOrderDiscount(order,snapshot)
+  assert.equal(recovered.activityDiscountAmount,10000);assert.equal(recovered.manualDiscountAmount,1000);assert.equal(recovered.activityName,'Sale-time name')
+  assert.equal(Object.hasOwn(recovered,'finalAmount'),false);assert.equal(Object.hasOwn(recovered,'discountAmount'),false)
+  assert.equal(historicalOrderDiscount(order,{...snapshot,paidAmount:29000}),null)
+  assert.equal(historicalOrderDiscount({...order,totalAmount:50000},snapshot),null)
+  assert.equal(historicalOrderDiscount({...order,discountAmount:5000},snapshot),null)
+  assert.equal(historicalOrderDiscount({...order,finalAmount:30000},snapshot),null)
+  assert.equal(historicalOrderDiscount(order,{applied:{...snapshot.applied,discount:10000.1}}),null)
+  assert.equal(historicalOrderDiscount(order,{applied:null}),null)
+  const points=historicalOrderDiscount({totalAmount:40000,discountAmount:0,finalAmount:39000,checkoutTaxAmount:0},{...snapshot,applied:{id:'points',name:'Points',kind:'points',discount:1000},paidAmount:39000})
+  assert.equal(points.pointsDiscountAmount,1000);assert.equal(points.activityDiscountAmount,0)
+})
+
+test('handover prints every triggering order with a unique order number, including after order 20',()=>{
+  const {shiftReceiptLayout}=load('client-pos/electron/shiftReceiptLayout.ts')
+  const {receiptHtml}=load('client-pos/electron/receiptLayout.ts')
+  const activityOrders=Array.from({length:25},(_,i)=>({orderNumber:'UNIQUE-ORDER-'+(i+1),pickupNumber:'A01',activityName:'Happy Hour',totalDiscountAmount:2000}))
+  const html=receiptHtml(shiftReceiptLayout({language:'en',paperSize:'58mm',summaryEvidence:{activityDiscountAmount:50000,totalDiscountAmount:50000,activityOrders}}))
+  for(const order of activityOrders)assert.ok(html.includes(order.orderNumber),order.orderNumber)
+  const source=fs.readFileSync('server/src/services/ShiftSummaryEvidence.ts','utf8')
+  assert.equal(source.includes('.slice(0, 20)'),false,'API must not silently truncate settlement evidence')
+})
+
+test('unclassified historical discounts remain explicit and are never guessed as activity or manual',()=>{
+  const {unclassifiedDiscount}=load('shared/utils/orderDiscount.ts')
+  assert.equal(unclassifiedDiscount(14000,[4000,0,0,0]),10000)
+  assert.equal(unclassifiedDiscount(4000,[4000,0,0,0]),0)
+  assert.equal(unclassifiedDiscount(0,[4000]),0)
+})

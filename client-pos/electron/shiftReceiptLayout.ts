@@ -66,8 +66,7 @@ export function shiftReceiptLayout(data: Record<string, any>) {
   if(visible('activityDetails')){
     const activityOrders=Array.isArray(evidence.activityOrders)?evidence.activityOrders:[]
     if(activityOrders.length){
-      const details: Row[] = activityOrders.slice(0,10).map((order:any)=>({name:`${order.pickupNumber?'#'+order.pickupNumber:order.orderNumber}${order.activityName?' · '+order.activityName:''}`,value:'-'+money(order.totalDiscountAmount)}))
-      if(activityOrders.length>10)details.push({name:label('其他订单','Other orders','Pesanan lain'),value:String(activityOrders.length-10)})
+      const details: Row[] = activityOrders.map((order:any)=>({name:`${order.orderNumber}${order.pickupNumber?' #'+order.pickupNumber:''}${order.activityName?' · '+order.activityName:''}`,value:'-'+money(order.totalDiscountAmount)}))
       group(details,label('活动订单明细','ACTIVITY ORDERS','DETAIL AKTIVITAS'))
     }
   }

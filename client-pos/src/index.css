@@ -262,6 +262,8 @@ html, body {
   filter: brightness(0.94);
 }
 .pos-toolbar button { flex-shrink: 0; }
+/* Spare room belongs before the tools; auto margin becomes zero on overflow. */
+.pos-toolbar > button:first-child { margin-left: auto; }
 
 /* Cashier desktops retain one header row at typical Windows display scaling.
    Narrow toolbars scroll horizontally instead of moving onto a second row. */
