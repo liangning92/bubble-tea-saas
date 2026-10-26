@@ -1,3 +1,4 @@
+import {StockPhotoEvidence} from '../../components/StockPhotoEvidence'
 import { ManualStockCorrection } from '../../components/ManualStockCorrection'
 import { useAuthStore } from '../../stores/auth'
 import { isSalesStockOut, stockLogCost } from '../../utils/inventorySalesCosts'
@@ -674,6 +675,7 @@ export function StockLogPage() {
                       <td className="py-3 text-sm text-gray-500 pl-4 max-w-xs truncate" title={log.note || ''}>
                         {log.manualCorrection && <span className="block text-xs text-amber-700" title={log.manualCorrection.reason}>{t(log.manualCorrection.role === 'reversal' ? 'manualStockCorrection.reversal' : log.manualCorrection.role === 'consumption_cost' ? 'manualStockCorrection.consumptionDifference' : 'manualStockCorrection.replacement')}</span>}
                         {log.note || '-'}
+                        {log.sourceEvidence?.photos?.length>0&&<StockPhotoEvidence logId={log.id} evidence={log.sourceEvidence} language={i18n.language}/>}
                       </td>
                       {isCorrectionAdmin && <td className="py-3 px-4 text-sm whitespace-nowrap">{(log.manualCorrectionEligible || log.manualCorrection) ? <><button type="button" className="btn-secondary min-h-[44px] px-4 border-primary-200 text-primary-700 hover:bg-primary-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500" onClick={() => setCorrectionLog(log.manualCorrection ? {...log,type:log.manualCorrection.type,id:log.manualCorrection.rootId} : log)}>{t(log.correctionStatus || log.manualCorrection ? 'manualStockCorrection.history' : 'manualStockCorrection.title')}</button>{log.correctionStatus && <span className="block text-xs text-gray-500">{t(log.correctionStatus === 'cancelled' ? 'manualStockCorrection.cancelled' : 'manualStockCorrection.corrected')}</span>}</> : '—'}</td>}
                     </tr>

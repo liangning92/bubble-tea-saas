@@ -205,6 +205,11 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
     with config_path.open('x', encoding='utf-8') as config_file:
         os.chmod(config_path, 0o600)
         config_file.write('tools:\n  tool_search:\n    enabled: "off"\n')
+        # The reviewed backend model supports native image input. An isolated
+        # custom provider has no cached catalog; declare its actual capability
+        # instead of silently flattening verified photos into a text disclaimer.
+        if context.get("model") == "MiniMax-M3.1-Flash":
+            config_file.write('model:\n  supports_vision: true\n')
     os.environ["HERMES_HOME"] = str(profile)
     os.chdir(home)
     session = isolation["sessionId"] if isolation else "employee_work_" + digest(key + ":" + execution)
@@ -579,7 +584,7 @@ def run_ticket(ticket: dict, config: dict, port, *, provider_send: Callable) -> 
     tools = {item["function"]["name"]: item["function"] for item in ticket["tools"]}
     context = {**config, "purpose": "employee_work", "executionId": execution,
         "compartmentKey": ticket["compartmentKey"], "memoryNamespace": ticket["compartmentKey"],
-        "ticketIsolation": ticket["isolation"], "input": ticket["sealedUserContent"], "instruction": ticket["instruction"], "executionTimeoutMs": ticket.get("executionTimeoutMs", 600000),
+        "ticketIsolation": ticket["isolation"], "input": ticket["sealedUserContent"], "maxTraceBytes": 24_000_000 if isinstance(ticket["sealedUserContent"], list) else 4_000_000, "instruction": ticket["instruction"], "executionTimeoutMs": ticket.get("executionTimeoutMs", 600000),
         "model": ticket["model"], "tools": tools}
     try:
         observation = run_employee(context, provider_send=checked_send, tool_execute=execute, response_observed=response_seen)

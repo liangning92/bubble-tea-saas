@@ -42,6 +42,7 @@ export interface StockOperation {
   expiryDate?:string
   manufacturingDate?:string
   operationId?: string
+  sourceEvidence?: {kind:'hermes-photo';channelId:string;messageId:string;seq:number;submittedBy:string;submittedName:string;agentId:string;photos:{fileId:string;sha256:string}[]}
   inventoryId: string
   storeId: string
   quantity: number
@@ -185,7 +186,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }, db:a
 export async function stockOut(data: StockOperation, db:any=prisma) {
   const { inventoryId, storeId, reason, note, staffId, orderId } = data
 
-  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
+  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId,...(data.sourceEvidence?{sourceEvidence:data.sourceEvidence}:{})})).digest('hex')
   const replay = async (tx:any) => {
     if (!data.operationId) return null
     const log = await tx.stockOutLog.findUnique({where:{operationId:data.operationId},include:{inventory:true}})
@@ -229,7 +230,7 @@ export async function stockOut(data: StockOperation, db:any=prisma) {
         staffId,
         quantity,
         reason,
-        note:JSON.stringify({version:1,kind:'manual-out',batchAllocations,carryingAmount:quantity*Number(inventory.avgCost),stockEffect:internalIssue?'internal_transfer':'physical_out',unitCost:Number(inventory.avgCost),totalAmount:Math.round(quantity*Number(inventory.avgCost)),note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
+        note:JSON.stringify({version:1,kind:'manual-out',...(data.sourceEvidence?{sourceEvidence:data.sourceEvidence}:{}),batchAllocations,carryingAmount:quantity*Number(inventory.avgCost),stockEffect:internalIssue?'internal_transfer':'physical_out',unitCost:Number(inventory.avgCost),totalAmount:Math.round(quantity*Number(inventory.avgCost)),note:note||'',requestFingerprint:fingerprint,inputQuantity:data.quantity,inputUnit:data.inputUnit||inventory.unit,ledgerUnit:inventory.unit,ledgerQuantity:quantity}),
         orderId
       }
     })

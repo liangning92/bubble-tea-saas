@@ -1,5 +1,12 @@
 # BUGS
 
+## BUG-HERMES-PHOTO-20261026-02
+Title: Hermes receives attachment counts instead of photo pixels and cannot record photo-backed stock-out work
+Severity: P1
+Status: IMPLEMENTED; EXACT-SHA VALIDATION AND REAL-WEB ACCEPTANCE IN PROGRESS
+Expected: Match ingredient photographs against real inventory; clarify uncertain quantity; create one native stock-out receipt with private photo evidence under backend-configured authority.
+Validation: Disposable PostgreSQL tests reject foreign files and altered pixels. Actual pinned Hermes SDK is tested against synthetic model responses; production image interpretation and real UI acceptance are separate release evidence.
+
 ## BUG-HERMES-20261026-01
 Title: Saved agent permissions do not control the employee executor; terminal-hosted gateway is unavailable
 Severity: P1

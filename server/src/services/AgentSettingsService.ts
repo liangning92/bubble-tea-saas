@@ -54,6 +54,7 @@ export const agentSettingsSchema = z.object({
   allChannelsAllowed: z.boolean().default(true),
   memoryEnabled: z.boolean().default(true),
   learningEnabled: z.boolean().default(true),
+  photoRecognitionEnabled: z.boolean().default(true),
   expiresAt: z.string().datetime().nullable().default(null),
   taskTimeoutMinutes: z.number().int().min(1).max(1440),
   requireHumanReview: z.boolean().default(true),
@@ -73,6 +74,7 @@ export function defaultAgentSettings(): AgentSettings {
     allChannelsAllowed: true,
     memoryEnabled: true,
     learningEnabled: true,
+    photoRecognitionEnabled: true,
     expiresAt: null,
     taskTimeoutMinutes: 10,
     requireHumanReview: true,
@@ -172,7 +174,7 @@ export function agentSettingsService(db: any = prisma) {
           employeeBridgeEnabled: toSave.employeeBridgeEnabled,
           allChannelsAllowed: toSave.allChannelsAllowed,
           taskTimeoutMinutes: toSave.taskTimeoutMinutes,
-          expiresAt:toSave.expiresAt,memoryEnabled:toSave.memoryEnabled,learningEnabled:toSave.learningEnabled,
+          expiresAt:toSave.expiresAt,memoryEnabled:toSave.memoryEnabled,learningEnabled:toSave.learningEnabled,photoRecognitionEnabled:toSave.photoRecognitionEnabled,
           permissions: toSave.permissions
         })
 

@@ -1,3 +1,4 @@
+import {stockOutPhoto} from '../services/teamAgentBridge/employeePhotos'
 import { getManualCorrection, correctManualStock } from '../services/ManualStockCorrectionService'
 import { todayStockOuts } from '../services/TodayStockOutService'
 import {refreshInventoryAlerts,handleInventoryAlert} from '../services/InventoryAlertCenterService'
@@ -88,6 +89,11 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
     console.error('Get inventory error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get inventory' })
   }
+})
+
+router.get('/logs/stock-out/:logId/photos/:fileId',authenticate,async(req:AuthRequest,res)=>{
+ try{const photo=await stockOutPhoto(prisma,getStoreId(req),req.params.logId,req.params.fileId);res.set({'Cache-Control':'private, no-store','Content-Type':photo.type,'X-Content-Type-Options':'nosniff'});res.send(photo.bytes)}
+ catch(error:any){res.status(error.status||error.statusCode||404).json({code:404,message:'INVENTORY_PHOTO_NOT_FOUND'})}
 })
 
 // GET /api/inventory/logs - Get all inventory logs (combined stock-in, stock-out, and adjustments)

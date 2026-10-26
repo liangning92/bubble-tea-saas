@@ -41,7 +41,7 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
   child.stderr.on('data',(chunk:Buffer)=>config.diagnosticSink?.(chunk))
   child.stdin.on('error',stop)
   child.stdout.on('data',(chunk:Buffer)=>{
-    bytes+=chunk.length;if(bytes>8_000_000){stop();return}
+    bytes+=chunk.length;if(bytes>(Array.isArray(ticket.sealedUserContent)?24_000_000:8_000_000)){stop();return}
     buffer+=decoder.write(chunk)
     let newline:number
     while((newline=buffer.indexOf('\n'))>=0){
