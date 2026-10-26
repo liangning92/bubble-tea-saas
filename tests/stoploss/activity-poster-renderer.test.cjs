@@ -35,3 +35,20 @@ test('variant association requires an exact Unicode product name and never a sub
  assert.deepEqual(Array.from(urls),['/uploads/primary.jpg','/uploads/tea-tall.jpg']);
  assert.deepEqual(Array.from(m.exports.posterImageUrls({name:''},[{name:'9x16.webp',url:'/uploads/no.jpg'}])),[]);
 });
+const controls=load('shared/utils/posterControls.ts');
+const editable={freeform:true,canvasWidth:1920,canvasHeight:1080,columns:2,cardItems:[{productName:'Tea',dayOfWeek:1,imageUrl:'/uploads/tea.jpg',imageMode:'manual',originalPrice:16000,specialPrice:12000,elements:{productName:{fontSize:35,color:'#ffffff'}}},{productName:'Ice',dayOfWeek:2,originalPrice:18000,specialPrice:13000}],designConfig:{highlightMode:'border_only'}};
+test('formerly inert controls produce a visible rendering difference in free positioning',()=>{
+ const before=render({posterConfig:editable},{day:1});
+ for(const patch of [{textGlow:true},{overlayGradientOpacity:65},{cardBorderStyle:'dashed'},{cardBorderStyle:'none'},{cardShadow:'deep'},{highlightMode:'popout'},{highlightMode:'glow'},{highlightMode:'ribbon'},{highlightMode:'popout',highlightScale:1.1},{priceStyle:'pill'},{priceBoxShadow:'soft'},{containerPaddingX:70},{containerPaddingY:35},{imageBleed:false},{fontStyle:'mono'}]){
+  const updated=controls.applyPosterDesignPatch(editable,patch);assert.notEqual(render({posterConfig:updated},{day:1}),before,JSON.stringify(patch));
+ }
+ const changed=controls.applyPosterDesignPatch(editable,{titleFontSize:48,titleColor:'#123456'});assert.equal(posterLayout(changed,2).layers.find(l=>l.key==='productName').style.fontSize,48);
+});
+test('two price gaps measure actual separation, preserve independent card scope and survive API storage',()=>{
+ const spaced=controls.setPosterPriceSpacing(editable,[9,13],0),schema=load('server/src/utils/activityPosterSchema.ts').activityPosterSchema;
+ const saved=JSON.parse(JSON.stringify(schema.parse(spaced))),layout=posterLayout(saved,2),prices=['originalPrice','specialPrice','savingAmount'].map(key=>layout.layers.find(l=>l.key===key&&l.cardIndex===0));
+ assert.ok(Math.abs(prices[1].rect.y-prices[0].rect.y-prices[0].rect.height-9)<.001);assert.ok(Math.abs(prices[2].rect.y-prices[1].rect.y-prices[1].rect.height-13)<.001);
+ assert.ok(prices.every(l=>l.rect.height>=l.style.fontSize*(l.style.lineHeight||1.2)));assert.deepEqual(saved.cardItems[1],editable.cardItems[1]);
+ const styled={...saved,elements:{specialPrice:{italic:true,textDecoration:'underline',textTransform:'uppercase',strokeWidth:3,strokeColor:'#ffffff',shadowColor:'#ff5d89',shadowBlur:12}}};
+ const html=render({posterConfig:schema.parse(styled)});assert.ok(html.includes('font-style:italic'));assert.ok(html.includes('text-decoration:underline'));assert.ok(html.includes('text-transform:uppercase'));assert.ok(html.includes('overflow:visible'));
+});

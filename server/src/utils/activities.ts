@@ -9,6 +9,9 @@ export interface PosterElementStyle {
   lineHeight?: number; letterSpacing?: number; textAlign?: 'left'|'center'|'right'
   color?: string; backgroundColor?: string; borderColor?: string
   borderWidth?: number; borderRadius?: number; padding?: number
+  borderStyle?: 'solid'|'dashed'|'none'
+  gradientOpacity?: number
+  italic?: boolean; textDecoration?: 'none'|'underline'|'line-through'; textTransform?: 'none'|'uppercase'|'lowercase'
   strokeColor?: string; strokeWidth?: number
   shadowColor?: string; shadowX?: number; shadowY?: number; shadowBlur?: number
   opacity?: number; rotation?: number; zIndex?: number; visible?: boolean

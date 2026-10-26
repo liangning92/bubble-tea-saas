@@ -1,3 +1,4 @@
+import {applyPosterDesignPatch} from '../../../../shared/utils/posterControls'
 import { PosterElementInspector, type PosterSelection } from './PosterElementInspector'
 import { PosterCanvasEditor } from './PosterCanvasEditor'
 import { renderActivityPoster, defaultPosterCards, DEFAULT_POSTER_DESIGN, type PosterInput } from '../../../../shared/utils/activityPoster'
@@ -183,21 +184,7 @@ export function ActivityPosterEditor({
   }
 
   const updateDesign = (patch: Partial<PosterDesignConfig>) => {
-    const elements={...config.elements}
-    const bind=(key:string,element:string,field:string)=>{if((patch as any)[key]!==undefined)(elements as any)[element]={...(elements as any)[element],[field]:(patch as any)[key]}}
-    for(const [key,element] of [['headlineFontSize','headline'],['subheadlineFontSize','subheadline'],['titleFontSize','productName'],['normalPriceFontSize','originalPrice'],['priceFontSize','specialPrice'],['savingFontSize','savingAmount'],['dayBadgeFontSize','dayBadge']])bind(key,element,'fontSize')
-    for(const [key,element] of [['headlineColor','headline'],['subheadlineColor','subheadline'],['titleColor','productName'],['normalPriceColor','originalPrice'],['priceColor','specialPrice'],['savingColor','savingAmount'],['dayBadgeColor','dayBadge']])bind(key,element,'color')
-    for(const [key,element,field] of [['imageFit','image','objectFit'],['imageBorderRadius','image','borderRadius'],['cardBorderWidth','card','borderWidth'],['cardBorderColor','card','borderColor'],['cardBorderRadius','card','borderRadius'],['priceBoxBg','priceBox','backgroundColor'],['priceBoxRadius','priceBox','borderRadius'],['dayBadgeBg','dayBadge','backgroundColor'],['highlightColor','highlight','borderColor']])bind(key,element,field)
-    const set=(key:string,style:any)=>{(elements as any)[key]={...(elements as any)[key],...style}}
-    if(patch.cardGap!==undefined){patch={...patch,cardGapX:patch.cardGap,cardGapY:patch.cardGap}}
-    for(const [field,element,target] of [['cardPadding','card','padding'],['imagePadding','image','padding'],['imageHeightRatio','image','height'],['imageBgColor','image','backgroundColor'],['fontStyle','productName','fontFamily'],['priceBoxBorderColor','priceBox','borderColor']])bind(field,element,target)
-    if(patch.textAlign)for(const key of ['productName','productSubname','originalPrice','specialPrice','savingAmount'])set(key,{textAlign:patch.textAlign})
-    if(patch.titlePosition)set('productName',{y:patch.titlePosition==='bottom'?66:5})
-    if(patch.pricePosition){const top=patch.pricePosition==='top'?25:patch.pricePosition==='middle'?55:78;set('priceBox',{y:top-1});for(const [i,key] of ['originalPrice','specialPrice','savingAmount'].entries())set(key,{y:top+i*3})}
-    if(patch.badgePosition)set('dayBadge',{visible:patch.badgePosition!=='hidden',y:patch.badgePosition.startsWith('top')?0:88.5})
-    if(patch.textStroke!==undefined||patch.textStrokeWidth!==undefined||patch.textStrokeColor!==undefined)for(const key of ['productName','specialPrice','savingAmount'])set(key,{strokeWidth:(patch.textStroke??design.textStroke)?(patch.textStrokeWidth??design.textStrokeWidth??2):0,strokeColor:patch.textStrokeColor??design.textStrokeColor??'#ffffff'})
-    if(patch.highlightColor)set('highlight',{backgroundColor:patch.highlightColor})
-    update({designConfig:{...design,...patch},...(config.freeform?{elements}:{})})
+    update(applyPosterDesignPatch({...config,cardItems:currentCards},patch))
   }
 
   const updateField = (field: keyof NonNullable<ActivityPosterConfig['showFields']>, checked: boolean) => {
@@ -318,10 +305,13 @@ export function ActivityPosterEditor({
     const newCards = currentCards.map((c, i) => ({
       ...c,
       color: preset.cardColors[i % preset.cardColors.length],
+      activeColor:preset.highlightColor,
+      elements:{...c.elements,card:{...c.elements?.card,backgroundColor:preset.cardColors[i%preset.cardColors.length]},productName:{...c.elements?.productName,color:preset.titleColors[i%preset.titleColors.length]},priceBox:{...c.elements?.priceBox,backgroundColor:preset.priceBoxBg}},
       titleColor: preset.titleColors[i % preset.titleColors.length],
     }))
 
     update({
+      elements:{...config.elements,headline:{...config.elements?.headline,color:preset.highlightColor},subheadline:{...config.elements?.subheadline,color:preset.highlightColor},highlight:{...config.elements?.highlight,borderColor:preset.highlightColor,backgroundColor:preset.highlightColor}},
       themeColor: preset.highlightColor,
       backgroundColor: preset.bg,
       cardItems: newCards,
