@@ -146,7 +146,7 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
    const previous=await readTeam<any>(db,storeId,questionContextKey(r.event.channelId))
    if(previous){
      const prior=await readTeam<any>(db,storeId,'employeeRuntime.execution.'+previous.executionId)
-     if(prior&&prior.phase==='complete'&&previous.taskId===r.task.taskId){
+     if(prior&&prior.phase==='complete'&&previous.taskId===r.task.taskId&&prior.scope?.compartmentKey===scope.compartmentKey){
        sources.push({kind:'employee_exchange',executionId:previous.executionId,questionMessageId:previous.questionMessageId})
      }else{
        await writeTeam(db,storeId,questionContextKey(r.event.channelId),null)
