@@ -54,7 +54,7 @@ var YOUME_POSTER = (() => {
     return { ...REFERENCE_ELEMENTS[key], ...cfg.elements?.[key], ...card?.elements?.[key] };
   }
   function posterLayout(cfg, count, aspectRatio = 16 / 9) {
-    const height = cfg.canvasHeight || 1080, width = cfg.canvasWidth || Math.round(height * aspectRatio), root = { x: 0, y: 0, width, height };
+    const height = cfg.canvasHeight || 1080, width = cfg.canvasWidth || Math.round(height * aspectRatio), paddingX = bounded(cfg.designConfig?.containerPaddingX, 0, 0, 200), paddingY = bounded(cfg.designConfig?.containerPaddingY, 0, 0, 200), root = { x: paddingX, y: paddingY, width: Math.max(1, width - paddingX * 2), height: Math.max(1, height - paddingY * 2) };
     const rect = (owner, s) => ({ x: owner.x + owner.width * bounded(s.x, 0) / 100, y: owner.y + owner.height * bounded(s.y, 0) / 100, width: owner.width * bounded(s.width, 100, 0) / 100, height: owner.height * bounded(s.height, 100, 0) / 100 });
     const layers = CANVAS_ELEMENTS.map((key) => ({ key, owner: root, style: posterElementStyle(cfg, key), rect: rect(root, posterElementStyle(cfg, key)) }));
     const grid = layers.find((l) => l.key === "grid").rect, rows = Math.max(1, cfg.designConfig?.rows || cfg.rows || 1), columns = Math.max(1, Math.min(cfg.columns || 5, Math.ceil(Math.max(count, 1) / rows))), gapX = cfg.designConfig?.cardGapX ?? cfg.designConfig?.cardGap ?? 10, gapY = cfg.designConfig?.cardGapY ?? cfg.designConfig?.cardGap ?? 10;

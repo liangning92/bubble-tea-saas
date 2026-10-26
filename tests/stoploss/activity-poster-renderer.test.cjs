@@ -54,3 +54,5 @@ test('two price gaps measure actual separation, preserve independent card scope 
  const styled={...saved,elements:{specialPrice:{italic:true,textDecoration:'underline',textTransform:'uppercase',strokeWidth:3,strokeColor:'#ffffff',shadowColor:'#ff5d89',shadowBlur:12}}};
  const html=render({posterConfig:schema.parse(styled)});assert.ok(html.includes('font-style:italic'));assert.ok(html.includes('text-decoration:underline'));assert.ok(html.includes('text-transform:uppercase'));assert.ok(html.includes('overflow:visible'));
 });
+
+test('canvas padding insets every canvas layer without rewriting user positions',()=>{const padded=controls.applyPosterDesignPatch(editable,{containerPaddingX:60,containerPaddingY:40});const layout=posterLayout(padded,2),headline=layout.layers.find(l=>l.key==='headline'),grid=layout.layers.find(l=>l.key==='grid');assert.equal(headline.owner.x,60);assert.equal(headline.owner.y,40);assert.equal(grid.owner.x,60);assert.equal(grid.owner.height,1000);assert.equal(padded.elements?.headline,undefined);});
