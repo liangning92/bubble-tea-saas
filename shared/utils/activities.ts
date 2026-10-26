@@ -53,6 +53,8 @@ export interface PosterDesignConfig {
   pricePosition?: 'bottom' | 'top' | 'middle'
   badgePosition?: 'bottom_bar' | 'top_pill' | 'top_right_ribbon' | 'bottom_pill' | 'hidden'
   textAlign?: 'center' | 'left' | 'right'
+  headlineFontSize?: number
+  subheadlineFontSize?: number
   titleFontSize?: number // 14..36 (default: 22)
   textShadow?: boolean
   textStroke?: boolean

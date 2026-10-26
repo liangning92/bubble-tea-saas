@@ -1,3 +1,4 @@
+import { renderActivityPoster } from '../../../shared/utils/activityPoster'
 import { TvIdleMusic } from '../components/TvIdleMusic'
 import { tvEventsApi } from '../services/api'
 import { activityEligible } from '../../../shared/utils/activities'
@@ -363,130 +364,8 @@ export function TvDisplayPage() {
           <div className="h-full flex flex-col justify-center p-4 gap-4 overflow-hidden">
             {currentActivity ? (
               currentActivity.posterConfig ? (
-                <div className="h-full flex flex-col justify-between py-2 overflow-hidden select-none">
-                  <div className="text-center pt-1">
-                    <h2
-                      className="text-3xl 2xl:text-4xl font-black tracking-tight"
-                      style={{ color: currentActivity.posterConfig.themeColor || '#FF4B72' }}
-                    >
-                      {currentActivity.posterConfig.headline || currentActivity.name}
-                    </h2>
-                    <p className="text-sm 2xl:text-base text-pink-200/90 font-medium tracking-wide mt-1">
-                      {currentActivity.posterConfig.subheadline || currentActivity.description || 'Promo Baru Setiap Hari'}
-                    </p>
-                  </div>
+                <iframe title="Activity poster" sandbox="" className="w-full h-full border-0" srcDoc={renderActivityPoster(currentActivity,{language:2,now:currentTime,assetUrl:mediaUrl,page:Math.floor(activityIndex/Math.max(1,visibleActivities.length))})}/>
 
-                  {/* Horizontal Weekday Cards Flow */}
-                  <div className="flex-1 flex items-center justify-center gap-2.5 my-3">
-                    {[
-                      { day: 1, label: 'Senin' },
-                      { day: 2, label: 'Selasa' },
-                      { day: 3, label: 'Rabu' },
-                      { day: 4, label: 'Kamis' },
-                      { day: 5, label: 'Jumat' },
-                      { day: 6, label: 'Sabtu' },
-                      { day: 0, label: 'Minggu' },
-                    ]
-                      .slice(0, currentActivity.posterConfig.columns || 5)
-                      .map((d, idx) => {
-                        const isActive = (currentActivity.posterConfig?.highlightToday ?? true) && currentTime.getDay() === d.day;
-                        const prods = currentActivity.products || [];
-                        const p = prods[idx % (prods.length || 1)] || {
-                          name: currentActivity.name,
-                          specs: [{ price: 16000 }],
-                        };
-                        const origPrice = p.specs?.[0]?.price || 16000;
-                        const specPrice = currentActivity.rule?.price ?? Math.round(origPrice * 0.8);
-                        const saving = origPrice - specPrice;
-                        const sampleGradients = [
-                          'linear-gradient(180deg, #FAD0C4 0%, #FFD1FF 100%)',
-                          'linear-gradient(180deg, #FFE5B4 0%, #FFB199 100%)',
-                          'linear-gradient(180deg, #D4FC79 0%, #96E6A1 100%)',
-                          'linear-gradient(180deg, #FCCB90 0%, #D57EEB 100%)',
-                          'linear-gradient(180deg, #FDEB71 0%, #F8D800 100%)',
-                        ];
-                        const show = currentActivity.posterConfig?.showFields || {};
-
-                        return (
-                          <div
-                            key={d.day}
-                            className={`flex-1 flex flex-col justify-between rounded-xl overflow-hidden shadow-xl transition-all duration-300 relative ${
-                              isActive
-                                ? 'transform -translate-y-2 ring-4 ring-pink-500 scale-105 z-10'
-                                : 'opacity-85'
-                            }`}
-                            style={{
-                              height: '92%',
-                              background: isActive
-                                ? 'linear-gradient(180deg, #FFF0F3 0%, #FFE3E8 100%)'
-                                : sampleGradients[idx % sampleGradients.length],
-                              color: isActive ? '#9D174D' : '#374151',
-                            }}
-                          >
-                            {show.productName !== false && (
-                              <div className="p-2 text-center">
-                                <p className={`font-black text-xs leading-tight line-clamp-2 ${isActive ? 'text-red-700' : 'text-gray-900'}`}>
-                                  {p.name}
-                                </p>
-                              </div>
-                            )}
-
-                            {show.productImage !== false && (
-                              <div className="flex-1 flex items-center justify-center p-1 relative overflow-hidden">
-                                {p.image ? (
-                                  <img src={mediaUrl(p.image)} alt={p.name} className="max-h-24 object-contain drop-shadow" />
-                                ) : (
-                                  <div
-                                    className="w-16 h-20 rounded-full flex items-center justify-center shadow-lg text-white font-black text-2xl"
-                                    style={{
-                                      background: isActive
-                                        ? 'linear-gradient(135deg, #FF4B72, #FF758C)'
-                                        : 'linear-gradient(135deg, #4A5568, #2D3748)',
-                                    }}
-                                  >
-                                    🥤
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            <div className="p-1.5 text-center bg-white/70 backdrop-blur-sm border-t border-white/40">
-                              {show.originalPrice !== false && (
-                                <p className="text-[10px] text-gray-500 line-through">
-                                  Normal: {formatCurrency(origPrice)}
-                                </p>
-                              )}
-                              {show.specialPrice !== false && (
-                                <p
-                                  className="text-xs font-black tracking-tight"
-                                  style={{ color: isActive ? '#E11D48' : '#DC2626' }}
-                                >
-                                  {formatCurrency(specPrice)}
-                                </p>
-                              )}
-                              {show.savingAmount !== false && saving > 0 && (
-                                <p className="text-[10px] font-bold text-emerald-700">
-                                  Hemat: {formatCurrency(saving)}
-                                </p>
-                              )}
-                            </div>
-
-                            {show.dayBadge !== false && (
-                              <div
-                                className="py-1 text-center font-black text-xs tracking-wider"
-                                style={{
-                                  backgroundColor: isActive ? (currentActivity.posterConfig?.themeColor || '#FF4B72') : '#6B7280',
-                                  color: '#FFFFFF',
-                                }}
-                              >
-                                {d.label}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
               ) : (
                 <>
                   <span className="text-amber-300 font-bold text-2xl">PROMO AKTIF</span>
