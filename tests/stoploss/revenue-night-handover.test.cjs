@@ -1,7 +1,7 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
 function load(file,imports={}){const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,{module:m,exports:m.exports,require:n=>{if(n in imports)return imports[n];if(n.endsWith('/storeDateSettings'))return load('server/src/utils/storeDateSettings.ts');throw Error(n)},Date,Map,Set,console});return m.exports;}
 const dates=load('server/src/utils/revenueDateRange.ts'),night=load('server/src/utils/dailyOnlineRevenue.ts',{'./revenueDateRange':dates});
-const receipts=load('server/src/services/ShiftManualReceipts.ts',{zod:require('../../server/node_modules/zod'),'../utils/dailyOnlineRevenue':night,'../utils/revenueDateRange':dates});
+const receipts=load('server/src/services/ShiftManualReceipts.ts',{zod:require('../../server/node_modules/zod'),'../utils/dailyOnlineRevenue':night,'../utils/revenueDateRange':dates,'../utils/orderDiscount':load('server/src/utils/orderDiscount.ts')});
 const handover=load('server/src/services/ShiftHandoverFinancials.ts',{'./ShiftManualReceipts':receipts});
 const definitions=[{key:'morning',nameZh:'早班',startTime:'08:00'},{key:'evening',nameZh:'晚班',startTime:'16:00'}];
 const amounts={cash:670000,qris:16000,shopeefood:100000,gofood:50000};
@@ -24,7 +24,7 @@ test('night detection supports configured shift keys and only a morning definiti
 });
 test('summary, channel and daily revenue share the same night-only online source',async()=>{
  const database=db([row('day','morning','11'),row('night','evening','11')]);database.order={findMany:async()=>[{status:'paid',paymentMethod:'cash',finalAmount:110000,refundRequests:[{status:'paid',amount:10000}],createdAt:new Date('2026-10-11T02:00Z'),channelId:'pos',channel:{name:'POS'}}]};
- const revenue=load('server/src/services/RevenueService.ts',{'./ShiftHandoverFinancials':handover,'../utils/refundAllocation':load('server/src/utils/refundAllocation.ts'),'./ReceiptFinancialEvidenceService':{requireVerifiedReceiptIncome:async()=>{}},'../config/database':{default:database,__esModule:true},'./ReceivedReceiptService':{},'./OrderReplayService':{},'../utils/revenueDateRange':dates});
+ const revenue=load('server/src/services/RevenueService.ts',{'./ShiftHandoverFinancials':handover,'../utils/refundAllocation':load('server/src/utils/refundAllocation.ts'),'./ReceiptFinancialEvidenceService':{requireVerifiedReceiptIncome:async()=>{}},'../config/database':{default:database,__esModule:true},'./ReceivedReceiptService':{},'./OrderReplayService':{},'../utils/revenueDateRange':dates,'../utils/orderDiscount':load('server/src/utils/orderDiscount.ts')});
  const summary=await revenue.getRevenueSummary('owned',start,end),channels=await revenue.getRevenueByChannel('owned',start,end),daily=await revenue.getDailyRevenue('owned',start,end);
  assert.equal(summary.orderRevenue,100000);assert.equal(summary.revenue,250000);assert.equal(channels.reduce((sum,r)=>sum+r.revenue,0),250000);assert.equal(daily.reduce((sum,r)=>sum+r.revenue,0),250000);
 });

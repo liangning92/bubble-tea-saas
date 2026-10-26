@@ -1,5 +1,6 @@
 import { dailyNightHandoverIds } from '../utils/dailyOnlineRevenue'
 import { netReceivedAmount } from '../utils/refundAllocation'
+import { orderDiscountTotal } from '../utils/orderDiscount'
 import { shiftHandoverFinancials } from './ShiftHandoverFinancials'
 import { loadShiftCashReviews } from './ShiftCashReconciliation'
 import { loadManualReceipts } from './ShiftManualReceipts'
@@ -36,7 +37,7 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
   const until = new Date(Math.min(now.getTime(), Math.max(range.endDate.getTime(), ...ends.map(d => d.getTime()))))
   const window = { storeId, createdAt: { gte: from, lt: until } }
   const [orders, expenses, warnings, staff, users, definitions, categoryConfig] = await Promise.all([
-    db.order.findMany({ where: window, select: { id: true, orderNumber: true, pickupNumber: true, staffId: true, status: true, finalAmount: true, paymentMethod: true, createdAt: true, items:{select:{productName:true,quantity:true}}, refundRequests:{where:{status:{in:['approved','paid']}},select:{amount:true,status:true}} }, orderBy: { createdAt: 'desc' } }),
+    db.order.findMany({ where: window, select: { id: true, orderNumber: true, pickupNumber: true, staffId: true, status: true, finalAmount: true, paymentMethod: true, createdAt: true, discountAmount: true, activityDiscountAmount: true, couponDiscountAmount: true, pointsDiscountAmount: true, manualDiscountAmount: true, activityName: true, activitySource: true, items:{select:{productName:true,quantity:true}}, refundRequests:{where:{status:{in:['approved','paid']}},select:{amount:true,status:true}} }, orderBy: { createdAt: 'desc' } }),
     db.expense.findMany({ where: window, orderBy: { createdAt: 'desc' } }),
     db.pOSActionLog.findMany({ where: { ...window, severity: { in: ['warning', 'critical'] } }, select: { id: true, staffId: true, staffName: true, action: true, severity: true, description: true, entityId: true, createdAt: true }, orderBy: { createdAt: 'desc' } }),
     db.staff.findMany({ where: { storeId }, select: { id: true, userId: true, name: true, employeeNumber: true, position: true } }),
@@ -85,8 +86,14 @@ export async function loadShiftReview(db: ReviewDB, storeId: string, start: unkn
       receipts?.qris ?? null,nightlyIds.has(b.id) ? receipts?.shopeefood || 0 : 0,nightlyIds.has(b.id) ? receipts?.gofood || 0 : 0,orderRevenue) : null
     const financials=calculated ? {...calculated,reported:!!receipts,onlineRevenueCounted:nightlyIds.has(b.id)} : null
     return { ...b, manualReceiptsCashBasis:receiptBases.get(b.id) || 'cash_receipts', handoverFinancials:financials, cashReconciliation:cashReviews.get(b.id)?.cashReconciliation || null, cashWarning:cashReviews.get(b.id)?.cashWarning || null, manualReceipts: manualReceipts.get(b.id) || null, attribution: 'recorded_time_window', overlapping: overlap,
-      summary: { revenue: financials?.totalRevenue ?? orderRevenue, completedOrders: completed.length, orders: completed.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size },
-      orders: b.orders.map(o => ({ ...o, amount: netReceivedAmount(o), originalAmount: o.finalAmount, staffName: person(o.staffId).name })),
+      summary: { revenue: financials?.totalRevenue ?? orderRevenue, completedOrders: completed.length, orders: completed.length, refundedOrders: b.orders.filter(o => o.status === 'refunded').length, refundedAmount: b.orders.filter(o => o.status === 'refunded').reduce((sum, o) => sum + o.finalAmount, 0), expenses: b.expenses.length, expenseAmount: b.expenses.reduce((sum, e) => sum + e.amount, 0) / 100, warnings: b.warnings.length, employees: participants.size,
+        activityDiscount: completed.reduce((sum, o) => sum + (o.activityDiscountAmount || 0), 0),
+        couponDiscount: completed.reduce((sum, o) => sum + (o.couponDiscountAmount || 0), 0),
+        pointsDiscount: completed.reduce((sum, o) => sum + (o.pointsDiscountAmount || 0), 0),
+        manualDiscount: completed.reduce((sum, o) => sum + (o.manualDiscountAmount || 0), 0),
+        totalDiscount: completed.reduce((sum, o) => sum + orderDiscountTotal(o), 0),
+        activityOrderCount: completed.filter(o => (o.activityDiscountAmount || 0) > 0).length },
+      orders: b.orders.map(o => ({ ...o, amount: netReceivedAmount(o), originalAmount: o.finalAmount, discount: orderDiscountTotal(o), activityName: o.activityName || null, activitySource: o.activitySource || null, staffName: person(o.staffId).name })),
       expenses: b.expenses.map(e => ({ id: e.id, category: e.category, amount: e.amount / 100, quantity: e.quantity ?? null, description: e.description, createdAt: e.createdAt, staffName: e.referenceId ? person(e.referenceId.split(':')[0]).name : null })),
       employees: [...participants.values()] }
   }
