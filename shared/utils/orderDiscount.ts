@@ -55,3 +55,8 @@ export function orderDiscountActivityName(order: { activityName?: string | null;
   if (order.activitySource === 'points') return null
   return order.activityName
 }
+
+// Historical discounts without a sale-time source remain visible without guessing their type.
+export function unclassifiedDiscount(total: number, buckets: (number | null | undefined)[]): number {
+  return Math.max(0, amount(total) - buckets.reduce<number>((sum, value) => sum + amount(value), 0))
+}

@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next'
 import api, { orderApi } from '../../services/api'
 import { useAuthStore } from '../../stores/auth'
 import { formatCurrency, formatDateTime } from '../../utils/helpers'
-import { orderDiscountTotal } from '../../../../shared/utils/orderDiscount'
+import { orderDiscountTotal, unclassifiedDiscount } from '../../../../shared/utils/orderDiscount'
 import { ArrowLeft, Printer, RotateCcw, CheckCircle, Clock, XCircle, Loader2 } from 'lucide-react'
 
 export function OrderDetailPage() {
@@ -79,6 +79,8 @@ export function OrderDetailPage() {
     { key: 'points', label: t('orders.pointsDiscount'), amount: order.pointsDiscountAmount || 0, name: null }
   ].filter(row => row.amount > 0)
   const discountTotal = orderDiscountTotal(order)
+  const otherDiscount = unclassifiedDiscount(discountTotal, discountRows.map(row => row.amount))
+  if (otherDiscount > 0) discountRows.push({key: 'other', label: t('orders.otherDiscount'), amount: otherDiscount, name: null})
   const taxAmount = order.checkoutTaxAmount ?? 0
 
   return (
