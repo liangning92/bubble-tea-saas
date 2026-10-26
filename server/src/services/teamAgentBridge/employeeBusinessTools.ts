@@ -1,3 +1,4 @@
+import {createHash} from 'crypto'
 import { z } from 'zod'
 import { stockIn, stockOut } from '../InventoryService'
 import { TeamError } from '../TeamCommunicationService'
@@ -39,6 +40,16 @@ export async function executeBusinessTool(db:any,g:BridgeGrant,scope:Communicati
     if(!v.inventoryId||!v.quantity)return {ok:false,code:'EMPLOYEE_STOCK_DETAILS_REQUIRED',message:'Ask for an inventory item and positive quantity.'}
     const item=await db.inventory.findFirst({where:{id:v.inventoryId,storeId},select:{id:true}})
     if(!item)deny('EMPLOYEE_STOCK_ITEM_NOT_FOUND')
+    if(v.action==='stock_out'&&photoEvidence){
+      operationId='hermes-photo:'+createHash('sha256').update(JSON.stringify([storeId,photoEvidence.channelId,photoEvidence.messageId,v.inventoryId])).digest('hex')
+      const prior=await db.stockOutLog.findUnique({where:{operationId},include:{inventory:{select:{storeId:true,unit:true}}}})
+      if(prior){
+        if(prior.inventory.storeId!==storeId||prior.inventoryId!==v.inventoryId)deny('EMPLOYEE_PHOTO_OPERATION_CONFLICT')
+        const receipt={ok:true,alreadyRecorded:true,operationRecorded:true,operationId,stockOutLogId:prior.id,quantity:prior.quantity,unit:prior.inventory.unit,message:'This exact photograph and material already have a committed stock-out receipt. Do not create another issue. Review the recorded quantity; any correction must update that original work.'}
+        if(!await audienceAllows(db,g,scope,'inventory.read'))return {ok:true,alreadyRecorded:true,operationRecorded:true,message:'This photo-backed stock operation was already recorded; it was not repeated.'}
+        return visibleBusinessData(db,g,scope,receipt)
+      }
+    }
     const data={inventoryId:v.inventoryId,storeId,quantity:v.quantity,inputUnit:v.unit,note:v.note,staffId:actor,operationId,...(photoEvidence?{sourceEvidence:photoEvidence}:{})}
     try{
     if(v.action==='stock_in'){
