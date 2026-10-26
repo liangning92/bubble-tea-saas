@@ -184,7 +184,7 @@ export function ActivityPosterEditor({
   }
 
   const updateDesign = (patch: Partial<PosterDesignConfig>) => {
-    update(applyPosterDesignPatch({...config,designConfig:design,cardItems:currentCards},patch))
+    update(applyPosterDesignPatch({...config,cardItems:currentCards},patch))
   }
 
   const updateField = (field: keyof NonNullable<ActivityPosterConfig['showFields']>, checked: boolean) => {
@@ -1444,7 +1444,7 @@ export function ActivityPosterEditor({
                 {l('字号尺寸与间距边距', 'Font Sizes & Spacing', 'Ukuran Font & Jarak')}
               </label>
 
-              <div className="grid grid-cols-2 gap-3">{([['headlineFontSize',l('主标题字号','Headline size','Ukuran judul utama'),55],['subheadlineFontSize',l('副标题字号','Subheadline size','Ukuran subjudul'),23]] as const).map(([key,label,defaultValue])=><label key={key} className="text-xs">{label}<input type="number" className="input" min={8} max={100} value={design[key]??defaultValue} onChange={e=>updateDesign({[key]:Math.max(8,Math.min(100,Number(e.target.value)))})}/></label>)}</div>
+              <div className="grid grid-cols-2 gap-3">{([['headlineFontSize',l('主标题字号','Headline size','Ukuran judul utama'),55],['subheadlineFontSize',l('副标题字号','Subheadline size','Ukuran subjudul'),23]] as const).map(([key,label,defaultValue])=><label key={key} className="text-xs">{label}<input type="number" className="input" min={0} max={300} value={design[key]??defaultValue} onChange={e=>updateDesign({[key]:Math.max(0,Math.min(300,Number(e.target.value)))})}/></label>)}</div>
               {/* Card Gap */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
@@ -1572,9 +1572,9 @@ export function ActivityPosterEditor({
             <summary className="font-semibold text-sm cursor-pointer">{l('高级尺寸与显示设置','Advanced sizes & visibility','Ukuran & tampilan lanjutan')}</summary>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
               {([
-                ['normalPriceFontSize',l('原价字号','Original price size','Ukuran harga normal'),14,8,40],
-                ['savingFontSize',l('节省金额字号','Savings size','Ukuran hemat'),13,8,40],
-                ['dayBadgeFontSize',l('标签字号','Badge size','Ukuran label'),20,8,48],
+                ['normalPriceFontSize',l('原价字号','Original price size','Ukuran harga normal'),14,0,300],
+                ['savingFontSize',l('节省金额字号','Savings size','Ukuran hemat'),13,0,300],
+                ['dayBadgeFontSize',l('标签字号','Badge size','Ukuran label'),20,0,300],
                 ['containerPaddingX',l('画布左右留白','Canvas side padding','Jarak sisi kanvas'),20,0,100],
                 ['containerPaddingY',l('画布上下留白','Canvas vertical padding','Jarak vertikal kanvas'),16,0,100],
                 ['cardPadding',l('卡片内边距','Card padding','Jarak dalam kartu'),0,0,50],
@@ -1582,7 +1582,7 @@ export function ActivityPosterEditor({
                 ['imageBorderRadius',l('图片圆角','Image corners','Sudut gambar'),16,0,50],
                 ['cardBorderWidth',l('边框粗细','Border width','Tebal bingkai'),1,0,12],
                 ['highlightScale',l('当天放大倍数','Today scale','Skala hari ini'),1.04,1,1.15],
-              ] as const).map(([key,label,defaultValue,min,max])=><label className="text-xs" key={key}>{label}<input type="number" className="input" min={min} max={max} step={key==='highlightScale'?0.01:1} value={design[key]??defaultValue} onChange={e=>updateDesign({[key]:Math.max(min,Math.min(max,Number(e.target.value)))})}/></label>)}
+              ] as const).map(([key,label,defaultValue,min,max])=><label className="text-xs" key={key}>{label}<input type="number" className="input" min={Math.min(min,design[key]??defaultValue)} max={Math.max(max,design[key]??defaultValue)} step="any" value={design[key]??defaultValue} onChange={e=>updateDesign({[key]:Math.max(min,Math.min(max,Number(e.target.value)))})}/></label>)}
               <label className="text-xs">{l('字体','Font family','Jenis font')}<select className="input" value={design.fontStyle||'sans'} onChange={e=>updateDesign({fontStyle:e.target.value as PosterDesignConfig['fontStyle']})}><option value="sans">Sans</option><option value="serif">Serif</option><option value="mono">Mono</option></select></label>
               <label className="text-xs">{l('价格框阴影','Price box shadow','Bayangan kotak harga')}<select className="input" value={design.priceBoxShadow||'medium'} onChange={e=>updateDesign({priceBoxShadow:e.target.value as PosterDesignConfig['priceBoxShadow']})}><option value="none">{l('无','None','Tidak ada')}</option><option value="soft">{l('柔和','Soft','Lembut')}</option><option value="medium">{l('中等','Medium','Sedang')}</option></select></label>
               <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.showFields?.productSubname!==false} onChange={e=>updateField('productSubname',e.target.checked)}/>{l('显示规格副标题','Show size subtitle','Tampilkan subjudul ukuran')}</label>
