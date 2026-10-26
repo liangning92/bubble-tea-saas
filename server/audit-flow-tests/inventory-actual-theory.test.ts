@@ -7,7 +7,7 @@ import {pgLedgerDDL,assertLedgerInstalled} from '../src/utils/inventoryLedger'
 import {ACTUAL_STOCK_KEY} from '../src/services/ActualInventoryPolicy'
 import {UNIFIED_INVENTORY_KEY} from '../src/services/UnifiedInventoryService'
 import {recordOrderConsumption,reverseOrderConsumption,FLOW_CUTOVER_KEY} from '../src/services/OrderConsumptionService'
-import {stockOut} from '../src/services/InventoryService'
+import {stockOut,getInventory} from '../src/services/InventoryService'
 import {employeeConsumption} from '../src/services/EmployeeConsumptionService'
 import {createRecipe,executeRecipe} from '../src/services/ProcessRecipeService'
 import {createInventoryCount,updateCountItem,submitInventoryCount,completeInventoryCount} from '../src/services/InventoryCountService'
@@ -82,3 +82,5 @@ test('inventory notices respect live store and employee access; reading does not
  await prisma.config.update({where:{storeId_key:{storeId:f.store.id,key}},data:{value:JSON.stringify({...event,active:false,status:'resolved'})}})
  expect((await inbox.read(actor)).items).toHaveLength(0)
 })
+
+test('existing employee and admin forms receive physical stock preview metadata',async()=>{const f=await fixture();const row=(await getInventory({storeId:f.store.id})).find((r:any)=>r.id===f.material.id);expect(row.actualStockPolicy).toBe(true);expect(row.unifiedStock).toBe(false);expect(row.currentStock).toBe(1000);await f.issue(10);expect((await getInventory({storeId:f.store.id}))[0].currentStock).toBe(990)});
