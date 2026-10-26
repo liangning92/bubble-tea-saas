@@ -35,3 +35,26 @@ test('variant association requires an exact Unicode product name and never a sub
  assert.deepEqual(Array.from(urls),['/uploads/primary.jpg','/uploads/tea-tall.jpg']);
  assert.deepEqual(Array.from(m.exports.posterImageUrls({name:''},[{name:'9x16.webp',url:'/uploads/no.jpg'}])),[]);
 });
+const controls=load('shared/utils/posterControls.ts');
+const editable={freeform:true,canvasWidth:1920,canvasHeight:1080,columns:2,cardItems:[{productName:'Tea',dayOfWeek:1,imageUrl:'/uploads/tea.jpg',imageMode:'manual',originalPrice:16000,specialPrice:12000,elements:{productName:{fontSize:35,color:'#ffffff'}}},{productName:'Ice',dayOfWeek:2,originalPrice:18000,specialPrice:13000}],designConfig:{highlightMode:'border_only'}};
+test('formerly inert controls produce a visible rendering difference in free positioning',()=>{
+ const before=render({posterConfig:editable},{day:1});
+ for(const patch of [{textGlow:true},{overlayGradientOpacity:65},{cardBorderStyle:'dashed'},{cardBorderStyle:'none'},{cardShadow:'deep'},{highlightMode:'popout'},{highlightMode:'glow'},{highlightMode:'ribbon'},{highlightMode:'popout',highlightScale:1.1},{priceStyle:'pill'},{priceBoxShadow:'soft'},{containerPaddingX:70},{containerPaddingY:35},{imageBleed:false},{fontStyle:'mono'}]){
+  const updated=controls.applyPosterDesignPatch(editable,patch);assert.notEqual(render({posterConfig:updated},{day:1}),before,JSON.stringify(patch));
+ }
+ const dashed=render({posterConfig:controls.applyPosterDesignPatch(editable,{cardBorderStyle:'dashed'})});assert.ok(dashed.includes('border:calc(1 * var(--u)) dashed #ffffff'));
+ const changed=controls.applyPosterDesignPatch(editable,{titleFontSize:48,titleColor:'#123456'});assert.equal(posterLayout(changed,2).layers.find(l=>l.key==='productName').style.fontSize,48);
+});
+test('two price gaps measure actual separation, preserve independent card scope and survive API storage',()=>{
+ const spaced=controls.setPosterPriceSpacing(editable,[9,13],0),schema=load('server/src/utils/activityPosterSchema.ts').activityPosterSchema;
+ const saved=JSON.parse(JSON.stringify(schema.parse(spaced))),layout=posterLayout(saved,2),prices=['originalPrice','specialPrice','savingAmount'].map(key=>layout.layers.find(l=>l.key===key&&l.cardIndex===0));
+ assert.ok(Math.abs(prices[1].rect.y-prices[0].rect.y-prices[0].rect.height-9)<.001);assert.ok(Math.abs(prices[2].rect.y-prices[1].rect.y-prices[1].rect.height-13)<.001);
+ const bigger=controls.applyPosterDesignPatch(saved,{priceFontSize:42});const biggerLayers=posterLayout(bigger,2).layers.filter(l=>l.cardIndex===0);assert.ok(biggerLayers.find(l=>l.key==='specialPrice').rect.height>=42*1.2);assert.deepEqual(Array.from(controls.posterPriceGaps(bigger,0)),[9,13]);
+ assert.ok(prices.every(l=>l.rect.height>=l.style.fontSize*(l.style.lineHeight||1.2)));assert.deepEqual(saved.cardItems[1],editable.cardItems[1]);
+ const styled={...saved,elements:{specialPrice:{italic:true,textDecoration:'underline',textTransform:'uppercase',strokeWidth:3,strokeColor:'#ffffff',shadowColor:'#ff5d89',shadowBlur:12}}};
+ const html=render({posterConfig:schema.parse(styled)});assert.ok(html.includes('font-style:italic'));assert.ok(html.includes('text-decoration:underline'));assert.ok(html.includes('text-transform:uppercase'));assert.ok(html.includes('overflow:visible'));
+});
+
+test('canvas padding insets every canvas layer without rewriting user positions',()=>{const padded=controls.applyPosterDesignPatch(editable,{containerPaddingX:60,containerPaddingY:40});const layout=posterLayout(padded,2),headline=layout.layers.find(l=>l.key==='headline'),grid=layout.layers.find(l=>l.key==='grid');assert.equal(headline.owner.x,60);assert.equal(headline.owner.y,40);assert.equal(grid.owner.x,60);assert.equal(grid.owner.height,1000);assert.equal(padded.elements?.headline,undefined);});
+
+test('today popout composes with the user card rotation',()=>{const config={...editable,elements:{card:{rotation:12}},designConfig:{highlightMode:'popout',highlightScale:1.1}};assert.ok(render({posterConfig:config},{day:1}).includes('transform:rotate(12deg) scale(1.1)'));});
