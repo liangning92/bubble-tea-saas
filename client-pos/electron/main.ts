@@ -1739,8 +1739,7 @@ function generateShiftReportText(data: any): string {
     if (activityOrders.length) {
       separator()
       wrap(label('活动订单明细', 'ACTIVITY ORDERS', 'DETAIL AKTIVITAS'))
-      for (const order of activityOrders.slice(0, 10)) money(`${order.pickupNumber ? '#' + order.pickupNumber : order.orderNumber}${order.activityName ? ' · ' + order.activityName : ''}`, order.totalDiscountAmount)
-      if (activityOrders.length > 10) wrap(label('其他订单', 'Other orders', 'Pesanan lain') + ': ' + String(activityOrders.length - 10))
+      for (const order of activityOrders) money(`${order.orderNumber}${order.pickupNumber ? ' #' + order.pickupNumber : ''}${order.activityName ? ' · ' + order.activityName : ''}`, order.totalDiscountAmount)
     }
   }
   if (visible('expenses')) {

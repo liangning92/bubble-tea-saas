@@ -129,6 +129,12 @@ export function createEmployeeContinuation(db:any,ports:EmployeeContinuationPort
         const observed=observationSchema.parse(await ports.readExecution(tx,s.active)) as Awaited<ReturnType<EmployeeContinuationPorts['readExecution']>>
         if(observed.phase==='running'&&now()-Date.parse(s.active.startedAt!)<(ports.executionDeadlineMs||120000))return {status:s.phase}
         if(observed.phase==='running'||observed.phase==='unknown'){
+          const release=observed.phase==='unknown'?await ports.readAbandoned(tx,s.active).catch(()=>({releasable:false})):{releasable:false}
+          if(release.releasable){
+            delete s.active;s.phase='ready';s.fault={code:'EMPLOYEE_CONTINUATION_EXECUTION_UNKNOWN',at:stamp()}
+            await writeTeam(tx,ports.storeId,executionKey(executionId),{reservation:saved.reservation,status:'released',fault:s.fault})
+            await save(tx,s);return {status:'released'}
+          }
           s.phase='unknown';s.fault={code:observed.phase==='running'?'EMPLOYEE_CONTINUATION_EXECUTION_TIMEOUT':'EMPLOYEE_CONTINUATION_EXECUTION_UNKNOWN',at:stamp()}
           await writeTeam(tx,ports.storeId,executionKey(executionId),{reservation:s.active,status:'unknown',fault:s.fault});await save(tx,s);return {status:'unknown'}
         }

@@ -430,58 +430,84 @@ export function MediaLibrary({
         </div>
       )}
       {rename && (
-        <div className="card flex gap-2">
-          <input
-            aria-label={t("media.rename")}
-            className="input"
-            maxLength={200}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy || !name.trim()}
-            onClick={() =>
-              void run(async () => {
-                await mediaApi.rename(rename.id, name);
-                setRename(null);
-              })
-            }
-          >
-            {t("common.save")}
-          </button>
-          <button type="button" className="btn" onClick={() => setRename(null)}>
-            {t("common.cancel")}
-          </button>
-        </div>
+        <AdminDialog
+          title={t("media.rename")}
+          onClose={() => setRename(null)}
+          className="max-w-md"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">
+                {t("media.name", "文件名称")}
+              </label>
+              <input
+                aria-label={t("media.rename")}
+                className="input w-full"
+                maxLength={200}
+                value={name}
+                autoFocus
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setRename(null)}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={busy || !name.trim()}
+                onClick={() =>
+                  void run(async () => {
+                    await mediaApi.rename(rename.id, name);
+                    setRename(null);
+                  })
+                }
+              >
+                {t("common.save")}
+              </button>
+            </div>
+          </div>
+        </AdminDialog>
       )}
       {deleting && (
-        <div className="card space-y-3">
-          <p>{t("media.deleteConfirm", { name: deleting.name })}</p>
-          <button
-            type="button"
-            disabled={busy}
-            className="btn text-red-600"
-            onClick={() =>
-              void run(async () => {
-                const asset = deleting;
-                setReferencesAsset(asset);
-                setDeleting(null);
-                await mediaApi.remove(asset.id);
-              })
-            }
-          >
-            {t("common.delete")}
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={() => setDeleting(null)}
-          >
-            {t("common.cancel")}
-          </button>
-        </div>
+        <AdminDialog
+          title={t("media.delete", "删除文件")}
+          onClose={() => setDeleting(null)}
+          className="max-w-md"
+        >
+          <div className="space-y-4">
+            <p className="text-gray-700 text-sm">{t("media.deleteConfirm", { name: deleting.name })}</p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setDeleting(null)}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className="btn bg-red-600 text-white hover:bg-red-700"
+                onClick={() =>
+                  void run(async () => {
+                    const asset = deleting;
+                    setReferencesAsset(asset);
+                    setDeleting(null);
+                    await mediaApi.remove(asset.id);
+                  })
+                }
+              >
+                {t("common.delete")}
+              </button>
+            </div>
+          </div>
+        </AdminDialog>
       )}
     </div>
   );

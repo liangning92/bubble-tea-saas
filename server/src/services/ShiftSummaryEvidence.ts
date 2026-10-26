@@ -50,9 +50,8 @@ export async function loadShiftSummaryEvidence(db: EvidenceDB, storeId: string, 
   // Discount provenance for the shift window: what the store gave away and which orders caused it.
   const discounted = completed.filter(o => orderDiscountTotal(o) > 0)
   const activityOrders = discounted
-    .filter(o => (o.activityDiscountAmount || 0) > 0 || !!o.activityName)
+    .filter(o => (o.activityDiscountAmount || 0) > 0)
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-    .slice(0, 20)
     .map(o => ({
       orderNumber: o.orderNumber,
       pickupNumber: o.pickupNumber,
