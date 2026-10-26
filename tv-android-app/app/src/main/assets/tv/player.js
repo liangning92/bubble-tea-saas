@@ -534,9 +534,21 @@
     const upcoming = upcomingSpecial();
     if (upcoming && !live) box.append(previewCard(upcoming));
   }
+  function isSpecialActive(s) {
+    if (eligible(s)) return true;
+    // Signage campaigns with a poster config remain on-air during their published date range
+    if (s && s.posterConfig) {
+      const now = estimatedTime();
+      if (now === null) return true;
+      if (s.startsAt && now < Date.parse(s.startsAt)) return false;
+      if (s.endsAt && now >= Date.parse(s.endsAt)) return false;
+      return true;
+    }
+    return false;
+  }
   function liveSpecial() {
     const list = (snapshot && snapshot.specials) || [];
-    for (const s of list) if (eligible(s)) return s;
+    for (const s of list) if (isSpecialActive(s)) return s;
     return null;
   }
   function upcomingSpecial() {
@@ -626,13 +638,21 @@
     const cfg = live.posterConfig;
     if (cfg && cfg.template === "daily_specials") {
       box.classList.add("special-poster-board");
+      const design = cfg.designConfig || {};
       if (cfg.backgroundColor) box.style.background = cfg.backgroundColor;
+      if (design.containerPaddingY !== undefined || design.containerPaddingX !== undefined) {
+        box.style.padding = (design.containerPaddingY ?? 16) * 0.12 + "vmin " + (design.containerPaddingX ?? 24) * 0.12 + "vmin";
+      }
+
       const posterHead = element("div", undefined, "special-poster-head");
       const title = element("h1", cfg.headline || live.name || t("specialBadge"), "special-poster-title");
-      if (cfg.themeColor) title.style.color = cfg.themeColor;
+      if (design.highlightColor || cfg.themeColor) title.style.color = design.highlightColor || cfg.themeColor;
+      if (design.titleFontSize) title.style.fontSize = (design.titleFontSize * 0.2) + "vmin";
       posterHead.append(title);
       if (cfg.subheadline || live.description) {
-        posterHead.append(element("p", cfg.subheadline || live.description, "special-poster-sub"));
+        const sub = element("p", cfg.subheadline || live.description, "special-poster-sub");
+        if (design.titleFontSize) sub.style.fontSize = (design.titleFontSize * 0.1) + "vmin";
+        posterHead.append(sub);
       }
       box.append(posterHead);
 
@@ -655,74 +675,148 @@
       const currentWeekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(todayWeekdayName);
 
       const cardRow = element("div", undefined, "special-poster-row");
-      const gradients = [
-        "linear-gradient(180deg, #FAD0C4 0%, #FFD1FF 100%)",
-        "linear-gradient(180deg, #FFE5B4 0%, #FFB199 100%)",
-        "linear-gradient(180deg, #D4FC79 0%, #96E6A1 100%)",
-        "linear-gradient(180deg, #FCCB90 0%, #D57EEB 100%)",
-        "linear-gradient(180deg, #FDEB71 0%, #F8D800 100%)",
-        "linear-gradient(180deg, #A8EDEA 0%, #FED6E3 100%)",
-        "linear-gradient(180deg, #E0C3FC 0%, #8EC5FC 100%)",
-      ];
+      if (design.cardGap !== undefined) {
+        cardRow.style.gap = (design.cardGap * 0.1) + "vmin";
+      }
 
+      const dayThemes = [
+        {
+          bg: "linear-gradient(180deg, #FFC4C4 0%, #FFD6D6 100%)",
+          activeBg: "linear-gradient(180deg, #FFF0F2 0%, #FFE0E5 100%)",
+          titleColor: "#9F1239",
+        },
+        {
+          bg: "linear-gradient(180deg, #FFF0F3 0%, #FFE2E7 100%)",
+          activeBg: "linear-gradient(180deg, #FFF5F7 0%, #FFE8ED 100%)",
+          titleColor: "#BE123C",
+        },
+        {
+          bg: "linear-gradient(180deg, #D4EDDA 0%, #C3E6CB 100%)",
+          activeBg: "linear-gradient(180deg, #EDFAEF 0%, #D8F3DC 100%)",
+          titleColor: "#166534",
+        },
+        {
+          bg: "linear-gradient(180deg, #FDE6D5 0%, #FBD4BD 100%)",
+          activeBg: "linear-gradient(180deg, #FEF0E6 0%, #FDE0CE 100%)",
+          titleColor: "#9A3412",
+        },
+        {
+          bg: "linear-gradient(180deg, #FEF3C7 0%, #FDE68A 100%)",
+          activeBg: "linear-gradient(180deg, #FFFBEB 0%, #FEF08A 100%)",
+          titleColor: "#854D0E",
+        },
+      ];
       const prods = live.products || [];
+      const cardItems = cfg.cardItems || [];
+      const highlightColor = design.highlightColor || cfg.themeColor || "#FF2E63";
+      const highlightMode = design.highlightMode || "popout";
+
       displayDays.forEach((d, idx) => {
-        const isActive = cfg.highlightToday !== false && currentWeekday === d.day;
-        const p = prods[idx % (prods.length || 1)] || prods[0] || {
+        const theme = dayThemes[idx % dayThemes.length];
+        const isActive = cfg.highlightToday !== false && (currentWeekday === d.day || ((currentWeekday === 0 || currentWeekday === 6) && d.day === 1));
+        const cardItem = cardItems.find(c => c.dayOfWeek === d.day);
+        const p = cardItem ? {
+          name: cardItem.productName,
+          image: cardItem.imageUrl,
+          originalPrice: cardItem.originalPrice,
+          specialPrice: cardItem.specialPrice,
+          saving: cardItem.saving,
+        } : (prods[idx % (prods.length || 1)] || prods[0] || {
           name: "YOUME Special",
+          image: "",
           originalPrice: 16000,
           specialPrice: 12000,
           saving: 4000,
-        };
+        });
+
         const card = element("article", undefined, "special-poster-card" + (isActive ? " special-card-active" : ""));
-        card.style.background = isActive
-          ? "linear-gradient(180deg, #FFF0F3 0%, #FFE3E8 100%)"
-          : gradients[idx % gradients.length];
-        if (isActive && cfg.themeColor) {
-          card.style.borderColor = cfg.themeColor;
-          card.style.boxShadow = "0 0 3vmin " + cfg.themeColor + "66";
+        card.style.background = isActive ? (cardItem?.activeColor || theme.activeBg) : (cardItem?.color || theme.bg);
+        if (design.cardBorderRadius !== undefined) {
+          card.style.borderRadius = (design.cardBorderRadius * 0.1) + "vmin";
+        }
+
+        if (isActive) {
+          if (highlightMode === "popout") {
+            const scale = design.highlightScale || 1.04;
+            card.style.transform = "translateY(-1.5vmin) scale(" + scale + ")";
+            card.style.boxShadow = "0 1.5vmin 4.5vmin " + highlightColor + "99";
+            card.style.border = "0.4vmin solid " + highlightColor;
+          } else if (highlightMode === "glow") {
+            card.style.boxShadow = "0 0 3.5vmin " + highlightColor + "cc";
+            card.style.border = "0.3vmin solid " + highlightColor;
+          } else if (highlightMode === "border_only") {
+            card.style.border = "0.4vmin solid " + highlightColor;
+          }
         }
 
         const show = cfg.showFields || {};
+        const titlePos = design.titlePosition || "top";
+
+        const topBox = element("div", undefined, "special-poster-top-box");
         if (show.productName !== false) {
-          const cardTitle = element("h3", p.name, "special-poster-product-title");
-          if (isActive) cardTitle.style.color = "#9d174d";
-          card.append(cardTitle);
+          const cardTitle = element("h3", p.name || "", "special-poster-product-title");
+          cardTitle.style.color = isActive ? highlightColor : (cardItem?.titleColor || theme.titleColor);
+          if (design.titleFontSize) cardTitle.style.fontSize = (design.titleFontSize * 0.12) + "vmin";
+          topBox.append(cardTitle);
         }
 
-        if (show.productImage !== false) {
-          const photo = element("figure", undefined, "special-poster-photo");
-          if (p.image) {
-            const img = element("img");
-            img.alt = p.name;
-            img.src = assetUrl(p.image);
-            img.onerror = () => img.remove();
-            photo.append(img);
-          } else {
-            photo.append(element("span", "🥤", "special-poster-emoji"));
-          }
-          card.append(photo);
+        if (titlePos === "top" && show.productName !== false) {
+          card.append(topBox);
         }
 
+        // Section 2: Middle Product Photo
+        const photoWrap = element("div", undefined, "special-poster-photo-wrap");
+        if (design.imageBorderRadius !== undefined) photoWrap.style.borderRadius = (design.imageBorderRadius * 0.1) + "vmin";
+        if (design.imageBgColor) photoWrap.style.background = design.imageBgColor;
+
+        if (show.productImage !== false && p.image) {
+          const img = element("img", undefined, "special-poster-photo-img");
+          img.alt = p.name || "";
+          img.src = assetUrl(p.image);
+          if (design.imageFit) img.style.objectFit = design.imageFit;
+          if (design.imageBorderRadius !== undefined) img.style.borderRadius = (design.imageBorderRadius * 0.1) + "vmin";
+          img.onerror = () => img.remove();
+          photoWrap.append(img);
+        } else {
+          photoWrap.append(element("span", "🥤", "special-poster-emoji"));
+        }
+        card.append(photoWrap);
+
+        if (titlePos === "bottom" && show.productName !== false) {
+          card.append(topBox);
+        }
+
+        // Section 3: Bottom Price Box (Clean White Container)
         const priceBox = element("div", undefined, "special-poster-price-box");
+        if (design.priceBoxBg) priceBox.style.background = design.priceBoxBg;
+        if (design.priceBoxRadius !== undefined) priceBox.style.borderRadius = (design.priceBoxRadius * 0.1) + "vmin";
+
         if (show.originalPrice !== false && p.originalPrice > 0) {
-          priceBox.append(element("p", (t("normalPrice") || "Harga Normal") + " : " + money(p.originalPrice), "special-card-normal-price"));
+          const norm = element("p", "Normal: " + (p.originalPrice).toLocaleString("id-ID"), "special-card-normal-price");
+          if (design.normalPriceFontSize) norm.style.fontSize = (design.normalPriceFontSize * 0.11) + "vmin";
+          priceBox.append(norm);
         }
         if (show.specialPrice !== false) {
-          const sp = element("p", (t("promoPrice") || "Harga Spesial") + " : " + money(p.specialPrice), "special-card-special-price");
-          if (isActive && cfg.themeColor) sp.style.color = cfg.themeColor;
-          priceBox.append(sp);
+          const spec = element("p", "Rp " + (p.specialPrice).toLocaleString("id-ID"), "special-card-special-price");
+          if (design.priceFontSize) spec.style.fontSize = (design.priceFontSize * 0.11) + "vmin";
+          spec.style.color = design.priceColor || "#FF2E63";
+          priceBox.append(spec);
         }
         if (show.savingAmount !== false && p.saving > 0) {
-          priceBox.append(element("p", (t("saving") || "Hemat") + " : " + money(p.saving), "special-card-saving"));
+          const sav = element("p", "Hemat: " + (p.saving).toLocaleString("id-ID"), "special-card-saving");
+          if (design.savingFontSize) sav.style.fontSize = (design.savingFontSize * 0.11) + "vmin";
+          priceBox.append(sav);
         }
         card.append(priceBox);
 
+        // Section 4: Bottom Weekday Bar
         if (show.dayBadge !== false) {
           const badge = element("div", d.label, "special-card-day-badge");
-          if (isActive && cfg.themeColor) {
-            badge.style.backgroundColor = cfg.themeColor;
+          if (isActive) {
+            badge.style.backgroundColor = highlightColor;
           }
+          if (design.dayBadgeFontSize) badge.style.fontSize = (design.dayBadgeFontSize * 0.12) + "vmin";
+          if (design.textUppercase === false) badge.style.textTransform = "none";
           card.append(badge);
         }
 

@@ -244,6 +244,7 @@ app.use('/api', (req, res, next) => {
   ])
   if (
     publicPaths.has(apiPath) ||
+    apiPath.startsWith('/internal/employee-hermes') ||
     isDisplayPublicRoute(req.method, apiPath) ||
     (req.method === 'POST' && apiPath === '/tv/pair/request') ||
     (req.method === 'GET' && /^\/tv\/pair\/check\/[a-f0-9-]+$/.test(apiPath)) ||

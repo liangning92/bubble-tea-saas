@@ -1,6 +1,6 @@
 import { z } from 'zod'
 const uuid = z.string().uuid(), seq = z.number().int().min(0).max(999999999999)
-export const actions = ['directory.read', 'conversations.read', 'conversation.create', 'messages.read', 'attachments.read', 'messages.send', 'receipts.read', 'agent.read', 'changes.read', 'delivery.read', 'tasks.read', 'tasks.assign', 'tasks.review', 'approvals.read', 'inventory.read'] as const
+export const actions = ['directory.read', 'conversations.read', 'conversation.create', 'messages.read', 'attachments.read', 'messages.send', 'receipts.read', 'agent.read', 'changes.read', 'delivery.read', 'tasks.read', 'tasks.assign', 'tasks.review', 'approvals.read', 'inventory.read', 'schedule.read', 'marketing.write', 'procurement.write', 'finance.write', 'operations.write', 'employee.request.write', 'products.write', 'training.read', 'training.write'] as const
 export type BridgeAction = typeof actions[number]
 export const grantSchema = z.object({ agentId: uuid, displayName: z.string().min(1).max(120), storeId: z.string().min(1), sponsorUserId: z.string().min(1),
   version: z.number().int().positive(), clientRevision: z.number().int().positive(), expiresAt: z.string().datetime(), revoked: z.boolean(), actions: z.array(z.enum(actions)),
@@ -36,7 +36,7 @@ export interface BridgeDependencies {
 }
 
 export interface CommunicationScope { compartmentKey:string; task:TaskRef; channelId?:string; audienceStaffIds:string[]; audienceHash:string; executionId?:string; requesterStaffId?:string }
-export type CommunicationSource = {kind:'conversation';channelId:string;messageId:string;seq:number} | {kind:'employee_task';taskId:string;version:number} | {kind:'public_sop';id:string;version:number} | {kind:'memory';compartmentKey:string} | {kind:'inventory_evidence';query:string;fingerprint:string} | {kind:'employee_exchange';executionId:string;questionMessageId:string}
+export type CommunicationSource = {kind:'conversation';channelId:string;messageId:string;seq:number} | {kind:'employee_task';taskId:string;version:number} | {kind:'public_sop';id:string;version:number} | {kind:'memory';compartmentKey:string} | {kind:'inventory_evidence';query:string;fingerprint:string} | {kind:'schedule_evidence';query:string;fingerprint:string} | {kind:'marketing_evidence';action:string;fingerprint:string} | {kind:'procurement_evidence';action:string;fingerprint:string} | {kind:'finance_evidence';action:string;fingerprint:string} | {kind:'operations_evidence';action:string;fingerprint:string} | {kind:'employee_request_evidence';action:string;fingerprint:string} | {kind:'product_evidence';action:string;fingerprint:string} | {kind:'training_evidence';action:string;fingerprint:string} | {kind:'employee_exchange';executionId:string;questionMessageId:string}
 export interface OutputRequest { purpose:'message'|'title';requestId:string;textHash:string }
 export type CommunicationDataClass = 'operational'|'revenue'|'profit'|'cost'|'salary'|'private_staff'|'unknown'
 export interface CommunicationPolicyPort {

@@ -1,6 +1,6 @@
 import { verifyOfflineSale } from '../services/POSOfflineOperationService'
 import {blocksSelfApproval} from '../utils/refundApprovalAccess'
-import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure } from '../services/ReceivedReceiptService'
+import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure, postReceivedReceipt, discardReceivedReceipt } from '../services/ReceivedReceiptService'
 import { findOrderReplay, orderRequestFingerprint, OrderReplayConflict, publicOrder } from '../services/OrderReplayService'
 import { OrderBusinessRejection } from '../services/OrderBusinessRejection'
 import { checkPaymentMethod } from '../services/POSConfigPolicy'
@@ -189,6 +189,26 @@ router.post('/received-receipts', authenticate, authorize('admin', 'manager', 'c
 router.get('/received-receipts',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
   try {return res.json({code:200,data:await listUnpostedReceipts(req.user!.storeId)})}
   catch {return res.status(500).json({code:500,message:'RECEIVED_RECEIPT_READ_FAILED'})}
+})
+
+router.post('/received-receipts/:id/post', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const actorName = (req.user as any)?.staffName || (req.user as any)?.name || req.user?.id || 'Admin'
+    const order = await postReceivedReceipt(req.user!.storeId!, req.params.id, req.user!.id, actorName)
+    return res.json({ code: 200, data: order, message: 'Receipt posted as order' })
+  } catch (error: any) {
+    return res.status(error.message === 'RECEIPT_NOT_FOUND' ? 404 : 500).json({ code: error.message === 'RECEIPT_NOT_FOUND' ? 404 : 500, message: error.message || 'POST_RECEIPT_FAILED' })
+  }
+})
+
+router.post('/received-receipts/:id/discard', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+  try {
+    const actorName = (req.user as any)?.staffName || (req.user as any)?.name || req.user?.id || 'Admin'
+    const result = await discardReceivedReceipt(req.user!.storeId!, req.params.id, req.user!.id, actorName)
+    return res.json({ code: 200, data: result, message: 'Receipt discarded' })
+  } catch (error: any) {
+    return res.status(error.message === 'RECEIPT_NOT_FOUND' ? 404 : 500).json({ code: error.message === 'RECEIPT_NOT_FOUND' ? 404 : 500, message: error.message || 'DISCARD_RECEIPT_FAILED' })
+  }
 })
 
 router.get('/:id', authenticate, async (req: AuthRequest, res) => {

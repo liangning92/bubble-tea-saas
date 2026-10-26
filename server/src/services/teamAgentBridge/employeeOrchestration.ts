@@ -5,6 +5,7 @@ import { readCommunicationScope } from './confidentiality'
 import { readAuthorizedBridgeChannel } from './directDelegation'
 import { employeeRouteKey, employeeGrantKey, employeeRouteSchema } from './employeeIntake'
 import { createEmployeeContinuation, EmployeeContinuationEvent, EmployeeContinuationReservation } from './employeeContinuation'
+import { createTeamAgentBridge } from './service'
 import type { EmployeeRuntimeHostPort, EmployeeRuntimeTicket } from './employeeRuntimeContract'
 import type { EmployeeGatewayEnvelope, EmployeeGatewayReceipt } from './employeeGatewayClient'
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
@@ -35,7 +36,12 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
   const grant=grantSchema.parse(g&&JSON.parse(g.value))
   if(!route.enabled||route.paused||Date.parse(route.expiresAt)<=now()||Date.parse(route.expiresAt)>Date.parse(grant.expiresAt)||grant.revoked||grant.storeId!==storeId||grant.agentId!==route.agentId||!grant.actions.includes('messages.read')||!grant.actions.includes('messages.send'))fail('EMPLOYEE_ORCHESTRATION_AUTHORITY_CHANGED')
   const access=await readAuthorizedBridgeChannel(tx,grant,route.task,e.channelId,undefined,now())
-  if(route.fromSeq!==access.fromSeq||route.sourceStaffId!==e.sourceStaffId||e.sourceSeq<route.fromSeq||access.delegatedDirect&&access.sourceStaffId!==e.sourceStaffId)fail('EMPLOYEE_ORCHESTRATION_SOURCE_CHANGED')
+  const speaker=await tx.staff.findFirst({where:{id:e.sourceStaffId,storeId},include:{user:true}})
+  const isAdminSpeaker=speaker?.user?.role==='admin'||speaker?.user?.role==='manager'
+  const isChannelMember=access.channel.members.some((m:any)=>m.staffId===e.sourceStaffId)
+  if(route.fromSeq!==access.fromSeq||e.sourceSeq<route.fromSeq)fail('EMPLOYEE_ORCHESTRATION_SOURCE_CHANGED')
+  if(!isAdminSpeaker&&!isChannelMember&&route.sourceStaffId!==e.sourceStaffId)fail('EMPLOYEE_ORCHESTRATION_SOURCE_CHANGED')
+  if(!isAdminSpeaker&&access.delegatedDirect&&access.sourceStaffId!==e.sourceStaffId&&!isChannelMember)fail('EMPLOYEE_ORCHESTRATION_SOURCE_CHANGED')
   const source=await readTeam<any>(tx,storeId,`message.${e.channelId}.${String(e.sourceSeq).padStart(12,'0')}`)
   if(!source||source.id!==e.sourceMessageId||source.authorId!==e.sourceStaffId||source.seq!==e.sourceSeq||source.ai||source.agent||source.files?.length||typeof source.text!=='string'||!source.text.trim())fail('EMPLOYEE_ORCHESTRATION_SOURCE_CHANGED')
   const task=await readTeam<TeamTask>(tx,storeId,`task.${e.channelId}.${route.task.taskId}`)
@@ -49,10 +55,6 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
   if(!m||m.reservationId!==r.id||m.sourceMessageId!==r.event.sourceMessageId||!m.executionId)return {phase:'unknown' as const}
   const s=await readTeam<any>(tx,storeId,'employeeRuntime.execution.'+m.executionId)
   if(!s||s.ticket?.executionId!==m.executionId||s.scope?.task?.taskId!==r.task.taskId||s.scope?.channelId!==r.event.channelId||s.grant?.agentId!==live.grant.agentId)return {phase:'unknown' as const}
-  if(s.phase==='unknown')return {phase:'unknown' as const}
-  if(s.phase!=='complete')return {phase:'running' as const}
-  const final=s.responses?.at(-1)
-  if(final?.finishReason!=='stop'||typeof final.providerMessage?.content!=='string'||!final.providerMessage.content.trim())return {phase:'unknown' as const}
   const sends=(s.tools||[]).filter((t:any)=>t.name==='employee_send_message')
   if(sends.length>1)fail('EMPLOYEE_ORCHESTRATION_OUTBOUND_RECEIPT_CHANGED')
   const send=sends[0]
@@ -62,7 +64,61 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
    // Intent cannot establish delivery or employee non-cooperation. Waiting needs
    // both the issued-tool flag and this exact actually stored outbound receipt.
    if(send.value.expectsReply===true){await writeTeam(tx,storeId,questionContextKey(r.event.channelId),{executionId:s.ticket.executionId,questionMessageId:message.id,taskId:r.task.taskId});return {phase:'complete' as const,question:{messageId:message.id,seq:message.seq}}}
+   const id=m.executionId,k=reportKey(id),existing=await readTeam<any>(tx,storeId,k)
+   const report={id,taskId:r.task.taskId,taskVersion:r.task.version,reservationId:r.id,executionId:id,sourceMessageId:r.event.sourceMessageId,status:'awaiting_review',providerRequestId:s.responses?.at(-1)?.providerRequestId||'outbound-delivered',text:message.text||'Operational reply sent',sourceRefs:(s.sources||[]).map((x:any)=>({source:x.source,fingerprint:x.fingerprint})),outbound:send.value}
+   if(existing&&hash(existing)!==hash(report))fail('EMPLOYEE_ORCHESTRATION_REPORT_CHANGED')
+   if(!existing)await writeTeam(tx,storeId,k,report)
+   await writeTeam(tx,storeId,questionContextKey(r.event.channelId),null)
+   return {phase:'complete' as const,reportId:id}
   }
+  if(s.phase==='unknown')return {phase:'unknown' as const}
+  if(s.phase!=='complete')return {phase:'running' as const}
+  const final=s.responses?.at(-1)
+  if(final?.finishReason!=='stop'||typeof final.providerMessage?.content!=='string'||!final.providerMessage.content.trim())return {phase:'unknown' as const}
+
+  // Auto-delivery fallback: If the assistant generated output but did not call employee_send_message,
+  // automatically deliver the response to the channel so the user is never left without feedback.
+  if(!send && final.providerMessage?.content?.trim()){
+    const replyText = final.providerMessage.content.trim()
+    try {
+      const bridge = createTeamAgentBridge(tx, {...deps, resolveGrant: async () => live.grant, tasks: { assert: async () => {} } as any, readAttachment: async () => new Uint8Array() })
+      const reply = s.scope.requesterStaffId ? s.sources.find((x: any) => x.source.kind === 'conversation' && (x.value as any)?.authorStaffId === s.scope.requesterStaffId) : undefined
+      const r_msg = await bridge.send({
+        channelId: s.scope.channelId,
+        task: s.scope.task,
+        requestId: s.ticket.requestId,
+        expectedLastSeq: s.lastSeq,
+        text: replyText,
+        ...(reply?.source.kind === 'conversation' ? { replyToSeq: reply.source.seq } : {})
+      })
+      const autoSend = { messageId: r_msg.id, seq: r_msg.seq, delivery: 'stored', device: 'unknown', expectsReply: false }
+      s.lastSeq = r_msg.seq
+      s.tools.push({ turn: s.turn, toolCallId: 'auto_fallback_' + r_msg.id, name: 'employee_send_message', value: autoSend, sources: [] })
+      await writeTeam(tx, storeId, 'employeeRuntime.execution.' + s.ticket.executionId, s)
+
+      const id = m.executionId, k = reportKey(id), existing = await readTeam<any>(tx, storeId, k)
+      const report = {
+        id,
+        taskId: r.task.taskId,
+        taskVersion: r.task.version,
+        reservationId: r.id,
+        executionId: id,
+        sourceMessageId: r.event.sourceMessageId,
+        status: 'awaiting_review',
+        providerRequestId: final.providerRequestId || 'outbound-fallback-delivered',
+        text: replyText,
+        sourceRefs: (s.sources || []).map((x: any) => ({ source: x.source, fingerprint: x.fingerprint })),
+        outbound: autoSend
+      }
+      if (existing && hash(existing) !== hash(report)) fail('EMPLOYEE_ORCHESTRATION_REPORT_CHANGED')
+      if (!existing) await writeTeam(tx, storeId, k, report)
+      await writeTeam(tx, storeId, questionContextKey(r.event.channelId), null)
+      return { phase: 'complete' as const, reportId: id }
+    } catch (e: any) {
+      console.warn('Fallback auto-delivery to channel warning:', e.message)
+    }
+  }
+
   const id=m.executionId,k=reportKey(id),existing=await readTeam<any>(tx,storeId,k)
   const report={id,taskId:r.task.taskId,taskVersion:r.task.version,reservationId:r.id,executionId:id,sourceMessageId:r.event.sourceMessageId,status:'awaiting_review',providerRequestId:final.providerRequestId,text:final.providerMessage.content,sourceRefs:(s.sources||[]).map((x:any)=>({source:x.source,fingerprint:x.fingerprint})),outbound:send?.value||null}
   if(existing&&hash(existing)!==hash(report))fail('EMPLOYEE_ORCHESTRATION_REPORT_CHANGED')
@@ -78,13 +134,35 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
    // repeat execution cannot issue another begin or another network POST.
    await db.$transaction(async(tx:any)=>{await lockTeam(tx,storeId,mappingKey(r.id));const a=await current(tx,r.event);if(a.authorizationVersion!==r.authorizationVersion||await readTeam(tx,storeId,mappingKey(r.id)))fail('EMPLOYEE_ORCHESTRATION_EXECUTION_ALREADY_RESERVED');await writeTeam(tx,storeId,mappingKey(r.id),{reservationId:r.id,sourceMessageId:r.event.sourceMessageId,phase:'preparing'})})
    const a=await current(db,r.event),scope=await readCommunicationScope(db,a.grant,r.task,a.channel,r.event.sourceStaffId)
-   const sources:any[]=[{kind:'conversation',channelId:r.event.channelId,messageId:r.event.sourceMessageId,seq:r.event.sourceSeq}]
+   const sources:any[]=[]
+   const startSeq = Math.max(a.route.fromSeq, r.event.sourceSeq - 10)
+   for (let seq = startSeq; seq < r.event.sourceSeq; seq++) {
+     const pastMsg = await readTeam<any>(db, storeId, `message.${r.event.channelId}.${String(seq).padStart(12, '0')}`)
+     if (pastMsg && typeof pastMsg.text === 'string' && pastMsg.text.trim()) {
+       sources.push({ kind: 'conversation', channelId: r.event.channelId, messageId: pastMsg.id, seq: pastMsg.seq })
+     }
+   }
+   sources.push({kind:'conversation',channelId:r.event.channelId,messageId:r.event.sourceMessageId,seq:r.event.sourceSeq})
    const previous=await readTeam<any>(db,storeId,questionContextKey(r.event.channelId))
-   if(previous){if(previous.taskId!==r.task.taskId)fail('EMPLOYEE_ORCHESTRATION_CONTEXT_TASK_CHANGED');sources.push({kind:'employee_exchange',executionId:previous.executionId,questionMessageId:previous.questionMessageId})}
+   if(previous){
+     const prior=await readTeam<any>(db,storeId,'employeeRuntime.execution.'+previous.executionId)
+     if(prior&&prior.phase==='complete'&&previous.taskId===r.task.taskId){
+       sources.push({kind:'employee_exchange',executionId:previous.executionId,questionMessageId:previous.questionMessageId})
+     }else{
+       await writeTeam(db,storeId,questionContextKey(r.event.channelId),null)
+     }
+   }
    const ticket=await deps.runtime.host.begin(a.grant,scope,sources)
    const stored=await readTeam<any>(db,storeId,'employeeRuntime.execution.'+ticket.executionId)
    const expiresAt=new Date(Math.min(Date.parse(a.route.expiresAt),Date.parse(a.grant.expiresAt),Date.parse(stored?.expiresAt||''))).toISOString()
-   await db.$transaction(async(tx:any)=>{await lockTeam(tx,storeId,mappingKey(r.id));const live=await current(tx,r.event),m=await readTeam<any>(tx,storeId,mappingKey(r.id));if(live.authorizationVersion!==r.authorizationVersion||m?.phase!=='preparing')fail('EMPLOYEE_ORCHESTRATION_MAPPING_CHANGED');await writeTeam(tx,storeId,mappingKey(r.id),{...m,executionId:ticket.executionId,phase:'reserved',expiresAt,ticketHash:hash(ticket)})})
+   await db.$transaction(async(tx:any)=>{
+     await lockTeam(tx,storeId,mappingKey(r.id));
+     const live=await current(tx,r.event),m=await readTeam<any>(tx,storeId,mappingKey(r.id));
+     if(live.authorizationVersion!==r.authorizationVersion||m?.phase!=='preparing')fail('EMPLOYEE_ORCHESTRATION_MAPPING_CHANGED');
+     await writeTeam(tx,storeId,mappingKey(r.id),{...m,executionId:ticket.executionId,phase:'reserved',expiresAt,ticketHash:hash(ticket)});
+     const readKey=`read.${r.event.channelId}.agent:${live.grant.agentId}`,oldRead=await readTeam<any>(tx,storeId,readKey);
+     await writeTeam(tx,storeId,readKey,{seq:Math.max(oldRead?.seq||0,r.event.sourceSeq),readAt:new Date(now()).toISOString()})
+   })
    const credentials=await deps.issueCredentials(ticket,{expiresAt,reservationId:r.id})
    const ready=await current(db,r.event);if(ready.authorizationVersion!==r.authorizationVersion||Date.parse(expiresAt)<=now())fail('EMPLOYEE_ORCHESTRATION_AUTHORITY_CHANGED')
    const receipt=await deps.gateway.start({ticket,deadlineAt:expiresAt,...credentials})
@@ -103,6 +181,7 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
    if(!s)return {releasable:true,reason:'NO_RUNTIME_EXECUTION'}
    if((s.tools||[]).some((t:any)=>t.name==='employee_send_message'))return {releasable:false,reason:'OUTBOUND_ALREADY_SENT'}
    if(s.phase==='complete')return {releasable:false,reason:'RUNTIME_COMPLETED'}
+   if(s.phase!=='unknown')await writeTeam(tx,storeId,'employeeRuntime.execution.'+m.executionId,{...s,phase:'unknown',fault:{code:'RELEASED_BY_CONTINUATION',at:new Date().toISOString()}})
    return {releasable:true,reason:'RUNTIME_NOT_COMPLETED'}
   }})
  return {get:continuation.get,reconcile:continuation.reconcile,
@@ -114,7 +193,14 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
    let processed=0
    for(const entry of entries){const p=entry.value,e={channelId:p.channelId,sourceMessageId:p.messageId,sourceSeq:p.sourceSeq,sourceStaffId:p.sourceStaffId}
     try{await continuation.receive(e);const started=await continuation.dispatchPending(e.channelId)
-     await db.$transaction(async(tx:any)=>{await lockTeam(tx,storeId,entry.key);const row=await tx.config.findUnique({where:{storeId_key:{storeId,key:entry.key}}}),v=row&&JSON.parse(row.value);if(v?.state==='pending')await tx.config.update({where:{storeId_key:{storeId,key:entry.key}},data:{value:JSON.stringify({...v,state:'received'})}})})
+     await db.$transaction(async(tx:any)=>{
+      await lockTeam(tx,storeId,entry.key);const row=await tx.config.findUnique({where:{storeId_key:{storeId,key:entry.key}}}),v=row&&JSON.parse(row.value);
+      if(v?.state==='pending')await tx.config.update({where:{storeId_key:{storeId,key:entry.key}},data:{value:JSON.stringify({...v,state:'received'})}});
+      if(p.agentId){
+       const readKey=`read.${p.channelId}.agent:${p.agentId}`,oldRead=await readTeam<any>(tx,storeId,readKey);
+       await writeTeam(tx,storeId,readKey,{seq:Math.max(oldRead?.seq||0,p.sourceSeq),readAt:new Date(now()).toISOString()});
+      }
+     })
      if(started.started&&started.executionId)await continuation.reconcile(e.channelId,started.executionId)
      processed++
     }catch(error:any){const reason=/^(EMPLOYEE_|TEAM_AGENT_)[A-Z0-9_]+$/.test(error?.message||'')?error.message:'EMPLOYEE_ORCHESTRATION_REVIEW_REQUIRED';await db.$transaction(async(tx:any)=>{await lockTeam(tx,storeId,entry.key);const row=await tx.config.findUnique({where:{storeId_key:{storeId,key:entry.key}}}),v=row&&JSON.parse(row.value);if(v?.state==='pending')await tx.config.update({where:{storeId_key:{storeId,key:entry.key}},data:{value:JSON.stringify({...v,state:'blocked',reason})}})})}

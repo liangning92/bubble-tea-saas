@@ -2,6 +2,78 @@
 export const ACTIVITY_TYPES = ['special_price','percent','nth_cup','buy_get','fixed','tiered','bundle','addon','upgrade','gift','member_price','birthday','welcome','coupon','points','stamps','lottery','referral','group'] as const
 export type ActivityType = typeof ACTIVITY_TYPES[number]
 
+export interface PosterDesignConfig {
+  // 1. Layout Mode & Grid
+  cardLayout?: 'overlay' | 'standard' // 'overlay' = image full bleed with text on image; 'standard' = separate boxes
+  layoutGridMode?: 'single_row' | 'two_rows' | 'grid' // rows structure
+  rows?: number // 1 or 2 rows
+
+  // 2. Spacing & Padding
+  cardGap?: number // px, e.g. 4..48 (default: 16)
+  containerPaddingY?: number // px, e.g. 0..48 (default: 16)
+  containerPaddingX?: number // px, e.g. 8..64 (default: 24)
+  cardPadding?: number // px, e.g. 4..24 (default: 10)
+  cardBorderRadius?: number // px, e.g. 0..40 (default: 16)
+
+  // 3. Image Area
+  imageBleed?: boolean // true = 0 margin, full bleed to edges!
+  imageHeightRatio?: number // % height of card (default: 65, up to 100)
+  imageFit?: 'cover' | 'contain' | 'fill' // (default: 'cover')
+  imageBorderRadius?: number // px (default: 12)
+  imagePadding?: number // px (default: 0)
+  imageBgColor?: string // (default: 'rgba(255, 255, 255, 0.4)')
+
+  // 4. Layer Styles & Custom Effects
+  cardShadow?: 'none' | 'soft' | 'medium' | 'deep' | 'glow'
+  cardBorderWidth?: number // 0, 1, 2, 4
+  cardBorderColor?: string
+  cardBorderStyle?: 'solid' | 'dashed' | 'none' | 'glow'
+  overlayGradientOpacity?: number // 0..100%
+
+  // Capsule / Pill Styles & Colors
+  priceBoxBg?: string // default '#ffffff'
+  priceBoxTextColor?: string // default '#FF2E63' or auto
+  priceBoxBorderColor?: string
+  priceBoxRadius?: number // default 14
+  priceBoxShadow?: 'none' | 'soft' | 'medium'
+  themePreset?: 'pastel' | 'dopamine' | 'dark' | 'sunset' | 'custom'
+
+  // Global Text Colors
+  headlineColor?: string
+  subheadlineColor?: string
+  titleColor?: string
+  priceColor?: string // default '#FF2E63'
+  normalPriceColor?: string
+  savingColor?: string
+  dayBadgeBg?: string
+  dayBadgeColor?: string
+
+  // 5. Typography & Positioning
+  titlePosition?: 'top' | 'bottom' | 'overlay'
+  pricePosition?: 'bottom' | 'top' | 'middle'
+  badgePosition?: 'bottom_bar' | 'top_pill' | 'top_right_ribbon' | 'bottom_pill' | 'hidden'
+  textAlign?: 'center' | 'left' | 'right'
+  titleFontSize?: number // 14..36 (default: 22)
+  textShadow?: boolean
+  textStroke?: boolean
+  textStrokeWidth?: number
+  textStrokeColor?: string
+  textGlow?: boolean
+  priceStyle?: 'pill' | 'list' | 'overlay' // 'list' = Harga Normal / Spesial / Hemat like screenshot
+  priceFontSize?: number // 24..60 (default: 38)
+  normalPriceFontSize?: number // 10..22 (default: 14)
+  savingFontSize?: number // 10..20 (default: 13)
+  dayBadgeFontSize?: number // 12..32 (default: 20)
+  dayBadgeStyle?: 'pill' | 'footer_bar' // 'footer_bar' = solid bar at bottom like screenshot
+  fontStyle?: 'sans' | 'serif' | 'mono'
+  textUppercase?: boolean
+
+  // 6. Highlight Mode
+  highlightMode?: 'popout' | 'glow' | 'ribbon' | 'border_only' | 'scale'
+  highlightColor?: string // default '#FF2E63'
+  highlightScale?: number // 1.0..1.15 (default: 1.04)
+}
+
 export interface ActivityPosterConfig {
   template?: 'daily_specials' | 'featured_grid' | 'bogo_duo' | 'lucky_wheel' | 'tiered_milestone'
   headline?: string
@@ -12,6 +84,7 @@ export interface ActivityPosterConfig {
   highlightToday?: boolean
   themeColor?: string
   backgroundColor?: string
+  designConfig?: PosterDesignConfig
   showFields?: {
     productImage?: boolean
     productName?: boolean
@@ -23,6 +96,7 @@ export interface ActivityPosterConfig {
     discountTag?: boolean
   }
   cardItems?: Array<{
+    id?: string
     dayOfWeek?: number
     dayLabel?: string
     productId?: string
@@ -33,6 +107,13 @@ export interface ActivityPosterConfig {
     specialPrice?: number
     saving?: number
     color?: string
+    activeColor?: string
+    titleColor?: string
+    priceColor?: string
+    pillBg?: string
+    pillTextColor?: string
+    badgeBg?: string
+    badgeTextColor?: string
   }>
 }
 
