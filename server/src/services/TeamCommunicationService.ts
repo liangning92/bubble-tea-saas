@@ -318,8 +318,16 @@ export function teamCommunication(db: DB = prisma) {
           const grantRow = await tx.config.findUnique({ where: { storeId_key: { storeId: a.storeId, key: 'externalAgent.teamBridge.v1.grant.' + agentId } } })
           if (grantRow) {
             const grant = JSON.parse(grantRow.value)
+            const settings=await read(tx,a.storeId,'ai.agent.settings')
+            if(settings&&(!settings.enabled||!settings.employeeBridgeEnabled||!settings.allChannelsAllowed))fail(403,'EMPLOYEE_CHANNEL_DISABLED_BY_SETTINGS')
+            if(grant.revoked||Date.parse(grant.expiresAt)<=Date.now())fail(403,'EMPLOYEE_CHANNEL_GRANT_UNAVAILABLE')
+            // The saved all-channel choice permits new agent conversations, not access to pre-membership history.
+            grant.staffIds=[...new Set([...grant.staffIds,...ids.filter(id=>!id.startsWith('agent:'))])]
+            grant.channelIds=[...new Set([...grant.channelIds,c.id])]
+            if(grant.staffIds.length>100||grant.channelIds.length>100)fail(409,'EMPLOYEE_CHANNEL_GRANT_CAPACITY')
+            await tx.config.update({where:{storeId_key:{storeId:a.storeId,key:'externalAgent.teamBridge.v1.grant.'+agentId}},data:{value:JSON.stringify(grant)}})
             const taskId = randomUUID(), task = { taskId, version: 1 }
-            const expiresAt = grant.expiresAt || new Date(Date.now() + 365 * 86400000).toISOString()
+            const expiresAt = grant.expiresAt
             const native: TeamTask = {
               id: taskId,
               channelId: c.id,

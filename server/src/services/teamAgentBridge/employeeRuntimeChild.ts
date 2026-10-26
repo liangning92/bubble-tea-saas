@@ -23,7 +23,7 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
   if (!/^[a-f0-9]{40}$/.test(config.hermesExpectedSha) || !config.providerCredential) throw Error('EMPLOYEE_RUNTIME_CONFIGURATION_INVALID')
   const info=await stat(config.isolatedRoot)
   if(!info.isDirectory() || (info.mode & 0o077)!==0)throw Error('EMPLOYEE_RUNTIME_PRIVATE_ROOT_REQUIRED')
-  const remaining=Math.min(Date.parse(config.deadlineAt)-Date.now(),120000)
+  const remaining=Math.min(Date.parse(config.deadlineAt)-Date.now(),86400000)
   if(!Number.isFinite(remaining)||remaining<=0)throw Error('EMPLOYEE_RUNTIME_EXPIRED')
   // Reuse the already reviewed exact raw-tree verifier (CRLF-aware, no git replace,
   // filters or untracked import shadows). Verify BEFORE importing Hermes code.

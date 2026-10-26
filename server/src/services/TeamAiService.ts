@@ -395,7 +395,7 @@ export function teamAi(db: any = prisma, transport: Transport = minimax, resolve
 /** Server-only restricted agent transport. Credentials never leave this module.
  * Kept separate from legacy text-only generation so tool calls are not discarded. */
 export interface TeamAgentModelProviderRequest {
-  model: 'MiniMax-M3.1-Flash'; stream: false; reasoning_effort: 'low'; reasoning_split: true
+  model: 'MiniMax-M3.1-Flash'; stream: false; reasoning_effort?: 'low'; reasoning_split: true
   messages: any[]; tools: any[]; tool_choice: 'auto'
 }
 export type TeamAgentModelTransport = (storeId: string, configVersion: number, request: TeamAgentModelProviderRequest,
@@ -403,10 +403,10 @@ export type TeamAgentModelTransport = (storeId: string, configVersion: number, r
 export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: boolean; fetch?: typeof fetch; toolProfile?: 'stock_readonly'|'employee_work' } = {}): TeamAgentModelTransport {
   return async (storeId, configVersion, request, beforeSend, deadlineAt) => {
     if (options.enabled !== true) denied('AGENT_MODEL_RELAY_DISABLED')
-    const toolNames = options.toolProfile === 'employee_work' ? ['employee_read_message','employee_read_task','employee_read_inventory','employee_read_schedule','employee_manage_marketing','employee_manage_procurement','employee_manage_finance','employee_manage_operations','employee_submit_request','employee_manage_product','employee_manage_training','employee_remember_rule','employee_send_message'] : ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report']
+    const toolNames = options.toolProfile === 'employee_work' ? ['employee_recall_memory','employee_store_memory','employee_manage_inventory','employee_manage_hygiene','employee_manage_staff','employee_read_message','employee_read_task','employee_read_inventory','employee_read_schedule','employee_manage_marketing','employee_manage_procurement','employee_manage_finance','employee_manage_operations','employee_submit_request','employee_manage_product','employee_manage_training','employee_remember_rule','employee_send_message'] : ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report']
     if (Object.keys(request).some(k => !['model', 'stream', 'reasoning_effort', 'reasoning_split', 'messages', 'tools', 'tool_choice'].includes(k)) ||
       !request.tools.every(t => t?.type === 'function' && toolNames.includes(t.function?.name)) ||
-      request.model !== 'MiniMax-M3.1-Flash' || request.stream !== false || request.reasoning_effort !== 'low' || request.reasoning_split !== true ||
+      request.model !== 'MiniMax-M3.1-Flash' || request.stream !== false || (request.reasoning_effort !== 'low' && !(options.toolProfile === 'employee_work' && request.reasoning_effort === undefined)) || request.reasoning_split !== true ||
       'max_tokens' in request || 'max_completion_tokens' in request) denied('AGENT_MODEL_REQUEST_INVALID', 400)
     const config = await readTeam(db, storeId, 'ai.settings')
     const connection = config && await readAiConnection(db, storeId, config)
@@ -416,9 +416,10 @@ export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: bo
     // decrypt() calls masterKey() in read-only mode; no new key/secret/config is created.
     const key = await decrypt(storeId, config.secret, 'cn')
     await beforeSend()
-    const remaining = deadlineAt === undefined ? 25000 : deadlineAt - Date.now()
+    const remaining = deadlineAt === undefined ? (options.toolProfile==='employee_work'?180000:25000) : deadlineAt - Date.now()
     if (!Number.isFinite(remaining) || remaining <= 0) denied('AGENT_MODEL_DEADLINE_BEFORE_SEND', 409)
-    const timeoutMs = Math.max(1, Math.min(25000, Math.floor(remaining)))
+    const ceiling=options.toolProfile==='employee_work'?(deadlineAt===undefined?180000:remaining):25000
+    const timeoutMs = Math.max(1, Math.min(ceiling, Math.floor(remaining)))
     let response: Response
     try { response = await (options.fetch || fetch)(endpoint('cn'), { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
       headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, body: JSON.stringify(request) }) }

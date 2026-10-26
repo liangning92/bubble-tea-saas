@@ -1,3 +1,4 @@
+import { agentMemoryService } from '../services/AgentMemoryService'
 import { Router } from 'express'
 import path from 'path'
 import { z } from 'zod'
@@ -38,6 +39,7 @@ const operations = teamOperations()
 const workflow = teamWorkflow()
 const managementDefaults = teamManagementDefaults(prisma)
 const agentSettings = agentSettingsService(prisma)
+const agentMemory = agentMemoryService(prisma)
 router.get('/workflow/defaults',run(async(req,res)=>ok(res,await managementDefaults.read(actor(req),req.query.requestId===undefined?undefined:z.string().uuid().parse(req.query.requestId)))))
 router.put('/workflow/defaults',run(async(req,res)=>ok(res,await managementDefaults.save(actor(req),req.body))))
 const workflowAfter = (req: AuthRequest) => z.coerce.number().int().nonnegative().max(999999999999).parse(req.query.after ?? 0)
@@ -69,6 +71,9 @@ router.get('/channels/:id/operations/:planId/export', run(async (req, res) => ok
 router.get('/ai/settings', run(async (req, res) => ok(res, await ai.settings(actor(req)))))
 router.put('/ai/settings', run(async (req, res) => ok(res, await ai.saveSettings(actor(req), req.body))))
 router.post('/ai/connection-check', run(async (req, res) => ok(res, await ai.checkConnection(actor(req), req.body))))
+router.get('/ai/agent-memory', run(async (req,res)=>ok(res,await agentMemory.list(actor(req),req.query.query||''))))
+router.get('/ai/agent-memory/:id/history', run(async (req,res)=>ok(res,await agentMemory.history(actor(req),req.params.id))))
+router.put('/ai/agent-memory/:id', run(async (req,res)=>ok(res,await agentMemory.update(actor(req),req.params.id,req.body))))
 router.get('/ai/agent-settings', run(async (req, res) => ok(res, await agentSettings.getSettings(actor(req)))))
 router.put('/ai/agent-settings', run(async (req, res) => ok(res, await agentSettings.saveSettings(actor(req), req.body))))
 router.post('/ai/agent-check', run(async (req, res) => ok(res, await agentSettings.checkConnection(actor(req), req.body))))

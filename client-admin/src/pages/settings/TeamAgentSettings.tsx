@@ -11,6 +11,7 @@ export interface ModulePermission {
 }
 
 export interface AgentPermissions {
+  marketing: ModulePermission
   products: ModulePermission
   inventory: ModulePermission
   orders: ModulePermission
@@ -29,6 +30,9 @@ export interface AgentSettingsData {
   pdcaPilotEnabled: boolean
   employeeBridgeEnabled: boolean
   allChannelsAllowed: boolean
+  memoryEnabled: boolean
+  learningEnabled: boolean
+  expiresAt: string | null
   taskTimeoutMinutes: number
   requireHumanReview: boolean
   permissions: AgentPermissions
@@ -63,6 +67,7 @@ const moduleKeys = [
   'inventory',
   'orders',
   'members',
+  'marketing',
   'finance',
   'staff',
   'hygiene',
@@ -180,7 +185,7 @@ export function TeamAgentSettings({
       }
     } catch {
       if (current() && reqId === epoch.current) {
-        setError(c.checkButton + ' 失败')
+        setError(c.checkFailed)
       }
     } finally {
       if (current() && reqId === epoch.current) setChecking(false)
@@ -203,7 +208,7 @@ export function TeamAgentSettings({
   const agentActive = draft.enabled
   const statusBadge = checking ? (
     <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{c.checking}</span>
-  ) : checkResult?.status === 'ready' ? (
+  ) : (checkResult?.status === 'ready'||!checkResult&&systemState?.runtimeAvailable&&agentActive) ? (
     <span className="rounded-full bg-green-50 px-3 py-1 text-xs font-medium text-green-700">{c.ready}</span>
   ) : checkResult?.status === 'standby' ? (
     <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">{c.standby}</span>
@@ -236,11 +241,11 @@ export function TeamAgentSettings({
             <div>
               <p className="text-xs font-medium text-gray-500">{c.statusCardTitle}</p>
               <p className="mt-1 text-sm font-semibold text-gray-800">
-                {checkResult ? checkResult.details : (agentActive ? '智能体服务已启用 · 监听待命' : '智能体当前已停用')}
+                {checkResult ? checkResult.details : (agentActive ? (systemState?.runtimeAvailable?c.ready:c.unreachable) : c.disabled)}
               </p>
               {checkResult?.checkedAt && (
                 <time className="mt-1 block text-xs text-gray-400">
-                  {new Date(checkResult.checkedAt).toLocaleTimeString(language)} · 延迟: {checkResult.latencyMs}ms
+                  {new Date(checkResult.checkedAt).toLocaleTimeString(language)} · {c.latency}: {checkResult.latencyMs}ms
                 </time>
               )}
             </div>
@@ -265,10 +270,10 @@ export function TeamAgentSettings({
           </div>
           {systemState && (
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-gray-200/60 pt-2.5 text-xs text-gray-500">
-              <span>底层运行时: <strong className="font-medium text-gray-700">{systemState.runtimeAvailable ? '就绪' : '不可用'}</strong></span>
-              <span>PDCA Pilot: <strong className="font-medium text-gray-700">{systemState.pilotState === 'running' ? '运行中' : '待机'}</strong></span>
-              <span>员工网关: <strong className="font-medium text-gray-700">{systemState.employeeBridgeConfigured ? '已配置' : '按需载入'}</strong></span>
-              <span>节点 Origin: <code className="rounded bg-gray-200/70 px-1 py-0.5 text-gray-700">{systemState.hostOrigin}</code></span>
+              <span>{c.runtime}: <strong className="font-medium text-gray-700">{systemState.runtimeAvailable ? c.ready : c.unreachable}</strong></span>
+              <span>PDCA Pilot: <strong className="font-medium text-gray-700">{systemState.pilotState === 'running' ? c.configured : c.disabled}</strong></span>
+              <span>{c.employeeGateway}: <strong className="font-medium text-gray-700">{systemState.employeeBridgeConfigured ? c.configured : c.unreachable}</strong></span>
+              <span>{c.agentOrigin}: <code className="rounded bg-gray-200/70 px-1 py-0.5 text-gray-700">{systemState.hostOrigin}</code></span>
             </div>
           )}
         </div>
@@ -308,6 +313,18 @@ export function TeamAgentSettings({
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-3 rounded-lg bg-gray-50 p-3 sm:col-span-2">
+              <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.memoryEnabled!==false} disabled={busy||checking} onChange={e=>updateDraft({memoryEnabled:e.target.checked})}/><span><strong className="font-medium">{c.memoryEnabled}</strong><span className="mt-1 block text-xs text-gray-600">{c.memoryHelp}</span></span></label>
+              <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.learningEnabled!==false} disabled={busy||checking||draft.memoryEnabled===false} onChange={e=>updateDraft({learningEnabled:e.target.checked})}/><span><strong className="font-medium">{c.learningEnabled}</strong><span className="mt-1 block text-xs text-gray-600">{c.learningHelp}</span></span></label>
+            </div>
+            <label className="block text-sm sm:col-span-2">
+              <span className="font-medium text-gray-700">{c.authorizationExpiry}</span>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={!draft.expiresAt} disabled={busy||checking} onChange={e=>updateDraft({expiresAt:e.target.checked?null:new Date(Date.now()+86400000).toISOString()})}/>{c.noExpiry}</label>
+                {draft.expiresAt&&<input aria-label={c.authorizationExpiry} className={field} type="datetime-local" disabled={busy||checking} value={new Date(Date.parse(draft.expiresAt)-new Date(draft.expiresAt).getTimezoneOffset()*60000).toISOString().slice(0,16)} onChange={e=>{if(e.target.value)updateDraft({expiresAt:new Date(e.target.value).toISOString()})}}/>}
+              </div>
+              <span className="mt-1 block text-xs text-gray-500">{c.expiryHelp}</span>
+            </label>
             <label className="block text-sm">
               <span className="font-medium text-gray-700">{c.agentName}</span>
               <input
@@ -354,7 +371,7 @@ export function TeamAgentSettings({
             <h4 id="agent-permissions-title" className="font-semibold text-gray-900">{c.permissionsSection}</h4>
             <p className="mt-0.5 text-xs text-gray-500">{c.permissionsSubtitle}</p>
           </div>
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">自定义读写授权</span>
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{c.customPermissions}</span>
         </div>
 
         <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
@@ -394,7 +411,7 @@ export function TeamAgentSettings({
                           disabled={busy || checking || !draft.enabled}
                           onChange={e => updatePermission(key, 'read', e.target.checked)}
                         />
-                        <span className="text-xs text-gray-700">读取</span>
+                        <span className="text-xs text-gray-700">{c.readPermission}</span>
                       </label>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -406,7 +423,7 @@ export function TeamAgentSettings({
                           disabled={busy || checking || !draft.enabled}
                           onChange={e => updatePermission(key, 'write', e.target.checked)}
                         />
-                        <span className="text-xs text-gray-700">写入</span>
+                        <span className="text-xs text-gray-700">{c.writePermission}</span>
                       </label>
                     </td>
                   </tr>
@@ -470,7 +487,7 @@ export function TeamAgentSettings({
             <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">{c.humanReviewDesc}</p>
           </div>
           <span className="shrink-0 rounded bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 border border-green-200/50">
-            强制生效
+            {c.humanReview}
           </span>
         </div>
       </section>
@@ -494,7 +511,7 @@ export function TeamAgentSettings({
                 setNotice('')
               }}
             >
-              放弃更改
+              {c.discard}
             </button>
             <button
               type="button"

@@ -1,3 +1,4 @@
+import { AgentMemoryPanel } from './AgentMemoryPanel'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TeamClient } from '../../../../shared/TeamCommunication'
@@ -24,6 +25,7 @@ export function AiSettingsPage() {
     <header><h2 className="text-xl font-semibold">{c.title}</h2></header>
     <TeamAiSettings key={`${user.id}:${user.storeId}`} client={client} identity={{userId:user.id,storeId:user.storeId}} language={i18n.language} />
     <TeamAgentSettings key={`agent:${user.id}:${user.storeId}`} client={client} language={i18n.language} />
+    <AgentMemoryPanel key={`memory:${user.id}:${user.storeId}`} client={client} language={i18n.language} />
     <TeamWorkflowSettings key={`workflow:${user.id}:${user.storeId}`} client={client} scope={`${user.id}:${user.storeId}`} staffId={user.staff?.id || ''} language={i18n.language} />
     <TeamManagementDefaults key={`management:${user.id}:${user.storeId}`} client={client} scope={`${user.id}:${user.storeId}`} staffId={user.staff?.id || ''} language={i18n.language} />
   </div>
