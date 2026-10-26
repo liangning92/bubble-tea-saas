@@ -8,3 +8,5 @@ test('read failure is not reported as zero pending work',async()=>{const {db}=da
 test('malformed cash warning evidence is not silently omitted',async()=>{const {db}=database();db.config.findMany=async()=>[{value:'bad json'}];await assert.rejects(()=>loadDashboardPendingActions(db,'owned'),/DASHBOARD_PENDING_CASH_WARNING_INVALID/)});
 
 test('refund-reconciled handovers no longer remain in dashboard pending actions',async()=>{const {db}=database();db.reviews=new Map([['s/1',{cashWarning:{status:'resolved'}}]]);const result=await loadDashboardPendingActions(db,'owned');assert.equal(result.total,2);assert.equal(result.actions.some(a=>a.key==='cash'),false)});
+
+test('inventory pending summary is omitted when the caller cannot read inventory',async()=>{const {db}=database();const original=db.config.findMany;db.config.findMany=async q=>{assert.notEqual(q.where.category,'inventory_alert_events');return original(q)};const result=await loadDashboardPendingActions(db,'owned',new Date(),false);assert.equal(result.actions.find(a=>a.key==='inventory').count,0)});

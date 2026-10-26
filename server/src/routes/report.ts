@@ -280,7 +280,9 @@ router.get('/staff', authenticate, authorize('admin', 'manager'), async (req: Au
 // Keep pending approvals available even when revenue data needs reconciliation.
 router.get('/pending-actions', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
-    res.json({ code: 200, data: await loadDashboardPendingActions(prisma, req.user!.storeId) })
+    const user=req.user!,access=user.accessRole
+    const inventoryAllowed=user.role==='admin'||(access?.version===2?access.modes?.['inventory.read']==='allow':!access||access.permissions?.includes('inventory.read'))
+    res.json({ code: 200, data: await loadDashboardPendingActions(prisma, user.storeId, new Date(), inventoryAllowed) })
   } catch (error) {
     console.error('Get pending actions error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get pending actions' })

@@ -1,3 +1,4 @@
+import {actualInventorySince,ACTUAL_STOCK_KEY} from './ActualInventoryPolicy'
 import { manualCorrectionMetadata } from './ManualStockCorrectionService'
 import {unifiedInventorySince,CALIBRATED_PREFIX} from './UnifiedInventoryService'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
@@ -74,6 +75,7 @@ export async function getInventory(filter: InventoryFilter) {
 
   const packages=await prisma.config.findMany({where:{key:{startsWith:'inventoryPackage:'},...(filter.storeId?{storeId:filter.storeId}:{})}})
   const forecasts=filter.storeId?await inventoryForecast(filter.storeId):[]
+  const actualPolicies=await prisma.config.findMany({where:{key:ACTUAL_STOCK_KEY,...(filter.storeId?{storeId:filter.storeId}:{})},select:{storeId:true}})
   const enriched=await Promise.all(items.map(async item=>{
     const saved=packages.find(p=>p.storeId===item.storeId&&p.key===`inventoryPackage:${item.id}`)
     let packaging:InventoryPackage|null=null
@@ -81,7 +83,8 @@ export async function getInventory(filter: InventoryFilter) {
     const forecast=forecasts.find((row:any)=>row.inventoryId===item.id)
     let unitCost=Number(item.avgCost),processCostAvailable=true
     if(item.type==='semi_finished'&&item.processRecipeId){try{unitCost=await inventoryQuantityCost(prisma,item.id,1,item.unit,0,item.storeId)}catch{unitCost=0;processCostAvailable=false}}
-    return {...item,unifiedStock:!!(forecast&&'calibrationRequired' in forecast),calibrationRequired:forecast&&'calibrationRequired' in forecast?forecast.calibrationRequired:false,avgCost:unitCost,processCostAvailable,packaging,effectiveSafetyStock:forecast?.effectiveSafetyStock??item.safetyStock,dynamicSafetyStock:forecast?.dynamicSafetyStock??0,forecastHistoryDays:forecast?.historyDays??0,daysUntilStockOut:forecast?.daysUntilStockOut??null}
+    const actualStockPolicy=actualPolicies.some(p=>p.storeId===item.storeId)
+    return {...item,actualStockPolicy,unifiedStock:!actualStockPolicy&&!!(forecast&&'calibrationRequired' in forecast),calibrationRequired:forecast&&'calibrationRequired' in forecast?forecast.calibrationRequired:false,avgCost:unitCost,processCostAvailable,packaging,effectiveSafetyStock:forecast?.effectiveSafetyStock??item.safetyStock,dynamicSafetyStock:forecast?.dynamicSafetyStock??0,forecastHistoryDays:forecast?.historyDays??0,daysUntilStockOut:forecast?.daysUntilStockOut??null}
   }))
   // Filter low stock using safetyStock threshold
   if (filter.lowStock) {
@@ -211,7 +214,7 @@ export async function stockOut(data: StockOperation, db:any=prisma) {
     const saved=data.inputUnit?await tx.config.findUnique({where:{storeId_key:{storeId,key:`inventoryPackage:${inventoryId}`}}}):null
     const quantity=convertQuantity(data.quantity,data.inputUnit||inventory.unit,inventory.unit,saved?validatePackage(JSON.parse(saved.value),inventory.unit):null)
     if(reason==='other'&&!note?.trim())throw Error('OUT_REASON_REQUIRED')
-    const internalIssue=reason==='withdrawal'&&!!(await unifiedInventorySince(tx,storeId))
+    const internalIssue=reason==='withdrawal'&&!!(await unifiedInventorySince(tx,storeId))&&!await actualInventorySince(tx,storeId)
     if(await unifiedInventorySince(tx,storeId)){if(['sold','adjust'].includes(reason||''))throw Error('USE_SALE_OR_COUNT_WORKFLOW')}
     if (!internalIssue && inventory.currentStock < quantity) {
       throw new Error('Insufficient stock')
@@ -605,6 +608,7 @@ export interface ConsumptionAnalysisFilter {
   startDate: string
   endDate: string
   varianceThreshold?: number      // 差异百分比阈值，默认10%
+  latest?: boolean
   varianceCriticalThreshold?: number
   category?: string              // 原料分类过滤
 }

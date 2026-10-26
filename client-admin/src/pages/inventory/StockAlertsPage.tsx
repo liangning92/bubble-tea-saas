@@ -6,25 +6,25 @@ import {formatStoreDate} from '../../utils/storeDateTime';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { inventoryApi } from '../../services/api';
 import { formatItemName } from '../../utils/helpers';
 import { useDashboardContext } from '../../utils/dashboardNavigation';
 import { DashboardReadFailure, DashboardContextNotice } from '../../components/DashboardReadState';
 export function StockAlertsPage() {
-    const dateSettings=useStoreDateSettings();
+    const dateSettings=useStoreDateSettings(),[params,setParams]=useSearchParams(),alertId=params.get('alert');
     const { t, i18n } = useTranslation(), context = useDashboardContext(), qc = useQueryClient();
     const [status, setStatus] = useState('open'), [type, setType] = useState(''), [selected, setSelected] = useState<any>(null), [note, setNote] = useState(''), [expiry, setExpiry] = useState(''), [error, setError] = useState('');
     const query = useQuery({ queryKey: ['inventory-alert-center', context.storeId], enabled: context.valid, queryFn: () => inventoryApi.alertCenter(), refetchInterval: 60000 });
     const refresh = () => { qc.invalidateQueries({ queryKey: ['inventory-alert-center'] }); setSelected(null); setNote(''); setExpiry(''); setError(''); };
     const mutation = useMutation({ mutationFn: () => selected.action === 'expiry' ? inventoryApi.setExpiry({ inventoryId: selected.detail.inventoryId, batchId: selected.detail.batchId || undefined, expiryDate: expiry }) : inventoryApi.handleAlert(selected.id, note), onSuccess: refresh, onError: () => setError(t('inventoryFlow.failed')) });
-    const list: any[] = query.data?.data?.data?.list || [], visible = list.filter(a => (status === 'all' || a.status === status) && (!type || a.type === type));
-    const n = (v: any) => consumptionQuantity(v,i18n.language), label = (key: string) => t('inventoryAlerts.' + key);
+    const list: any[] = query.data?.data?.data?.list || [], visible = list.filter(a => (!alertId || a.id===alertId) && (alertId || status === 'all' || a.status === status) && (!type || a.type === type));
+    const n = (v: any) => consumptionQuantity(v,i18n.language,3), label = (key: string) => t('inventoryAlerts.' + key);
     if (!context.valid)
         return <DashboardReadFailure scope/>;
     if (query.isError)
         return <DashboardReadFailure retry={() => query.refetch()}/>;
-    return <div className="space-y-5"><DashboardContextNotice current/><header className="flex justify-between"><h1 className="text-2xl font-bold">{label('title')}</h1><Link className="text-primary" to="/inventory/alert-config">{label('settings')}</Link></header><p className="text-sm text-gray-600">{t('inventoryUnified.forecast')}</p><p className="text-sm text-gray-600">{label('handleHint')}</p><p className="text-sm text-gray-600">{t('inventoryFlow.usagePolicyHint')}</p>
+    return <div className="space-y-5"><DashboardContextNotice current/><header className="flex justify-between"><h1 className="text-2xl font-bold">{label('title')}</h1><Link className="text-primary" to="/inventory/alert-config">{label('settings')}</Link></header><details className="text-sm text-gray-500"><summary className="cursor-pointer">{t('operations.reportBasis')}</summary><p>{t('inventoryUnified.forecast')}</p><p>{label('handleHint')}</p></details>{alertId&&<button className="text-primary text-sm" onClick={()=>setParams({})}>{t('dashboard.viewAll')}</button>}
  <div className="grid grid-cols-3 gap-3">{['open', 'handled', 'resolved'].map(s => <button key={s} className={`card text-left ${s === 'open' ? 'bg-orange-50' : ''}`} onClick={() => setStatus(s)}><p>{label(s)}</p><strong className="text-2xl">{list.filter(a => a.status === s).length}</strong></button>)}</div>
  <div className="flex gap-3"><select aria-label={label('open')} className="input min-w-0 flex-1" value={status} onChange={e => setStatus(e.target.value)}>{['open', 'handled', 'resolved', 'all'].map(s => <option key={s} value={s}>{label(s)}</option>)}</select><select aria-label={label('all')} className="input min-w-0 flex-1" value={type} onChange={e => setType(e.target.value)}><option value="">{label('all')}</option>{[...new Set(list.map(a => a.type))].map(s => <option key={s} value={s}>{label(s)}</option>)}</select><button className="btn btn-outline shrink-0 whitespace-nowrap" onClick={() => query.refetch()}>{t('inventoryFlow.refresh')}</button></div>
  {query.isPending ? <p>{t('common.loading')}</p> : !visible.length ? <p className="card text-gray-500">{t('inventoryFlow.noAlerts')}</p> : visible.map(a => {

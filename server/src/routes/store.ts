@@ -28,6 +28,7 @@ router.post('/', authenticate, authorize('admin'), async (req: AuthRequest, res)
     })
 
     await prisma.config.create({data:{storeId:store.id,key:'inventory_unified_stock_v1',value:new Date().toISOString(),category:'inventory'}})
+      await prisma.config.create({data:{storeId:store.id,key:'inventory_actual_out_v2',value:new Date().toISOString(),category:'inventory'}})
 
     // Initialize default receipt template for new store
     await seedDefaultReceiptTemplate(store.id).catch((err: any) => {

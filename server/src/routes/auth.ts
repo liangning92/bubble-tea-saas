@@ -68,6 +68,7 @@ router.post('/register', authLimiter, validateBody(registerSchema), async (req, 
       const tenant = await tx.tenant.create({ data: { name: storeName } })
       const store = await tx.store.create({ data: { tenantId: tenant.id, name: storeName } })
       await tx.config.create({data:{storeId:store.id,key:'inventory_unified_stock_v1',value:new Date().toISOString(),category:'inventory'}})
+      await tx.config.create({data:{storeId:store.id,key:'inventory_actual_out_v2',value:new Date().toISOString(),category:'inventory'}})
       const user = await tx.user.create({
         data: { phone, password: hashed, role: 'admin', storeId: store.id }
       })

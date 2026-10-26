@@ -1,3 +1,5 @@
+import {correctedConsumptionSnapshots} from './ConsumptionEvidenceService'
+import {inventoryProductionComparison} from './InventoryProductionComparison';
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy';
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
@@ -17,7 +19,7 @@ export async function employeeConsumption(filter: {
 }, db: any = prisma) {
     const {boundary,startOfDay}=await inventoryBusinessCalendar(filter.storeId,db);
     const start = boundary(filter.startDate), end = boundary(filter.endDate, true);
-    if (end < start)
+    if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start)
         throw Error('INVALID_ANALYSIS_PERIOD');
     const setting = await getInventoryAlertConfig(filter.storeId);
     const cutoverRecord = await db.config.findUnique({ where: { storeId_key: { storeId: filter.storeId, key: FLOW_CUTOVER_KEY } } });
@@ -26,8 +28,8 @@ export async function employeeConsumption(filter: {
         return { list: [], cutover: cutover?.toISOString() || null, legacyOnly: true, segments: [{ basis: 'legacy', start: start.toISOString(), end: end.toISOString() }] };
     const effectiveStart = new Date(Math.max(start.getTime(), cutover.getTime()));
     const inventory = await db.inventory.findMany({ where: { storeId: filter.storeId }, orderBy: { name: 'asc' } });
-    const snapshots = await db.orderConsumptionSnapshot.findMany({ where: { storeId: filter.storeId, createdAt: { gte: effectiveStart, lte: end } } });
-    const logs = await db.stockOutLog.findMany({ where: { inventory: { storeId: filter.storeId }, createdAt: { gte: effectiveStart, lte: end }, reason: { in: ['withdrawal', 'loss', 'expired', 'other', 'process'] } } });
+    const snapshots = await correctedConsumptionSnapshots(db,{storeId:filter.storeId,createdAt:{gte:effectiveStart,lte:end}});
+    const logs = await db.stockOutLog.findMany({ where: { inventory: { storeId: filter.storeId }, createdAt: { gte: effectiveStart, lte: end }, reason: { in: ['withdrawal', 'loss', 'expired', 'other', 'transfer', 'process'] } } });
     const uncovered = await db.order.count({ where: { storeId: filter.storeId, status: { in: ['completed', 'paid'] }, createdAt: { gte: effectiveStart, lte: end }, id: { notIn: snapshots.map((s: any) => s.orderId) } } });
     const materials = new Map<string, {
         quantity: number;
@@ -50,19 +52,22 @@ export async function employeeConsumption(filter: {
             materials.set(material.inventoryId, { quantity: (previous?.quantity || 0) + material.quantity, unit: material.unit });
         }
     }
+    const withdrawals=new Map<string,number>(),withdrawalTimes=new Map<string,Date>();
+    for(const log of logs)if(log.reason==='withdrawal'){withdrawals.set(log.inventoryId,(withdrawals.get(log.inventoryId)||0)+log.quantity);const first=withdrawalTimes.get(log.inventoryId);if(!first||log.createdAt<first)withdrawalTimes.set(log.inventoryId,log.createdAt);}
+    const production=await inventoryProductionComparison(db,filter.storeId,effectiveStart,end,withdrawals,withdrawalTimes);
     const list = inventory.filter((i:any)=>i.type!=='semi_finished'||!i.processRecipeId).map((item: any) => {
         const totals: {
             [key: string]: number;
-        } = { withdrawal: 0, loss: 0, expired: 0, other: 0, process: 0 };
+        } = { withdrawal: 0, loss: 0, expired: 0, other: 0, transfer: 0, process: 0 };
         for (const log of logs.filter((l: any) => l.inventoryId === item.id))
             totals[log.reason] += log.quantity;
         // A unified processing entry describes an internal conversion, not a second issue.
-        const internalProcess=logs.filter((l:any)=>l.inventoryId===item.id&&l.reason==='process').reduce((sum:number,l:any)=>{try{return sum+(JSON.parse(l.note||'null')?.stockEffect==='internal_conversion'?l.quantity:0)}catch{return sum}},0);
-        const actual = Object.values(totals).reduce((a, b) => a + b, 0)-internalProcess, theory = materials.get(item.id);
+
+        const actual = totals.withdrawal, theory = materials.get(item.id);
         const classification = classifyEmployeeConsumption(theory?.quantity || 0, actual, setting.varianceWarningPercent, setting.varianceCriticalPercent, setting.enableConsumptionAlert, incomplete || !!theory && theory.unit !== item.unit);
-        const usageMode=inventoryUsageMode(item);
-        const comparison=usageMode==='tracked'&&classification.varianceStatus==='unavailable'?classification:{variance:usageMode==='self_produced'?null:Math.round((actual-(theory?.quantity||0))*1e9)/1e9,variancePercent:null,varianceStatus:'not_compared',unavailableReason:usageMode==='bulk'?'BULK_ISSUE':usageMode==='self_produced'?'SELF_PRODUCED':'BATCH_WITHDRAWAL'};
-        return { usageMode, inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: theory?.quantity || 0, actualConsumption: actual, breakdown: totals, ...comparison, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
+        const usageMode=inventoryUsageMode(item),evidenceIncomplete=incomplete || !!theory && theory.unit!==item.unit;
+        const comparison=evidenceIncomplete?{variance:null,variancePercent:null,varianceStatus:'unavailable',unavailableReason:'INCOMPLETE_RECIPE'}:{variance:usageMode==='self_produced'?null:Math.round((actual-(theory?.quantity||0))*1e9)/1e9,variancePercent:null,varianceStatus:'not_compared',unavailableReason:usageMode==='bulk'?'BULK_ISSUE':usageMode==='self_produced'?'SELF_PRODUCED':'BATCH_WITHDRAWAL'};
+        return { usageMode, inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: evidenceIncomplete?null:theory?.quantity || 0, actualConsumption: actual, actualWithdrawal: actual, production:production.get(item.id)||[], breakdown: totals, ...comparison, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
     });
     return { list, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
 }

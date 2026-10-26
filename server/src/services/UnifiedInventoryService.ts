@@ -1,3 +1,4 @@
+import {actualInventorySince,ACTUAL_CALIBRATED_PREFIX} from './ActualInventoryPolicy'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {consumeInventoryBatches} from './InventoryBatchService'
 export const UNIFIED_INVENTORY_KEY='inventory_unified_stock_v1'
@@ -10,12 +11,13 @@ export async function unifiedInventorySince(db:any,storeId:string):Promise<Date|
  return date
 }
 export async function calibrationAt(db:any,storeId:string,inventoryId:string):Promise<Date|null>{
- const record=await db.config.findUnique({where:{storeId_key:{storeId,key:CALIBRATED_PREFIX+inventoryId}}})
+ const record=await db.config.findUnique({where:{storeId_key:{storeId,key:(await actualInventorySince(db,storeId)?ACTUAL_CALIBRATED_PREFIX:CALIBRATED_PREFIX)+inventoryId}}})
  return record?new Date(record.value):null
 }
 /** Internal movements never change estimated whole-store raw-equivalent stock.
  * Late orders included in an approved physical observation must not deduct again. */
 export async function applySaleEstimate(db:any,storeId:string,snapshot:any){
+ if(await actualInventorySince(db,storeId))return
  const since=await unifiedInventorySince(db,storeId)
  if(!since||snapshot.createdAt<since)return
  for(const material of JSON.parse(snapshot.materials).sort((a:any,b:any)=>a.inventoryId.localeCompare(b.inventoryId))){
@@ -35,6 +37,7 @@ export async function applySaleEstimate(db:any,storeId:string,snapshot:any){
  }
 }
 export async function reverseSaleEstimate(db:any,snapshot:any){
+ if(await actualInventorySince(db,snapshot.storeId))return
  for(const material of JSON.parse(snapshot.materials).sort((a:any,b:any)=>a.inventoryId.localeCompare(b.inventoryId))){
   const original=await db.stockOutLog.findUnique({where:{operationId:'sale-estimate:'+snapshot.id+':'+material.inventoryId}})
   if(!original)continue

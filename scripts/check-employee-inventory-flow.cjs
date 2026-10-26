@@ -12,7 +12,15 @@ const invoke=args=>execFileSync(process.execPath,[prisma,...args],{cwd:repo,env,
 const legacy=execFileSync('git',['show','c2e2086e829be74c48f808a18ab4615a7faf0b8f:server/prisma/schema.sqlite.prisma'],{cwd:repo,encoding:'utf8'});
 fs.writeFileSync(path.join(run,'legacy.prisma'),legacy);
 const sql=execFileSync(process.execPath,[prisma,'migrate','diff','--from-empty','--to-schema-datamodel',path.join(run,'legacy.prisma'),'--script'],{cwd:repo,env,encoding:'utf8'});
-fs.writeFileSync(path.join(run,'legacy.sql'),sql);env.INVENTORY_FLOW_LEGACY_SQL=path.join(run,'legacy.sql');
+// Keep later, unrelated order fields present in the supported inventory-upgrade fixture.
+const currentSql=execFileSync(process.execPath,[prisma,'migrate','diff','--from-empty','--to-schema-datamodel',file,'--script'],{cwd:repo,env,encoding:'utf8'});
+let legacySql=sql;
+for(const table of ['Order','OrderItem']){
+ const block=new RegExp(String.raw`CREATE TABLE "${table}" \(([\s\S]*?)\);`);
+ const old=sql.match(block)?.[1]||'',now=currentSql.match(block)?.[1]||'';
+ for(const line of now.split('\n')){const column=line.match(/^\s+"([^"]+)"\s+(.+?),?$/);if(column&&!old.includes('"'+column[1]+'"'))legacySql+='\nALTER TABLE "'+table+'" ADD COLUMN "'+column[1]+'" '+column[2].replace(/,$/,'')+';';}
+}
+fs.writeFileSync(path.join(run,'legacy.sql'),legacySql);env.INVENTORY_FLOW_LEGACY_SQL=path.join(run,'legacy.sql');
 invoke(['generate','--schema',file]);invoke(['db','push','--skip-generate','--schema',file]);
 const config={rootDir:server,testEnvironment:'node',testMatch:[path.join(server,'audit-flow-tests/**/*.test.ts')],transform:{'^.+\\.ts$':[path.join(server,'node_modules/ts-jest'),{tsconfig:{module:'CommonJS',esModuleInterop:true},diagnostics:true}]},maxWorkers:1,cache:false,testTimeout:30000,setupFiles:[path.join(server,'audit-flow-tests/safety.cjs')],moduleNameMapper:{'^@prisma/client$':`${run}/client`}};
 console.log('Disposable check directory: '+run);
