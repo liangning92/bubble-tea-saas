@@ -29,3 +29,9 @@ test('freeform suppresses executable URLs and CSS values and does not invent con
  const html=render({type:'buy_get',products:[{id:'p',price:16000}],posterConfig:{freeform:true,cardItems:[{productId:'p',imageUrl:'javascript:alert(1)',imageMode:'manual',productName:'<script>bad</script>'}],elements:{headline:{color:'red; background:url(https://bad)'}}}});
  assert.ok(!html.includes('src="javascript:'));assert.ok(!html.includes('background:url'));assert.ok(!html.includes('<script>'));assert.ok(!html.includes('Harga Spesial :'));
 });
+test('variant association requires an exact Unicode product name and never a substring',()=>{
+ const m={exports:{}};vm.runInNewContext(ts.transpileModule(fs.readFileSync('server/src/utils/posterImageVariants.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{module:m,exports:m.exports,require:()=>({})});
+ const urls=m.exports.posterImageUrls({name:'奶茶',image:'/uploads/primary.jpg'},[{name:'奶茶 (9:16).webp',url:'/uploads/tea-tall.jpg'},{name:'草莓奶茶_9x16.webp',url:'/uploads/strawberry.jpg'},{name:'咖啡_16x9.webp',url:'/uploads/coffee.jpg'}]);
+ assert.deepEqual(Array.from(urls),['/uploads/primary.jpg','/uploads/tea-tall.jpg']);
+ assert.deepEqual(Array.from(m.exports.posterImageUrls({name:''},[{name:'9x16.webp',url:'/uploads/no.jpg'}])),[]);
+});

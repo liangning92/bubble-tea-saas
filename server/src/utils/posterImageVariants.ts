@@ -6,7 +6,17 @@ const dimensions = new Map<string, {
     width: number;
     height: number;
 }>();
-const normalize = (s: string) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalize = (s: string) => s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+export function posterImageUrls(product:any,assets:any[]=[]):string[] {
+    const linked = (product.images || []).map((i: any) => i.media).filter(Boolean);
+    const exact = assets.filter(asset => {
+        const name = String(asset.name || '').replace(/\.[a-z0-9]+$/i, '');
+        const stripped = name.replace(/(?:16[:x×]9|9[:x×]16|1[:x×]1|portrait|landscape|horizontal|vertical)/gi, ' ');
+        const productName=normalize(product.name||'');
+        return !!productName && stripped !== name && normalize(stripped) === productName;
+    });
+    return [...new Set<string>([product.image, ...linked.map((a: any) => a.url), ...exact.map(a => a.url)].filter(Boolean))];
+}
 // Only explicit product links, its primary image, or an exact product-name + orientation tag.
 // Similar product names never establish a relationship and no persistent binding is changed.
 export async function posterImageVariants(product: any, assets: any[] = []): Promise<{
@@ -14,13 +24,7 @@ export async function posterImageVariants(product: any, assets: any[] = []): Pro
     width?: number;
     height?: number;
 }[]> {
-    const linked = (product.images || []).map((i: any) => i.media).filter(Boolean);
-    const exact = assets.filter(asset => {
-        const name = String(asset.name || '').replace(/\.[a-z0-9]+$/i, '');
-        const stripped = name.replace(/(?:^|[\s_-])(?:16x9|9x16|1x1|portrait|landscape|horizontal|vertical)(?=$|[\s_-])/gi, ' ');
-        return stripped !== name && normalize(stripped) === normalize(product.name || '');
-    });
-    const urls = [...new Set<string>([product.image, ...linked.map((a: any) => a.url), ...exact.map(a => a.url)].filter(Boolean))];
+    const urls=posterImageUrls(product,assets);
     return Promise.all(urls.map(async (url) => {
         const relative = localUploadPath(url);
         if (!relative)
