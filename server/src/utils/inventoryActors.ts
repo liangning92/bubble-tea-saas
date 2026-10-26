@@ -8,6 +8,12 @@ export async function loadInventoryActors(db: any, storeId: string | undefined, 
     const actor = { id: person.id, name: person.name, employeeNumber: person.employeeNumber };
     result.set(person.id, actor); result.set(person.userId, actor);
   }
+  const agents=ids.filter(id=>/^agent:[a-f0-9-]{36}$/i.test(id));
+  if(agents.length){
+    const prefix='externalAgent.teamBridge.v1.grant.';
+    const rows=await db.config.findMany({where:{storeId,key:{in:agents.map(id=>prefix+id.slice(6))}},select:{key:true,value:true}});
+    for(const row of rows){try{const g=JSON.parse(row.value),id='agent:'+g.agentId;if(g.storeId===storeId&&row.key===prefix+g.agentId&&agents.includes(id)&&typeof g.displayName==='string'&&g.displayName.trim()&&g.displayName.length<=64)result.set(id,{id,name:g.displayName,employeeNumber:''})}catch{}}
+  }
   return result;
 }
 export function inventoryLogActorId(log: { staffId?: string | null; reason?: string; note?: string | null }) {

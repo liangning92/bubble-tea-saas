@@ -19,3 +19,10 @@ test('count adjustment actor is recovered only from its own structured audit dat
  assert.equal(inventoryLogActorId({reason:'count_adjustment',note:'{"actor":"reviewer"}'}),'reviewer');
  assert.equal(inventoryLogActorId({reason:'sold',note:'{"actor":"spoof"}'}),null);assert.equal(inventoryLogActorId({reason:'count_adjustment',note:'broken'}),null);
 });
+
+test('agent operations retain the configured agent name without impersonating a staff member',async()=>{
+ const id='a1234567-1111-4111-a111-123456789012',prefix='externalAgent.teamBridge.v1.grant.';let query;
+ const db={staff:{findMany:async()=>[]},config:{findMany:async q=>{query=q;return[{key:prefix+id,value:JSON.stringify({agentId:id,storeId:'own',displayName:'店铺 Hermes',secret:'never output'})}]}}};
+ const actors=await loadInventoryActors(db,'own',['agent:'+id]);assert.equal(query.where.storeId,'own');assert.deepEqual(actors.get('agent:'+id),{id:'agent:'+id,name:'店铺 Hermes',employeeNumber:''});
+ db.config.findMany=async()=>[{key:prefix+id,value:JSON.stringify({agentId:id,storeId:'another-store',displayName:'Foreign agent'})}];assert.equal((await loadInventoryActors(db,'own',['agent:'+id])).size,0);
+});
