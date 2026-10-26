@@ -1,3 +1,4 @@
+const aiPanelFixture=require('./ai-settings-fixture.cjs');
 /* Actual built Admin UI, synthetic session and loopback API only. No provider calls. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'../..'),{chromium}=require(root+'/node_modules/playwright'),express=require(root+'/server/node_modules/express');
@@ -6,6 +7,7 @@ let state={version:4,checkRevision:0,provider:'minimax',model:'MiniMax-M3',regio
 let mode='ok',checks=0,saves=0,server,browser;const passed=[],errors=[];
 const app=express();app.use(express.json());app.all('/api/*',(req,res)=>{
  const ok=data=>res.json({code:200,data});
+ const panelData=aiPanelFixture(req.path);if(panelData!==undefined)return ok(panelData);
  if(req.path==='/api/team/ai/settings'&&req.method==='GET')return ok(state);
  if(req.path==='/api/team/ai/settings'&&req.method==='PUT'){saves++;const {expectedVersion,targetConfirmed,removeKey,...fields}=req.body;assert.equal(expectedVersion,state.version);state={...state,...fields,version:state.version+1,connection:null};return ok(state);}
  if(req.path==='/api/team/ai/connection-check'){
