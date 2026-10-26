@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client'
 import { CASH_WARNING_PREFIX, loadShiftCashReviews } from './ShiftCashReconciliation'
 
 // Pending work is store-wide and independent of dashboard sales date filters.
-export async function loadDashboardPendingActions(db: PrismaClient, storeId: string, now = new Date()) {
+export async function loadDashboardPendingActions(db: PrismaClient, storeId: string, now = new Date(), includeInventory = true) {
   const pending = { storeId, status: 'pending' }
   const [refunds, leave, correction, swap, overtime, reimbursement, rewards, purchases, counts, hygiene, permissions, cashWarnings] = await Promise.all([
     db.refundRequest.count({ where: { status: 'pending', order: { storeId } } }),
@@ -51,7 +51,7 @@ export async function loadDashboardPendingActions(db: PrismaClient, storeId: str
       actions.push({ key: 'cash', count: 1, to: `/finance/revenue/shifts/${encodeURIComponent(session.id)}?${range}` })
     }
   }
-  const inventoryAlerts=await db.config.findMany({where:{storeId,category:'inventory_alert_events'},select:{value:true}})
+  const inventoryAlerts=includeInventory?await db.config.findMany({where:{storeId,category:'inventory_alert_events'},select:{value:true}}):[]
   const active=inventoryAlerts.filter(row=>{try{const a=JSON.parse(row.value);return a.active&&a.status==='open'}catch{return false}}).length
   actions.push({key:'inventory',count:active,to:'/inventory/alerts'})
   return { actions, total: actions.reduce((sum, action) => sum + action.count, 0), timestamp: now.toISOString() }
