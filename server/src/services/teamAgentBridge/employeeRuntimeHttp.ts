@@ -40,9 +40,9 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
       const a=await access(req,'provider');runtime=a.runtime
       admission=await runtime.provider.claim(a.executionId,employeeRuntimeDigest(req.body))
       // This is the complete approved SDK input. The explicit server transform
-      // uses a non-streaming provider request, low effort, and no output cap.
+      // uses a non-streaming provider request and model-default reasoning, with no output cap.
       const p=admission.request,request={model:p.model,messages:p.messages,tools:p.tools,tool_choice:'auto' as const,
-        stream:false as const,reasoning_effort:'low' as const,reasoning_split:true as const}
+        stream:false as const,reasoning_split:true as const}
       const raw=await deps.transport(admission.storeId,admission.configVersion,request,async()=>{
         if(Date.now()>=Math.min(admission!.deadlineAt,Date.parse(a.expiresAt)))throw Error('EMPLOYEE_INGRESS_EXPIRED')
         // Credential revocation is checked again immediately before transport.

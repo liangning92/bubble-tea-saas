@@ -11,7 +11,7 @@ export async function readCommunicationScope(db: any, g: BridgeGrant, task: Task
   const people = await db.staff.findMany({ where: { storeId:g.storeId,id:{in:audienceStaffIds},status:'active' }, select:{id:true,user:{select:{id:true,storeId:true,role:true}}} })
   if (people.length !== audienceStaffIds.length || people.some((s:any) => !s.user || s.user.storeId !== g.storeId || employeeAppAccess(s.user.role).modes['personal.messages'] !== 'allow')) reject()
   if (requesterStaffId && !people.some((s:any) => s.id === requesterStaffId)) reject()
-  const policies=await db.config.findMany({where:{storeId:g.storeId,key:{in:['staff.access.policy.v2','staff.access.policy']}},select:{key:true,value:true},orderBy:{key:'asc'}})
+  const policies=await db.config.findMany({where:{storeId:g.storeId,key:{in:['staff.access.policy.v2','staff.access.policy','externalAgent.memory.v1.revision.'+g.agentId]}},select:{key:true,value:true},orderBy:{key:'asc'}})
   const accessHash=createHash('sha256').update(JSON.stringify([people.sort((a:any,b:any)=>a.id.localeCompare(b.id)),policies])).digest('hex')
   const membersHash=channel?audienceHash(channel):''
   const scope: CommunicationScope = { compartmentKey: contextKey(g,task,channel?.id,membersHash+accessHash), task, channelId: channel?.id, audienceStaffIds, audienceHash:membersHash, requesterStaffId }
@@ -45,6 +45,9 @@ export async function assertDataAudience(db:any,g:BridgeGrant,scope:Communicatio
 export const textHash = (text:string) => createHash('sha256').update(text).digest('hex')
 export const audienceHash = (channel:TeamChannel) => createHash('sha256').update(JSON.stringify(channel.members.map(m=>({staffId:m.staffId,fromSeq:m.fromSeq})).sort((a,b)=>a.staffId.localeCompare(b.staffId)))).digest('hex')
 const sourceSchema=z.discriminatedUnion('kind',[
+ z.object({kind:z.literal('employee_execution_outcome'),executionId:z.string().uuid(),channelId:z.string().uuid()}).strict(),
+ z.object({kind:z.literal('agent_memory'),id:z.string().regex(/^[a-f0-9]{64}$/),version:z.number().int().positive(),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
+ z.object({kind:z.literal('operation_experience_evidence'),fingerprint:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
  z.object({kind:z.literal('conversation'),channelId:z.string().uuid(),messageId:z.string().uuid(),seq:z.number().int().positive()}).strict(),
  z.object({kind:z.literal('employee_task'),taskId:z.string().uuid(),version:z.number().int().positive()}).strict(),
  z.object({kind:z.literal('public_sop'),id:z.string().min(1),version:z.number().int().positive()}).strict(),

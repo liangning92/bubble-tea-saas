@@ -130,10 +130,13 @@ export function createEmployeeContinuation(db:any,ports:EmployeeContinuationPort
         if(observed.phase==='running'&&now()-Date.parse(s.active.startedAt!)<(ports.executionDeadlineMs||120000))return {status:s.phase}
         if(observed.phase==='running'||observed.phase==='unknown'){
           const release=observed.phase==='unknown'?await ports.readAbandoned(tx,s.active).catch(()=>({releasable:false})):{releasable:false}
-          if(release.releasable){
+          if(release.releasable||observed.phase==='unknown'){
             delete s.active;s.phase='ready';s.fault={code:'EMPLOYEE_CONTINUATION_EXECUTION_UNKNOWN',at:stamp()}
-            await writeTeam(tx,ports.storeId,executionKey(executionId),{reservation:saved.reservation,status:'released',fault:s.fault})
-            await save(tx,s);return {status:'released'}
+            await writeTeam(tx,ports.storeId,executionKey(executionId),{reservation:saved.reservation,status:release.releasable?'released':'unknown',fault:s.fault})
+            // The old source remains consumed. New questions may proceed, but no
+            // uncertain business operation is re-queued or repeated.
+            const source=await readTeam<any>(tx,ports.storeId,eventKey(saved.reservation.event.sourceMessageId));await writeTeam(tx,ports.storeId,eventKey(saved.reservation.event.sourceMessageId),{...source,status:'unknown'})
+            await save(tx,s);return {status:release.releasable?'released':'unknown'}
           }
           s.phase='unknown';s.fault={code:observed.phase==='running'?'EMPLOYEE_CONTINUATION_EXECUTION_TIMEOUT':'EMPLOYEE_CONTINUATION_EXECUTION_UNKNOWN',at:stamp()}
           await writeTeam(tx,ports.storeId,executionKey(executionId),{reservation:s.active,status:'unknown',fault:s.fault});await save(tx,s);return {status:'unknown'}

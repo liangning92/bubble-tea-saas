@@ -64,6 +64,7 @@ describe('AgentSettingsService and Schema verification', () => {
       $transaction: async (fn: any) => {
         return fn({
           config: {
+            findMany: async () => [],
             findUnique: async ({ where }: any) => {
               const val = store.get(where.storeId_key?.key || '')
               return val ? { value: val } : null

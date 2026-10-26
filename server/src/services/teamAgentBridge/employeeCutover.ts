@@ -13,11 +13,10 @@ const input=z.object({storeId:z.string().min(1),channelId:z.string().uuid(),sour
  * Native owner/permissions are resolved here; no manufactured admin actor or
  * employee login is used to seed the service-owned coordination task. */
 export async function installEmployeeCutover(db:any,raw:z.infer<typeof input>) {
-  // Absolute operator-authorized bound of the renewed isolated employee window.
-  // A configuration or credential renewal can never move it; a new window is a
-  // new reviewed bound, never an extension of the previous one.
-  const v=input.parse(raw),now=Date.now(),limit=Date.parse('2026-10-23T10:00:00.000Z')
-  if(Date.parse(v.expiresAt)>limit||Date.parse(v.expiresAt)<=now)fail('EMPLOYEE_CUTOVER_DEADLINE_INVALID')
+  // The operator supplies authorization expiry. Runtime settings own renewals;
+  // an obsolete trial date is not a product authorization rule.
+  const v=input.parse(raw),now=Date.now()
+  if(Date.parse(v.expiresAt)<=now)fail('EMPLOYEE_CUTOVER_DEADLINE_INVALID')
   return db.$transaction(async(tx:any)=>{
     await lockTeam(tx,v.storeId,'channel.'+v.channelId)
     if(Date.parse(v.expiresAt)<=Date.now())fail('EMPLOYEE_CUTOVER_DEADLINE_INVALID')
@@ -40,7 +39,7 @@ export async function installEmployeeCutover(db:any,raw:z.infer<typeof input>) {
     // tripwire, so this backend-authored text must stay clear of those words even when
     // it states a restriction. Naming a restricted class here would make the assigned
     // task unreadable to its own executor.
-    const native:TeamTask={id:taskId,channelId:c.id,roundId:taskId,minuteVersion:1,actionIndex:0,text:'Hermes: coordinate new operational questions in this conversation; report facts, blockers and evidence for manager review. Do not disclose restricted records or perform business writes.',ownerId:'agent:'+v.agentId,reviewerId:c.ownerId,dueDate:v.expiresAt.slice(0,10),deadlineAt:v.expiresAt,sourceSeq:[],fromSeq,status:'assigned',version:1,createdAt:time,updatedAt:time,audienceIds:c.members.map(m=>m.staffId),evidenceRequired:'Actual message/tool/provider receipts and explicit unresolved facts; no invented completion.',acceptanceCriteria:'Manager checks evidence. A report or acknowledgement is not acceptance.',events:[{action:'service_agent_delegate',by:'service:employee-cutover',at:time,note:'Dedicated AI executor; no human impersonation.',sourceSeq:[]}]}
+    const native:TeamTask={id:taskId,channelId:c.id,roundId:taskId,minuteVersion:1,actionIndex:0,text:'Hermes: answer new operational questions in this conversation using current backend authorization and actual evidence. Never invent completion.',ownerId:'agent:'+v.agentId,reviewerId:c.ownerId,dueDate:v.expiresAt.slice(0,10),deadlineAt:v.expiresAt,sourceSeq:[],fromSeq,status:'assigned',version:1,createdAt:time,updatedAt:time,audienceIds:c.members.map(m=>m.staffId),evidenceRequired:'Actual message/tool/provider receipts and explicit unresolved facts; no invented completion.',acceptanceCriteria:'Manager checks evidence. A report or acknowledgement is not acceptance.',events:[{action:'service_agent_delegate',by:'service:employee-cutover',at:time,note:'Dedicated AI executor; no human impersonation.',sourceSeq:[]}]}
     await writeTeam(tx,v.storeId,'task.'+c.id+'.'+taskId,native)
     await tx.config.create({data:{storeId:v.storeId,key:employeeGrantKey(v.agentId),category:'staff',value:JSON.stringify(grant)}})
     await tx.config.create({data:{storeId:v.storeId,key:'externalAgent.teamBridge.v1.channel.'+c.id,category:'staff',value:JSON.stringify({agentId:v.agentId,task,delegatedDirect:{sourceStaffId:v.sourceStaffId,fromSeq,audienceHash:directDelegationAudienceHash(c),grantVersion:1,clientRevision:1,expiresAt:v.expiresAt}})}})

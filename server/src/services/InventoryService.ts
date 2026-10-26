@@ -109,7 +109,7 @@ export async function getInventoryById(inventoryId: string) {
 }
 
 // Stock in operation
-export async function stockIn(data: StockOperation & { unitCost?: number }) {
+export async function stockIn(data: StockOperation & { unitCost?: number }, db:any=prisma) {
   const { inventoryId, storeId, unitCost, note, staffId, supplierId } = data
 
   const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
@@ -121,7 +121,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
     if (log.inventory.storeId!==storeId||saved?.requestFingerprint!==fingerprint) throw Error('STOCK_IDEMPOTENCY_CONFLICT')
     return serializeBigInt(log.inventory)
   }
-  try { return await prisma.$transaction(async (tx) => {
+  try { return await db.$transaction(async (tx) => {
     const previous=await replay(tx);if(previous)return previous
     // Get current inventory
     const inventory = await tx.inventory.findFirst({
@@ -178,11 +178,11 @@ export async function stockIn(data: StockOperation & { unitCost?: number }) {
 
     if (unitCost !== undefined) await recalculateInventoryConsumers(tx,[inventoryId])
     return serializeBigInt(updated)
-  }) } catch(error:any) {if(error.code==='P2002'){const previous=await replay(prisma);if(previous)return previous}throw error}
+  }) } catch(error:any) {if(error.code==='P2002'){const previous=await replay(db);if(previous)return previous}throw error}
 }
 
 // Stock out operation
-export async function stockOut(data: StockOperation) {
+export async function stockOut(data: StockOperation, db:any=prisma) {
   const { inventoryId, storeId, reason, note, staffId, orderId } = data
 
   const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
@@ -194,7 +194,7 @@ export async function stockOut(data: StockOperation) {
     if (log.inventory.storeId!==storeId||saved?.requestFingerprint!==fingerprint) throw Error('STOCK_IDEMPOTENCY_CONFLICT')
     return serializeBigInt(log.inventory)
   }
-  try { return await prisma.$transaction(async (tx) => {
+  try { return await db.$transaction(async (tx) => {
     const previous=await replay(tx);if(previous)return previous
     // Get current inventory
     const inventory = await tx.inventory.findFirst({
@@ -235,7 +235,7 @@ export async function stockOut(data: StockOperation) {
     })
 
     return serializeBigInt(updated)
-  }) } catch(error:any) {if(error.code==='P2002'){const previous=await replay(prisma);if(previous)return previous}throw error}
+  }) } catch(error:any) {if(error.code==='P2002'){const previous=await replay(db);if(previous)return previous}throw error}
 }
 
 // Get low stock alerts (using safetyStock as threshold)

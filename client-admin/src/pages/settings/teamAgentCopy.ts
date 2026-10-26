@@ -1,4 +1,19 @@
 const zh = {
+  authorizationExpiry: '授权有效期',
+  noExpiry: '持续授权（可随时停用）',
+  expiryHelp: '权限和有效期保存后由执行器实时核对；后台服务不依赖终端窗口。',
+  checkFailed: '连接检查失败',
+  latency: '延迟',
+  runtime: '后台运行服务',
+  unreachable: '节点不可达',
+  configured: '已配置',
+  employeeGateway: '工作网关',
+  customPermissions: '自定义读写授权',
+  discard: '放弃更改',
+  memoryEnabled: '启用长期记忆',
+  memoryHelp: '跨会话保留偏好、规则与经验；可以在下方查看、纠正或删除。',
+  learningEnabled: '根据反馈和实际执行结果学习',
+  learningHelp: '记住有用的纠正和经验，避免重复失败；业务数据仍按当前记录核实。',
   title: '智能体（Agent）设置',
   subtitle: '配置 Hermes 自主执行智能体角色、运行节点与业务读写权限。',
   statusCardTitle: '智能体运行状态',
@@ -19,7 +34,7 @@ const zh = {
   // 基础设置
   basicSection: '1. 智能体基础配置',
   enableSwitch: '启用 Hermes 智能体服务',
-  enableHelp: '开启后，允许系统向配置的 Hermes 节点分发受限任务和专属会话协同。',
+  enableHelp: '开启后，由 Hermes 理解自由提问，并按保存的业务权限调查和执行；回复依据接收员工权限过滤。',
   allChannelsTitle: '全频道允许沟通（不限制频道）',
   allChannelsDesc: '开启后，无需逐个频道选点授权，所有团队工作频道均自动允许智能体接入协同与回答。',
   agentName: '智能体身份名称',
@@ -27,10 +42,10 @@ const zh = {
   agentOrigin: 'Hermes 节点地址 (Origin)',
   agentOriginHelp: '本地独立回环或受保护网关地址（如 http://host.docker.internal:18643 或 http://127.0.0.1:8642）。',
   timeout: '单任务单次执行租约（分钟）',
-  timeoutHelp: '单次思考调用最长执行锁定时间（1 - 1440 分钟，防死锁。长期任务会在每天或状态更新时自动持续跟踪）。',
+  timeoutHelp: '单次执行的最长时间（1–1440 分钟）；业务授权有效期单独设置。',
 
   // 业务能力
-  capabilitiesSection: '2. 智能体执行能力 (Capabilities)',
+  capabilitiesSection: '3. 智能体执行能力 (Capabilities)',
   pdcaTitle: '库存比对审计执行器 (STOCK-RO-001 PDCA)',
   pdcaDesc: '执行计划(P)→执行(D)→核查(C)→处置(A)闭环：比对系统账本与实物盘点证据，生成不可篡改报告。',
   employeeBridgeTitle: '员工工作协同助理 (Employee Hermes Bridge)',
@@ -46,13 +61,14 @@ const zh = {
   riskSafe: '常用安全操作',
 
   modules: {
+    marketing: { name: '营销活动', desc: '查询活动与商品表现；创建、调整或结束促销活动' },
     products: { name: '商品与配方', desc: '读取商品档案、规格配方(BOM)；修改商品信息或售价' },
     inventory: { name: '库存与物料', desc: '读取实时库存、盘点记录；出入库录入、发起采购或修正账面' },
     orders: { name: '收银与订单', desc: '查看流水订单、销售统计；创建订单、发起退款或取消' },
     members: { name: '会员与营销', desc: '查看会员画像、积分明细；发放优惠券、调整会员等级' },
     finance: { name: '财务与账目', desc: '查阅收支损益与税务报表；录入经营杂费、财务记账' },
     staff: { name: '人事与排班', desc: '查看员工花名册、出勤工时；生成排班表、薪酬与奖惩' },
-    hygiene: { name: '门店卫生巡检', desc: '查看清洁卫生标准；自动填写巡检打卡与交接报告' },
+    hygiene: { name: '门店卫生巡检', desc: '查看清洁卫生标准；分派清洁任务、检查证据并跟进整改' },
     channels: { name: '工作频道沟通', desc: '读取员工业务提问与交流；直接在频道发送解答与跟进消息' }
   },
 
@@ -63,6 +79,21 @@ const zh = {
 }
 
 const en: typeof zh = {
+  authorizationExpiry: 'Authorization expiry',
+  noExpiry: 'Until revoked',
+  expiryHelp: 'The executor checks saved permissions and expiry. The service runs without an open terminal.',
+  checkFailed: 'Connection check failed',
+  latency: 'Latency',
+  runtime: 'Background service',
+  unreachable: 'Node unreachable',
+  configured: 'Configured',
+  employeeGateway: 'Work gateway',
+  customPermissions: 'Custom access',
+  discard: 'Discard changes',
+  memoryEnabled: 'Enable long-term memory',
+  memoryHelp: 'Keep preferences, rules and lessons across conversations. Review, correct or delete them below.',
+  learningEnabled: 'Learn from feedback and actual outcomes',
+  learningHelp: 'Remember useful corrections and lessons to avoid repeated failures; verify changing business data.',
   title: 'Agent Settings (Hermes)',
   subtitle: 'Configure Hermes autonomous agent roles, gateway origin, and custom module read/write permissions.',
   statusCardTitle: 'Agent Operational Status',
@@ -107,6 +138,7 @@ const en: typeof zh = {
   riskSafe: 'Standard Safe',
 
   modules: {
+    marketing: { name: 'Marketing', desc: 'Read campaign performance; create, update or end promotions' },
     products: { name: 'Products & Recipes', desc: 'Read product catalogs, BOM recipes; modify info or prices' },
     inventory: { name: 'Inventory & Supplies', desc: 'Read stock, physical counts; record stock in/out, purchase orders' },
     orders: { name: 'POS & Orders', desc: 'Read orders and sales metrics; create orders, process refunds' },
@@ -123,6 +155,21 @@ const en: typeof zh = {
 }
 
 const id: typeof zh = {
+  authorizationExpiry: 'Masa berlaku izin',
+  noExpiry: 'Berlaku sampai dinonaktifkan',
+  expiryHelp: 'Pelaksana memeriksa izin dan masa berlaku tersimpan. Layanan berjalan tanpa terminal terbuka.',
+  checkFailed: 'Pemeriksaan koneksi gagal',
+  latency: 'Latensi',
+  runtime: 'Layanan latar belakang',
+  unreachable: 'Node tidak dapat dihubungi',
+  configured: 'Terkonfigurasi',
+  employeeGateway: 'Gateway kerja',
+  customPermissions: 'Izin kustom',
+  discard: 'Batalkan perubahan',
+  memoryEnabled: 'Aktifkan memori jangka panjang',
+  memoryHelp: 'Simpan preferensi, aturan, dan pelajaran lintas percakapan. Tinjau, koreksi, atau hapus di bawah.',
+  learningEnabled: 'Belajar dari umpan balik dan hasil aktual',
+  learningHelp: 'Ingat koreksi dan pelajaran untuk menghindari kegagalan berulang; periksa data bisnis terkini.',
   title: 'Pengaturan Agen (Hermes)',
   subtitle: 'Konfigurasi peran agen otonom Hermes, origin gateway, dan izin baca/tulis modul kustom.',
   statusCardTitle: 'Status Operasional Agen',
@@ -152,13 +199,13 @@ const id: typeof zh = {
   timeout: 'Batas Sewa Eksekusi Tunggal (Menit)',
   timeoutHelp: 'Batas kunci untuk satu putaran panggilan (1 - 1440 mnt). Tugas berhari-hari tetap dilacak otomatis.',
 
-  capabilitiesSection: '2. Kemampuan Eksekusi Agen',
+  capabilitiesSection: '3. Kemampuan Eksekusi Agen',
   pdcaTitle: 'Pelaksana Audit Stok (STOCK-RO-001 PDCA)',
   pdcaDesc: 'Siklus Plan-Do-Check-Act: Membandingkan buku stok dengan bukti fisik secara hanya-baca.',
   employeeBridgeTitle: 'Asisten Kolaborasi Pegawai (Employee Hermes Bridge)',
   employeeBridgeDesc: 'Membantu pertanyaan operasional di kanal kerja, mengumpulkan kendala, dan melapor ke manajer.',
 
-  permissionsSection: '3. Izin Baca/Tulis Modul Bisnis (Dapat Disesuaikan)',
+  permissionsSection: '2. Izin Baca/Tulis Modul Bisnis (Dapat Disesuaikan)',
   permissionsSubtitle: 'Mirip dengan izin pegawai, sesuaikan modul bisnis mana yang dapat dibaca dan ditulis oleh agen.',
   moduleName: 'Modul Bisnis',
   readPermission: 'Izin Baca',
@@ -167,6 +214,7 @@ const id: typeof zh = {
   riskSafe: 'Aman Standar',
 
   modules: {
+    marketing: { name: 'Pemasaran', desc: 'Lihat kinerja kampanye; buat, ubah, atau akhiri promosi' },
     products: { name: 'Produk & Resep', desc: 'Baca katalog, resep BOM; ubah info produk atau harga' },
     inventory: { name: 'Inventaris & Bahan', desc: 'Baca stok dan stok opname; catat keluar/masuk, PO' },
     orders: { name: 'Kasir & Pesanan', desc: 'Baca pesanan dan penjualan; buat pesanan, pengembalian dana' },

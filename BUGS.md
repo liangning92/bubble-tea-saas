@@ -1,5 +1,14 @@
 # BUGS
 
+## BUG-HERMES-20261026-01
+Title: Saved agent permissions do not control the employee executor; terminal-hosted gateway is unavailable
+Severity: P1
+Status: IMPLEMENTED; RELEASE AND REAL-WEB ACCEPTANCE IN PROGRESS
+Reproductions: Agent module settings differ from the installed BridgeGrant; gateway port 18643 refuses connections; trial launcher has an obsolete absolute expiry. Normal employee questions are keyword-redacted and business tools depend on a fixed admin role.
+Expected: Backend settings govern authorization, duration and modules; the model understands free-form questions; backend tools operate under store authority while data visibility follows each recipient's real policy; a supervised private service runs without a terminal.
+Validation: Disposable PostgreSQL tests cover settings/grant/route synchronization, stock idempotency and rollback, hygiene task assignment, scheduling and recipient filtering. Actual pinned Hermes is exercised with a synthetic provider and a prefixed backend URL. Real employee/model and deployed UI verification are recorded separately; synthetic checks are not production acceptance.
+
+
 所有 bug 必须先登记 ID 再进入修复流程。
 
 格式：

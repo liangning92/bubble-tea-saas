@@ -45,6 +45,13 @@ describe('server-only CN Flash tool transport (all fetch/key reads synthetic moc
     // mock fs exposes readFile only; mkdir/writeFile/master-key creation would fail this test.
     expect((fs.readFile as any).mock.calls.at(-1)[0]).toContain('.team-ai-master.key')
   })
+  test('employee runtime forwards its business tools without forcing low reasoning', async () => {
+    const f=fixture();delete f.body.reasoning_effort
+    f.body.tools=['employee_manage_inventory','employee_manage_hygiene','employee_manage_staff'].map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{},additionalProperties:false}}}))
+    const fetcher=jest.fn(async (_url:any,init:any)=>{const body=JSON.parse(init.body);expect(body).not.toHaveProperty('reasoning_effort');expect(body).not.toHaveProperty('max_tokens');expect(body.tools).toHaveLength(3);return {ok:true,text:async()=>JSON.stringify({id:'synthetic-business',choices:[]})}})
+    await createTeamAgentMiniMaxTransport(f.db,{enabled:true,fetch:fetcher as any,toolProfile:'employee_work'})(f.store,5,f.body,async()=>{})
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
   test.each(['config_version', 'region', 'model', 'unverified', 'output_cap', 'arbitrary_tool'])('%s is rejected before fetch', async change => {
     const f = fixture(), fetcher = jest.fn()
     if (change === 'region') f.db.records['ai.settings'].region = 'global'

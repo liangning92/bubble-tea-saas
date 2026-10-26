@@ -1,3 +1,4 @@
+import { audienceAllows } from './employeeAccess'
 import { createHash } from 'crypto'
 import { z } from 'zod'
 import { TeamError } from '../TeamCommunicationService'
@@ -35,14 +36,15 @@ async function authorize(db:any,g:BridgeGrant,scope:CommunicationScope) {
   if(!audience.length||new Set(scope.audienceStaffIds).size!==scope.audienceStaffIds.length||JSON.stringify(audience)!==JSON.stringify([...scope.audienceStaffIds].sort())||scope.audienceHash!==directDelegationAudienceHash(access.channel)||!audience.includes(scope.requesterStaffId))deny()
   const people=await db.staff.findMany({where:{storeId:g.storeId,id:{in:audience},status:'active'},select:{id:true,userId:true,user:{select:{id:true,storeId:true,role:true}}}})
   if(people.length!==audience.length)deny()
+  if(!await audienceAllows(db,g,scope,'inventory.read'))deny()
   const permissions=[]
   for(const person of people.sort((a:any,b:any)=>a.id.localeCompare(b.id))){
     if(!person.user||person.user.id!==person.userId||person.user.storeId!==g.storeId)deny()
     const acl=await userAccessV2({staffId:person.id,storeId:g.storeId,role:person.user.role},db)
     // userAccessV2 returns null for a real admin: preserve its intrinsic system
     // permission, but never apply the sponsor's role to any other recipient.
-    if(person.user.role!=='admin'&&acl?.modes['inventory.read']!=='allow')deny()
-    permissions.push({staffId:person.id,userId:person.user.id,role:person.user.role,revision:acl?.revision??null,inventoryRead:person.user.role==='admin'?'allow':acl!.modes['inventory.read']})
+
+    permissions.push({staffId:person.id,userId:person.user.id,role:person.user.role,revision:acl?.revision??null,inventoryRead:'allow'})
   }
   return hash({storeId:g.storeId,agentId:g.agentId,grantVersion:g.version,clientRevision:g.clientRevision,expiresAt:g.expiresAt,task:scope.task,channelId:scope.channelId,audienceHash:scope.audienceHash,requesterStaffId:scope.requesterStaffId,compartmentKey:scope.compartmentKey,permissions})
 }
