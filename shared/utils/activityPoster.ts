@@ -1,4 +1,67 @@
-import type { ActivityPosterConfig } from './activities';
+import type { ActivityPosterConfig, PosterDesignConfig } from './activities';
+export const DEFAULT_POSTER_DESIGN: PosterDesignConfig = {
+  cardLayout: 'overlay', // Default to modern full-bleed overlay as requested
+  layoutGridMode: 'single_row',
+  rows: 1,
+  cardGap: 14,
+  containerPaddingY: 16,
+  containerPaddingX: 20,
+  cardPadding: 0,
+  cardBorderRadius: 16,
+
+  imageBleed: true,
+  imageHeightRatio: 75,
+  imageFit: 'cover',
+  imageBorderRadius: 16,
+  imagePadding: 0,
+  imageBgColor: 'transparent',
+
+  cardShadow: 'medium',
+  cardBorderWidth: 1,
+  cardBorderColor: 'rgba(255, 255, 255, 0.4)',
+  cardBorderStyle: 'solid',
+  overlayGradientOpacity: 70,
+
+  priceBoxBg: 'rgba(0, 0, 0, 0.5)',
+  priceBoxTextColor: '#dc2626',
+  priceBoxBorderColor: 'transparent',
+  priceBoxRadius: 12,
+  priceBoxShadow: 'medium',
+  themePreset: 'pastel',
+
+  headlineColor: '#FF4B72',
+  subheadlineColor: '#ffcad4',
+  titleColor: '#ffffff',
+  priceColor: '#FF2E63',
+  normalPriceColor: 'rgba(255, 255, 255, 0.85)',
+  savingColor: '#f472b6',
+  dayBadgeBg: 'rgba(71, 85, 105, 0.95)',
+  dayBadgeColor: '#ffffff',
+
+  titlePosition: 'overlay',
+  pricePosition: 'bottom',
+  badgePosition: 'bottom_bar',
+  textAlign: 'center',
+  titleFontSize: 24,
+  textShadow: true,
+  textStroke: false,
+  textStrokeWidth: 1,
+  textStrokeColor: 'rgba(255, 46, 99, 0.85)',
+  textGlow: false,
+  priceStyle: 'list',
+  priceFontSize: 36,
+  normalPriceFontSize: 13,
+  savingFontSize: 13,
+  dayBadgeFontSize: 20,
+  dayBadgeStyle: 'footer_bar',
+  fontStyle: 'sans',
+  textUppercase: false,
+
+  highlightMode: 'popout',
+  highlightColor: '#FF2E63',
+  highlightScale: 1.04,
+}
+
 export interface PosterProduct {
     id?: string;
     name: string;
@@ -80,7 +143,7 @@ export function renderActivityPoster(a: PosterInput, options: {
     assetUrl?: (s: string) => string;
     page?: number;
 } = {}): string {
-    const cfg = a.posterConfig || {}, d = cfg.designConfig || {}, show = cfg.showFields || {}, lang = options.language ?? 2;
+    const cfg = a.posterConfig || {}, d = { ...DEFAULT_POSTER_DESIGN, ...cfg.designConfig, rows: cfg.designConfig?.rows ?? cfg.rows ?? DEFAULT_POSTER_DESIGN.rows, highlightColor: cfg.designConfig?.highlightColor ?? cfg.themeColor ?? DEFAULT_POSTER_DESIGN.highlightColor, headlineColor: cfg.designConfig?.headlineColor ?? cfg.themeColor ?? DEFAULT_POSTER_DESIGN.headlineColor }, show = cfg.showFields || {}, lang = options.language ?? 2;
     const l = (zh: string, en: string, id: string) => [zh, en, id][lang] || id;
     const days = [['周日', '周一', '周二', '周三', '周四', '周五', '周六'], ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']][lang] || [];
     const today = options.day ?? ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(new Intl.DateTimeFormat('en', { timeZone: a.timezone || 'Asia/Jakarta', weekday: 'short' }).format(options.now || new Date()));
@@ -112,6 +175,6 @@ export function renderActivityPoster(a: PosterInput, options: {
     const audience = [a.memberOnly ? l('仅限会员', 'Members only', 'Khusus anggota') : '', a.memberLevels?.join('/'), a.paymentMethods?.length ? l('支付方式', 'Payment', 'Pembayaran') + ': ' + a.paymentMethods.join('/') : '', a.channels?.length ? a.channels.join('/') : ''].filter(Boolean).join(' · ');
     const schedule = [(a.weekdays?.length ? a.weekdays.map(x => days[x]).join(' · ') : ''), a.dailyStart && a.dailyEnd ? `${a.dailyStart}–${a.dailyEnd}` : '', a.timezone || ''].filter(Boolean).join('  /  ');
     return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{container-type:size;background:${colour(cfg.backgroundColor, '#111827')};color:white;font-family:${font}}main{height:100%;display:flex;flex-direction:column;padding:${unit(d.containerPaddingY, 16)} ${unit(d.containerPaddingX, 20)};gap:1.4cqh}header{text-align:center;flex:none}h1{margin:0;color:${colour(d.headlineColor, accent)};font-size:${unit(d.headlineFontSize, 55)};line-height:1.1;overflow-wrap:anywhere}header p{margin:0.7cqh 0 0;color:${colour(d.subheadlineColor, '#cbd5e1')};font-size:${unit(d.subheadlineFontSize, 23)}}.grid{min-height:0;flex:1;display:grid;grid-template-columns:repeat(${Math.min(columns, Math.max(1, Math.ceil(items.length / rows)))},minmax(0,1fr));grid-template-rows:repeat(${Math.min(rows, Math.max(1, items.length))},minmax(0,1fr));gap:${unit(d.cardGap, 14)};padding:1.3cqh}.card{position:relative;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}.photo{min-height:0;overflow:hidden}.photo img{display:block;width:100%;height:100%}.copy{padding:1cqh;display:flex;flex-direction:column;gap:0.6cqh;flex:0 1 auto;min-height:0;z-index:1}.copy h2{margin:0;line-height:1.15;overflow-wrap:anywhere}.copy p{margin:0}.spacer{flex:1}.prices{padding:0.8cqh;line-height:1.2;max-width:100%;overflow-wrap:anywhere}.card:not(.overlay) .copy{display:contents}.card:not(.overlay) .copy h2{padding:.7cqh;order:${d.titlePosition === 'bottom' ? 3 : 1}}.card:not(.overlay) .photo{order:2}.card:not(.overlay) .prices{order:${d.pricePosition === 'top' ? 0 : d.pricePosition === 'middle' ? 2 : 4};margin:.5cqh}.card:not(.overlay) .spacer{display:none}.card:not(.overlay) .badge{order:5}.price{font-weight:900}.subname{font-size:1.6cqh}.badge{padding:0.7cqh;text-align:center;z-index:2;font-weight:bold;flex:none}.top_pill,.top_right_ribbon{position:absolute;top:0.6cqh;right:0.6cqh;border-radius:1cqh}.bottom_pill{border-radius:2cqh;margin:0.5cqh}.overlay .photo{position:absolute;inset:0}.overlay .photo:after{content:'';position:absolute;inset:0;background:linear-gradient(#0008,transparent 40%,rgba(0,0,0,${num(d.overlayGradientOpacity, 70, 0, 100) / 100}))}.overlay .copy{flex:1;position:relative}.missing{height:100%;display:grid;place-items:center;font-size:1.8cqh;color:#94a3b8}.today{position:absolute;left:0;top:0;padding:.5cqh;background:${accent};color:white;font-size:1.8cqh;z-index:3}.discount{position:absolute;right:0;top:0;background:${accent};padding:0.5cqh;font-size:2cqh;z-index:3}.prices.list{text-align:inherit}.footer{max-height:14cqh;overflow:hidden;font-size:1.65cqh;text-align:center;color:#cbd5e1;flex:none;overflow-wrap:anywhere}.empty{display:grid;place-items:center;text-align:center;font-size:3cqh;grid-column:1/-1} @media(max-aspect-ratio:1/1){h1{font-size:3.5cqh}.grid{grid-template-columns:repeat(${Math.min(2, columns)},minmax(0,1fr));grid-template-rows:repeat(${Math.ceil(items.length / Math.min(2, columns)) || 1},minmax(0,1fr))}.copy h2{font-size:1.7cqh!important}.price{font-size:2.3cqh!important}}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{container-type:size;background:${colour(cfg.backgroundColor, '#121214')};color:white;font-family:${font}}main{height:100%;display:flex;flex-direction:column;padding:${unit(d.containerPaddingY, 16)} ${unit(d.containerPaddingX, 20)};gap:1.4cqh}header{text-align:center;flex:none}h1{margin:0;color:${colour(d.headlineColor, accent)};font-size:${unit(d.headlineFontSize, 55)};line-height:1.1;overflow-wrap:anywhere}header p{margin:0.7cqh 0 0;color:${colour(d.subheadlineColor, '#cbd5e1')};font-size:${unit(d.subheadlineFontSize, 23)}}.grid{min-height:0;flex:1;display:grid;grid-template-columns:repeat(${Math.min(columns, Math.max(1, Math.ceil(items.length / rows)))},minmax(0,1fr));grid-template-rows:repeat(${Math.min(rows, Math.max(1, items.length))},minmax(0,1fr));gap:${unit(d.cardGap, 14)};padding:1.3cqh}.card{position:relative;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}.photo{min-height:0;overflow:hidden}.photo img{display:block;width:100%;height:100%}.copy{padding:1cqh;display:flex;flex-direction:column;gap:0.6cqh;flex:0 1 auto;min-height:0;z-index:1}.copy h2{margin:0;line-height:1.15;overflow-wrap:anywhere}.copy p{margin:0}.spacer{flex:1}.prices{padding:0.8cqh;line-height:1.2;max-width:100%;overflow-wrap:anywhere}.card:not(.overlay) .copy{display:contents}.card:not(.overlay) .copy h2{padding:.7cqh;order:${d.titlePosition === 'bottom' ? 3 : 1}}.card:not(.overlay) .photo{order:2}.card:not(.overlay) .prices{order:${d.pricePosition === 'top' ? 0 : d.pricePosition === 'middle' ? 2 : 4};margin:.5cqh}.card:not(.overlay) .spacer{display:none}.card:not(.overlay) .badge{order:5}.price{font-weight:900}.subname{font-size:1.6cqh}.badge{padding:0.7cqh;text-align:center;z-index:2;font-weight:bold;flex:none}.top_pill,.top_right_ribbon{position:absolute;top:0.6cqh;right:0.6cqh;border-radius:1cqh}.bottom_pill{border-radius:2cqh;margin:0.5cqh}.overlay .photo{position:absolute;inset:0}.overlay .photo:after{content:'';position:absolute;inset:0;background:linear-gradient(#0008,transparent 40%,rgba(0,0,0,${num(d.overlayGradientOpacity, 70, 0, 100) / 100}))}.overlay .copy{flex:1;position:relative}.missing{height:100%;display:grid;place-items:center;font-size:1.8cqh;color:#94a3b8}.today{position:absolute;left:0;top:0;padding:.5cqh;background:${accent};color:white;font-size:1.8cqh;z-index:3}.discount{position:absolute;right:0;top:0;background:${accent};padding:0.5cqh;font-size:2cqh;z-index:3}.prices.list{text-align:inherit}.footer{max-height:14cqh;overflow:hidden;font-size:1.65cqh;text-align:center;color:#cbd5e1;flex:none;overflow-wrap:anywhere}.empty{display:grid;place-items:center;text-align:center;font-size:3cqh;grid-column:1/-1} @media(max-aspect-ratio:1/1){h1{font-size:3.5cqh}.grid{grid-template-columns:repeat(${Math.min(2, columns)},minmax(0,1fr));grid-template-rows:repeat(${Math.ceil(items.length / Math.min(2, columns)) || 1},minmax(0,1fr))}.copy h2{font-size:1.7cqh!important}.price{font-size:2.3cqh!important}}
 </style></head><body><main><header><h1>${esc(cfg.headline ?? a.name ?? '')}</h1>${cfg.subheadline ? `<p>${esc(cfg.subheadline)}</p>` : ''}</header><section class="grid">${html || `<div class="empty">${esc(l('添加卡片并选择商品或填写文案', 'Add a card and choose a product or enter copy', 'Tambahkan kartu dan pilih produk atau isi teks'))}</div>`}</section><footer class="footer">${esc([offer, a.description, audience, schedule].filter(Boolean).join(' · '))}${cards.length > capacity ? ` · ${page + 1}/${Math.ceil(cards.length / capacity)}` : ''}</footer></main></body></html>`;
 }

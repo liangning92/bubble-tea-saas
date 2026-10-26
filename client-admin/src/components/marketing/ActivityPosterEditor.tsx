@@ -1,4 +1,4 @@
-import { renderActivityPoster, defaultPosterCards, type PosterInput } from '../../../../shared/utils/activityPoster'
+import { renderActivityPoster, defaultPosterCards, DEFAULT_POSTER_DESIGN, type PosterInput } from '../../../../shared/utils/activityPoster'
 import { MediaPicker } from '../MediaLibrary'
 import { receiptMediaUrl } from '../../services/api'
 import { useState } from 'react'
@@ -50,68 +50,7 @@ export const DEFAULT_DAYS = [
   { day: 0, labelZh: '周日', labelEn: 'Sun', labelId: 'Minggu', defaultColor: '#FCE7F3', activeColor: '#FDF2F8', titleColor: '#9D174D' },
 ]
 
-export const DEFAULT_DESIGN_CONFIG: PosterDesignConfig = {
-  cardLayout: 'overlay', // Default to modern full-bleed overlay as requested
-  layoutGridMode: 'single_row',
-  rows: 1,
-  cardGap: 14,
-  containerPaddingY: 16,
-  containerPaddingX: 20,
-  cardPadding: 0,
-  cardBorderRadius: 16,
-
-  imageBleed: true,
-  imageHeightRatio: 75,
-  imageFit: 'cover',
-  imageBorderRadius: 16,
-  imagePadding: 0,
-  imageBgColor: 'transparent',
-
-  cardShadow: 'medium',
-  cardBorderWidth: 1,
-  cardBorderColor: 'rgba(255, 255, 255, 0.4)',
-  cardBorderStyle: 'solid',
-  overlayGradientOpacity: 70,
-
-  priceBoxBg: 'rgba(0, 0, 0, 0.5)',
-  priceBoxTextColor: '#dc2626',
-  priceBoxBorderColor: 'transparent',
-  priceBoxRadius: 12,
-  priceBoxShadow: 'medium',
-  themePreset: 'pastel',
-
-  headlineColor: '#FF4B72',
-  subheadlineColor: '#ffcad4',
-  titleColor: '#ffffff',
-  priceColor: '#FF2E63',
-  normalPriceColor: 'rgba(255, 255, 255, 0.85)',
-  savingColor: '#f472b6',
-  dayBadgeBg: 'rgba(71, 85, 105, 0.95)',
-  dayBadgeColor: '#ffffff',
-
-  titlePosition: 'overlay',
-  pricePosition: 'bottom',
-  badgePosition: 'bottom_bar',
-  textAlign: 'center',
-  titleFontSize: 24,
-  textShadow: true,
-  textStroke: false,
-  textStrokeWidth: 1,
-  textStrokeColor: 'rgba(255, 46, 99, 0.85)',
-  textGlow: false,
-  priceStyle: 'list',
-  priceFontSize: 36,
-  normalPriceFontSize: 13,
-  savingFontSize: 13,
-  dayBadgeFontSize: 20,
-  dayBadgeStyle: 'footer_bar',
-  fontStyle: 'sans',
-  textUppercase: false,
-
-  highlightMode: 'popout',
-  highlightColor: '#FF2E63',
-  highlightScale: 1.04,
-}
+export const DEFAULT_DESIGN_CONFIG: PosterDesignConfig = DEFAULT_POSTER_DESIGN
 
 export const THEME_PRESETS = [
   {
