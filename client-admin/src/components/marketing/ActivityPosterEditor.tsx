@@ -1,4 +1,4 @@
-import {applyPosterDesignPatch} from '../../../../shared/utils/posterControls'
+import {applyPosterDesignPatch,posterControlDesign} from '../../../../shared/utils/posterControls'
 import { PosterElementInspector, type PosterSelection } from './PosterElementInspector'
 import { PosterCanvasEditor } from './PosterCanvasEditor'
 import { renderActivityPoster, defaultPosterCards, DEFAULT_POSTER_DESIGN, type PosterInput } from '../../../../shared/utils/activityPoster'
@@ -166,7 +166,7 @@ export function ActivityPosterEditor({
     },
   }
 
-  const design = config.designConfig || DEFAULT_DESIGN_CONFIG
+  const design = {...DEFAULT_DESIGN_CONFIG,...posterControlDesign(config)}
 
   const [activeTab, setActiveTab] = useState<'cards' | 'positions' | 'colors' | 'effects' | 'image' | 'spacing' | 'elements'>('elements')
   const [elementSelection, setElementSelection] = useState<PosterSelection>({key:'productName'})
@@ -184,7 +184,7 @@ export function ActivityPosterEditor({
   }
 
   const updateDesign = (patch: Partial<PosterDesignConfig>) => {
-    update(applyPosterDesignPatch({...config,cardItems:currentCards},patch))
+    update(applyPosterDesignPatch({...config,designConfig:design,cardItems:currentCards},patch))
   }
 
   const updateField = (field: keyof NonNullable<ActivityPosterConfig['showFields']>, checked: boolean) => {

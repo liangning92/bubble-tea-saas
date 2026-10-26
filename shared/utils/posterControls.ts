@@ -1,6 +1,18 @@
 import type {ActivityPosterConfig, PosterDesignConfig, PosterElementKey, PosterElementStyle} from './activities';
-import {posterLayout, POSTER_ELEMENT_KEYS} from './posterLayout';
+import {posterElementStyle, posterLayout, POSTER_ELEMENT_KEYS} from './posterLayout';
 const textKeys: PosterElementKey[]=['headline','subheadline','productName','productSubname','originalPrice','specialPrice','savingAmount','dayBadge','discountTag','footer'];
+// Legacy tabs show effective layer values rather than stale pre-freeform defaults.
+export function posterControlDesign(cfg:ActivityPosterConfig):PosterDesignConfig {
+ const d={...cfg.designConfig};if(!cfg.freeform)return d;
+ const get=(key:PosterElementKey)=>posterElementStyle(cfg,key,0);
+ const bind=(field:keyof PosterDesignConfig,key:PosterElementKey,target:keyof PosterElementStyle)=>{if(get(key)[target]!==undefined)(d as any)[field]=get(key)[target]};
+ for(const [field,key] of [['headlineFontSize','headline'],['subheadlineFontSize','subheadline'],['titleFontSize','productName'],['normalPriceFontSize','originalPrice'],['priceFontSize','specialPrice'],['savingFontSize','savingAmount'],['dayBadgeFontSize','dayBadge']] as const)bind(field,key,'fontSize');
+ for(const [field,key] of [['headlineColor','headline'],['subheadlineColor','subheadline'],['titleColor','productName'],['normalPriceColor','originalPrice'],['priceColor','specialPrice'],['savingColor','savingAmount'],['dayBadgeColor','dayBadge']] as const)bind(field,key,'color');
+ for(const [field,key,target] of [['imageFit','image','objectFit'],['imageBorderRadius','image','borderRadius'],['imageHeightRatio','image','height'],['imagePadding','image','padding'],['cardBorderWidth','card','borderWidth'],['cardBorderColor','card','borderColor'],['cardBorderRadius','card','borderRadius'],['cardPadding','card','padding'],['priceBoxBg','priceBox','backgroundColor'],['priceBoxRadius','priceBox','borderRadius'],['dayBadgeBg','dayBadge','backgroundColor'],['overlayGradientOpacity','image','gradientOpacity'],['fontStyle','productName','fontFamily'],['textAlign','productName','textAlign'],['textStrokeWidth','productName','strokeWidth'],['textStrokeColor','productName','strokeColor']] as const)bind(field,key,target);
+ d.textStroke=(get('productName').strokeWidth||0)>0;
+ d.textGlow=(get('productName').shadowBlur||0)>0&&!['#000000','transparent'].includes(get('productName').shadowColor||'transparent');
+ d.cardBorderStyle=d.cardBorderStyle==='glow'&&(get('card').shadowBlur||0)>0?'glow':get('card').borderStyle||'solid';return d;
+}
 export function applyPosterDesignPatch(cfg:ActivityPosterConfig, patch:Partial<PosterDesignConfig>):ActivityPosterConfig {
  const elements={...cfg.elements}, changed:Partial<Record<PosterElementKey,Partial<PosterElementStyle>>>={};
  const set=(key:PosterElementKey,style:Partial<PosterElementStyle>)=>{changed[key]={...changed[key],...style};elements[key]={...elements[key],...style}};
@@ -17,7 +29,7 @@ export function applyPosterDesignPatch(cfg:ActivityPosterConfig, patch:Partial<P
  if(patch.textStroke!==undefined||patch.textStrokeWidth!==undefined||patch.textStrokeColor!==undefined)for(const key of textKeys)set(key,{strokeWidth:(patch.textStroke??cfg.designConfig?.textStroke)?(patch.textStrokeWidth??cfg.designConfig?.textStrokeWidth??2):0,strokeColor:patch.textStrokeColor??cfg.designConfig?.textStrokeColor??'#ffffff'});
  if(patch.textGlow!==undefined||patch.textShadow!==undefined){const glow=patch.textGlow??cfg.designConfig?.textGlow,shadow=patch.textShadow??cfg.designConfig?.textShadow;for(const key of textKeys)set(key,{shadowColor:glow?'#ff5d89':shadow?'#000000':'transparent',shadowX:0,shadowY:glow?0:shadow?3:0,shadowBlur:glow?14:shadow?6:0});}
  if(patch.highlightColor)set('highlight',{backgroundColor:patch.highlightColor});
- if(patch.cardBorderStyle)set('card',{borderStyle:patch.cardBorderStyle==='dashed'?'dashed':patch.cardBorderStyle==='none'?'none':'solid',...(patch.cardBorderStyle==='glow'?{shadowColor:cfg.designConfig?.cardBorderColor||'#ff5d89',shadowBlur:20,shadowX:0,shadowY:0}:{shadowBlur:0})});
+ if(patch.cardBorderStyle)set('card',{...(patch.cardBorderStyle!=='none'?{borderWidth:cfg.elements?.card?.borderWidth||cfg.designConfig?.cardBorderWidth||1,borderColor:cfg.elements?.card?.borderColor||cfg.designConfig?.cardBorderColor||'#ffffff'}:{}),borderStyle:patch.cardBorderStyle==='dashed'?'dashed':patch.cardBorderStyle==='none'?'none':'solid',...(patch.cardBorderStyle==='glow'?{shadowColor:cfg.designConfig?.cardBorderColor||'#ff5d89',shadowBlur:20,shadowX:0,shadowY:0}:{shadowBlur:0})});
  const shadows={none:0,soft:8,medium:16,deep:30,glow:24};
  if(patch.cardShadow)set('card',{shadowBlur:shadows[patch.cardShadow],shadowColor:patch.cardShadow==='glow'?(cfg.designConfig?.highlightColor||'#ff5d89'):'#000000',shadowX:0,shadowY:patch.cardShadow==='none'||patch.cardShadow==='glow'?0:5});
  if(patch.priceBoxShadow)set('priceBox',{shadowBlur:shadows[patch.priceBoxShadow],shadowColor:'#000000',shadowX:0,shadowY:patch.priceBoxShadow==='none'?0:4});
@@ -26,7 +38,7 @@ export function applyPosterDesignPatch(cfg:ActivityPosterConfig, patch:Partial<P
  if(patch.cardLayout!==undefined||patch.imageBleed!==undefined){const overlay=patch.imageBleed??patch.cardLayout==='overlay';set('image',{y:0,height:overlay?88.5:62});set('productName',{y:overlay?5:63,height:overlay?22:12});set('priceBox',{y:76});}
  if(patch.containerPaddingX!==undefined||patch.containerPaddingY!==undefined){const x=patch.containerPaddingX??cfg.designConfig?.containerPaddingX??0,y=patch.containerPaddingY??cfg.designConfig?.containerPaddingY??0,w=cfg.canvasWidth||1920,h=cfg.canvasHeight||1080;for(const key of ['headline','subheadline','grid','footer'] as const){set(key,{x:x/w*100,width:100-x/w*200,...(key==='grid'?{y:24.5+y/h*100,height:64-y/h*200}:{})});}}
  const cardItems=cfg.cardItems?.map(c=>{const overrides={...c.elements};for(const key of POSTER_ELEMENT_KEYS){if(!changed[key]||!overrides[key])continue;const s={...overrides[key]};for(const field of Object.keys(changed[key]!))delete (s as any)[field];overrides[key]=s;}return {...c,...(patch.dayBadgeBg!==undefined?{activeColor:patch.dayBadgeBg}:{}),elements:overrides};});
- return {...cfg,designConfig:{...cfg.designConfig,...patch},...(cfg.freeform?{elements,cardItems}:{})};
+ let next:ActivityPosterConfig={...cfg,designConfig:{...cfg.designConfig,...patch},...(cfg.freeform?{elements,cardItems}:{})};if(cfg.freeform&&['originalPrice','specialPrice','savingAmount'].some(k=>{const s=changed[k as PosterElementKey];return s&&(s.fontSize!==undefined||s.lineHeight!==undefined||s.strokeWidth!==undefined)}))for(let i=0;i<(cfg.cardItems?.length||0);i++)next=setPosterPriceSpacing(next,posterPriceGaps(cfg,i),i);return next;
 }
 export function posterPriceGaps(cfg:ActivityPosterConfig,index=0):[number,number]{
  const layout=posterLayout(cfg,cfg.cardItems?.length||1), layers=(['originalPrice','specialPrice','savingAmount'] as const).map(key=>layout.layers.find(l=>l.key===key&&l.cardIndex===index)!);
