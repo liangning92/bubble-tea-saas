@@ -23,7 +23,11 @@ import zipfile
 
 LOCAL_COLUMNS = ('pickupNumber', 'requestFingerprint', 'requestReceipt')
 COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
-    ('Order','checkoutTaxAmount','INTEGER'), ('Staff','baseSalary','INTEGER'),
+    ('Order','checkoutTaxAmount','INTEGER'),
+    *[('Order', name, 'INTEGER NOT NULL DEFAULT 0') for name in
+      ('activityDiscountAmount', 'couponDiscountAmount', 'pointsDiscountAmount', 'manualDiscountAmount')],
+    *[('Order', name, 'TEXT') for name in ('activityId', 'activityName', 'activitySource')],
+    ('Staff','baseSalary','INTEGER'),
     ('Inventory','ledgerSequence','BIGINT NOT NULL DEFAULT 0'), ('Inventory','ledgerEpoch','BIGINT NOT NULL DEFAULT 0'),
     ('StockInLog','ledgerSequence','BIGINT'), ('StockOutLog','ledgerSequence','BIGINT'),
     ('RefundRequest','reasonCode',"TEXT NOT NULL DEFAULT 'legacy'"), ('RefundRequest','selectedItemIds',"TEXT NOT NULL DEFAULT '[]'"),

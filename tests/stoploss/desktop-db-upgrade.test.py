@@ -111,6 +111,9 @@ class UpgradeTests(unittest.TestCase):
         with closing(sqlite3.connect(template)) as c, c:
             c.execute('CREATE TABLE "Order" (id TEXT PRIMARY KEY, total REAL, evidence BLOB, pickupNumber TEXT, requestFingerprint TEXT, requestReceipt TEXT, checkoutTaxAmount INTEGER)')
         with closing(sqlite3.connect(template)) as c, c:
+            for table, name, declaration in U.COLUMN_ADDITIONS:
+                if table == 'Order' and name not in (*U.LOCAL_COLUMNS, 'checkoutTaxAmount'):
+                    c.execute('ALTER TABLE "Order" ADD COLUMN ' + U.quote(name) + ' ' + declaration)
             c.execute('CREATE TABLE Leave (id TEXT PRIMARY KEY, totalDays REAL NOT NULL)')
             c.execute('CREATE TABLE LeaveBalance (id TEXT PRIMARY KEY, usedLeave REAL NOT NULL, usedSick REAL NOT NULL)')
             for table in ['Staff','Inventory','StockInLog','StockOutLog','RefundRequest','PurchaseOrder','PurchaseOrderItem','Expense']:
@@ -134,6 +137,27 @@ class UpgradeTests(unittest.TestCase):
 
     def prepare(self, processes=lambda: []):
         return U.prepare(self.db, self.app, self.catalog, processes)
+
+    def test_discount_columns_upgrade_old_orders_without_repricing_or_guessing_history(self):
+        template = self.root / 'empty.db'
+        for database in (template, self.db):
+            with closing(sqlite3.connect(database)) as c, c:
+                for name in ('totalAmount', 'discountAmount', 'finalAmount'):
+                    c.execute('ALTER TABLE "Order" ADD COLUMN ' + U.quote(name) + ' INTEGER NOT NULL DEFAULT 0')
+        with closing(sqlite3.connect(self.db)) as c, c:
+            c.execute('UPDATE "Order" SET totalAmount=40000, discountAmount=10000, finalAmount=30000')
+        self.catalog = U.catalog_from_empty(template, 'a' * 40)
+        self.prepare()
+        with closing(sqlite3.connect(self.db)) as c, c:
+            self.assertEqual(c.execute('SELECT totalAmount,discountAmount,finalAmount,total,evidence FROM "Order"').fetchone(),
+                             (40000, 10000, 30000, 123.45, b'\x00\xff'))
+            self.assertEqual(c.execute('SELECT activityDiscountAmount,couponDiscountAmount,pointsDiscountAmount,manualDiscountAmount,activityId,activityName,activitySource FROM "Order"').fetchone(),
+                             (0, 0, 0, 0, None, None, None))
+            c.execute('UPDATE "Order" SET activityDiscountAmount=4000,manualDiscountAmount=6000,activityId="sale",activityName="Sale-time name",activitySource="activity"')
+        self.prepare()
+        with closing(sqlite3.connect(self.db)) as c:
+            self.assertEqual(c.execute('SELECT totalAmount,discountAmount,finalAmount,activityDiscountAmount,manualDiscountAmount,activityName FROM "Order"').fetchone(),
+                             (40000, 10000, 30000, 4000, 6000, 'Sale-time name'))
 
     def employee_number_catalog(self):
         template = self.root / 'empty.db'
@@ -209,7 +233,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(U.tree_manifest(self.app), self.app_before)
         self.assertTrue((self.app / 'empty-uploads').is_dir())
         with closing(sqlite3.connect(self.db)) as c, c:
-            self.assertEqual(c.execute('SELECT * FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None, None)])
+            self.assertEqual(c.execute('SELECT id,total,evidence,pickupNumber,requestFingerprint,requestReceipt,checkoutTaxAmount FROM "Order"').fetchall(), [('historical', 123.45, b'\x00\xff', None, None, None, None)])
         self.assertEqual(U.digest(receipt['databaseBackup']), receipt['databaseBackupSha256'])
 
     def test_inventory_upgrade_keeps_purchase_children_and_all_old_values(self):
