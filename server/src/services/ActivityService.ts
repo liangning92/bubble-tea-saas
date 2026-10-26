@@ -1,3 +1,4 @@
+import { posterImageVariants } from '../utils/posterImageVariants'
 import { activityPosterSchema } from '../utils/activityPosterSchema'
 import { resolveProductImageByRatio, deriveTargetAspectRatio } from '../utils/mediaResolver'
 import { generateCouponCode } from '../utils/couponCode'
@@ -281,6 +282,7 @@ export async function publicActivities(storeId:string,channel=''){
   prisma.mediaAsset.findMany({ where: { storeId, kind: 'image' } }),
   prisma.rewardCatalog.findMany({ where: { storeId, isActive: true, validFrom: { lte: now }, validUntil: { gt: now }, OR: [{ stock: null }, { stock: { gt: 0 } }] } })
  ])
+ const imageVariants=new Map(await Promise.all(products.map(async p=>[p.id,await posterImageVariants(p,mediaAssets)] as const)))
  const availableProducts=new Set(products.map(p=>p.id))
  const availableRewards=new Set(rewards.map(r=>r.id))
  const entries=all.filter(a=>(!a.productIds.length||a.productIds.some(id=>availableProducts.has(id)))&&(!a.rule.components?.length||a.rule.components.every(c=>availableProducts.has(c.productId)))&&a.showOnTv&&activityEligible(a,{now,channel},false)&&(!a.rule.rewardIds?.length||a.rule.rewardIds.some(id=>availableRewards.has(id)))&&(a.type!=='lottery'||a.rule.prizes?.some(p=>p.weight>0&&(p.remaining===undefined||p.remaining>0)&&(!p.rewardId||availableRewards.has(p.rewardId))))).map(a=>{
@@ -299,7 +301,7 @@ export async function publicActivities(storeId:string,channel=''){
       const img9x16 = resolveProductImageByRatio(p, '9:16', mediaAssets)
       const primaryImg = resolveProductImageByRatio(p, targetRatio, mediaAssets) || p.image || img16x9 || img9x16
       return {
-        id:p.id,name:p.name,image:primaryImg,image16x9:img16x9||p.image,image9x16:img9x16||p.image,quantity:a.rule.components?.find(c=>c.productId===p.id)?.quantity,
+        id:p.id,name:p.name,imageVariants:imageVariants.get(p.id),image:primaryImg,image16x9:img16x9||p.image,image9x16:img9x16||p.image,quantity:a.rule.components?.find(c=>c.productId===p.id)?.quantity,
         specs:p.specs.filter(s=>!a.specIds.length||a.specIds.includes(s.id)).map(s=>({id:s.id,name:s.name,price:s.price}))
       }
     })

@@ -1993,6 +1993,7 @@ export function ActivitiesPage() {
                         id: p.id,
                         name: p.name,
                         image: p.image,
+                        imageVariants: p.imageVariants,
                         price: orig,
                         specialPrice: spec,
                       };

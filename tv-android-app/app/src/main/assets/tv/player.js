@@ -615,7 +615,7 @@
       live = liveSpecial(),
       upcoming = upcomingSpecial();
     const page = live?.posterPage || 0;
-    const key = live ? JSON.stringify([live, language, page, new Intl.DateTimeFormat('en',{timeZone:live.timezone||snapshot.store.timezone,weekday:'short'}).format(new Date(estimatedTime()||Date.now()))]) : '';
+    const key = live ? JSON.stringify([live, language, page, box.clientWidth, box.clientHeight, new Intl.DateTimeFormat('en',{timeZone:live.timezone||snapshot.store.timezone,weekday:'short'}).format(new Date(estimatedTime()||Date.now()))]) : '';
     const playing = snapshot.screen.isActive;
     $("content").hidden = playing && !!live;
     box.hidden = !playing || !live;
@@ -633,7 +633,7 @@
       frame.title = live.name;
       frame.setAttribute('sandbox', '');
       frame.style.cssText = 'width:100%;height:100%;border:0;display:block';
-      frame.srcdoc = window.YOUME_POSTER.renderActivityPoster(live, { language:language==='zh'?0:language==='en'?1:2, now:new Date(estimatedTime()||Date.now()), assetUrl, page });
+      frame.srcdoc = window.YOUME_POSTER.renderActivityPoster(live, { language:language==='zh'?0:language==='en'?1:2, now:new Date(estimatedTime()||Date.now()), assetUrl, page, aspectRatio:box.clientWidth/Math.max(1,box.clientHeight) });
       box.append(frame);
       return;
     }

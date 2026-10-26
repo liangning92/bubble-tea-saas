@@ -1,3 +1,4 @@
+import { posterImageVariants } from '../utils/posterImageVariants'
 import { getOrCreateStoreChannels } from "./ChannelBootstrap";
 import {
   createHash,
@@ -444,6 +445,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
       images: { include: { media: true }, orderBy: { position: "asc" } },
     },
   });
+  const imageVariants=new Map(await Promise.all(specialRows.map(async p=>[p.id,await posterImageVariants(p,allMediaAssets)] as const)));
   const specialProducts = (activity: Activity) => {
     const targetRatio = deriveTargetAspectRatio(
       activity.posterConfig as any,
@@ -465,6 +467,7 @@ export async function signageSnapshot(screen: any, db = prisma) {
           id: p.id,
           name: p.name,
           image: img,
+          imageVariants: imageVariants.get(p.id),
           originalPrice,
           specialPrice,
           saving: specialPrice === undefined ? undefined : Math.max(0, originalPrice - specialPrice),
@@ -524,10 +527,12 @@ export async function signageSnapshot(screen: any, db = prisma) {
   const hardware = brandRow ? JSON.parse(brandRow.value) : {},
     assets: any[] = [];
   const specialImages = specials.flatMap((s) => [
+    ...s.products.flatMap((p:any)=>(p.imageVariants||[]).map((v:any)=>({url:v.url,kind:"image"}))),
     ...s.products
       .filter((p: any) => p.image)
       .map((p: any) => ({ url: p.image!, kind: "image" })),
-    ...((s.posterConfig?.cardItems || []) as any[])
+    ...(s.posterConfig?.logoUrl?[{imageUrl:s.posterConfig.logoUrl}]:[]),
+    ...((s.posterConfig?.cardItems || []) as any[]).flatMap(c=>[c,...(c.logoUrl?[{imageUrl:c.logoUrl}]:[])])
       .filter((c: any) => c.imageUrl)
       .map((c: any) => ({ url: c.imageUrl!, kind: "image" })),
   ]);

@@ -33,6 +33,11 @@ interface LotteryPrize {
 
 const DAYS_NAME = ['Minggu (Sunday)', 'Senin (Monday)', 'Selasa (Tuesday)', 'Rabu (Wednesday)', 'Kamis (Thursday)', 'Jumat (Friday)', 'Sabtu (Saturday)']
 
+function ActivityPosterFrame({activity,now,page}:{activity:any;now:Date;page:number}) {
+  const holder=useRef<HTMLDivElement>(null),[ratio,setRatio]=useState(16/9)
+  useEffect(()=>{const node=holder.current;if(!node)return;const observer=new ResizeObserver(([entry])=>{if(entry.contentRect.height)setRatio(entry.contentRect.width/entry.contentRect.height)});observer.observe(node);return()=>observer.disconnect()},[])
+  return <div ref={holder} className="w-full h-full"><iframe title="Activity poster" sandbox="" className="w-full h-full border-0" srcDoc={renderActivityPoster(activity,{language:2,now,assetUrl:mediaUrl,page,aspectRatio:ratio})}/></div>
+}
 export function TvDisplayPage() {
   const [searchParams,setSearchParams] = useSearchParams()
   const storeId = searchParams.get('storeId') || localStorage.getItem('tv_store_id') || ''
@@ -364,7 +369,7 @@ export function TvDisplayPage() {
           <div className="h-full flex flex-col justify-center p-4 gap-4 overflow-hidden">
             {currentActivity ? (
               currentActivity.posterConfig ? (
-                <iframe title="Activity poster" sandbox="" className="w-full h-full border-0" srcDoc={renderActivityPoster(currentActivity,{language:2,now:currentTime,assetUrl:mediaUrl,page:Math.floor(activityIndex/Math.max(1,visibleActivities.length))})}/>
+                <ActivityPosterFrame activity={currentActivity} now={currentTime} page={Math.floor(activityIndex/Math.max(1,visibleActivities.length))}/>
 
               ) : (
                 <>

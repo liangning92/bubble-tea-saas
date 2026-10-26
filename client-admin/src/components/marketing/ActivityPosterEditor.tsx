@@ -1,3 +1,5 @@
+import { PosterElementInspector, type PosterSelection } from './PosterElementInspector'
+import { PosterCanvasEditor } from './PosterCanvasEditor'
 import { renderActivityPoster, defaultPosterCards, DEFAULT_POSTER_DESIGN, type PosterInput } from '../../../../shared/utils/activityPoster'
 import { MediaPicker } from '../MediaLibrary'
 import { receiptMediaUrl } from '../../services/api'
@@ -33,6 +35,7 @@ export interface ActivityPosterEditorProps {
     id: string
     name: string
     image?: string
+    imageVariants?: Array<{url:string;width?:number;height?:number}>
     price?: number
     specialPrice?: number
   }>
@@ -164,7 +167,8 @@ export function ActivityPosterEditor({
 
   const design = config.designConfig || DEFAULT_DESIGN_CONFIG
 
-  const [activeTab, setActiveTab] = useState<'cards' | 'positions' | 'colors' | 'effects' | 'image' | 'spacing'>('cards')
+  const [activeTab, setActiveTab] = useState<'cards' | 'positions' | 'colors' | 'effects' | 'image' | 'spacing' | 'elements'>('elements')
+  const [elementSelection, setElementSelection] = useState<PosterSelection>({key:'productName'})
   const [imageCard, setImageCard] = useState<number | null>(null)
   const [previewPage, setPreviewPage] = useState(0)
   const [previewRatio, setPreviewRatio] = useState('16 / 9')
@@ -179,12 +183,21 @@ export function ActivityPosterEditor({
   }
 
   const updateDesign = (patch: Partial<PosterDesignConfig>) => {
-    update({
-      designConfig: {
-        ...design,
-        ...patch,
-      },
-    })
+    const elements={...config.elements}
+    const bind=(key:string,element:string,field:string)=>{if((patch as any)[key]!==undefined)(elements as any)[element]={...(elements as any)[element],[field]:(patch as any)[key]}}
+    for(const [key,element] of [['headlineFontSize','headline'],['subheadlineFontSize','subheadline'],['titleFontSize','productName'],['normalPriceFontSize','originalPrice'],['priceFontSize','specialPrice'],['savingFontSize','savingAmount'],['dayBadgeFontSize','dayBadge']])bind(key,element,'fontSize')
+    for(const [key,element] of [['headlineColor','headline'],['subheadlineColor','subheadline'],['titleColor','productName'],['normalPriceColor','originalPrice'],['priceColor','specialPrice'],['savingColor','savingAmount'],['dayBadgeColor','dayBadge']])bind(key,element,'color')
+    for(const [key,element,field] of [['imageFit','image','objectFit'],['imageBorderRadius','image','borderRadius'],['cardBorderWidth','card','borderWidth'],['cardBorderColor','card','borderColor'],['cardBorderRadius','card','borderRadius'],['priceBoxBg','priceBox','backgroundColor'],['priceBoxRadius','priceBox','borderRadius'],['dayBadgeBg','dayBadge','backgroundColor'],['highlightColor','highlight','borderColor']])bind(key,element,field)
+    const set=(key:string,style:any)=>{(elements as any)[key]={...(elements as any)[key],...style}}
+    if(patch.cardGap!==undefined){patch={...patch,cardGapX:patch.cardGap,cardGapY:patch.cardGap}}
+    for(const [field,element,target] of [['cardPadding','card','padding'],['imagePadding','image','padding'],['imageHeightRatio','image','height'],['imageBgColor','image','backgroundColor'],['fontStyle','productName','fontFamily'],['priceBoxBorderColor','priceBox','borderColor']])bind(field,element,target)
+    if(patch.textAlign)for(const key of ['productName','productSubname','originalPrice','specialPrice','savingAmount'])set(key,{textAlign:patch.textAlign})
+    if(patch.titlePosition)set('productName',{y:patch.titlePosition==='bottom'?66:5})
+    if(patch.pricePosition){const top=patch.pricePosition==='top'?25:patch.pricePosition==='middle'?55:78;set('priceBox',{y:top-1});for(const [i,key] of ['originalPrice','specialPrice','savingAmount'].entries())set(key,{y:top+i*3})}
+    if(patch.badgePosition)set('dayBadge',{visible:patch.badgePosition!=='hidden',y:patch.badgePosition.startsWith('top')?0:88.5})
+    if(patch.textStroke!==undefined||patch.textStrokeWidth!==undefined||patch.textStrokeColor!==undefined)for(const key of ['productName','specialPrice','savingAmount'])set(key,{strokeWidth:(patch.textStroke??design.textStroke)?(patch.textStrokeWidth??design.textStrokeWidth??2):0,strokeColor:patch.textStrokeColor??design.textStrokeColor??'#ffffff'})
+    if(patch.highlightColor)set('highlight',{backgroundColor:patch.highlightColor})
+    update({designConfig:{...design,...patch},...(config.freeform?{elements}:{})})
   }
 
   const updateField = (field: keyof NonNullable<ActivityPosterConfig['showFields']>, checked: boolean) => {
@@ -251,7 +264,11 @@ export function ActivityPosterEditor({
   // 4. Change a card field
   const handleCardFieldChange = (index: number, patch: any) => {
     const nextList = [...currentCards]
-    nextList[index] = { ...nextList[index], ...patch }
+    const elements={...nextList[index].elements}
+    if(patch.color!==undefined)elements.card={...elements.card,backgroundColor:patch.color}
+    if(patch.titleColor!==undefined)elements.productName={...elements.productName,color:patch.titleColor}
+    if(patch.pillBg!==undefined)elements.priceBox={...elements.priceBox,backgroundColor:patch.pillBg}
+    nextList[index] = { ...nextList[index], ...patch,...(config.freeform?{elements}:{}) }
     update({ cardItems: nextList })
   }
 
@@ -266,6 +283,7 @@ export function ActivityPosterEditor({
     const imgUrl = selectedProd.image || ''
 
     handleCardFieldChange(index, {
+      imageMode: 'auto',
       productId: selectedProd.id,
       productName: selectedProd.name,
       imageUrl: imgUrl,
@@ -442,6 +460,8 @@ export function ActivityPosterEditor({
             </button>
           </div>
 
+          <button type="button" className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold ${activeTab==='elements'?'bg-sky-50 border-sky-400 text-sky-800':'bg-white'}`} onClick={()=>setActiveTab('elements')}>{l('图层与自由编辑','Layers & free positioning','Lapisan & posisi bebas')}</button>
+          {activeTab==='elements'&&<PosterElementInspector value={{...config,cardItems:currentCards}} onChange={update} selection={elementSelection} onSelect={setElementSelection} language={language}/>}
           {/* TAB 1: CARDS & ROWS (Add/Delete/Reorder Columns & Rows) */}
           {activeTab === 'cards' && (
             <div className="space-y-4">
@@ -697,7 +717,7 @@ export function ActivityPosterEditor({
                           <div className="grid gap-2 pt-3">
                             <label>{l('高亮星期（只影响海报）','Highlight day (visual only)','Hari sorotan (visual saja)')}<select className="input" aria-label={l('高亮星期','Highlight day','Hari sorotan')} value={card.dayOfWeek ?? ''} onChange={e=>handleCardFieldChange(idx,{dayOfWeek:e.target.value===''?undefined:Number(e.target.value)})}><option value="">{l('无','None','Tidak ada')}</option>{DEFAULT_DAYS.map(day=><option key={day.day} value={day.day}>{[day.labelZh,day.labelEn,day.labelId][language]}</option>)}</select></label>
                             <label>{l('副标题 / 规格','Subtitle / size','Subjudul / ukuran')}<input className="input" value={card.specName ?? ''} onChange={e=>handleCardFieldChange(idx,{specName:e.target.value})}/></label>
-                            <label>{l('图片地址','Image URL','URL gambar')}<input className="input" value={card.imageUrl ?? ''} onChange={e=>handleCardFieldChange(idx,{imageUrl:e.target.value})}/></label>
+                            <label>{l('图片地址','Image URL','URL gambar')}<input className="input" value={card.imageUrl ?? ''} onChange={e=>handleCardFieldChange(idx,{imageUrl:e.target.value,imageMode:'manual'})}/></label>
                             <button type="button" className="btn-secondary" onClick={()=>setImageCard(idx)}>{l('从素材库选择图片','Choose image from library','Pilih gambar dari pustaka')}</button>
                             <button type="button" className="btn-secondary" disabled={currentCards.length>=30} onClick={()=>{const list=[...currentCards];list.splice(idx+1,0,{...card,id:crypto.randomUUID()});update({cardItems:list})}}>{l('复制此卡片','Duplicate card','Salin kartu')}</button>
                           </div>
@@ -1585,16 +1605,17 @@ export function ActivityPosterEditor({
           <div className="lg:sticky lg:top-20 space-y-3">
             <div className="flex flex-wrap justify-between gap-2 items-center">
               <h4 className="font-semibold flex gap-2"><Eye size={16}/>{l('实际播放预览','Playback preview','Pratinjau pemutaran')}</h4>
-              <select className="input w-auto text-xs" aria-label={l('画布比例','Canvas ratio','Rasio kanvas')} value={previewRatio} onChange={e=>setPreviewRatio(e.target.value)}><option value="16 / 9">16:9</option><option value="9 / 16">9:16</option><option value="1 / 1">1:1</option></select>
+              <select className="input w-auto text-xs" aria-label={l('画布比例','Canvas ratio','Rasio kanvas')} value={previewRatio} onChange={e=>{setPreviewRatio(e.target.value);if(config.freeform){const parts=e.target.value.split('/').map(Number);update({canvasWidth:parts[0]===9?1080:parts[0]===1?1080:1920,canvasHeight:parts[0]===9?1920:1080})}}}><option value="16 / 9">16:9</option><option value="9 / 16">9:16</option><option value="1 / 1">1:1</option></select>
             </div>
             <div className="flex flex-wrap gap-1">{DEFAULT_DAYS.map(day=><button type="button" className={`px-2 py-1 rounded text-xs ${previewDay===day.day?'bg-red-600 text-white':'bg-gray-100'}`} key={day.day} onClick={()=>setPreviewDay(day.day)}>{[day.labelZh,day.labelEn,day.labelId][language]}</button>)}</div>
-            <iframe title={l('活动海报预览','Activity poster preview','Pratinjau poster aktivitas')} sandbox="" className="block mx-auto border rounded-xl shadow-lg bg-slate-950" style={{width:previewRatio==='9 / 16'?'min(100%, 42vh)':previewRatio==='1 / 1'?'min(100%, 75vh)':'100%',aspectRatio:previewRatio,maxHeight:'75vh'}} srcDoc={renderActivityPoster({...activity,name:activityName,posterConfig:{...config,cardItems:currentCards},products},{language,day:previewDay,assetUrl:receiptMediaUrl,page:previewPage})}/>
+            <PosterCanvasEditor language={language} page={previewPage} title={l('活动海报预览','Activity poster preview','Pratinjau poster aktivitas')} value={{...config,cardItems:currentCards}} selection={elementSelection} onSelect={setElementSelection} onBegin={()=>{setHistory(h=>[...h.slice(-29),config]);setFuture([])}} onDirectChange={onChange} aspectRatio={config.freeform?`${config.canvasWidth||1920} / ${config.canvasHeight||1080}`:previewRatio} html={renderActivityPoster({...activity,name:activityName,posterConfig:{...config,cardItems:currentCards},products},{language,day:previewDay,assetUrl:receiptMediaUrl,page:previewPage,aspectRatio:Number(previewRatio.split('/')[0])/Number(previewRatio.split('/')[1])})}/>
+
             {currentCards.length>(config.columns||5)*rowCount&&<button type="button" className="btn-secondary" onClick={()=>setPreviewPage(p=>p+1)}>{l('预览下一页','Preview next page','Pratinjau halaman berikutnya')}</button>}
             <p className="text-xs text-gray-500">{l('与电视和副屏共用同一渲染器。海报编辑不会修改优惠规则；发布后按实际活动时间播放。','Uses the same renderer as TV and customer displays. Poster edits do not change pricing rules; playback follows the activity schedule.','Renderer sama dengan TV dan layar pelanggan. Desain tidak mengubah aturan harga; tayang mengikuti jadwal aktivitas.')}</p>
           </div>
         </div>
       </div>
-      {imageCard!==null&&<MediaPicker scene="tv" imagesOnly max={1} onClose={()=>setImageCard(null)} onSelect={assets=>{if(assets[0])handleCardFieldChange(imageCard,{imageUrl:assets[0].url});setImageCard(null)}}/>}
+      {imageCard!==null&&<MediaPicker scene="tv" imagesOnly max={1} onClose={()=>setImageCard(null)} onSelect={assets=>{if(assets[0])handleCardFieldChange(imageCard,{imageUrl:assets[0].url,imageMode:'manual'});setImageCard(null)}}/>}
     </div>
   )
 }

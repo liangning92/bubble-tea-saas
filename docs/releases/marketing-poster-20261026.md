@@ -22,3 +22,9 @@ The running API and admin had direct, unversioned changes beyond the repository.
 ## Verification requirements
 
 Run activity-poster-renderer/schema tests, affected component type checks, translation checks and scoped marketing/TV checks. Check desktop, tablet and phone layouts; loading, empty, filter and error states. Reopen a saved activity and verify all changed settings, actual images, card order and screen preview. Repeat the real workflow after deployment and retain screenshots. API/admin/pos/Android sources are affected; Windows distribution must be considered against its own published baseline.
+
+## Reference-based free layout
+
+The reference composition is an optional starting point. Independent canvas/card layers cover headings, images, optional logo, product text, three price lines, day label, discount marker, price background and active-day outline. Percentage geometry, rotation, order, visibility, font, outline, shadow, colour and padding persist globally or as individual-card overrides. The canvas supports pointer positioning/resizing, undo and a larger preview without activating an activity.
+
+The API measures explicitly linked product image variants. The shared renderer chooses the closest original aspect ratio to the actual image box, preserves manual selections and includes variants in the TV offline asset manifest. An approved isolated copy of the single paused test activity and its five products verified a 1080×1920 to 2730×1536 image switch when changing the first image box to landscape. No formal users, orders, staff or credentials are copied; the formal activity remains paused.

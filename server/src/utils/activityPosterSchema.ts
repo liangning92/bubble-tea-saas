@@ -1,6 +1,36 @@
 import { z } from 'zod';
+const elementStyleSchema=z.object({
+  x:z.number().finite().min(-100).max(200).optional(),
+  y:z.number().finite().min(-100).max(200).optional(),
+  width:z.number().finite().min(0).max(300).optional(),
+  height:z.number().finite().min(0).max(300).optional(),
+  fontSize:z.number().finite().min(0).max(300).optional(),
+  borderRadius:z.number().finite().min(0).max(300).optional(),
+  padding:z.number().finite().min(0).max(300).optional(),
+  shadowBlur:z.number().finite().min(0).max(300).optional(),
+  borderWidth:z.number().finite().min(0).max(30).optional(),
+  strokeWidth:z.number().finite().min(0).max(30).optional(),
+  shadowX:z.number().finite().min(-100).max(100).optional(),
+  shadowY:z.number().finite().min(-100).max(100).optional(),
+  letterSpacing:z.number().finite().min(-100).max(100).optional(),
+  color:z.string().max(100).optional(),
+  backgroundColor:z.string().max(100).optional(),
+  borderColor:z.string().max(100).optional(),
+  strokeColor:z.string().max(100).optional(),
+  shadowColor:z.string().max(100).optional(),
+  fontWeight:z.number().min(100).max(900).optional(), fontFamily:z.enum(['sans','serif','mono']).optional(),
+  lineHeight:z.number().min(.5).max(4).optional(),textAlign:z.enum(['left','center','right']).optional(),
+  opacity:z.number().min(0).max(1).optional(),rotation:z.number().min(-180).max(180).optional(),zIndex:z.number().int().min(0).max(50).optional(),visible:z.boolean().optional(),
+  objectFit:z.enum(['cover','contain','fill']).optional(),objectPositionX:z.number().min(0).max(100).optional(),objectPositionY:z.number().min(0).max(100).optional(),
+})
+const elementsSchema=z.record(z.enum(['headline', 'subheadline', 'grid', 'card', 'image', 'logo', 'productName', 'productSubname', 'priceBox', 'originalPrice', 'specialPrice', 'savingAmount', 'dayBadge', 'discountTag', 'highlight', 'footer']),elementStyleSchema)
+const priceLabelsSchema=z.object({originalPrice:z.string().max(80).optional(),specialPrice:z.string().max(80).optional(),savingAmount:z.string().max(80).optional()})
+
 // Persist the design controls supported by the deployed editor and TV player.
 export const activityPosterSchema = z.object({
+    freeform:z.boolean().optional(),canvasWidth:z.number().int().min(320).max(7680).optional(),canvasHeight:z.number().int().min(320).max(7680).optional(),
+    elements:elementsSchema.optional(),logoUrl:z.string().max(2048).optional(),priceFormat:z.enum(['currency','grouped','plain']).optional(),priceLabels:priceLabelsSchema.optional(),
+
     template: z.enum(['daily_specials', 'featured_grid', 'bogo_duo', 'lucky_wheel', 'tiered_milestone']).optional(),
     headline: z.string().max(100).optional(),
     subheadline: z.string().max(150).optional(),
@@ -52,6 +82,8 @@ export const activityPosterSchema = z.object({
         fontStyle: z.string().max(100).optional(),
         highlightMode: z.string().max(100).optional(),
         rows: z.number().finite().min(1).max(5).optional(),
+        cardGapX:z.number().min(0).max(100).optional(),
+        cardGapY:z.number().min(0).max(100).optional(),
         cardGap: z.number().finite().min(0).max(100).optional(),
         containerPaddingY: z.number().finite().min(0).max(200).optional(),
         containerPaddingX: z.number().finite().min(0).max(200).optional(),
@@ -79,6 +111,7 @@ export const activityPosterSchema = z.object({
         textUppercase: z.boolean().optional(),
     }).optional(),
     cardItems: z.array(z.object({
+        imageMode:z.enum(['auto','manual']).optional(),logoUrl:z.string().max(2048).optional(),elements:elementsSchema.optional(),priceLabels:priceLabelsSchema.optional(),
         id: z.string().max(100).optional(),
         pillBg: z.string().max(100).optional(),
         pillTextColor: z.string().max(100).optional(),

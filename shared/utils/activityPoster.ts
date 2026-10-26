@@ -1,3 +1,5 @@
+import { renderFreeformPoster } from './posterFreeform'
+import { choosePosterImage } from './posterLayout'
 import type { ActivityPosterConfig, PosterDesignConfig } from './activities';
 export const DEFAULT_POSTER_DESIGN: PosterDesignConfig = {
   cardLayout: 'overlay', // Default to modern full-bleed overlay as requested
@@ -66,6 +68,8 @@ export interface PosterProduct {
     id?: string;
     name: string;
     image?: string;
+    imageVariants?: {url:string;width?:number;height?:number}[];
+    image16x9?:string; image9x16?:string;
     price?: number;
     specialPrice?: number;
     originalPrice?: number;
@@ -141,6 +145,7 @@ export function renderActivityPoster(a: PosterInput, options: {
     day?: number;
     now?: Date;
     assetUrl?: (s: string) => string;
+    aspectRatio?: number;
     page?: number;
 } = {}): string {
     const cfg = a.posterConfig || {}, d = { ...DEFAULT_POSTER_DESIGN, ...cfg.designConfig, rows: cfg.designConfig?.rows ?? cfg.rows ?? DEFAULT_POSTER_DESIGN.rows, highlightColor: cfg.designConfig?.highlightColor ?? cfg.themeColor ?? DEFAULT_POSTER_DESIGN.highlightColor, headlineColor: cfg.designConfig?.headlineColor ?? cfg.themeColor ?? DEFAULT_POSTER_DESIGN.headlineColor }, show = cfg.showFields || {}, lang = options.language ?? 2;
@@ -151,6 +156,7 @@ export function renderActivityPoster(a: PosterInput, options: {
     const cards: NonNullable<ActivityPosterConfig['cardItems']> = custom !== undefined ? custom : defaultPosterCards(a);
     const rows = Math.round(num(d.rows ?? cfg.rows, 1, 1, 5)), columns = Math.round(num(cfg.columns, Math.min(5, Math.max(cards.length, 1)), 1, 10)), capacity = columns * rows;
     const page = Math.max(0, options.page || 0) % Math.max(1, Math.ceil(cards.length / capacity)), items = cards.slice(page * capacity, (page + 1) * capacity);
+    if(cfg.freeform)return renderFreeformPoster(a,{...options,day:today,cards:items,page,pages:Math.max(1,Math.ceil(cards.length/capacity))});
     const overlay = d.cardLayout === 'overlay' || d.titlePosition === 'overlay', accent = colour(d.highlightColor || cfg.themeColor, '#f43f5e');
     const unit = (v: number | undefined, fallback: number) => num(v, fallback) * 0.09 + 'cqh';
     const titleSize = unit(d.titleFontSize, 24), priceSize = unit(d.priceFontSize, 36), normalSize = unit(d.normalPriceFontSize, 14), saveSize = unit(d.savingFontSize, 13);
@@ -159,7 +165,7 @@ export function renderActivityPoster(a: PosterInput, options: {
     const align = ['left', 'center', 'right'].includes(d.textAlign || '') ? d.textAlign : 'center';
     const rule = a.rule || {}, offer = a.summary || [rule.nth ? l('第', 'Cup', 'Gelas') + ' ' + rule.nth : '', rule.buy ? `${l('买', 'Buy', 'Beli')} ${rule.buy} · ${l('赠', 'Get', 'Gratis')} ${rule.get}` : '', rule.percent !== undefined ? `${rule.percent}% ${l('优惠', 'off', 'diskon')}` : '', a.type === 'fixed' && rule.amount !== undefined ? `${l('优惠', 'Save', 'Hemat')} ${money(rule.amount)}` : '', rule.multiplier ? `${l('积分', 'Points', 'Poin')} ×${rule.multiplier}` : '', rule.points ? `${l('积分', 'Points', 'Poin')} +${rule.points}` : '', rule.stampsRequired ? `${l('集章', 'Stamps', 'Stempel')}: ${rule.stampsRequired}` : '', rule.minAmount ? `${l('最低消费', 'Minimum spend', 'Minimum belanja')} ${money(rule.minAmount)}` : ''].filter(Boolean).join(' · ');
     const html = items.map((c, i) => {
-        const p = products.find(p => p.id === c.productId), name = c.productName ?? p?.name ?? '', image = safeImage(c.imageUrl || p?.image), original = c.originalPrice ?? p?.price ?? p?.originalPrice ?? p?.specs?.[0]?.price, special = c.specialPrice ?? (p ? posterPrice(a, p) : undefined), saving = original !== undefined && special !== undefined ? Math.max(0, original - special) : undefined;
+        const p = products.find(p => p.id === c.productId), name = c.productName ?? p?.name ?? '', image = safeImage(choosePosterImage(p,c,((options.aspectRatio||16/9)/Math.min(columns,Math.max(1,items.length)))*rows/(overlay?1:(d.imageHeightRatio||65)/100))?.url), original = c.originalPrice ?? p?.price ?? p?.originalPrice ?? p?.specs?.[0]?.price, special = c.specialPrice ?? (p ? posterPrice(a, p) : undefined), saving = original !== undefined && special !== undefined ? Math.max(0, original - special) : undefined;
         const active = cfg.highlightToday !== false && c.dayOfWeek !== undefined && today === c.dayOfWeek;
         const bg = colour(active ? c.activeColor : c.color, overlay ? '#1e293b' : ['#ffe4e6', '#ffedd5', '#dcfce7', '#e0e7ff', '#fef3c7'][i % 5]);
         const text = colour(c.titleColor || d.titleColor, overlay ? '#ffffff' : '#172033'), badge = colour(c.badgeBg || d.dayBadgeBg, accent), badgeText = colour(c.badgeTextColor || d.dayBadgeColor, '#ffffff');
