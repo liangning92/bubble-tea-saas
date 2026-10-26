@@ -190,7 +190,7 @@ class Gateway:
                 line = frames.get(timeout=max(.001, until-time.time()))
                 if not line: break
                 total += len(line)
-                if len(line) > MAX_BODY or total > 8_000_000 or not line.endswith("\n"):
+                if len(line) > MAX_BODY or total > (24_000_000 if isinstance(ticket.get("sealedUserContent"), list) else 8_000_000) or not line.endswith("\n"):
                     raise ValueError("FRAME_LIMIT")
                 frame = json.loads(line)
                 if set(frame) != {"protocol", "method", "params"} or frame["protocol"] != PROTOCOL:

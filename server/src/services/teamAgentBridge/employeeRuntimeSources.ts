@@ -1,3 +1,4 @@
+import {employeeMessagePhotos} from './employeePhotos'
 import {readAgentMemories,readAgentExperiences,agentMemoryFingerprint} from '../AgentMemoryService'
 import { visibleBusinessData, visibleScheduleStaff } from './employeeAccess'
 import { createHash } from 'crypto'
@@ -65,7 +66,8 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
       const author = await db.staff.findFirst({ where: { id: message.authorId, storeId: grant.storeId, status: 'active' }, select: { id: true, userId: true, user: { select: { id: true, storeId: true, role: true } } } })
       if (!author?.userId || author.user?.id !== author.userId || author.user?.storeId !== grant.storeId || typeof message.text !== 'string') deny()
       const isAdmin = author.user?.role === 'admin' || author.user?.role === 'manager'
-      value = { messageId: message.id, seq: message.seq, authorStaffId: author.id, role: 'user', text: message.text.trim()||'An attachment was shared without text. Ask what should be checked; attachment contents have not been loaded.', ...(message.files?.length?{attachmentCount:message.files.length,attachmentAccess:'not_loaded'}:{}), createdAt: message.createdAt }
+      const photos=message.files?.length?await employeeMessagePhotos(db,grant,scope,message):[]
+      value = { messageId: message.id, seq: message.seq, authorStaffId: author.id, role: 'user', text: message.text.trim()||(photos.length?'The employee shared a verified work photo without text. Ask what help is needed if intent is unclear.':'An attachment was shared without text. Ask what should be checked; attachment contents have not been loaded.'), ...(message.files?.length?{attachmentCount:message.files.length,attachmentAccess:photos.length?'verified_images':'not_loaded',photos}:{}), createdAt: message.createdAt }
     }
   } else if (source.kind === 'employee_task') {
     if (!grant.actions.includes('tasks.read') || source.taskId !== scope.task.taskId || source.version !== scope.task.version) deny()

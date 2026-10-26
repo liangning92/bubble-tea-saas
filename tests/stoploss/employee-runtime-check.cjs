@@ -17,6 +17,13 @@ async function begin(){scope=await readCommunicationScope(db,grant,task,await re
 const wire=t=>({model:t.model,messages:[...system,{role:'user',content:t.sealedUserContent}],tools:t.tools,stream:true});
 async function input(runtime,t,p,version=t.traceVersion,turn=1){return runtime.host.recordInput({executionId:t.executionId,expectedTraceVersion:version,turn,inputHash:hash(p),toolSchemaHash:t.toolSchemaHash,isolation:t.isolation,providerRequest:p})}
 async function response(runtime,t,version,message,turn=1){return runtime.host.recordResponse({executionId:t.executionId,expectedTraceVersion:version,turn,providerRequestId:'synthetic-provider-'+turn,finishReason:message.tool_calls?'tool_calls':'stop',providerMessage:message})}
+async function photoMessage(){
+ const fs=require('node:fs/promises'),crypto=require('node:crypto'),sharp=require(root+'/server/node_modules/sharp'),{writeWork}=built('EmployeeWorkspaceStore');
+ const id=randomUUID(),bytes=await sharp({create:{width:160,height:120,channels:3,background:'#f5e0b0'}}).png().toBuffer();
+ await fs.mkdir(path.join(process.env.UPLOADS_PATH,'.employee-private'),{recursive:true});await fs.writeFile(path.join(process.env.UPLOADS_PATH,'.employee-private',id),bytes);
+ await writeWork(storeId,'file.'+id,{id,staffId:staff.staffId,purpose:'team',type:'image/png',sha256:crypto.createHash('sha256').update(bytes).digest('hex')},db);
+ const m=await teamCommunication(db).send(staff,channel.id,{requestId:randomUUID(),text:'出库',files:[id]});return {id,bytes,m,ref:{kind:'conversation',channelId:channel.id,messageId:m.id,seq:m.seq}};
+}
 async function main(){
  const tenant=await db.tenant.create({data:{name:'Runtime synthetic isolated'}});await db.store.create({data:{id:storeId,tenantId:tenant.id,name:'Synthetic'}});
  for(const [a,phone]of[[owner,'08911117001'],[staff,'08911117002']])await db.user.create({data:{id:a.id,phone,password:'fixture-not-login',role:a.role,storeId,staff:{create:{id:a.staffId,storeId,name:a.staffId,employeeNumber:a.staffId}}}});
@@ -135,6 +142,16 @@ async function main(){
    await assert.rejects(()=>built('AgentMemoryService').readAgentMemories(db,grant,{...scope,audienceStaffIds:[owner.staffId]}),/AGENT_MEMORY_SCOPE_DENIED/);
   }finally{grant.actions=original;await db.config.delete({where:{storeId_key:{storeId,key:'team.communication.ai.agent.settings'}}});if(previousGrant)await db.config.update({where:{storeId_key:{storeId,key:grantKey}},data:{value:previousGrant.value}});else await db.config.delete({where:{storeId_key:{storeId,key:grantKey}}})}
  });
+ await check('authorized chat photos reach the model as image parts; substituted pixels and foreign files are rejected',async()=>{
+  const f=await photoMessage();task.version++;scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));
+  const runtime=make(),ticket=await runtime.host.begin(grant,scope,[f.ref]);assert(Array.isArray(ticket.sealedUserContent));assert.equal(ticket.sealedUserContent[1].type,'image_url');assert(ticket.sealedUserContent[1].image_url.url.startsWith('data:image/jpeg;base64,'));
+  const p=wire(ticket),changed=structuredClone(p);changed.messages.at(-1).content[1].image_url.url='data:image/jpeg;base64,forged';await assert.rejects(()=>input(runtime,ticket,changed));
+  await input(runtime,ticket,p);await runtime.recover(ticket.executionId);
+  const {employeeMessagePhotos}=built('teamAgentBridge/employeePhotos');const photos=await employeeMessagePhotos(db,grant,scope,f.m);assert.equal(photos[0].fileId,f.id);assert.equal(photos[0].dataUrl,undefined);const {employeeStockPhotoEvidence}=built('teamAgentBridge/employeePhotos'),history=[{source:{kind:'employee_exchange'},value:{employeeFacts:[{messageId:f.m.id,seq:f.m.seq,photos}]}}];assert.equal((await employeeStockPhotoEvidence(db,grant,scope,history)).needsPhotoSelection,true);assert.equal((await employeeStockPhotoEvidence(db,grant,scope,history,f.m.id)).photos[0].fileId,f.id);assert.equal(await employeeStockPhotoEvidence(db,grant,scope,history,'none'),undefined);
+  const original=await readTeam(db,storeId,'message.'+channel.id+'.'+String(f.m.seq).padStart(12,'0'));await writeTeam(db,storeId,'message.'+channel.id+'.'+String(f.m.seq).padStart(12,'0'),{...original,files:[randomUUID()]});await assert.rejects(()=>employeeMessagePhotos(db,grant,scope,f.m),/EMPLOYEE_PHOTO_NOT_AUTHORIZED/);await writeTeam(db,storeId,'message.'+channel.id+'.'+String(f.m.seq).padStart(12,'0'),original);
+  const fs=require('node:fs/promises'),file=path.join(process.env.UPLOADS_PATH,'.employee-private',f.id);await fs.writeFile(file,'changed bytes');await assert.rejects(()=>employeeMessagePhotos(db,grant,scope,f.m),/EMPLOYEE_PHOTO_NOT_AUTHORIZED/);await fs.writeFile(file,f.bytes);
+  await writeTeam(db,storeId,'ai.agent.settings',{enabled:true,employeeBridgeEnabled:true,photoRecognitionEnabled:false});assert.deepEqual(await employeeMessagePhotos(db,grant,scope,f.m),[]);await db.config.delete({where:{storeId_key:{storeId,key:'team.communication.ai.agent.settings'}}});
+ });
  await check('private HTTP relay matches reserved SDK input, persists provider receipt and never resends duplicate',async()=>{
   const express=require(root+'/server/node_modules/express'),{createEmployeeRuntimeHttp}=built('teamAgentBridge/employeeRuntimeHttp');
   const t=await next(),runtime=make(),p=wire(t);await input(runtime,t,p);await writeTeam(db,storeId,'ai.settings',{version:7});let sends=0;
@@ -158,7 +175,7 @@ async function main(){
   try{assert.equal((await fetch('http://127.0.0.1:'+server.address().port+'/v1/chat/completions',{method:'POST',headers:{authorization:'Bearer synthetic-scope-source-revocation','content-type':'application/json'},body:JSON.stringify(p)})).status,409);assert.equal(sends,0);assert.equal((await runtime.inspect(t.executionId)).phase,'unknown');assert.equal((await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId+'.provider.1')).state,'unknown')}
   finally{await new Promise(r=>server.close(r))}
  });
- if(process.env.EMPLOYEE_REAL_HERMES==='1')await check('actual pinned Hermes child executes two scoped tools and persists all three real SDK turns',async()=>{
+ if(process.env.EMPLOYEE_REAL_HERMES==='1')await check('actual pinned Hermes sends image parts, records one photo-backed stock-out and persists all SDK turns',async()=>{
   const fs=require('node:fs/promises'),http=require('node:http'),os=require('node:os');
   const {runEmployeeRuntimeChild}=built('teamAgentBridge/employeeRuntimeChild');
   const template=require('../fixtures/hermes-employee-system-template.json');
@@ -166,8 +183,8 @@ async function main(){
   try{
    const runtime=createEmployeeRuntime(db,{...deps,approvedSystemHashes:[],reviewedSystemTemplate:{hash:template.hash,isolatedRoot:root},maxExecutionMs:120000});
    const realItem=await db.inventory.create({data:{storeId,name:'Actual Hermes synthetic cups',category:'supplies',unit:'pcs',currentStock:10,avgCost:2}});grant.actions.push('inventory.write');
-   task.version++;scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));const t=await runtime.host.begin(grant,scope,[source]);
-   server=http.createServer((req,res)=>{if(req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({object:'list',data:[{id:t.model,object:'model'}]}));return}let body='';req.on('data',b=>body+=b);req.on('end',()=>{calls++;const p=JSON.parse(body);assert.equal(req.method,'POST');assert.equal(req.url,'/api/internal/employee-hermes/v1/chat/completions');assert.equal(p.model,t.model);assert(!body.includes('MANAGER_SECRET_SENTINEL'));
+   const photo=await photoMessage();task.version++;scope=await readCommunicationScope(db,grant,task,await readTeam(db,storeId,'channel.'+channel.id));const t=await runtime.host.begin(grant,scope,[photo.ref]);
+   server=http.createServer((req,res)=>{if(req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({object:'list',data:[{id:t.model,object:'model'}]}));return}let body='';req.on('data',b=>body+=b);req.on('end',()=>{calls++;const p=JSON.parse(body);assert.equal(req.method,'POST');assert.equal(req.url,'/api/internal/employee-hermes/v1/chat/completions');assert.equal(p.model,t.model);assert(p.messages.find(m=>m.role==='user').content.some(part=>part.type==='image_url'&&part.image_url.url.startsWith('data:image/jpeg;base64,')));assert(!body.includes('MANAGER_SECRET_SENTINEL'));
     let delta,reason;
     if(calls===1){delta={role:'assistant',tool_calls:[{index:0,id:'real-read',type:'function',function:{name:'employee_manage_inventory',arguments:JSON.stringify({action:'stock_out',inventoryId:realItem.id,quantity:1,reason:'loss',note:'Synthetic Hermes native ledger test'})}}]};reason='tool_calls'}
     else if(calls===2){delta={role:'assistant',tool_calls:[{index:0,id:'real-send',type:'function',function:{name:'employee_send_message',arguments:JSON.stringify({text:'Mohon konfirmasi petugas pemeriksa penutup mesin.'})}}]};reason='tool_calls'}
@@ -177,7 +194,7 @@ async function main(){
    const config={python:process.env.EMPLOYEE_HERMES_PYTHON,hermesSource:process.env.EMPLOYEE_HERMES_SOURCE,hermesExpectedSha:template.hermesSha,repository:require('node:fs').realpathSync(path.resolve(__dirname,'../..')),isolatedRoot:root,providerBaseUrl:'http://127.0.0.1:'+server.address().port+'/api/internal/employee-hermes/v1',providerCredential:'synthetic-no-real-model-credential',deadlineAt:new Date(Date.now()+110000).toISOString(),diagnosticSink:b=>require('node:fs').appendFileSync('/tmp/employee-synthetic-child-diagnostic.log',b)};
    const result=await runEmployeeRuntimeChild(t,runtime.host,config);const state=await runtime.inspect(t.executionId);
    assert.equal(result.state,'complete',JSON.stringify({result,state,calls}));assert.equal(calls,3);assert.equal(state.turn,3);assert.equal((await db.inventory.findUnique({where:{id:realItem.id}})).currentStock,9);assert.equal(await db.stockOutLog.count({where:{inventoryId:realItem.id}}),1);
-   const saved=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(saved.phase,'complete');assert.equal(saved.tools.length,2);assert.equal(saved.inputs.length,3);assert.equal(saved.responses.length,3);
+   const saved=await readTeam(db,storeId,'employeeRuntime.execution.'+t.executionId);assert.equal(saved.phase,'complete');assert.equal(saved.tools.length,2);assert.equal(saved.inputs.length,3);assert.equal(saved.responses.length,3);const log=await db.stockOutLog.findFirst({where:{inventoryId:realItem.id}});assert.equal(JSON.parse(log.note).sourceEvidence.photos[0].fileId,photo.id);const image=await built('teamAgentBridge/employeePhotos').stockOutPhoto(db,storeId,log.id,photo.id);assert(image.bytes.equals(photo.bytes));await assert.rejects(()=>built('teamAgentBridge/employeePhotos').stockOutPhoto(db,'different-store',log.id,photo.id));
    const rebuilt=createEmployeeRuntime(db,{...deps,approvedSystemHashes:[],reviewedSystemTemplate:{hash:template.hash,isolatedRoot:root}});await rebuilt.recover(t.executionId);assert.equal((await rebuilt.inspect(t.executionId)).phase,'complete');assert.equal(calls,3);
   }finally{if(server)await new Promise(r=>server.close(r));await fs.rm(root,{recursive:true,force:true})}
  });

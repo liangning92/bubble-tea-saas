@@ -16,7 +16,7 @@ export type EmployeeRuntimeIsolation = z.infer<typeof employeeRuntimeIsolationSc
 export interface EmployeeRuntimeTicket {
   protocol: typeof EMPLOYEE_RUNTIME_PROTOCOL; executionId: string; requestId: string; traceVersion: number;
   compartmentKey: string; audienceHash: string; inputContextHash: string; toolSchemaHash: string;
-  sealedUserContent: string; instruction: string; isolation: EmployeeRuntimeIsolation;
+  sealedUserContent: string | ({type:'text';text:string}|{type:'image_url';image_url:{url:string;detail:'high'}})[]; instruction: string; isolation: EmployeeRuntimeIsolation;
   model: 'MiniMax-M3.1-Flash'; tools: { type: 'function'; function: { name: string; description: string; parameters: unknown } }[];
   executionTimeoutMs?: number
   isAdmin?: boolean

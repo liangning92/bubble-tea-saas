@@ -7,21 +7,21 @@ import type { BridgeGrant, CommunicationScope } from './contract'
 const deny=(code:string):never=>{throw new TeamError(403,code)}
 const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>!isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v)
 const id=z.string().trim().min(1).max(128)
-const schema=z.object({action:z.string().min(1),query:z.string().trim().max(80).optional(),cursor:id.optional(),inventoryId:id.optional(),quantity:z.number().finite().positive().optional(),unit:z.string().max(30).optional(),unitCost:z.number().finite().nonnegative().optional(),reason:z.enum(['loss','expired','withdrawal','other']).optional(),note:z.string().trim().max(2000).optional(),
+const schema=z.object({action:z.string().min(1),query:z.string().trim().max(80).optional(),cursor:id.optional(),inventoryId:id.optional(),quantity:z.number().finite().positive().optional(),unit:z.string().max(30).optional(),unitCost:z.number().finite().nonnegative().optional(),reason:z.enum(['loss','expired','withdrawal','other']).optional(),note:z.string().trim().max(2000).optional(),photoMessageId:z.union([z.string().uuid(),z.literal('none')]).optional(),
   staffId:id.optional(),date:date.optional(),shift:id.optional(),taskId:id.optional(),name:z.string().trim().min(1).max(200).optional(),areaCode:id.optional(),dueTime:z.string().datetime().optional(),priority:z.number().int().min(1).max(3).optional()}).strict()
 export const businessToolNames=['employee_manage_inventory','employee_manage_hygiene','employee_manage_staff']
 export function businessToolSchemas() {
   const tool=(name:string,description:string,actions:string[],properties:any)=>({type:'function' as const,function:{name,description,parameters:{type:'object',additionalProperties:false,required:['action'],properties:{action:{type:'string',enum:actions},...properties}}}})
   const staffId={type:'string',description:'Actual store staff ID; look it up first, never invent one.'},day={type:'string',description:'YYYY-MM-DD; ask if the requested date is unclear.'}
   return [
-    tool('employee_manage_inventory','List store inventory for broad analysis or unknown item names, then record actual stock receipts or stock issues through the native stock ledger. Quantities must be supplied or confirmed, not inferred from advice or low-stock predictions. Ask for missing item, quantity and reason. A recorded stock issue is not a physical-count certification.',['list','stock_in','stock_out'],{query:{type:'string',description:'Optional literal item-name filter; omit for a store-wide list.'},cursor:{type:'string',description:'Cursor returned by the preceding list call.'},inventoryId:{type:'string'},quantity:{type:'number',exclusiveMinimum:0},unit:{type:'string'},unitCost:{type:'number',minimum:0},reason:{type:'string',enum:['loss','expired','withdrawal','other']},note:{type:'string'}}),
+    tool('employee_manage_inventory','List store inventory for broad analysis or unknown item names, then record actual stock receipts or stock issues through the native stock ledger. Quantities must be supplied or confirmed, not inferred from advice or low-stock predictions. Ask for missing item, quantity and reason. A recorded stock issue is not a physical-count certification.',['list','stock_in','stock_out'],{query:{type:'string',description:'Optional literal item-name filter; omit for a store-wide list.'},cursor:{type:'string',description:'Cursor returned by the preceding list call.'},inventoryId:{type:'string'},quantity:{type:'number',exclusiveMinimum:0},unit:{type:'string'},photoMessageId:{type:'string',description:'Exact verified photo message ID from conversation facts. Required for a photo-based stock-out, including after quantity clarification. If older photos are unrelated to a new text-only operation, explicitly use none.'},unitCost:{type:'number',minimum:0},reason:{type:'string',enum:['loss','expired','withdrawal','other']},note:{type:'string'}}),
     tool('employee_manage_hygiene','Inspect hygiene tasks and areas; create and assign a cleaning task. Read existing task evidence to reason about hygiene. Never mark cleaning as physically completed without employee evidence.',['list_tasks','list_areas','create_task','assign_task'],{taskId:{type:'string'},staffId,date:day,name:{type:'string'},areaCode:{type:'string'},dueTime:{type:'string'},priority:{type:'integer',minimum:1,maximum:3},note:{type:'string'}}),
     tool('employee_manage_staff','Read the store staff directory or assign a staff member to an existing store shift on a specific date. Other HR actions use the existing operations and training tools.',['list_staff','set_schedule'],{staffId,date:day,shift:{type:'string',description:'Existing shift key, not a made-up label.'},note:{type:'string'}})
   ]
 }
 
 /** Called inside the runtime transaction: business mutation and tool receipt commit together. */
-export async function executeBusinessTool(db:any,g:BridgeGrant,scope:CommunicationScope,name:string,raw:unknown,operationId:string) {
+export async function executeBusinessTool(db:any,g:BridgeGrant,scope:CommunicationScope,name:string,raw:unknown,operationId:string,photoEvidence?:import('../InventoryService').StockOperation['sourceEvidence']) {
   const parsed=schema.safeParse(raw)
   if(!parsed.success)return {ok:false,code:'EMPLOYEE_BUSINESS_INPUT_INVALID',message:'Check the tool fields and ask for missing or invalid details.'}
   const v=parsed.data,storeId=g.storeId,actor='agent:'+g.agentId
@@ -33,21 +33,23 @@ export async function executeBusinessTool(db:any,g:BridgeGrant,scope:Communicati
   if(name==='employee_manage_inventory'&&v.action==='list'){
     if(!await audienceAllows(db,g,scope,'inventory.read'))return {ok:false,code:'EMPLOYEE_INVENTORY_NOT_VISIBLE',message:'Inventory data is not visible to every recipient here.'}
     const rows=await db.inventory.findMany({where:{storeId,...(v.query?{name:{contains:v.query,mode:'insensitive'}}:{})},select:{id:true,name:true,unit:true,currentStock:true,safetyStock:true},orderBy:{id:'asc'},take:51,...(v.cursor?{cursor:{id:v.cursor},skip:1}:{})})
-    const items=rows.slice(0,50);return {items,hasMore:rows.length>50,cursor:rows.length>50?items.at(-1).id:null}
+    const items=rows.slice(0,50),packages=await db.config.findMany({where:{storeId,key:{in:items.map(item=>'inventoryPackage:'+item.id)}}});const packById=new Map(packages.map((row:any)=>[row.key.slice('inventoryPackage:'.length),JSON.parse(row.value)]));return {items:items.map(item=>({...item,package:packById.get(item.id)||null})),hasMore:rows.length>50,cursor:rows.length>50?items.at(-1).id:null}
   }
   if(name==='employee_manage_inventory') {
     if(!v.inventoryId||!v.quantity)return {ok:false,code:'EMPLOYEE_STOCK_DETAILS_REQUIRED',message:'Ask for an inventory item and positive quantity.'}
     const item=await db.inventory.findFirst({where:{id:v.inventoryId,storeId},select:{id:true}})
     if(!item)deny('EMPLOYEE_STOCK_ITEM_NOT_FOUND')
-    const data={inventoryId:v.inventoryId,storeId,quantity:v.quantity,inputUnit:v.unit,note:v.note,staffId:actor,operationId}
+    const data={inventoryId:v.inventoryId,storeId,quantity:v.quantity,inputUnit:v.unit,note:v.note,staffId:actor,operationId,...(photoEvidence?{sourceEvidence:photoEvidence}:{})}
+    try{
     if(v.action==='stock_in'){
       if(v.unitCost===undefined)return {ok:false,code:'EMPLOYEE_STOCK_COST_REQUIRED',message:'Ask for the required missing details before performing this operation.'}
       result=await stockIn({...data,reason:'purchase',unitCost:v.unitCost},db)
     }else if(v.action==='stock_out'){
-      if(!v.reason)return {ok:false,code:'EMPLOYEE_STOCK_REASON_REQUIRED',message:'Ask for the required missing details before performing this operation.'}
-      result=await stockOut({...data,reason:v.reason},db)
+      result=await stockOut({...data,reason:v.reason||'withdrawal'},db)
     }else deny('EMPLOYEE_BUSINESS_ACTION_INVALID')
-    result={ok:true,inventoryId:result.id,currentStock:result.currentStock,unit:result.unit,operationId}
+    }catch(error:any){if(['Insufficient stock','INCOMPATIBLE_INVENTORY_UNITS','UNIT_REQUIRED','INVALID_QUANTITY','OUT_REASON_REQUIRED','PROCESS_OUTPUT_IS_CONVERSION_ONLY'].includes(error.message))return {ok:false,code:'EMPLOYEE_STOCK_DETAILS_NEED_CHECK',message:'The stock operation was not recorded. Recheck the item, quantity and unit, and ask the employee for the missing or ambiguous details.'};throw error}
+    const log=v.action==='stock_out'?await db.stockOutLog.findUnique({where:{operationId},select:{id:true}}):null
+    result={ok:true,inventoryId:result.id,currentStock:result.currentStock,unit:result.unit,operationId,...(log?{stockOutLogId:log.id}:{}),...(photoEvidence?{recordedPhotos:photoEvidence.photos.length}:{})}
   }else if(name==='employee_manage_hygiene'){
     if(v.action==='list_areas'&&!await audienceAllows(db,g,scope,'hygiene.read'))return {ok:false,code:'EMPLOYEE_HYGIENE_NOT_VISIBLE'}
     if(v.action==='list_areas')result=await db.hygieneArea.findMany({where:{storeId},select:{code:true,name:true},orderBy:{code:'asc'},take:100})

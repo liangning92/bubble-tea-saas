@@ -32,6 +32,7 @@ export interface AgentSettingsData {
   allChannelsAllowed: boolean
   memoryEnabled: boolean
   learningEnabled: boolean
+  photoRecognitionEnabled: boolean
   expiresAt: string | null
   taskTimeoutMinutes: number
   requireHumanReview: boolean
@@ -314,6 +315,7 @@ export function TeamAgentSettings({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-3 rounded-lg bg-gray-50 p-3 sm:col-span-2">
+              <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.photoRecognitionEnabled!==false} disabled={busy||checking} onChange={e=>updateDraft({photoRecognitionEnabled:e.target.checked})}/><span><strong className="font-medium">{c.photosEnabled}</strong><span className="mt-1 block text-xs text-gray-600">{c.photosHelp}</span></span></label>
               <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.memoryEnabled!==false} disabled={busy||checking} onChange={e=>updateDraft({memoryEnabled:e.target.checked})}/><span><strong className="font-medium">{c.memoryEnabled}</strong><span className="mt-1 block text-xs text-gray-600">{c.memoryHelp}</span></span></label>
               <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.learningEnabled!==false} disabled={busy||checking||draft.memoryEnabled===false} onChange={e=>updateDraft({learningEnabled:e.target.checked})}/><span><strong className="font-medium">{c.learningEnabled}</strong><span className="mt-1 block text-xs text-gray-600">{c.learningHelp}</span></span></label>
             </div>
