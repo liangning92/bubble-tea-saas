@@ -39,8 +39,8 @@ export async function assertDataAudience(db:any,g:BridgeGrant,scope:Communicatio
     const access=dataClass==='operational'?employeeAppAccess(actor.role):await userAccessV2(actor,db)
     if (required[dataClass].some(key=>dataClass==='operational'?access?.modes[key]!=='allow':actor.role!=='admin'&&access?.modes[key]!=='allow')) reject()
   }
-  // This release intentionally opens no protected-data publication, even to an all-admin audience.
-  if (dataClass!=='operational') reject()
+  // Publication follows each current recipient's saved account permissions.
+  // Do not impose a second hardcoded data-class ban on an authorized audience.
 }
 export const textHash = (text:string) => createHash('sha256').update(text).digest('hex')
 export const audienceHash = (channel:TeamChannel) => createHash('sha256').update(JSON.stringify(channel.members.map(m=>({staffId:m.staffId,fromSeq:m.fromSeq})).sort((a,b)=>a.staffId.localeCompare(b.staffId)))).digest('hex')
