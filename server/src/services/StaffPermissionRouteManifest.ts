@@ -1,5 +1,6 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
 export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null}> = {
+  "GET /api/inventory/evidence-export": {permission:"inventory.read",ownerOnly:false,export:true,personal:false,legacyRoles:["admin"],legacyPermission:"inventory.read"},
   "GET /api/staff-work/my/push-device/config": {permission:"personal.profile",ownerOnly:false,export:false,personal:true},
   "POST /api/staff-work/my/push-device/check": {permission:"personal.profile",ownerOnly:false,export:false,personal:true},
   "POST /api/staff-work/my/push-device/test": {permission:"personal.profile",ownerOnly:false,export:false,personal:true},
