@@ -23,7 +23,7 @@ return route.fulfill({contentType:'application/json',body:JSON.stringify({code:2
 // Actual glyph bounds: switching locale and using long/custom copy cannot overflow a price row.
 const renderer={window:{},Intl,Date};vm.runInNewContext(fs.readFileSync('server/public/tv/poster.js','utf8'),renderer);
 const fitPage=await browser.newPage({viewport:{width:1920,height:1080}});
-for(const language of [0,1,2])for(const copy of [undefined,'Harga penawaran khusus: {amount}','今日特价：{amount}','Promo\n{amount}']){
+for(const language of [0,1,2])for(const copy of [undefined,'mmmm WWWW mmmm WWWW: {amount}','Harga penawaran khusus: {amount}','今日特价：{amount}','Promo\n{amount}']){
  const config={freeform:true,columns:5,priceFormat:'plain',elements:{originalPrice:{fontSize:48},specialPrice:{fontSize:48,text:copy},savingAmount:{fontSize:48}},cardItems:Array.from({length:5},(_,i)=>({productName:'Tea '+i,originalPrice:16000,specialPrice:12000}))};
  await fitPage.setContent(renderer.window.YOUME_POSTER.renderActivityPoster({posterConfig:config},{language}));
  const bounds=await fitPage.locator('[data-element-key="originalPrice"],[data-element-key="specialPrice"],[data-element-key="savingAmount"]').evaluateAll(nodes=>nodes.map(node=>{const range=document.createRange();range.selectNodeContents(node);const box=node.getBoundingClientRect(),ink=range.getBoundingClientRect();return {text:node.textContent,box:{left:box.left,right:box.right,top:box.top,bottom:box.bottom},ink:{left:ink.left,right:ink.right,top:ink.top,bottom:ink.bottom}}}));

@@ -20,7 +20,7 @@ export function fitPosterPriceText(text: string, style: PosterElementStyle, widt
     const lines = text.split(/\r?\n/), tracking = Math.max(0, style.letterSpacing || 0);
     const widths = lines.map(line => {
         const chars = Array.from(style.textTransform === 'uppercase' ? line.toUpperCase() : style.textTransform === 'lowercase' ? line.toLowerCase() : line);
-        const em = chars.reduce((sum, c) => sum + (style.fontFamily === 'mono' && c.codePointAt(0)! < 256 ? .65 : /[MW@%&]/.test(c) ? 1.1 : /[A-Z]/.test(c) ? .85 : /[0-9]/.test(c) ? .72 : /[a-z]/.test(c) ? .72 : /\s/.test(c) ? .4 : /[.,:;!'|]/.test(c) ? .4 : 1.2), 0);
+        const em = chars.reduce((sum, c) => sum + (style.fontFamily === 'mono' && c.codePointAt(0)! < 256 ? .65 : /[MWmw@%&]/.test(c) ? 1.1 : /[A-Z]/.test(c) ? .85 : /[0-9]/.test(c) ? .72 : /[a-z]/.test(c) ? .72 : /\s/.test(c) ? .4 : /[.,:;!'|]/.test(c) ? .4 : 1.2), 0);
         return { em, spacing: Math.max(0, chars.length - 1) * tracking };
     });
     const innerWidth = Math.max(0, width - 2 * (padding + stroke + border) - (style.italic ? size * .25 : 0));
