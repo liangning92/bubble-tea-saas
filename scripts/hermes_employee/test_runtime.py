@@ -31,6 +31,11 @@ def worker(case, root, source_dir=None):
     socket.socket.connect = lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("NETWORK_DISABLED"))
     sys.path.insert(0, source)
     import httpx
+    if case == "probe_drift":
+        from tools import env_probe
+        def unexpected_probe():
+            return "Python toolchain: synthetic-drift-must-not-enter-employee-prompt."
+        env_probe.get_environment_probe_line = unexpected_probe
     calls = 0
     tool_calls = 0
     model_text = "Bisa. Siapkan gelas dan cek label bahan sebelum buka."
@@ -242,6 +247,12 @@ class RuntimeTest(unittest.TestCase):
                                     env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"})
             self.assertEqual(result.returncode, 0, result.stderr[-2000:])
             return json.loads(result.stdout.split("RUNTIME_RESULT:")[-1])
+
+    def test_employee_prompt_ignores_variable_terminal_environment_probe(self):
+        r = self.run_case("probe_drift")
+        self.assertTrue(r["complete"], r)
+        for request in r["modelRequests"]:
+            self.assertNotIn("Python toolchain:", request["body"])
 
     def test_real_hermes_tool_roundtrip_and_complete_wire(self):
         r = self.run_case("normal")

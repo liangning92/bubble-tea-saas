@@ -58,7 +58,7 @@ export async function visibleBusinessData(db:any,g:BridgeGrant,scope:Communicati
 export async function assertToolSettings(db:any,storeId:string,name:string,args:any) {
   const s=await assertEmployeeSettings(db,storeId)
   if(!s)return
-  const readActions=['list','list_active','list_products','query_products','list_low_stock','list_suppliers','query_revenue_summary','list_recent_expenses','list_pending_leaves','list_staff','list_tasks','list_areas']
+  const readActions=['list','list_stock_out','list_active','list_products','query_products','list_low_stock','list_suppliers','query_revenue_summary','list_recent_expenses','list_pending_leaves','list_staff','list_tasks','list_areas']
   const module=name.includes('inventory')||name.includes('procurement')?'inventory':name.includes('hygiene')?'hygiene'
     :name.includes('marketing')?'marketing':name.includes('product')?'products':name.includes('finance')?'finance'
     :name.includes('schedule')||name.includes('staff')||name.includes('operations')||name.includes('training')||name==='employee_submit_request'?'staff'
