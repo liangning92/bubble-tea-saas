@@ -27,6 +27,31 @@ var YOUME_POSTER = (() => {
     renderActivityPoster: () => renderActivityPoster
   });
 
+  // shared/utils/posterText.ts
+  function posterPriceLabels(language = 2) {
+    return [
+      { originalPrice: "\u539F\u4EF7", specialPrice: "\u6D3B\u52A8\u4EF7", savingAmount: "\u8282\u7701" },
+      { originalPrice: "Normal price", specialPrice: "Special price", savingAmount: "Save" },
+      { originalPrice: "Harga Normal", specialPrice: "Harga Spesial", savingAmount: "Hemat" }
+    ][language] || { originalPrice: "Harga Normal", specialPrice: "Harga Spesial", savingAmount: "Hemat" };
+  }
+  function posterTextContent(style, value, amount = "", label = "") {
+    return style.text === void 0 ? value : style.text.replace(/\{(value|amount|label)\}/g, (_, key) => ({ value, amount, label })[key] || "");
+  }
+  function fitPosterPriceText(text, style, width, height) {
+    const size = Math.max(0, style.fontSize ?? 22), padding = Math.max(0, style.padding || 0), stroke = Math.max(0, style.strokeWidth || 0), border = Math.max(0, style.borderWidth || 0);
+    const lines = text.split(/\r?\n/), tracking = Math.max(0, style.letterSpacing || 0);
+    const widths = lines.map((line) => {
+      const chars = Array.from(style.textTransform === "uppercase" ? line.toUpperCase() : style.textTransform === "lowercase" ? line.toLowerCase() : line);
+      const em = chars.reduce((sum, c) => sum + (style.fontFamily === "mono" && c.codePointAt(0) < 256 ? 0.65 : /[MW@%&]/.test(c) ? 1.1 : /[A-Z]/.test(c) ? 0.85 : /[0-9]/.test(c) ? 0.72 : /[a-z]/.test(c) ? 0.72 : /\s/.test(c) ? 0.4 : /[.,:;!'|]/.test(c) ? 0.4 : 1.2), 0);
+      return { em, spacing: Math.max(0, chars.length - 1) * tracking };
+    });
+    const innerWidth = Math.max(0, width - 2 * (padding + stroke + border) - (style.italic ? size * 0.25 : 0));
+    const maxWidthSize = Math.min(...widths.map((w) => w.em ? Math.max(0, innerWidth - w.spacing) / w.em : size));
+    const maxHeightSize = Math.max(0, height - 2 * (padding + stroke + border)) / (lines.length * Math.max(1.2, style.lineHeight || 1.2));
+    return Math.max(0, Math.min(size, maxWidthSize, maxHeightSize));
+  }
+
   // shared/utils/posterLayout.ts
   var POSTER_ELEMENT_KEYS = ["headline", "subheadline", "grid", "card", "image", "logo", "productName", "productSubname", "priceBox", "originalPrice", "specialPrice", "savingAmount", "dayBadge", "discountTag", "highlight", "footer"];
   var CANVAS_ELEMENTS = ["headline", "subheadline", "grid", "footer"];
@@ -95,28 +120,36 @@ var YOUME_POSTER = (() => {
     const amount = (v) => cfg.priceFormat === "plain" ? String(Math.round(v)) : cfg.priceFormat === "grouped" ? Math.round(v).toLocaleString("id-ID") : "Rp " + Math.round(v).toLocaleString("id-ID");
     const root = { x: 0, y: 0 }, global = (key, text) => {
       const layer = layout.layers.find((x) => x.key === key && x.cardIndex === void 0);
-      return `<div class="element text" data-element-key="${key}" style="${css(layer.style, layer.rect)}">${esc(text)}</div>`;
+      return `<div class="element text" data-element-key="${key}" style="${css(layer.style, layer.rect)}">${esc(posterTextContent(layer.style, text))}</div>`;
     };
     const grid = layout.layers.find((x) => x.key === "grid"), cardHTML = options.cards.map((c, i) => {
       const card = layout.cards[i], cardLayer = layout.layers.find((x) => x.key === "card" && x.cardIndex === i), active = cfg.highlightToday !== false && c.dayOfWeek !== void 0 && options.day === c.dayOfWeek, p = a.products?.find((p2) => p2.id === c.productId);
       const original = c.originalPrice ?? p?.price ?? p?.originalPrice ?? p?.specs?.[0]?.price, special = c.specialPrice ?? p?.specialPrice ?? (["special_price", "member_price"].includes(a.type || "") ? a.rule?.price : a.type === "percent" && original !== void 0 && a.rule?.percent !== void 0 ? Math.round(original * (100 - a.rule.percent) / 100) : void 0), saving = original !== void 0 && special !== void 0 ? Math.max(0, original - special) : void 0;
-      const labels = { originalPrice: l("\u539F\u4EF7", "Normal price", "Harga Normal"), specialPrice: l("\u6D3B\u52A8\u4EF7", "Special price", "Harga Spesial"), savingAmount: l("\u8282\u7701", "Save", "Hemat"), ...cfg.priceLabels, ...c.priceLabels };
+      const labels = { ...posterPriceLabels(lang), ...cfg.priceLabels, ...c.priceLabels };
       const text = { productName: c.productName ?? p?.name ?? "", productSubname: c.specName || "", originalPrice: original === void 0 ? "" : `${labels.originalPrice}${labels.originalPrice ? " : " : ""}${amount(original)}`, specialPrice: special === void 0 ? "" : `${labels.specialPrice}${labels.specialPrice ? " : " : ""}${amount(special)}`, savingAmount: saving === void 0 ? "" : `${labels.savingAmount}${labels.savingAmount ? " : " : ""}${amount(saving)}`, dayBadge: c.dayLabel ?? (c.dayOfWeek !== void 0 ? days[c.dayOfWeek] : ""), discountTag: original && special !== void 0 && special < original ? `-${Math.round((original - special) / original * 100)}%` : "" };
       const fields = { image: "productImage", productName: "productName", productSubname: "productSubname", originalPrice: "originalPrice", specialPrice: "specialPrice", savingAmount: "savingAmount", dayBadge: "dayBadge", discountTag: "discountTag" };
       const children = layout.layers.filter((x) => x.cardIndex === i && x.key !== "card").map((layer) => {
         const key = layer.key, style = { ...layer.style };
+        const priceKey = ["originalPrice", "specialPrice", "savingAmount"].includes(key) ? key : void 0;
+        const priceValue = key === "originalPrice" ? original : key === "specialPrice" ? special : saving;
+        const copy = posterTextContent(style, text[key] || "", priceKey && priceValue !== void 0 ? amount(priceValue) : "", priceKey ? labels[priceKey] || "" : "");
+        if (priceKey) {
+          const nextY = layout.layers.filter((l2) => l2.cardIndex === i && ["originalPrice", "specialPrice", "savingAmount", "dayBadge"].includes(l2.key) && l2.key !== key && l2.style.visible !== false && (!fields[l2.key] || cfg.showFields?.[fields[l2.key]] !== false) && l2.rect.y > layer.rect.y).reduce((y, l2) => Math.min(y, l2.rect.y), card.y + card.height);
+          style.fontSize = fitPosterPriceText(copy, style, layer.rect.width, Math.min(layer.rect.height, Math.max(0, nextY - layer.rect.y)));
+          style.lineHeight = Math.max(1.2, style.lineHeight || 1.2);
+        }
         if (style.visible === false || key === "highlight" && !active || fields[key] && cfg.showFields?.[fields[key]] === false)
           return "";
         if (key === "dayBadge" && active)
           style.backgroundColor = c.activeColor || cfg.designConfig?.highlightColor || cfg.themeColor || "#ff5d89";
-        const base = `data-element-key="${key}" data-card-index="${i + options.page * ((cfg.columns || 5) * (cfg.designConfig?.rows || cfg.rows || 1))}" style="${css(style, layer.rect, card)}"`;
+        const base = `data-element-key="${key}" data-card-index="${i + options.page * ((cfg.columns || 5) * (cfg.designConfig?.rows || cfg.rows || 1))}" style="${css(style, layer.rect, card)}${priceKey ? ";white-space:pre;overflow-wrap:normal" : ""}"`;
         if (key === "image" || key === "logo") {
           const variant = key === "image" ? choosePosterImage(p, c, layer.rect.width / Math.max(1, layer.rect.height)) : void 0, url = image(key === "logo" ? c.logoUrl || cfg.logoUrl : variant?.url), source = url ? options.assetUrl ? options.assetUrl(url) : url : "";
           return `<div class="element photo" ${base}>${source ? `<img src="${esc(source)}" alt="${esc(key === "logo" ? "Logo" : text.productName)}" data-image-width="${variant?.width || ""}" data-image-height="${variant?.height || ""}" style="object-fit:${["cover", "contain", "fill"].includes(style.objectFit || cfg.designConfig?.imageFit || "") ? style.objectFit || cfg.designConfig?.imageFit : "cover"};object-position:${n(style.objectPositionX, 50, 0, 100)}% ${n(style.objectPositionY, 50, 0, 100)}%">` : `<span class="missing">${esc(l("\u672A\u9009\u62E9\u56FE\u7247", "Choose an image", "Pilih gambar"))}</span>`}${key === "image" && style.gradientOpacity ? `<div class="image-gradient" style="opacity:${n(style.gradientOpacity, 0, 0, 100) / 100}"></div>` : ""}</div>`;
         }
         if (key === "priceBox" || key === "highlight")
           return `<div class="element shape" ${base}></div>`;
-        return text[key] ? `<div class="element text ${key === "dayBadge" ? "badge" : ""}" ${base}>${esc(text[key])}</div>` : "";
+        return copy && (!priceKey || priceValue !== void 0) ? `<div class="element text ${key === "dayBadge" ? "badge" : ""}" ${base}>${esc(copy)}</div>` : "";
       }).join("");
       return `<article data-element-key="card" data-card-index="${i}" class="free-card" style="${css(cardLayer.style, card, grid.rect)};transform:${[cardLayer.style.rotation ? `rotate(${n(cardLayer.style.rotation)}deg)` : "", active && ["popout", "scale"].includes(cfg.designConfig?.highlightMode || "") ? `scale(${n(cfg.designConfig?.highlightScale, 1.04, 1, 1.5)})` : ""].filter(Boolean).join(" ") || "none"};${active && cfg.designConfig?.highlightMode === "glow" ? `box-shadow:0 0 28px ${color(c.activeColor || cfg.designConfig?.highlightColor, "#ff5d89")};` : ""}">${children}${active && cfg.designConfig?.highlightMode === "ribbon" ? `<b class="today-ribbon" style="background:${color(c.activeColor || cfg.designConfig?.highlightColor, "#ff5d89")}">${esc(l("\u4ECA\u65E5", "Today", "Hari ini"))}</b>` : ""}</article>`;
     }).join("");

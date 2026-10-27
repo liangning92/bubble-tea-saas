@@ -4,6 +4,7 @@ export type ActivityType = typeof ACTIVITY_TYPES[number]
 
 export type PosterElementKey = 'headline' | 'subheadline' | 'grid' | 'card' | 'image' | 'logo' | 'productName' | 'productSubname' | 'priceBox' | 'originalPrice' | 'specialPrice' | 'savingAmount' | 'dayBadge' | 'discountTag' | 'highlight' | 'footer'
 export interface PosterElementStyle {
+  text?: string // Custom poster copy; {value}, {amount}, {label} remain dynamic.
   x?: number; y?: number; width?: number; height?: number
   fontSize?: number; fontWeight?: number; fontFamily?: 'sans'|'serif'|'mono'
   lineHeight?: number; letterSpacing?: number; textAlign?: 'left'|'center'|'right'
