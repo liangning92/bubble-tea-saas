@@ -1,5 +1,6 @@
 import { z } from 'zod';
 const elementStyleSchema=z.object({
+  text:z.string().max(1000).optional(),
   borderStyle:z.enum(['solid','dashed','none']).optional(),gradientOpacity:z.number().min(0).max(100).optional(),italic:z.boolean().optional(),textDecoration:z.enum(['none','underline','line-through']).optional(),textTransform:z.enum(['none','uppercase','lowercase']).optional(),
   x:z.number().finite().min(-100).max(200).optional(),
   y:z.number().finite().min(-100).max(200).optional(),

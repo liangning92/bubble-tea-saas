@@ -58,3 +58,21 @@ test('two price gaps measure actual separation, preserve independent card scope 
 test('canvas padding insets every canvas layer without rewriting user positions',()=>{const padded=controls.applyPosterDesignPatch(editable,{containerPaddingX:60,containerPaddingY:40});const layout=posterLayout(padded,2),headline=layout.layers.find(l=>l.key==='headline'),grid=layout.layers.find(l=>l.key==='grid');assert.equal(headline.owner.x,60);assert.equal(headline.owner.y,40);assert.equal(grid.owner.x,60);assert.equal(grid.owner.height,1000);assert.equal(padded.elements?.headline,undefined);});
 
 test('today popout composes with the user card rotation',()=>{const config={...editable,elements:{card:{rotation:12}},designConfig:{highlightMode:'popout',highlightScale:1.1}};assert.ok(render({posterConfig:config},{day:1}).includes('transform:rotate(12deg) scale(1.1)'));});
+
+test('custom text survives API storage, keeps dynamic amounts and escapes arbitrary copy',()=>{
+ const schema=load('server/src/utils/activityPosterSchema.ts').activityPosterSchema;
+ const config=schema.parse({...editable,elements:{headline:{text:'Custom <headline>'},specialPrice:{text:'Today: {amount}'},footer:{text:'Custom conditions',visible:true}},cardItems:[{...editable.cardItems[0],elements:{productName:{text:'Custom tea'},savingAmount:{text:'{label}: {amount}'}}}]});
+ const html=render({posterConfig:config},{language:2});
+ assert.ok(html.includes('Custom &lt;headline&gt;'));assert.ok(html.includes('Today: Rp 12.000'));assert.ok(html.includes('Hemat: Rp 4.000'));assert.ok(html.includes('Custom tea'));assert.ok(html.includes('Custom conditions'));
+ assert.ok(!html.includes('<headline>'));assert.ok(!html.includes('undefined'));
+ const noPrice=render({type:'buy_get',posterConfig:{freeform:true,elements:{specialPrice:{text:'Today: {amount}'}},cardItems:[{productName:'Tea'}]}});assert.ok(!noPrice.includes('Today:'));
+ assert.equal(schema.safeParse({elements:{headline:{text:'x'.repeat(1001)}}}).success,false);
+});
+test('price fitting contains multilingual and explicit multiline copy without changing stored font settings',()=>{
+ const {fitPosterPriceText}=load('shared/utils/posterText.ts'),style={fontSize:48,lineHeight:1.2,strokeWidth:2};
+ for(const text of ['原价 : 16000','Harga Spesial : 12000','Normal price : Rp 16.000','Harga penawaran khusus : 12000','優惠活動價格 : 12000','Promo\n12000']){
+  const fitted=fitPosterPriceText(text,style,310,35);assert.ok(fitted>0&&fitted<=48);assert.ok(fitted*1.2*text.split('\n').length+4<=35.001);
+ }
+ assert.equal(style.fontSize,48);
+ for(const language of [0,1,2]){const html=render({posterConfig:{...editable,columns:5,elements:{specialPrice:style}}},{language});assert.ok(html.includes('white-space:pre;overflow-wrap:normal'));}
+});
