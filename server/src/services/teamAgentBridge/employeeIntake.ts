@@ -26,7 +26,18 @@ export async function assertLegacyConsumer(db:any,storeId:string,channelId:strin
  * fact; no child/model/timer/network. Presence returns true and excludes legacy. */
 export async function enqueueEmployeeIntake(db:any,storeId:string,c:TeamChannel,message:any,nowMs=Date.now()):Promise<boolean> {
   const row=await readRoute(db,storeId,c.id)
-  if(!row)return false
+  if(!row){
+    // An agent-labelled conversation without a route is not an enabled AI.
+    // Save a visible failure rather than silently dropping the question or
+    // sending it through a different/paid legacy model. Ordinary human-only
+    // channels retain their existing legacy behavior.
+    if(message.ai||message.agent||!c.members.some(m=>m.staffId.startsWith('agent:'))||!c.members.some(m=>m.staffId===message.authorId))return false
+    const id=eventId(c.id,message.id),key=employeeIntakeKey(id)
+    const value={eventId:id,channelId:c.id,messageId:message.id,sourceSeq:message.seq,sourceStaffId:message.authorId,
+      state:'blocked',reason:'EMPLOYEE_ROUTE_NOT_CONFIGURED',createdAt:message.createdAt,updatedAt:new Date(nowMs).toISOString()}
+    await db.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,category:'staff',value:JSON.stringify(value)},update:{}})
+    return true
+  }
   if(message.ai||message.agent)return true
   let route:EmployeeRoute|undefined,reason:string|undefined
   try{route=employeeRouteSchema.parse(JSON.parse(row.value))}catch{reason='EMPLOYEE_ROUTE_INVALID'}
