@@ -451,7 +451,7 @@ export function ActivityPosterEditor({
           </div>
 
           <button type="button" className={`w-full rounded-lg border px-3 py-2 text-sm font-semibold ${activeTab==='elements'?'bg-sky-50 border-sky-400 text-sky-800':'bg-white'}`} onClick={()=>setActiveTab('elements')}>{l('图层与自由编辑','Layers & free positioning','Lapisan & posisi bebas')}</button>
-          {activeTab==='elements'&&<PosterElementInspector value={{...config,cardItems:currentCards}} onChange={update} selection={elementSelection} onSelect={setElementSelection} language={language}/>}
+          {activeTab==='elements'&&<PosterElementInspector activity={{...activity,name:activityName,products}} value={{...config,cardItems:currentCards}} onChange={update} selection={elementSelection} onSelect={setElementSelection} language={language}/>}
           {/* TAB 1: CARDS & ROWS (Add/Delete/Reorder Columns & Rows) */}
           {activeTab === 'cards' && (
             <div className="space-y-4">
