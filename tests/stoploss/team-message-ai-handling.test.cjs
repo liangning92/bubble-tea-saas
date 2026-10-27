@@ -54,3 +54,7 @@ test('unconfigured Hermes route is visible as inactive, without details from the
  const f=fixture(),key=intake(f,'blocked');f.records.set(key,{...f.records.get(key),reason:'EMPLOYEE_ROUTE_NOT_CONFIGURED',secret:'PRIVATE'})
  const r=(await f.run()).get('m0');assert.equal(r.failureReason,'paused');assert(!JSON.stringify(r).includes('PRIVATE'))
 })
+test('a preserved human takeover explains who must resume without exposing policy details',async()=>{
+ const f=fixture();f.job(0,{status:'blocked',error:'TEAM_WORKFLOW_PAUSED_HUMAN_TAKEOVER',policy:{secret:'PRIVATE'}})
+ const r=(await f.run()).get('m0');assert.equal(r.failureReason,'human');assert(!JSON.stringify(r).includes('PRIVATE'))
+})

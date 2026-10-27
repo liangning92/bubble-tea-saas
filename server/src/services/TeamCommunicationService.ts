@@ -159,7 +159,7 @@ async function messageRows(db: DB, storeId: string, id: string, after: number, l
     ...(until !== undefined ? { lte: prefix + pad(until) } : {}) } }, orderBy: { key: 'asc' }, take: limit }))
     .map((r: any) => JSON.parse(r.value))
 }
-export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused' | 'failed'; updatedAt: string; detail?: string; failureReason?:'permission'|'paused'|'execution'|'delayed'|'timeout'|'review' }
+export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused' | 'failed'; updatedAt: string; detail?: string; failureReason?:'permission'|'paused'|'execution'|'delayed'|'timeout'|'review'|'human' }
 /** Read-only source status. Never project a colleague's job or an audit-only history floor. */
 export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel, messages: any[], nowMs=Date.now()) {
   const member = c.members.find(m => m.staffId === a.staffId)
@@ -188,7 +188,7 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
     else if (['queued', 'retry_wait'].includes(j.status)) state = paused ? 'paused' : 'queued'
     if (state) {
       const failureReason:OwnAiHandling['failureReason']=j.status==='awaiting_approval'?'review':
-        ['blocked','uncertain'].includes(j.status)?(/PAUSED|EXPIRED|DISABLED|NOT_CONFIGURED|BUDGET|RATE_LIMIT/.test(j.error||'')?'paused':/GRANT|AUTHORIZ|ACCESS|PERMISSION|REVOK/.test(j.error||'')?'permission':'execution'):
+        ['blocked','uncertain'].includes(j.status)?(/HUMAN_TAKEOVER/.test(j.error||'')?'human':/PAUSED|EXPIRED|DISABLED|NOT_CONFIGURED|BUDGET|RATE_LIMIT/.test(j.error||'')?'paused':/GRANT|AUTHORIZ|ACCESS|PERMISSION|REVOK/.test(j.error||'')?'permission':'execution'):
         state==='paused'?'paused':state==='processing'&&Number.isFinite(j.leaseUntil)&&j.leaseUntil<nowMs?'timeout':
         state==='queued'&&nowMs-Date.parse(j.updatedAt)>120000?'delayed':undefined
       output.set(m.id, { state, updatedAt: j.updatedAt, ...(failureReason?{failureReason}:{}) })

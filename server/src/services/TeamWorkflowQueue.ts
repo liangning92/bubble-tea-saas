@@ -50,7 +50,24 @@ export async function enqueueTeamWorkflow(db: any, a: TeamActor, c: TeamChannel,
   if (message.ai || message.agent) return
   if (await enqueueEmployeeIntake(db,a.storeId,c,message)) return
   const inherited = await inheritManagementPolicy(db, a.storeId, c)
-  if (inherited.active && 'paused' in inherited && inherited.paused) return
+  if (inherited.active && 'paused' in inherited && inherited.paused) {
+    // A pause stops AI execution, not acknowledgement of the saved question.
+    // Preserve the explicit takeover/exception; never resume it implicitly.
+    const key=workflowJobKey(c.id,message.seq)
+    if(!await ports.read(db,a.storeId,key)){
+      const p:WorkflowPolicy=await ports.read(db,a.storeId,'workflow.policy.'+c.id)
+      const defaults=await ports.read(db,a.storeId,'workflow.defaults')
+      const job:WorkflowJob={id:message.id,channelId:c.id,sourceSeq:message.seq,sourceAuthorId:a.staffId,
+        sourceHash:workflowHash({text:message.text,files:message.files}),policyHash:p?.hash||'',
+        operatorUserId:p?.operatorUserId||defaults?.ownerUserId||'',operatorStaffId:p?.operatorStaffId||defaults?.ownerStaffId||'',
+        sourceFloor:Math.max(...c.members.map(m=>m.fromSeq)),version:1,attempt:0,status:'blocked',billingStatus:'not_started',
+        error:p?.takeover?'TEAM_WORKFLOW_PAUSED_HUMAN_TAKEOVER':'TEAM_WORKFLOW_PAUSED',createdAt:message.createdAt,updatedAt:message.createdAt,
+        timing:{sourceWrittenAt:message.sourceWrittenAt||message.createdAt,enqueuedAt:new Date().toISOString()}}
+      await ports.write(db,a.storeId,key,job)
+      await workflowEvent(db,a.storeId,c.id,{jobId:job.id,sourceSeq:job.sourceSeq,status:job.status,reason:job.error},ports)
+    }
+    return
+  }
   if (inherited.active && 'unavailable' in inherited && inherited.unavailable) {
     const unavailable = inherited.unavailable, key = workflowJobKey(c.id, message.seq)
     if (!await ports.read(db, a.storeId, key)) {
