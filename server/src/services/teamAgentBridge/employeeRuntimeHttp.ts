@@ -31,7 +31,8 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
       res.json({result:result??null})
     }catch(error:any){
       console.error('[EmployeeRuntimeHttp] RPC error in', v?.method, error?.message || error, error?.stack)
-      res.status(403).json({error:'EMPLOYEE_RUNTIME_RPC_DENIED'})
+      const code=/^(?:EMPLOYEE|TEAM)_[A-Z0-9_]{1,90}$/.test(error?.message||'')?error.message:'EMPLOYEE_RUNTIME_RPC_DENIED'
+      res.status(403).json({error:'EMPLOYEE_RUNTIME_RPC_DENIED',code})
     }
   })
   router.post('/v1/chat/completions',async(req,res)=>{

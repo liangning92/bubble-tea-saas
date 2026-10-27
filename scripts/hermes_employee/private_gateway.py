@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import signal
 import socket
 import sqlite3
@@ -140,7 +141,7 @@ class Gateway:
             # would prevent applying the remaining absolute deadline per read.
             response = http.client.HTTPResponse(sock, method='POST')
             response.begin()
-            if not 200 <= response.status < 300: raise ValueError('RPC_REJECTED')
+            status = response.status
             chunks, size = [], 0
             while True:
                 remaining = min(10,until-time.time())
@@ -155,6 +156,12 @@ class Gateway:
             timer.cancel()
             if 'response' in locals(): response.close()
             connection.close()
+        if not 200 <= status < 300:
+            try: code = json.loads(raw).get('code')
+            except (ValueError, AttributeError): code = None
+            # Only stable backend categories cross into the journal. Never retain
+            # response prose, URLs, tokens or stack traces as a failure code.
+            raise ValueError(code if isinstance(code,str) and re.fullmatch(r'(?:EMPLOYEE|TEAM)_[A-Z0-9_]{1,90}',code) else 'RPC_REJECTED')
         value = json.loads(raw)
         if set(value) != {"result"}:
             raise ValueError("RPC_UNCONFIRMED")
@@ -216,9 +223,11 @@ class Gateway:
                 child.stdin.write(json.dumps({"result": result})+"\n"); child.stdin.flush()
             if child.wait(timeout=max(.001, until-time.time())) == 0 and finished:
                 state, code = "complete", None
-        except BaseException:
+        except BaseException as error:
             # No raw exception/URL/provider prose is logged or persisted.
-            pass
+            candidate = str(error)
+            if re.fullmatch(r'(?:EMPLOYEE|TEAM|RPC)_[A-Z0-9_]{1,90}',candidate):
+                code = candidate
         finally:
             try:
                 if child and child.poll() is None:

@@ -159,7 +159,7 @@ async function messageRows(db: DB, storeId: string, id: string, after: number, l
     ...(until !== undefined ? { lte: prefix + pad(until) } : {}) } }, orderBy: { key: 'asc' }, take: limit }))
     .map((r: any) => JSON.parse(r.value))
 }
-export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused'; updatedAt: string; detail?: string }
+export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused' | 'failed'; updatedAt: string; detail?: string; failureReason?:'permission'|'paused'|'execution'|'delayed' }
 /** Read-only source status. Never project a colleague's job or an audit-only history floor. */
 export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel, messages: any[]) {
   const member = c.members.find(m => m.staffId === a.staffId)
@@ -167,9 +167,12 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
   const output = new Map<string, OwnAiHandling>()
   if (!own.length) return output
   const prefix = `workflow.job.${c.id}.`, settings = [`workflow.policy.${c.id}`, 'workflow.defaults', `workflow.exception.${c.id}`]
-  const keys = [...own.map(m => TEAM_PREFIX + prefix + pad(m.seq)), ...settings.map(key => TEAM_PREFIX + key)]
+  const hermesRouteKey='externalAgent.teamBridge.v1.employeeRoute.'+c.id
+  const intakeKey=(id:string)=>'externalAgent.teamBridge.v1.employeePending.'+createHash('sha256').update(JSON.stringify(['employee_work',c.id,id])).digest('hex')
+  const keys = [...own.map(m => TEAM_PREFIX + prefix + pad(m.seq)), ...settings.map(key => TEAM_PREFIX + key),...own.flatMap(m=>[TEAM_PREFIX+'employeeContinuation.event.'+m.id,intakeKey(m.id)]),hermesRouteKey,TEAM_PREFIX+'ai.agent.settings']
   const rows = await db.config.findMany({ where: { storeId: a.storeId, key: { in: keys } }, select: { key: true, value: true } })
   const records = new Map<string, any>(rows.map((row: any) => [row.key.slice(TEAM_PREFIX.length), JSON.parse(row.value)]))
+  const absoluteRecords=new Map<string,any>(rows.map((row:any)=>[row.key,JSON.parse(row.value)]))
   const p = records.get(settings[0]), defaults = records.get(settings[1]), exception = records.get(settings[2])
   const paused = p?.paused === true || p?.enabled === false || defaults?.enabled === false || !!exception
   for (const m of own) {
@@ -227,6 +230,44 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
         }
       }
     } catch {}
+  }
+  const hermesRoute=absoluteRecords.get(hermesRouteKey),agentSettings=absoluteRecords.get(TEAM_PREFIX+'ai.agent.settings')
+  const ownedEvents=own.map(m=>({m,event:records.get('employeeContinuation.event.'+m.id)})).filter(({m,event})=>event?.event?.channelId===c.id&&event.event.sourceMessageId===m.id&&event.event.sourceSeq===m.seq&&event.event.sourceStaffId===a.staffId)
+  const loadProjectionRows=async(keys:string[])=>{if(!keys.length)return;for(const row of await db.config.findMany({where:{storeId:a.storeId,key:{in:[...new Set(keys)]}},select:{key:true,value:true}}))absoluteRecords.set(row.key,JSON.parse(row.value))}
+  await loadProjectionRows([...ownedEvents.flatMap(({event})=>event.executionId?[TEAM_PREFIX+'employeeContinuation.execution.'+event.executionId,TEAM_PREFIX+'employeeOrchestration.mapping.'+event.executionId]:[]),...(hermesRoute?.agentId?['externalAgent.teamBridge.v1.grant.'+hermesRoute.agentId]:[])])
+  await loadProjectionRows(ownedEvents.flatMap(({event})=>{const receipt=absoluteRecords.get(TEAM_PREFIX+'employeeContinuation.execution.'+event.executionId),mapping=absoluteRecords.get(TEAM_PREFIX+'employeeOrchestration.mapping.'+event.executionId);return [...(receipt?.reportId?[TEAM_PREFIX+'employeeOrchestration.report.'+receipt.reportId]:[]),...(mapping?.executionId?[TEAM_PREFIX+'employeeRuntime.execution.'+mapping.executionId]:[])]}))
+  const liveHermesGrant=hermesRoute?.agentId&&absoluteRecords.get('externalAgent.teamBridge.v1.grant.'+hermesRoute.agentId)
+  // Per-source Hermes receipts override generic workflow review labels. A reply
+  // to a later question must never hide a failed earlier request. Only the
+  // requesting member sees these allowlisted outcomes, not raw faults or grants.
+  for(const m of own){
+    const intake=absoluteRecords.get(intakeKey(m.id)),event=records.get('employeeContinuation.event.'+m.id)
+    const validIntake=intake?.channelId===c.id&&intake?.messageId===m.id&&intake?.sourceSeq===m.seq&&intake?.sourceStaffId===a.staffId
+    const validEvent=event?.event?.channelId===c.id&&event.event.sourceMessageId===m.id&&event.event.sourceSeq===m.seq&&event.event.sourceStaffId===a.staffId
+    if(validIntake&&intake.state==='blocked'){
+      const reason=typeof intake.reason==='string'?intake.reason:''
+      output.set(m.id,{state:'failed',updatedAt:intake.updatedAt||m.createdAt,failureReason:/PAUSED|EXPIRED|DISABLED/.test(reason)?'paused':/GRANT|AUTHORIZ|ACCESS|PERMISSION|REVOK/.test(reason)?'permission':'execution'})
+    }else if(validEvent&&event.status==='unknown'){
+      const mapping=absoluteRecords.get(TEAM_PREFIX+'employeeOrchestration.mapping.'+event.executionId)
+      const runtime=mapping?.executionId&&absoluteRecords.get(TEAM_PREFIX+'employeeRuntime.execution.'+mapping.executionId),code=runtime?.scope?.channelId===c.id?String(runtime.fault?.code||''):''
+      output.set(m.id,{state:'failed',updatedAt:event.finishedAt||m.createdAt,failureReason:/PAUSED|EXPIRED|DISABLED/.test(code)?'paused':/NOT_VISIBLE|NOT_GRANTED|AUTHORIZ|ACCESS|PERMISSION|REVOK|GRANT/.test(code)?'permission':'execution'})
+    }else if(validEvent&&['waiting_for_staff','awaiting_review'].includes(event.status)){
+      output.set(m.id,{state:'failed',updatedAt:m.createdAt,failureReason:'execution'})
+      // The continuation receipt is source-specific; its delivered question or
+      // stored report is authoritative, unlike "any agent message after this".
+      const receipt=absoluteRecords.get(TEAM_PREFIX+'employeeContinuation.execution.'+event.executionId)
+      if(receipt?.question?.messageId&&receipt.question.seq>m.seq)output.set(m.id,{state:'replied',updatedAt:receipt.finishedAt||m.createdAt})
+      else if(receipt?.reportId){
+        const report=absoluteRecords.get(TEAM_PREFIX+'employeeOrchestration.report.'+receipt.reportId)
+        output.set(m.id,report?.sourceMessageId===m.id&&report?.outbound?.messageId&&report.outbound.seq>m.seq?{state:'replied',updatedAt:receipt.finishedAt||m.createdAt}:{state:'failed',updatedAt:receipt.finishedAt||m.createdAt,failureReason:'execution'})
+      }
+    }else if(validIntake&&hermesRoute&&(hermesRoute.enabled===false||hermesRoute.paused||Date.parse(hermesRoute.expiresAt)<=Date.now()||agentSettings?.enabled===false||agentSettings?.employeeBridgeEnabled===false||agentSettings?.expiresAt&&Date.parse(agentSettings.expiresAt)<=Date.now())){
+      output.set(m.id,{state:'failed',updatedAt:intake.updatedAt||m.createdAt,failureReason:'paused'})
+    }else if(validIntake&&hermesRoute&&(!liveHermesGrant||liveHermesGrant.revoked||Date.parse(liveHermesGrant.expiresAt)<=Date.now())){
+      output.set(m.id,{state:'failed',updatedAt:intake.updatedAt||m.createdAt,failureReason:'permission'})
+    }else if(validIntake&&intake.state==='pending'&&Date.now()-Date.parse(intake.createdAt)>120000){
+      output.set(m.id,{state:'queued',updatedAt:intake.updatedAt||m.createdAt,failureReason:'delayed'})
+    }
   }
   return output
 }
