@@ -1,3 +1,4 @@
+import { pdcaPilotDiagnostic } from './agentTasks/diagnostics'
 import { z } from 'zod'
 import prisma from '../config/database'
 import { grantSchema, actions } from './teamAgentBridge/contract'
@@ -105,11 +106,12 @@ export function agentSettingsService(db: any = prisma) {
         merged.expiresAt=expiries[0]||null
       }
       if(process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN&&merged.agentOrigin==='http://127.0.0.1:8642')merged.agentOrigin=process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN
-      const pilotEnabledEnv = process.env.AGENT_TASK_PILOT_ENABLED === '1'
+      const pdcaPilot = await pdcaPilotDiagnostic(db, a.storeId)
       const employeeEnabledEnv = process.env.EMPLOYEE_HERMES_ENABLED === '1'&&(!process.env.EMPLOYEE_HERMES_STORE_ID||process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId)
 
       const systemState = {
-        pilotState: pilotEnabledEnv ? 'running' : 'disabled',
+        pilotState: pdcaPilot.state === 'valid' ? 'running' : pdcaPilot.state,
+        pdcaPilot,
         employeeBridgeConfigured: employeeEnabledEnv,
         runtimeAvailable: employeeEnabledEnv&&await employeeGatewayReachable(merged.agentOrigin),
         hostOrigin: merged.agentOrigin,
@@ -119,7 +121,7 @@ export function agentSettingsService(db: any = prisma) {
             name: 'STOCK-RO-001 库存比对审计 (PDCA)',
             description: '比对账本库存与现场物理盘点证据，执行自主审查并生成不可篡改报告。',
             tools: ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report'],
-            active: merged.enabled && merged.pdcaPilotEnabled
+            active: merged.enabled && merged.pdcaPilotEnabled && pdcaPilot.state === 'valid'
           },
           {
             id: 'employee_coordination',

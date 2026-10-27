@@ -14,7 +14,8 @@ export function posterCopySnapshot(activity: PosterInput, config: ActivityPoster
             elements: { ...config.elements, [key]: { ...config.elements?.[key], ...style } },
             cardItems: config.cardItems?.map((c, i) => i === index ? { ...c, elements: { ...c.elements, [key]: { ...c.elements?.[key], ...style } } } : c) };
         const html = renderActivityPoster({ ...activity, posterConfig: cfg }, { language, page: Math.floor(index / capacity), day: 1 });
-        const doc = new DOMParser().parseFromString(html, 'text/html');
+        // Text inspection must not load poster images from a detached document.
+        const doc = new DOMParser().parseFromString(html.replace(/<img\b[^>]*>/gi, ''), 'text/html');
         const selector = `[data-element-key="${key}"]${['headline','subheadline','footer'].includes(key) ? '' : `[data-card-index="${index}"]`}`;
         return doc.querySelector(selector)?.textContent || '';
     };

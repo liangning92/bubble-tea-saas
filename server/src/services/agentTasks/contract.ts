@@ -26,7 +26,9 @@ export type AgentPlan = z.infer<typeof agentPlanSchema>
 const mutation = { requestId: uuid, authVersion: version }
 export const assignTaskSchema = z.object({ ...mutation, channelId: uuid,
   taskCode: z.literal('STOCK-RO-001'), expectedVersion: z.literal(0), plan: agentPlanSchema }).strict()
-export const readTaskSchema = z.object({ taskId: uuid, authVersion: version }).strict()
+// Read-only fixed alias resolves inside the current manager's authorized store.
+// Mutations and executor reads continue to require the authoritative UUID.
+export const readTaskSchema = z.object({ taskId: z.union([uuid, z.literal('STOCK-RO-001')]), authVersion: version }).strict()
 export const claimTaskSchema = z.object({ ...mutation, taskId: uuid, runId: uuid,
   round: version, expectedVersion: version }).strict()
 export const leaseSchema = z.object({ ...mutation, taskId: uuid, runId: uuid, round: version,
