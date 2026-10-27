@@ -136,7 +136,6 @@ var YOUME_POSTER = (() => {
         if (priceKey) {
           const nextY = layout.layers.filter((l2) => l2.cardIndex === i && ["originalPrice", "specialPrice", "savingAmount", "dayBadge"].includes(l2.key) && l2.key !== key && l2.style.visible !== false && (!fields[l2.key] || cfg.showFields?.[fields[l2.key]] !== false) && l2.rect.y > layer.rect.y).reduce((y, l2) => Math.min(y, l2.rect.y), card.y + card.height);
           style.fontSize = fitPosterPriceText(copy, style, layer.rect.width, Math.min(layer.rect.height, Math.max(0, nextY - layer.rect.y)));
-          style.lineHeight = Math.max(1.2, style.lineHeight || 1.2);
         }
         if (style.visible === false || key === "highlight" && !active || fields[key] && cfg.showFields?.[fields[key]] === false)
           return "";

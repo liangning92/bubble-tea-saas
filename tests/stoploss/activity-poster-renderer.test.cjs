@@ -74,5 +74,6 @@ test('price fitting contains multilingual and explicit multiline copy without ch
   const fitted=fitPosterPriceText(text,style,310,35);assert.ok(fitted>0&&fitted<=48);assert.ok(fitted*1.2*text.split('\n').length+4<=35.001);
  }
  assert.equal(style.fontSize,48);
+ const customLine=render({posterConfig:{...editable,elements:{specialPrice:{text:'Promo\n{amount}',lineHeight:.8}}}});assert.ok(customLine.includes('line-height:0.8'));
  for(const language of [0,1,2]){const html=render({posterConfig:{...editable,columns:5,elements:{specialPrice:style}}},{language});assert.ok(html.includes('white-space:pre;overflow-wrap:normal'));}
 });

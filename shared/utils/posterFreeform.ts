@@ -40,7 +40,6 @@ export function renderFreeformPoster(a: PosterInput, options: {
                 // Fit inside both the requested box and the next visible row, preserving row positions/gaps.
                 const nextY = layout.layers.filter(l => l.cardIndex === i && ['originalPrice','specialPrice','savingAmount','dayBadge'].includes(l.key) && l.key !== key && l.style.visible !== false && (!fields[l.key] || cfg.showFields?.[fields[l.key]!] !== false) && l.rect.y > layer.rect.y).reduce((y,l) => Math.min(y,l.rect.y), card.y + card.height);
                 style.fontSize = fitPosterPriceText(copy, style, layer.rect.width, Math.min(layer.rect.height, Math.max(0,nextY-layer.rect.y)));
-                style.lineHeight = Math.max(1.2,style.lineHeight || 1.2);
             }
             if (style.visible === false || key === 'highlight' && !active || fields[key] && cfg.showFields?.[fields[key]!] === false)
                 return '';
