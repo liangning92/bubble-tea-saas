@@ -6,6 +6,7 @@ import { userAccessV2 } from '../StaffPermissionV2Service'
 import { buildTeamStockReadOnlySource, StockReadOnlySnapshot } from '../TeamStockReadOnlySource'
 import { readAuthorizedBridgeChannel, directDelegationAudienceHash } from './directDelegation'
 import type { BridgeGrant, CommunicationScope } from './contract'
+import {employeeStockOutSummary,stockOutPeriodFromQuery} from './employeeStockOutSummary'
 
 export interface EmployeeInventoryEvidence {
   items: Array<{ id:string; name:string; unit:string; bookQuantity:number; bookUpdatedAt:string;
@@ -23,7 +24,8 @@ export interface EmployeeInventoryEvidence {
     createdAt: string;
     note: string | null;
   }>;
-  sourceRefs:string[]; fingerprint:string; hasMoreMatches:boolean
+  stockOutSummary?:Omit<Awaited<ReturnType<typeof employeeStockOutSummary>>,'asOf'>;
+  sourceRefs:string[]; fingerprint:string; hasMoreMatches:boolean; hasMoreStockOuts?:boolean
 }
 export type EmployeeInventoryEvidencePort = (db:any,grant:BridgeGrant,scope:CommunicationScope,input:{query:string})=>Promise<EmployeeInventoryEvidence>
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex')
@@ -81,7 +83,8 @@ export async function readEmployeeInventoryEvidence(db:any,g:BridgeGrant,scope:C
     if (qLower.includes(k.toLowerCase())) searchTerms.push(...aliases)
   }
   const orConditions = searchTerms.flatMap(term => [{ id: term }, { name: { contains: term, mode: 'insensitive' as const } }])
-  const isMovementQuery = /outbound|movement|log|出库|入库|消耗|昨天|今天|记录/.test(qLower)
+  const isMovementQuery = /outbound|movement|log|stok keluar|hari ini|kemarin|today|yesterday|出库|入库|消耗|昨天|今天|记录|\d{4}-\d{2}-\d{2}/.test(qLower)
+  const period=isMovementQuery?stockOutPeriodFromQuery(query):undefined
   const captured = await db.$transaction(async(tx:any)=>{
     const permissionHash=await authorize(tx,g,scope),proofs:Record<string,string>={}
     // Reuse the certified count/boundary checks while restricting the original
@@ -92,7 +95,7 @@ export async function readEmployeeInventoryEvidence(db:any,g:BridgeGrant,scope:C
       ? { inventory: { storeId: g.storeId } }
       : { inventoryId: { in: snapshot.items.slice(0, 10).map((r: any) => r.id) } }
     const rawStockOuts = await tx.stockOutLog.findMany({
-      where: stockOutWhere,
+      where: {...stockOutWhere,...(period?{createdAt:{gte:new Date(period.startDate!+'T00:00:00+07:00'),lt:new Date(new Date(period.endDate!+'T00:00:00+07:00').getTime()+86400000)}}:{})},
       include: { inventory: { select: { id: true, name: true, unit: true } } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 25
@@ -125,7 +128,11 @@ export async function readEmployeeInventoryEvidence(db:any,g:BridgeGrant,scope:C
         note: cleanNote
       }
     })
-    return {snapshot,permissionHash,proofs,recentStockOuts,rawStockOuts}
+    const summary=period?await employeeStockOutSummary(tx,g.storeId,period):undefined
+    // Observation time changes on each read; source equality binds the full
+    // native period/results rather than an incidental fresh wall-clock timestamp.
+    const stockOutSummary=summary?(({asOf,...stable})=>stable)(summary):undefined
+    return {snapshot,permissionHash,proofs,recentStockOuts,rawStockOuts,stockOutSummary}
   },{isolationLevel:'RepeatableRead'})
   if(await authorize(db,g,scope)!==captured.permissionHash)deny() // Refuse ACL/audience changes during snapshot I/O.
   const chosen=captured.snapshot.items.slice(0,10)
@@ -134,6 +141,6 @@ export async function readEmployeeInventoryEvidence(db:any,g:BridgeGrant,scope:C
       physicalQuantity:row.observation.physicalStock,historicalComparable:row.observation.comparable,historicalDifference:row.observation.difference,
       currentComparable:row.currentComparable,currentDifference:row.currentDifference,blockers:row.observation.blockers}:null,blockers:row.blockers}))
   const sourceRefs=[...chosen.flatMap(row=>[row.sourceId,...(row.observation?.sourceIds||[])]), ...captured.rawStockOuts.map((s: any)=>'stockOutLog:'+s.id)]
-  const facts={items,recentStockOuts:captured.recentStockOuts,sourceRefs,hasMoreMatches:captured.snapshot.items.length>10}
+  const facts={items,recentStockOuts:captured.recentStockOuts,...(captured.stockOutSummary?{stockOutSummary:captured.stockOutSummary,hasMoreStockOuts:captured.stockOutSummary.totalRecords>captured.recentStockOuts.length}:{}),sourceRefs,hasMoreMatches:captured.snapshot.items.length>10}
   return {...facts,fingerprint:hash({facts,permissionHash:captured.permissionHash,nativeEvidence:chosen,proofs:chosen.filter(row=>row.observation).map(row=>({itemId:row.observation!.itemId,hash:captured.proofs['inventoryCountObservation.'+row.observation!.itemId]}))})}
 }

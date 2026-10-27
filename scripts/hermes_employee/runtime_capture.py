@@ -205,6 +205,10 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
     with config_path.open('x', encoding='utf-8') as config_file:
         os.chmod(config_path, 0o600)
         config_file.write('tools:\n  tool_search:\n    enabled: "off"\n')
+        # Terminal tooling is not part of this profile. Its asynchronous local
+        # Python probe can add a host-dependent prompt line after a cold start,
+        # breaking the reviewed system assembly before any model request.
+        config_file.write('agent:\n  environment_probe: false\n')
         # The reviewed backend model supports native image input. An isolated
         # custom provider has no cached catalog; declare its actual capability
         # instead of silently flattening verified photos into a text disclaimer.

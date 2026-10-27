@@ -68,6 +68,21 @@ async function main(){
   const observed={...db,$transaction:(fn,options)=>db.$transaction(tx=>fn({...tx,inventory:{findMany:args=>{seen=true;assert.equal(args.take,11);assert(args.where.storeId===storeId&&args.where.OR.length===2);assert(!Object.keys(args.select).some(k=>/cost|price|profit/i.test(k)));return tx.inventory.findMany(args)}}}),options)};
   await read(observed,g,scope,{query:'Cup'});assert(seen);assert.deepEqual(await db.inventory.findMany({orderBy:{id:'asc'}}),before);assert.equal(await db.stockInLog.count(),logs);
  });
+ await check('daily outbound totals cover every row and Jakarta boundary, separate sales estimates and retain actual ACL',async()=>{
+  const {startOfDay,formatDate}=require(root+'/server/dist/utils/dateUtils'),{employeeStockOutSummary:summary,stockOutPeriodFromQuery}=built('teamAgentBridge/employeeStockOutSummary'),{executeBusinessTool}=built('teamAgentBridge/employeeBusinessTools');
+  const start=startOfDay(new Date()),day=formatDate(start,'YYYY-MM-DD'),end=new Date(start.getTime()+86400000);
+  const rows=Array.from({length:30},(_,n)=>({inventoryId:'sugar',quantity:0.1,reason:'withdrawal',createdAt:new Date(start.getTime()+n*1000)}));
+  rows.push({inventoryId:'sugar',quantity:0.5,reason:'loss',createdAt:new Date(end.getTime()-1)},{inventoryId:'sugar',quantity:4,reason:'sale_estimate',createdAt:new Date(start.getTime()+40000)},{inventoryId:'sugar',quantity:100,reason:'withdrawal',createdAt:new Date(start.getTime()-1)},{inventoryId:'sugar',quantity:200,reason:'withdrawal',createdAt:end},{inventoryId:'cross-store',quantity:999,reason:'withdrawal',createdAt:start});
+  await db.stockOutLog.createMany({data:rows});
+  const result=await executeBusinessTool(db,g,scope,'employee_manage_inventory',{action:'list_stock_out',startDate:day,endDate:day},'read-only-query');
+  assert.equal(result.complete,true);assert.equal(result.totalRecords,32);assert.equal(result.timeZone,'Asia/Jakarta');assert.equal(result.startAt,start.toISOString());assert.equal(result.endExclusive,end.toISOString());
+  const ordinary=result.items.find(i=>i.reason==='withdrawal');assert.equal(ordinary.records,30);assert(Math.abs(ordinary.quantity-3)<1e-9);assert.equal(ordinary.sourceKind,'recorded_stock_out');assert.equal(result.items.find(i=>i.reason==='sale_estimate').sourceKind,'recipe_sales_estimate');assert(!JSON.stringify(result).includes('SECRET_OTHER_STORE'));assert(!JSON.stringify(result).includes('avgCost'));
+  const legacy=await query('今天出库了哪些原料？');assert.equal(legacy.stockOutSummary.totalRecords,32);assert.equal(legacy.recentStockOuts.length,25);assert.equal(legacy.hasMoreStockOuts,true);assert.equal(legacy.fingerprint,(await query('今天出库了哪些原料？')).fingerprint);
+  assert.equal((await summary(db,storeId,{startDate:day,reason:'withdrawal'})).totalRecords,30);assert.equal((await summary(db,storeId,{startDate:day,inventoryId:'negative'})).totalRecords,0);
+  const yesterday=formatDate(new Date(start.getTime()-86400000),'YYYY-MM-DD');assert.equal(stockOutPeriodFromQuery('昨天出库',start).startDate,yesterday);assert.deepEqual(stockOutPeriodFromQuery('2026-01-01到2026-01-05'),{startDate:'2026-01-01',endDate:'2026-01-05'});
+  await assert.rejects(()=>summary(db,storeId,{startDate:'2026-02-30'}));await assert.rejects(()=>summary(db,storeId,{startDate:'2026-02-05',endDate:'2026-02-01'}));
+  policy.assignments=[];await savePolicy();assert.equal((await executeBusinessTool(db,g,scope,'employee_manage_inventory',{action:'list_stock_out'},'denied-read')).ok,false);policy.assignments=[{staffId:employee.staffId,roleId:'inventory-reader',overrides:{}}];await savePolicy();
+ });
  const out=root+'/output/employee-inventory-evidence';fs.mkdirSync(out,{recursive:true});fs.writeFileSync(out+'/verification.json',JSON.stringify({batch:process.env.BT_TEST_RUN,passed,realPg:true,modelCalls:0,productionWrites:0},null,2));console.log(JSON.stringify({passed,batch:process.env.BT_TEST_RUN}));
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>db.$disconnect());
