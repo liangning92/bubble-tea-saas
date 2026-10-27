@@ -18,9 +18,9 @@ export function createAgentTaskTools(server: McpServer, service: AgentTaskServic
   for (const definition of definitions.filter(d => d.role === role && scopes.includes(d.scope))) {
     let base: any = definition.schema
     while (base instanceof z.ZodEffects) base = base.innerType()
-    const publicSchema = base.omit({ authVersion: true }).strict()
+    const publicSchema = (definition.name === 'get' && role === 'executor' ? base.extend({ taskId: z.string().uuid() }) : base).omit({ authVersion: true }).strict()
     server.registerTool('store_task_' + definition.name, {
-      description: 'STOCK-RO-001 authorized task operation: ' + definition.name + '. Business authorization and versions are enforced by the store backend.',
+      description: 'STOCK-RO-001 authorized task operation: ' + definition.name + '. Business authorization and versions are enforced by the store backend.' + (definition.name === 'get' && role === 'manager' ? ' taskId accepts its UUID or the fixed STOCK-RO-001 alias resolved within your existing authorized store.' : ''),
       inputSchema: fromJsonSchema(zodToJsonSchema(publicSchema, { $refStrategy: 'none' }) as any),
       annotations: { readOnlyHint: definition.name === 'get', destructiveHint: false, idempotentHint: true, openWorldHint: false }
     }, async input => {

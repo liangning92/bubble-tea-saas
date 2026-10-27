@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { createHash, randomUUID } from 'crypto'
 import { TeamError, TeamTask, TEAM_PREFIX, readTeam, writeTeam, lockTeam } from '../TeamCommunicationService'
 import { buildTeamStockReadOnlySource, stockReadOnlySnapshotSchema } from '../TeamStockReadOnlySource'
@@ -152,7 +153,20 @@ export function createAgentTaskService(db:any,deps:AgentTaskDependencies):AgentT
       const e=await event(tx,p,t,'task.dispatch_ready');x.eventId=e.id;await writeTeam(tx,p.storeId,taskKey(t.channelId,t.id),t)
       return receipt(tx,p,v,'assign',await view(tx,p,t))
     })},
-    async get(principal,input){const v=readTaskSchema.parse(input);return db.$transaction(async(tx:any)=>{await storeLock(tx,principal.storeId);const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,scopeForRead(principal),t.channelId,v.authVersion);bound(p,t);return view(tx,p,t,p.role==='manager')})},
+    async get(principal,input){const v=readTaskSchema.parse(input);return db.$transaction(async(tx:any)=>{
+      await storeLock(tx,principal.storeId)
+      if(v.taskId==='STOCK-RO-001') {
+        if(principal.role!=='manager')fail('AGENT_TASK_MANAGER_REQUIRED',403)
+        const pointer=await readTeam<any>(tx,principal.storeId,'agent.task.code.STOCK-RO-001')
+        if(!z.string().uuid().safeParse(pointer?.taskId).success||!z.string().uuid().safeParse(pointer?.channelId).success)fail('AGENT_TASK_NOT_FOUND',404)
+        // Resolve only the fixed current-store pointer, then check the original
+        // live grant/channel/pilot binding before returning any task or evidence.
+        const p=await auth(tx,principal,'management.read',pointer.channelId,v.authVersion),t=await load(tx,p,pointer.taskId)
+        if(t.channelId!==pointer.channelId)fail('AGENT_TASK_NOT_FOUND',404)
+        bound(p,t,'manager');return view(tx,p,t,true)
+      }
+      const t=await load(tx,principal,v.taskId),p=await auth(tx,principal,scopeForRead(principal),t.channelId,v.authVersion);bound(p,t);return view(tx,p,t,p.role==='manager')
+    })},
     async supervise(principal,input){return db.$transaction(async(tx:any)=>{
       await storeLock(tx,principal.storeId);const t=await load(tx,principal,input.taskId),p=await auth(tx,principal,'management.read',t.channelId,input.authVersion);bound(p,t,'manager');version(t,input.expectedVersion);run(t,input)
       const x=t.agentTask

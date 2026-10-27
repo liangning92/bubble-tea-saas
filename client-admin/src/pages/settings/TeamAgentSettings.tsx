@@ -48,7 +48,8 @@ interface CapabilityItem {
 }
 
 interface SystemStateData {
-  pilotState: 'running' | 'disabled' | 'failed'
+  pilotState: 'running' | 'disabled' | 'failed' | 'expired' | 'invalid' | 'unavailable'
+  pdcaPilot?: { state: 'valid' | 'expired' | 'disabled' | 'invalid' | 'unavailable'; renewalRequired: boolean; startedAt?: string; expiresAt?: string }
   employeeBridgeConfigured: boolean
   runtimeAvailable: boolean
   hostOrigin: string
@@ -272,11 +273,18 @@ export function TeamAgentSettings({
           {systemState && (
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-gray-200/60 pt-2.5 text-xs text-gray-500">
               <span>{c.runtime}: <strong className="font-medium text-gray-700">{systemState.runtimeAvailable ? c.ready : c.unreachable}</strong></span>
-              <span>PDCA Pilot: <strong className="font-medium text-gray-700">{systemState.pilotState === 'running' ? c.configured : c.disabled}</strong></span>
               <span>{c.employeeGateway}: <strong className="font-medium text-gray-700">{systemState.employeeBridgeConfigured ? c.configured : c.unreachable}</strong></span>
               <span>{c.agentOrigin}: <code className="rounded bg-gray-200/70 px-1 py-0.5 text-gray-700">{systemState.hostOrigin}</code></span>
             </div>
           )}
+          <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50/40 p-3.5 text-sm" data-testid="pdca-pilot-status" role="status">
+            <h4 className="font-semibold text-gray-900">{c.pdcaStatus}</h4>
+            <p className="mt-1 text-gray-800">{({ valid: c.pdcaValid, expired: c.pdcaExpired, disabled: c.pdcaDisabled, invalid: c.pdcaInvalid, unavailable: c.pdcaUnavailable })[systemState?.pdcaPilot?.state || 'unavailable']}</p>
+            {systemState?.pdcaPilot?.startedAt && systemState.pdcaPilot.expiresAt && (
+              <p className="mt-2 break-words text-xs text-gray-600">{c.pdcaPeriod}: {new Date(systemState.pdcaPilot.startedAt).toLocaleString(language === 'zh' ? 'zh-CN' : language === 'id' ? 'id-ID' : 'en-US', { timeZone: 'Asia/Jakarta' })} → {new Date(systemState.pdcaPilot.expiresAt).toLocaleString(language === 'zh' ? 'zh-CN' : language === 'id' ? 'id-ID' : 'en-US', { timeZone: 'Asia/Jakarta' })}</p>
+            )}
+            <p className="mt-2 text-xs leading-relaxed text-gray-600">{systemState?.pdcaPilot?.renewalRequired ? c.pdcaRenewalHelp : c.pdcaStatusHelp}</p>
+          </div>
         </div>
       </section>
 
