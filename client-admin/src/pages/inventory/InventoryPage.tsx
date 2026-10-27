@@ -1,4 +1,5 @@
 import { formatNumber } from '../../utils/numberDisplay'
+import { InventoryEvidenceExport } from '../../components/InventoryEvidenceExport'
 import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { ConsumptionAlertsWidget } from '../../components/ConsumptionAlertsWidget'
 import { notifyAdmin, confirmAdmin } from '../../components/AdminFeedback'
@@ -379,6 +380,7 @@ export function InventoryPage() {
       <p className="text-sm text-gray-600">{t("inventoryUnified.hint")}</p><div className="grid grid-cols-3 gap-3">{[["materials",inventory.length],["lowStock",inventory.filter(isLowItem).length],["outOfStock",inventory.filter((item:any)=>isStockItem(item)&&!item.calibrationRequired&&item.currentStock<=0).length]].map(([key,value])=><div className="rounded-xl border bg-white p-4" key={key}><p className="text-sm text-gray-500">{t("operations."+key)}</p><p className="text-2xl font-semibold tabular-nums mt-1">{formatNumber(isLoading||isError||key!=='materials'&&inventory.some((item:any)=>item.calibrationRequired)?'—':value)}</p></div>)}</div>
       {isError&&<p role="alert" className="text-red-700"><button type="button" onClick={()=>refetch()}>{t("common.error")} · {t("operations.refresh")}</button></p>}
       <ConsumptionAlertsWidget compact />
+      <InventoryEvidenceExport />
       {/* 分类看板 */}
       <div className="flex gap-3 overflow-x-auto pb-2">
         <div

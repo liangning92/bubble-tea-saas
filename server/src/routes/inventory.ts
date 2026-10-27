@@ -1,4 +1,5 @@
 import {stockOutPhoto} from '../services/teamAgentBridge/employeePhotos'
+import { inventoryEvidenceHandler } from '../services/InventoryEvidenceHttp'
 import { getManualCorrection, correctManualStock } from '../services/ManualStockCorrectionService'
 import { todayStockOuts } from '../services/TodayStockOutService'
 import {refreshInventoryAlerts,handleInventoryAlert} from '../services/InventoryAlertCenterService'
@@ -16,6 +17,9 @@ import { getInventoryAlertConfig, saveInventoryAlertConfig, DEFAULT_INVENTORY_AL
 
 const router = Router()
 const resourceAccess = requireResourceStore(req => prisma.inventory.findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
+
+// Explicitly scoped, immutable download; export permissions are declared in the route manifest.
+router.get('/evidence-export', authenticate, inventoryEvidenceHandler(prisma))
 
 // Validation schemas
 const stockInSchema = z.object({
