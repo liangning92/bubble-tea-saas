@@ -36,13 +36,15 @@ print(json.dumps({'protocol':t['protocol'],'method':'finished','params':{'stored
 class TestGateway(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.root=Path(self.tmp.name)
-        self.calls=[];self.starts=[];self.bearer='synthetic-gateway-'+'g'*32
+        self.calls=[];self.starts=[];self.bearer='synthetic-gateway-'+'g'*32;self.rejection=None
         owner=self
         class Rpc(BaseHTTPRequestHandler):
             def log_message(self,*a):pass
             def do_POST(self):
                 body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 owner.calls.append((body,self.headers.get('Authorization')))
+                if owner.rejection and body['method']=='recordInput':
+                    raw=json.dumps({'error':'EMPLOYEE_RUNTIME_RPC_DENIED','code':owner.rejection}).encode();self.send_response(403);self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw);return
                 if self.path=='/slow-headers':
                     time.sleep(.6)
                     return
@@ -81,6 +83,14 @@ class TestGateway(unittest.TestCase):
         self.assertEqual([c[0]['method'] for c in self.calls],['recordInput','recordResponse','executeTool','recordOutput'])
         self.assertTrue(all(c[1]=='Bearer '+e['callbackCredential'] for c in self.calls))
         raw=(self.root/'admissions.sqlite').read_bytes();self.assertNotIn(e['providerCredential'].encode(),raw);self.assertNotIn(e['callbackCredential'].encode(),raw)
+
+    def test_backend_failure_category_survives_without_persisting_raw_error_text(self):
+        for rejection,expected in [('EMPLOYEE_BUSINESS_ACTION_NOT_GRANTED','EMPLOYEE_BUSINESS_ACTION_NOT_GRANTED'),('token=SECRET-RPC-ERROR','RPC_REJECTED')]:
+            self.rejection=rejection;e=self.envelope();self.http('/employee-runs',e);result=self.final(e)
+            self.assertEqual(result['state'],'unknown');self.assertEqual(result['code'],expected)
+            marked=[c[0] for c in self.calls if c[0]['method']=='markUnknown' and c[0]['executionId']==e['ticket']['executionId']]
+            self.assertEqual(marked[-1]['params']['code'],expected)
+        self.assertNotIn(b'SECRET-RPC-ERROR',(self.root/'admissions.sqlite').read_bytes())
 
     def test_concurrent_duplicate_and_changed_auth_never_second_child(self):
         e=self.envelope()

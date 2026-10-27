@@ -82,7 +82,7 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
     const replyText = final.providerMessage.content.trim()
     try {
       const bridge = createTeamAgentBridge(tx, {...deps, resolveGrant: async () => live.grant, tasks: { assert: async () => {} } as any, readAttachment: async () => new Uint8Array() })
-      const reply = s.scope.requesterStaffId ? s.sources.find((x: any) => x.source.kind === 'conversation' && (x.value as any)?.authorStaffId === s.scope.requesterStaffId) : undefined
+      const reply = s.scope.requesterStaffId ? s.sources.filter((x: any) => x.source.kind === 'conversation' && (x.value as any)?.authorStaffId === s.scope.requesterStaffId).sort((a:any,b:any)=>b.value.seq-a.value.seq)[0] : undefined
       const r_msg = await bridge.send({
         channelId: s.scope.channelId,
         task: s.scope.task,

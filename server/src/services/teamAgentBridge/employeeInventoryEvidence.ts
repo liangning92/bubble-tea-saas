@@ -106,7 +106,7 @@ export async function readEmployeeInventoryEvidence(db:any,g:BridgeGrant,scope:C
         try {
           const parsed = JSON.parse(s.note)
           if (parsed && typeof parsed === 'object') {
-            cleanNote = parsed.reason || parsed.remark || parsed.description || (s.reason === 'sale_estimate' ? '销售消耗' : null)
+            cleanNote = [parsed.note,parsed.reason,parsed.remark,parsed.description].find(value=>typeof value==='string'&&value.trim()) || (s.reason === 'sale_estimate' ? '销售消耗' : null)
           } else {
             cleanNote = String(s.note)
           }
