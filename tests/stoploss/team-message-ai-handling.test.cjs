@@ -5,8 +5,8 @@ new Function('require','exports',compiled)(name=>name==='crypto'?crypto:name==='
 const channel='00000000-0000-4000-8000-000000000001',a={id:'user-a',storeId:'store-a',staffId:'staff-a',role:'staff',employeeApp:true};
 function fixture(){const c={id:channel,archived:false,members:[{staffId:a.staffId,fromSeq:2},{staffId:'other',fromSeq:1}]},messages=Array.from({length:3},(_,i)=>({id:'m'+i,seq:i+2,authorId:a.staffId,channelId:channel})),records=new Map(),queries=[];
  const put=(key,value)=>records.set('team.communication.'+key,value),job=(i,patch={})=>{const m=messages[i];put(`workflow.job.${channel}.${String(m.seq).padStart(12,'0')}`,{id:m.id,channelId:channel,sourceSeq:m.seq,sourceAuthorId:a.staffId,status:'queued',updatedAt:'2026-10-20T00:00:00Z',...patch})};
- const db={config:{findUnique:async q=>{const key=q.where.storeId_key.key;return records.has(key)?{key,value:JSON.stringify(records.get(key))}:null},findMany:async q=>{queries.push(q);assert.equal(q.where.storeId,a.storeId);assert(q.where.key.in);return q.where.key.in.filter(k=>records.has(k)).map(key=>({key,value:JSON.stringify(records.get(key))}))}}};return{c,messages,records,queries,put,job,run:()=>exportsObject.projectOwnAiHandling(db,a,c,messages)};}
-test('one batch projects only allowlisted state/time, never private job contents',async()=>{const f=fixture();f.job(0,{status:'uncertain',error:'SECRET ERROR',result:{replyText:'SECRET DRAFT'},billingAttempts:[{secret:'SECRET COST'}]});f.job(1,{status:'blocked'});const r=await f.run();assert.deepEqual(r.get('m0'),{state:'needs_review',updatedAt:'2026-10-20T00:00:00Z'});assert.equal(r.get('m1').state,'needs_review');assert(!JSON.stringify([...r]).includes('SECRET'));assert.equal(f.queries.length,1)});
+ const db={config:{findUnique:async q=>{const key=q.where.storeId_key.key;return records.has(key)?{key,value:JSON.stringify(records.get(key))}:null},findMany:async q=>{queries.push(q);assert.equal(q.where.storeId,a.storeId);assert(q.where.key.in);return q.where.key.in.filter(k=>records.has(k)).map(key=>({key,value:JSON.stringify(records.get(key))}))}}};return{c,messages,records,queries,put,job,run:(now)=>exportsObject.projectOwnAiHandling(db,a,c,messages,now)};}
+test('one batch projects only allowlisted state/time, never private job contents',async()=>{const f=fixture();f.job(0,{status:'uncertain',error:'SECRET ERROR',result:{replyText:'SECRET DRAFT'},billingAttempts:[{secret:'SECRET COST'}]});f.job(1,{status:'blocked'});const r=await f.run();assert.deepEqual(r.get('m0'),{state:'needs_review',updatedAt:'2026-10-20T00:00:00Z',failureReason:'execution'});assert.equal(r.get('m1').state,'needs_review');assert(!JSON.stringify([...r]).includes('SECRET'));assert.equal(f.queries.length,1)});
 test('state precedence preserves pending action and owner decision; no_reply is understood',async()=>{for(const [patch,state]of [[{status:'pending_action',replyMessageId:'reply'},'pending_action'],[{status:'awaiting_owner',replyMessageId:'reply'},'waiting_owner'],[{status:'reviewed',management:{kind:'no_reply'}},'understood'],[{status:'reviewed',replyMessageId:'reply'},'replied'],[{status:'processing'},'processing'],[{status:'retry_wait'},'queued']]){const f=fixture();f.job(0,patch);assert.equal((await f.run()).get('m0').state,state)}});
 test('explicit policy/default/exception pause is truthful for queued work only',async()=>{for(const [key,value]of [[`workflow.policy.${channel}`,{enabled:false}],[`workflow.policy.${channel}`,{paused:true}],['workflow.defaults',{enabled:false}],[`workflow.exception.${channel}`,{reason:'manual'}]]){const f=fixture();f.job(0);f.job(1,{status:'pending_action'});f.put(key,value);const r=await f.run();assert.equal(r.get('m0').state,'paused');assert.equal(r.get('m1').state,'pending_action')}});
 test('other author, mismatched source id/channel/author/sequence and AI outputs never gain status',async()=>{for(const patch of [{id:'different'},{channelId:'other-channel'},{sourceAuthorId:'other'},{sourceSeq:99},{updatedAt:'bad'}]){const f=fixture();f.job(0,patch);assert.equal((await f.run()).has('m0'),false)}for(const patch of [{authorId:'other'},{channelId:'other-channel'},{ai:{model:'mock'}}]){const f=fixture();Object.assign(f.messages[0],patch);f.job(0);assert.equal((await f.run()).has('m0'),false)}});
@@ -20,3 +20,37 @@ test('completed continuation needs a delivered receipt for this exact question',
 test('runtime permission failures retain a user-safe explanation after transport failure',async()=>{const f=fixture(),m=f.messages[0];f.put('employeeContinuation.event.'+m.id,{event:{channelId:channel,sourceMessageId:m.id,sourceSeq:m.seq,sourceStaffId:a.staffId},status:'unknown',executionId:'reservation'});f.put('employeeOrchestration.mapping.reservation',{executionId:'runtime'});f.put('employeeRuntime.execution.runtime',{scope:{channelId:channel},fault:{code:'EMPLOYEE_BUSINESS_ACTION_NOT_GRANTED'},grant:{secret:'SECRET'}});const r=(await f.run()).get(m.id);assert.equal(r.failureReason,'permission');assert(!JSON.stringify(r).includes('SECRET'));assert(!JSON.stringify(r).includes('GRANTED'))});
 
 test('disabling the service or revoking authorization while a request is active is visible without a worker receipt',async()=>{for(const mode of ['disabled','revoked']){const f=fixture(),m=f.messages[0],key='externalAgent.teamBridge.v1.employeePending.'+crypto.createHash('sha256').update(JSON.stringify(['employee_work',channel,m.id])).digest('hex');f.records.set(key,{channelId:channel,messageId:m.id,sourceSeq:m.seq,sourceStaffId:a.staffId,state:'received'});f.records.set('externalAgent.teamBridge.v1.employeeRoute.'+channel,{agentId:'agent',enabled:true,expiresAt:'2099-01-01T00:00:00Z'});f.records.set('externalAgent.teamBridge.v1.grant.agent',{revoked:mode==='revoked',expiresAt:'2099-01-01T00:00:00Z'});if(mode==='disabled')f.put('ai.agent.settings',{enabled:false});const r=(await f.run()).get(m.id);assert.equal(r.state,'failed');assert.equal(r.failureReason,mode==='disabled'?'paused':'permission')}});
+
+function intake(f, state='pending', createdAt='2026-10-28T01:00:00Z') {
+ const m=f.messages[0],key='externalAgent.teamBridge.v1.employeePending.'+crypto.createHash('sha256').update(JSON.stringify(['employee_work',channel,m.id])).digest('hex')
+ f.records.set(key,{channelId:channel,messageId:m.id,sourceSeq:m.seq,sourceStaffId:a.staffId,state,createdAt,updatedAt:createdAt})
+ return key
+}
+test('newly persisted Hermes requests show immediate acknowledgement before worker admission',async()=>{
+ const f=fixture();intake(f)
+ const r=(await f.run(Date.parse('2026-10-28T01:00:01Z'))).get('m0')
+ assert.equal(r.state,'queued');assert.equal(r.failureReason,undefined)
+})
+test('a later reply never makes a pending source look answered',async()=>{
+ const f=fixture();intake(f,'received');f.put(`employeeContinuation.channel.${channel}`,{phase:'ready',lastConsumedSeq:20})
+ f.messages.push({id:'unrelated-reply',seq:8,authorId:'agent:one',agent:{agentId:'one'},channelId:channel})
+ const r=(await f.run(Date.parse('2026-10-28T01:00:01Z'))).get('m0')
+ assert.equal(r.state,'queued');assert.notEqual(r.state,'replied')
+})
+test('expired source-specific execution shows unconfirmed timeout without replay or private fault data',async()=>{
+ const f=fixture(),m=f.messages[0];intake(f,'received')
+ f.put('employeeContinuation.event.'+m.id,{event:{channelId:channel,sourceMessageId:m.id,sourceSeq:m.seq,sourceStaffId:a.staffId},status:'running',executionId:'reservation'})
+ f.put('employeeOrchestration.mapping.reservation',{executionId:'runtime'})
+ f.put('employeeRuntime.execution.runtime',{scope:{channelId:channel,requesterStaffId:a.staffId},phase:'tools',expiresAt:'2026-10-28T01:01:00Z',responses:[{content:'PRIVATE'}],grant:{secret:'SECRET'}})
+ const r=(await f.run(Date.parse('2026-10-28T01:02:00Z'))).get(m.id)
+ assert.equal(r.state,'needs_review');assert.equal(r.failureReason,'timeout')
+ assert(!JSON.stringify(r).includes('PRIVATE'));assert(!JSON.stringify(r).includes('SECRET'))
+})
+test('owner review and expired processing lease give explicit safe explanations',async()=>{
+ const f=fixture();f.job(0,{status:'awaiting_approval'});f.job(1,{status:'processing',leaseUntil:1})
+ const r=await f.run();assert.equal(r.get('m0').failureReason,'review');assert.equal(r.get('m1').failureReason,'timeout')
+})
+test('unconfigured Hermes route is visible as inactive, without details from the configuration',async()=>{
+ const f=fixture(),key=intake(f,'blocked');f.records.set(key,{...f.records.get(key),reason:'EMPLOYEE_ROUTE_NOT_CONFIGURED',secret:'PRIVATE'})
+ const r=(await f.run()).get('m0');assert.equal(r.failureReason,'paused');assert(!JSON.stringify(r).includes('PRIVATE'))
+})

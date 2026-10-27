@@ -159,9 +159,9 @@ async function messageRows(db: DB, storeId: string, id: string, after: number, l
     ...(until !== undefined ? { lte: prefix + pad(until) } : {}) } }, orderBy: { key: 'asc' }, take: limit }))
     .map((r: any) => JSON.parse(r.value))
 }
-export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused' | 'failed'; updatedAt: string; detail?: string; failureReason?:'permission'|'paused'|'execution'|'delayed' }
+export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 'understood' | 'replied' | 'waiting_owner' | 'pending_action' | 'paused' | 'failed'; updatedAt: string; detail?: string; failureReason?:'permission'|'paused'|'execution'|'delayed'|'timeout'|'review' }
 /** Read-only source status. Never project a colleague's job or an audit-only history floor. */
-export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel, messages: any[]) {
+export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel, messages: any[], nowMs=Date.now()) {
   const member = c.members.find(m => m.staffId === a.staffId)
   const own = member && !c.archived ? messages.filter(m => m.channelId === c.id && m.authorId === a.staffId && !m.ai && Number.isSafeInteger(m.seq) && m.seq >= member.fromSeq) : []
   const output = new Map<string, OwnAiHandling>()
@@ -186,7 +186,13 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
     else if (j.status === 'reviewed' && (j.management?.kind === 'no_reply' || j.result?.management?.kind === 'no_reply')) state = 'understood'
     else if (j.status === 'processing') state = 'processing'
     else if (['queued', 'retry_wait'].includes(j.status)) state = paused ? 'paused' : 'queued'
-    if (state) output.set(m.id, { state, updatedAt: j.updatedAt })
+    if (state) {
+      const failureReason:OwnAiHandling['failureReason']=j.status==='awaiting_approval'?'review':
+        ['blocked','uncertain'].includes(j.status)?(/PAUSED|EXPIRED|DISABLED|NOT_CONFIGURED|BUDGET|RATE_LIMIT/.test(j.error||'')?'paused':/GRANT|AUTHORIZ|ACCESS|PERMISSION|REVOK/.test(j.error||'')?'permission':'execution'):
+        state==='paused'?'paused':state==='processing'&&Number.isFinite(j.leaseUntil)&&j.leaseUntil<nowMs?'timeout':
+        state==='queued'&&nowMs-Date.parse(j.updatedAt)>120000?'delayed':undefined
+      output.set(m.id, { state, updatedAt: j.updatedAt, ...(failureReason?{failureReason}:{}) })
+    }
   }
 
   // Hermes team agent bridge projection:
@@ -246,7 +252,7 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
     const validEvent=event?.event?.channelId===c.id&&event.event.sourceMessageId===m.id&&event.event.sourceSeq===m.seq&&event.event.sourceStaffId===a.staffId
     if(validIntake&&intake.state==='blocked'){
       const reason=typeof intake.reason==='string'?intake.reason:''
-      output.set(m.id,{state:'failed',updatedAt:intake.updatedAt||m.createdAt,failureReason:/PAUSED|EXPIRED|DISABLED/.test(reason)?'paused':/GRANT|AUTHORIZ|ACCESS|PERMISSION|REVOK/.test(reason)?'permission':'execution'})
+      output.set(m.id,{state:'failed',updatedAt:intake.updatedAt||m.createdAt,failureReason:/PAUSED|EXPIRED|DISABLED|NOT_CONFIGURED/.test(reason)?'paused':/GRANT|AUTHORIZ|ACCESS|PERMISSION|REVOK/.test(reason)?'permission':'execution'})
     }else if(validEvent&&event.status==='unknown'){
       const mapping=absoluteRecords.get(TEAM_PREFIX+'employeeOrchestration.mapping.'+event.executionId)
       const runtime=mapping?.executionId&&absoluteRecords.get(TEAM_PREFIX+'employeeRuntime.execution.'+mapping.executionId),code=runtime?.scope?.channelId===c.id?String(runtime.fault?.code||''):''
@@ -261,12 +267,23 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
         const report=absoluteRecords.get(TEAM_PREFIX+'employeeOrchestration.report.'+receipt.reportId)
         output.set(m.id,report?.sourceMessageId===m.id&&report?.outbound?.messageId&&report.outbound.seq>m.seq?{state:'replied',updatedAt:receipt.finishedAt||m.createdAt}:{state:'failed',updatedAt:receipt.finishedAt||m.createdAt,failureReason:'execution'})
       }
-    }else if(validIntake&&hermesRoute&&(hermesRoute.enabled===false||hermesRoute.paused||Date.parse(hermesRoute.expiresAt)<=Date.now()||agentSettings?.enabled===false||agentSettings?.employeeBridgeEnabled===false||agentSettings?.expiresAt&&Date.parse(agentSettings.expiresAt)<=Date.now())){
+    }else if(validIntake&&hermesRoute&&(hermesRoute.enabled===false||hermesRoute.paused||Date.parse(hermesRoute.expiresAt)<=nowMs||agentSettings?.enabled===false||agentSettings?.employeeBridgeEnabled===false||agentSettings?.expiresAt&&Date.parse(agentSettings.expiresAt)<=nowMs)){
       output.set(m.id,{state:'failed',updatedAt:intake.updatedAt||m.createdAt,failureReason:'paused'})
-    }else if(validIntake&&hermesRoute&&(!liveHermesGrant||liveHermesGrant.revoked||Date.parse(liveHermesGrant.expiresAt)<=Date.now())){
+    }else if(validIntake&&hermesRoute&&(!liveHermesGrant||liveHermesGrant.revoked||Date.parse(liveHermesGrant.expiresAt)<=nowMs)){
       output.set(m.id,{state:'failed',updatedAt:intake.updatedAt||m.createdAt,failureReason:'permission'})
-    }else if(validIntake&&intake.state==='pending'&&Date.now()-Date.parse(intake.createdAt)>120000){
-      output.set(m.id,{state:'queued',updatedAt:intake.updatedAt||m.createdAt,failureReason:'delayed'})
+    }else if(validEvent&&event.status==='running'){
+      const mapping=absoluteRecords.get(TEAM_PREFIX+'employeeOrchestration.mapping.'+event.executionId)
+      const runtime=mapping?.executionId&&absoluteRecords.get(TEAM_PREFIX+'employeeRuntime.execution.'+mapping.executionId)
+      const matches=runtime?.scope?.channelId===c.id&&runtime?.scope?.requesterStaffId===a.staffId
+      const deadline=matches?Date.parse(runtime.expiresAt):NaN
+      // No new timer, replay or claim of failure. An expired saved execution
+      // needs reconciliation; its business outcome is not guessed from time.
+      if(matches&&runtime.phase==='unknown')output.set(m.id,{state:'failed',updatedAt:runtime.fault?.at||intake?.updatedAt||m.createdAt,failureReason:'execution'})
+      else if(Number.isFinite(deadline)&&deadline<=nowMs)output.set(m.id,{state:'needs_review',updatedAt:intake?.updatedAt||m.createdAt,failureReason:'timeout'})
+      else output.set(m.id,{state:'processing',updatedAt:intake?.updatedAt||m.createdAt,...(nowMs-Date.parse(intake?.createdAt||m.createdAt)>120000?{failureReason:matches?'delayed' as const:'timeout' as const}:{})})
+    }else if(validIntake&&['pending','received'].includes(intake.state)){
+      output.set(m.id,{state:'queued',updatedAt:intake.updatedAt||m.createdAt,
+        ...(nowMs-Date.parse(intake.createdAt)>120000?{failureReason:'delayed' as const}:{})})
     }
   }
   return output
