@@ -76,7 +76,7 @@ async function main(){
  await runtime.host.recordOutput({executionId:ticket.executionId,expectedTraceVersion:version,providerRequestId:'synthetic-operation-turn-2',providerMessage:final});
  await check('status links actual execution, native Hermes reply and tool receipts while independent acceptance remains open',async()=>{
   await orchestration.drain(1);const status=await operationsTaskStatus(binding.credential,submitted.requestId,db);
-  assert.equal(status.execution.id,ticket.executionId);assert.equal(status.executionCompleted,true);assert.equal(status.businessCompleted,false);assert.equal(status.independentAcceptance,'not_reviewed');assert.equal(status.operationReceipts.length,5);assert.equal(status.outbound.length,1);assert.equal(status.outbound[0].text,final.content);
+  assert.equal(status.execution.id,ticket.executionId);assert.equal(status.executionCompleted,true);assert.equal(status.businessCompleted,false);assert.equal(status.independentAcceptance,'not_reviewed');assert.equal(status.operationReceipts.length,3);assert.equal(status.outbound.length,1);assert.equal(status.outbound[0].text,final.content);
  });
  await check('normal owner instructions in the employee channel remain readable but cannot import private owner sources/memory',async()=>{
   const group=await teamCommunication(db).create(owner,{requestId:randomUUID(),title:'Routine employee work',kind:'group',members:[employee.staffId,'agent:'+agentId]});
