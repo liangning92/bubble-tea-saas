@@ -43,3 +43,5 @@ else:
     raise AssertionError('The 10-second login appearance gate must remain enforced')
 print('Startup evidence rejects stale health, old PID and incomplete/reused-PID marks; timing gate retained')
 `], {stdio:'inherit'});
+
+require('node:child_process').execFileSync(process.platform === 'win32' ? 'python' : 'python3', ['tests/stoploss/windows-runtime-observation.test.py'], {stdio:'inherit'});
