@@ -8,11 +8,11 @@ const values=new Map<string,any>()
 const rule={month:'2026-10',enabled:true,mode:'interval',intervalMinutes:10,intervalAmount:5000,tiers:[],version:'v1',effectiveAt:'2026-10-01'}
 const db:any={config:{findUnique:jest.fn(async({where}:any)=>{const value=values.get(where.storeId_key.key);return value?{value:JSON.stringify(value)}:null}),upsert:jest.fn(async({create}:any)=>{values.set(create.key,JSON.parse(create.value))}),findMany:jest.fn(async()=>[])},attendance:{findMany:jest.fn(async()=>[])}}
 beforeEach(()=>{values.clear();jest.clearAllMocks();db.config.findMany.mockResolvedValue([]);db.attendance.findMany.mockResolvedValue([])})
-test('new starter has a full-month estimate with no attendance and no extra paid-rest credit',async()=>{
+test('new starter without attendance has no worked pay or paid credit',async()=>{
  values.set('staff.probation.rule',{enabled:true,durationUnit:'months',duration:1,salaryMode:'fixed',salaryValue:1300000})
  const basis=await calculatePayrollBasis(db,staff,'2026-10')
- expect(basis).toMatchObject({version:2,eligibleDays:27,payableDays:27,paidRestDays:0,daysSource:'estimate',amount:1132258,attendanceDays:{probation:0,regular:0}})
- expect(basis.segments[0]).toMatchObject({type:'probation',days:27,startDate:'2026-10-05',endDate:'2026-10-31'})
+ expect(basis).toMatchObject({version:2,eligibleDays:27,payableDays:0,paidRestDays:0,daysSource:'estimate',amount:0,attendanceDays:{probation:0,regular:0}})
+ expect(basis.segments[0]).toMatchObject({type:'probation',days:0,startDate:'2026-10-05',endDate:'2026-10-31'})
  expect(db.config.upsert).not.toHaveBeenCalled()
 })
 test('full-month estimate excludes fixed credits and actual half-day correction keeps them capped',async()=>{
