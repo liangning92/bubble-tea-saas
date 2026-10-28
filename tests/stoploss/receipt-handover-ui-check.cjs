@@ -23,7 +23,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),http
   assert.ok(await dialog.getByText('#MEQ24TP39A').isVisible());assert.ok(await dialog.getByText('1 / 2').isVisible());
   await page.mouse.click(10,10);assert.equal(await dialog.count(),1,'outside interaction does not cancel receipt printing');
   await page.screenshot({path:'/tmp/receipt-handover-dialog.png',animations:'disabled'});
-  await page.evaluate(()=>{const button=document.querySelector('[data-testid=receipt-handover-assistance] button:last-child');button.click();button.click()});
+  await page.evaluate(()=>{const button=document.querySelector('[data-testid=receipt-handover-assistance] > button');button.click();button.click()});
   assert.deepEqual(await page.evaluate(()=>window.__responses),[{id:'first',confirmed:true}]);
   for(const [lang,message,button] of [['en','Wait for printing, tear off the customer copy and hand it to the customer.','Torn off — print operator copy'],['id','Tunggu struk keluar, sobek salinan pelanggan dan berikan kepada pelanggan.','Sudah disobek — cetak salinan operator']]){
    await page.setViewportSize({width:360,height:640});await page.evaluate(p=>window.__promptListener(p),{...prompt,requestId:lang,message,button});
