@@ -20,7 +20,8 @@ try{
  browser=await chromium.launch({headless:true});
  for(const app of ['client-staff','client-admin']){
   const config=(await import(require('node:url').pathToFileURL(path.join(workspace,app,'tailwind.config.js')).href)).default; config.content=config.content.map(file=>path.resolve(workspace,app,file));
-  const server=await createServer({root:path.join(workspace,app),configFile:path.join(workspace,app,'vite.config.ts'),css:{postcss:{plugins:[require('tailwindcss')(config),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:0,strictPort:false},logLevel:'error'}); await server.listen();servers.push(server);
+  const portProbe=require('node:net').createServer();await new Promise(resolve=>portProbe.listen(0,'127.0.0.1',resolve));const temporaryPort=portProbe.address().port;await new Promise(resolve=>portProbe.close(resolve));
+  const server=await createServer({root:path.join(workspace,app),configFile:path.join(workspace,app,'vite.config.ts'),css:{postcss:{plugins:[require('tailwindcss')(config),require('autoprefixer')()]}},server:{host:'127.0.0.1',port:temporaryPort,strictPort:true},logLevel:'error'}); await server.listen();servers.push(server);
   const url=`http://127.0.0.1:${server.httpServer.address().port}`;
   const context=await browser.newContext({viewport:{width:390,height:844},locale:'en-GB'});
   const errors=[], posts=[], requests=[];let items=structuredClone(baseItems),added=false,hold=false, held=[],malformed=true;
@@ -76,10 +77,10 @@ try{
   assert(posts.includes('approval-1'));
   const approvalSelector=app==='client-staff'?'#staff-approval-request-1':'article';
   await page.locator(approvalSelector).first().waitFor();
-  await page.goto(url+'/inbox');await page.locator('#awareness-notice-approval-1').waitFor();
+  await page.goto(url+'/inbox');await page.getByRole('button',{name:'Pending tasks',exact:true}).click();await page.locator('#awareness-notice-approval-1').waitFor();
   const approval=await page.locator('#awareness-notice-approval-1').innerText();assert(approval.includes('Read'));assert(approval.includes('Approvals pending'));
   await page.screenshot({path:path.join(output,`${app}-read-still-pending.png`),fullPage:true});
-  await page.locator('#awareness-notice-training-1 button').click();
+  await page.getByRole('button',{name:'All',exact:true}).click();await page.locator('#awareness-notice-training-1 button').click();
   await page.waitForURL(app==='client-staff'?'**/training/library?item=guide-1':'**/staff/training/library?item=guide-1');
   assert(!posts.includes('training-1'));
   await page.goto(url+(app==='client-staff'?'/team':'/staff/communication'));

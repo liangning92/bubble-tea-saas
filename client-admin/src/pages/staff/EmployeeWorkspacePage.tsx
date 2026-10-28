@@ -313,7 +313,7 @@ export function EmployeeWorkspacePage({mode='all'}:{mode?:'review'|'lateness'|'a
           </h2>
           {!data?.[kind === "appeal" ? "appeals" : "profiles"]?.length&&<p className="text-sm text-gray-500">{labels.empty}</p>}
           {data?.[kind === "appeal" ? "appeals" : "profiles"]?.map((r: any) => (
-            <article key={r.id} data-notice-object={r.id} className="bg-white p-4 rounded-xl space-y-2">
+            <article key={r.id} data-notice-object={r.id} data-notice-status={r.status} className="bg-white p-4 rounded-xl space-y-2">
               <p>
                 {r.staffName || r.staffId} · {r.status} · {r.createdAt}
               </p>
