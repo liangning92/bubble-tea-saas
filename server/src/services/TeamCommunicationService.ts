@@ -359,7 +359,7 @@ export function teamCommunication(db: DB = prisma) {
         await activeMembers(tx, a.storeId, ids.filter(id => !teamAgentProvenance(a) || id !== a.staffId))
         if ((await list(tx, a.storeId, 'channel.', 501)).length >= 500) fail(409, 'TEAM_CHANNEL_LIMIT')
         if (v.kind === 'direct') {
-          const found = (await list(tx, a.storeId, 'channel.')).find((c: TeamChannel) => c.kind === 'direct' && !c.archived && c.members.map(m => m.staffId).sort().join('|') === ids.join('|'))
+          const found = (await list(tx, a.storeId, 'channel.')).find((c: TeamChannel) => c.kind === 'direct' && !c.archived && c.members.filter(m => ids.some(id=>id.startsWith('agent:')) || !m.staffId.startsWith('agent:')).map(m => m.staffId).sort().join('|') === ids.join('|'))
           if (found) { await write(tx, a.storeId, requestKey, { hash: creationHash, channel: found }); return found }
         }
         const now = new Date().toISOString()

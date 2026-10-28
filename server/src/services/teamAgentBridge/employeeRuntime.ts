@@ -1,3 +1,4 @@
+import { employeeGrantExtends } from './employeeGrantAuthority'
 import {formatDate} from '../../utils/dateUtils'
 import {employeeMessagePhotos,employeeStockPhotoEvidence} from './employeePhotos'
 import {readAgentMemories,readAgentExperiences,storeAgentMemory,recordAgentExperience,agentMemoryFingerprint} from '../AgentMemoryService'
@@ -76,7 +77,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     if (deps.enabled !== true) fail('EMPLOYEE_RUNTIME_DISABLED')
     await assertEmployeeSettings(tx,deps.storeId)
     const g = grantSchema.parse(await deps.resolveGrant(tx))
-    if (g.storeId !== deps.storeId || g.revoked || Date.parse(g.expiresAt) <= now() || s && hash(g) !== hash(s.grant)) fail('EMPLOYEE_RUNTIME_GRANT_CHANGED')
+    if (g.storeId !== deps.storeId || g.revoked || Date.parse(g.expiresAt) <= now() || s && !employeeGrantExtends(s.grant,g)) fail('EMPLOYEE_RUNTIME_GRANT_CHANGED')
     const sponsor = await tx.user.findFirst({ where: { id: g.sponsorUserId, storeId: g.storeId, role: { in: ['admin','manager'] } }, include: { staff: true } })
     if (!sponsor?.staff || sponsor.staff.status !== 'active' || sponsor.staff.storeId !== g.storeId) fail('EMPLOYEE_RUNTIME_SPONSOR_UNAVAILABLE')
     // Native bridge also rechecks actual team.manage for native task mutations.
@@ -123,7 +124,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       // Only its omitted requester can be filled from this server-owned trace;
       // actual outbound admission still requires the exact resolved requester.
       const comparable={...scope,requesterStaffId:scope.requesterStaffId??s?.scope.requesterStaffId}
-      if (!s || hash(g)!==hash(s.grant) || hash(comparable)!==hash(s.scope) || ['unknown'].includes(s.phase)) fail()
+      if (!s || !employeeGrantExtends(s.grant,g) || hash(comparable)!==hash(s.scope) || ['unknown'].includes(s.phase)) fail()
       await fresh(tx,s,false)
       return { purpose:'employee_work', compartmentKey:scope.compartmentKey, memoryNamespace:scope.compartmentKey, executionId:s.ticket.executionId }
     },
@@ -137,7 +138,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     },
     async admitOutput(tx,g,scope,input) {
       const p = await readTeam<any>(tx,g.storeId,pointer(scope)), s = p && await load(tx,p.executionId)
-      if (!s || !['tools','final'].includes(s.phase) || hash(g)!==hash(s.grant) || hash({...scope,executionId:undefined})!==hash(s.scope)) fail()
+      if (!s || !['tools','final'].includes(s.phase) || !employeeGrantExtends(s.grant,g) || hash({...scope,executionId:undefined})!==hash(s.scope)) fail()
       await fresh(tx,s,false)
       const response = s.responses.at(-1)
       const call = response?.providerMessage.tool_calls?.find((c:any)=>c.function.name==='employee_send_message')
@@ -1699,5 +1700,5 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       })
     },
   }
-  return {host,communication,provider,async inspect(id:string){const s=await load(db,id);const g=await fresh(db);if(hash(g)!==hash(s.grant))fail();return {executionId:id,phase:s.phase,version:s.version,turn:s.turn,fault:s.fault}},async recover(id:string){const s=await load(db,id);if(s.phase!=='complete')await host.markUnknown(id,s.version,'EMPLOYEE_RUNTIME_PROCESS_INTERRUPTED')}}
+  return {host,communication,provider,async inspect(id:string){const s=await load(db,id);const g=await fresh(db);if(!employeeGrantExtends(s.grant,g))fail();return {executionId:id,phase:s.phase,version:s.version,turn:s.turn,fault:s.fault}},async recover(id:string){const s=await load(db,id);if(s.phase!=='complete')await host.markUnknown(id,s.version,'EMPLOYEE_RUNTIME_PROCESS_INTERRUPTED')}}
 }
