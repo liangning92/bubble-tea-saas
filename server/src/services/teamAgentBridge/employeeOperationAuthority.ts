@@ -1,3 +1,4 @@
+import {structuredAssessment} from './employeeOperationalEvidence'
 import { isStandardRoutine } from './employeeStandardRoutine';
 import { TeamError } from '../TeamCommunicationService';
 import { audienceAllows } from './employeeAccess';
@@ -188,7 +189,7 @@ export async function assertPublicationContext(
   name: string,
   args: any,
 ) {
-  if (isStandardRoutine(name, args)) return;
+  if (isStandardRoutine(name, args)||(name==='employee_manage_training'&&structuredAssessment(args))) return;
   const storeWide =
     (name === 'employee_manage_operations' && args?.action === 'publish_announcement') ||
     (name === 'employee_manage_training' &&

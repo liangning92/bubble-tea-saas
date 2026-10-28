@@ -1,3 +1,4 @@
+import {normalizeMarketingIntent,verifyTrainingAssessment} from './employeeOperationalEvidence'
 import { expenseIdrToCents, expenseCentsToIdr } from './employeeExpenseEvidence'
 import {membershipToolSchema,executeMembershipTool} from './employeeMembershipTools'
 import { isStandardRoutine, executeStandardRoutine } from './employeeStandardRoutine'
@@ -193,7 +194,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
         if(g.actions.includes('finance.write')||g.actions.includes('finance.read')) tools.push(fn('employee_manage_finance','Authorized business tool for store financial records and business revenue analysis (门店财务记账与营业流水/收支统计分析). Supports recording operating expenses (record_expense), querying revenue summaries and order stats (query_revenue_summary), and listing recent expenses (list_recent_expenses).',{action:{type:'string',enum:['record_expense','query_revenue_summary','list_recent_expenses'],description:'Action to perform'},amount:{type:'number',description:'Expense amount in Indonesian rupiah; amountUnit IDR is required for recording'},amountUnit:{type:'string',enum:['IDR'],description:'Explicit amount unit for record_expense; do not guess cents versus rupiah'},category:{type:'string',description:'Expense category: 物资 | 租金 | 水电 | 报销 | 工资 | 其他'},type:{type:'string',enum:['supplies','rent','utilities','reimbursement','salary','other'],description:'Expense type code'},description:{type:'string',description:'Expense description or reason'},paymentSource:{type:'string',enum:['drawer_cash','owner_transfer','personal','other'],description:'Payment source'},date:{type:'string',description:'Expense date in YYYY-MM-DD'},startDate:{type:'string',description:'Start date for query_revenue_summary (YYYY-MM-DD)'},endDate:{type:'string',description:'End date for query_revenue_summary (YYYY-MM-DD)'}},['action']))
         if(g.actions.includes('operations.write')) tools.push(fn('employee_manage_operations','Authorized business tool for store operations, team announcements, and HR leave approval (门店日常运营、团队全员公告发布与员工请假审批). Supports publishing store announcements (publish_announcement), listing pending leave requests (list_pending_leaves), and approving/rejecting leave applications (review_leave).',{action:{type:'string',enum:['publish_announcement','list_pending_leaves','review_leave'],description:'Action to perform'},title:{type:'string',description:'Announcement title'},content:{type:'string',description:'Announcement content'},type:{type:'string',enum:['info','warning','urgent'],description:'Announcement priority type'},leaveId:{type:'string',description:'Leave application ID to review'},reviewDecision:{type:'string',enum:['approved','rejected'],description:'Review decision: approved or rejected'},rejectionReason:{type:'string',description:'Reason if rejecting the leave request'}},['action']))
         if(g.actions.includes('products.write')) tools.push(fn('employee_manage_product','Authorized business tool to manage store products and media library image bindings (商品信息维护与媒体库图片按名称批量关联). Supports automatically scanning media library to match and link product photos by name (auto_link_media_images), setting a specific image for a product (set_product_image), updating product status/description (update_product), or querying product catalog (list_products).',{action:{type:'string',enum:['auto_link_media_images','set_product_image','update_product','list_products'],description:'Action to perform: auto_link_media_images (自动将媒体库里的图片按名称关联到对应商品), set_product_image (为指定商品设置媒体图片), update_product (更新商品状态或描述), list_products (查询商品列表及图片绑定情况)'},productId:{type:'string',description:'Product ID (required for set_product_image and update_product)'},productName:{type:'string',description:'Product name fuzzy search or filter'},mediaAssetId:{type:'string',description:'Media asset ID to link to product (optional for set_product_image)'},mediaAssetName:{type:'string',description:'Media asset name fuzzy match (optional for set_product_image)'},status:{type:'string',enum:['active','inactive'],description:'Product status (for update_product)'},description:{type:'string',description:'Product description (for update_product)'},limit:{type:'number',description:'Limit number of products to list (default 50)'}},['action']))
-        if(g.actions.includes('training.write')||g.actions.includes('training.read')) tools.push(fn('employee_manage_training','Authorized business tool for employee training management and SOP course authoring (员工培训管理、培训记录建档与培训资料/SOP课程编写发布). Supports writing and publishing training course modules/SOPs with steps, common errors and warnings (create_course), authoring store checklists (create_checklist), assigning training schedules to staff (assign_training), recording training assessment scores and results (record_result), querying staff training records (list_trainings), and viewing course library (list_courses).',{action:{type:'string',enum:['create_course','create_checklist','assign_training','assign_published_course','record_result','list_trainings','list_courses'],description:'Action: create_course (编写/添加培训SOP课程模块), create_checklist (编写岗位检查单), assign_training (为员工安排培训排期), record_result (登记考核成绩与合格状态), list_trainings (查询员工培训记录), list_courses (查询课程库列表)'},courseKey:{type:'string',description:'Existing reviewed published module key for assign_published_course. This action takes only action, courseKey, staffId and date; no model-authored text.'},date:{type:'string',description:'YYYY-MM-DD for assign_published_course'},title:{type:'string',description:'Course or checklist or training title (e.g. "饮品标准化制作与封口操作SOP", "吧台每日打烊清洁检查单")'},category:{type:'string',enum:['onboarding','safety','product','service','hygiene','inventory','leadership','compliance','other'],description:'Training category'},subtitle:{type:'string',description:'Course subtitle or summary'},minutes:{type:'number',description:'Estimated study/training duration in minutes (e.g. 15)'},sections:{type:'array',items:{type:'object',properties:{title:{type:'string',description:'Section title'},points:{type:'array',items:{type:'string'},description:'Standard operating steps / key points (标准操作步骤)'},errors:{type:'array',items:{type:'string'},description:'Common operational mistakes to avoid (常见错误)'},practice:{type:'string',description:'Practical exercise description (实操考核规范)'},checklist:{type:'array',items:{type:'string'},description:'Key check items (检查项)'},warning:{type:'string',description:'Safety or quality warning (安全/品质红线警告)'},tip:{type:'string',description:'Helpful tips (实用小技巧)'}},required:['title','points']},description:'Course sections with detailed SOP steps, common mistakes, and practice instructions'},checklistItems:{type:'array',items:{type:'string'},description:'Items for create_checklist (检查单项目列表)'},quiz:{type:'array',items:{type:'object',properties:{q:{type:'string',description:'Question text'},options:{type:'array',items:{type:'string'},description:'Multiple choice options'},answer:{type:'number',description:'Correct option index (0-based)'},explanation:{type:'string',description:'Explanation'}},required:['q','options','answer']},description:'Practice quiz questions for the training module'},staffId:{type:'string',description:'Staff ID for assign_training or record_result'},staffName:{type:'string',description:'Staff name for assign_training, record_result, or list_trainings (e.g. "Rangga", "Sekar")'},startDate:{type:'string',description:'Training start date (YYYY-MM-DD)'},endDate:{type:'string',description:'Training end date (YYYY-MM-DD)'},duration:{type:'number',description:'Training duration in hours (e.g. 2)'},trainingId:{type:'string',description:'Training record ID for record_result'},score:{type:'number',description:'Assessment score (0-100) for record_result'},passed:{type:'boolean',description:'Whether the staff passed the assessment (record_result)'},status:{type:'string',enum:['scheduled','in_progress','completed','cancelled'],description:'Training status'},notes:{type:'string',description:'Training notes, objectives, or assessment feedback'},limit:{type:'number',description:'Limit for list queries (default 20)'}},['action']))
+        if(g.actions.includes('training.write')||g.actions.includes('training.read')) tools.push(fn('employee_manage_training','Authorized business tool for employee training management and SOP course authoring (员工培训管理、培训记录建档与培训资料/SOP课程编写发布). Supports writing and publishing training course modules/SOPs with steps, common errors and warnings (create_course), authoring store checklists (create_checklist), assigning training schedules to staff (assign_training), recording training assessment scores and results (record_result), querying staff training records (list_trainings), and viewing course library (list_courses).',{action:{type:'string',enum:['create_course','create_checklist','assign_training','assign_published_course','record_result','list_trainings','list_courses'],description:'Action: create_course (编写/添加培训SOP课程模块), create_checklist (编写岗位检查单), assign_training (为员工安排培训排期), record_result (登记考核成绩与合格状态), list_trainings (查询员工培训记录), list_courses (查询课程库列表)'},courseKey:{type:'string',description:'Existing reviewed published module key for assign_published_course. This action takes only action, courseKey, staffId and date; no model-authored text.'},date:{type:'string',description:'YYYY-MM-DD for assign_published_course'},title:{type:'string',description:'Course or checklist or training title (e.g. "饮品标准化制作与封口操作SOP", "吧台每日打烊清洁检查单")'},category:{type:'string',enum:['onboarding','safety','product','service','hygiene','inventory','leadership','compliance','other'],description:'Training category'},subtitle:{type:'string',description:'Course subtitle or summary'},minutes:{type:'number',description:'Estimated study/training duration in minutes (e.g. 15)'},sections:{type:'array',items:{type:'object',properties:{title:{type:'string',description:'Section title'},points:{type:'array',items:{type:'string'},description:'Standard operating steps / key points (标准操作步骤)'},errors:{type:'array',items:{type:'string'},description:'Common operational mistakes to avoid (常见错误)'},practice:{type:'string',description:'Practical exercise description (实操考核规范)'},checklist:{type:'array',items:{type:'string'},description:'Key check items (检查项)'},warning:{type:'string',description:'Safety or quality warning (安全/品质红线警告)'},tip:{type:'string',description:'Helpful tips (实用小技巧)'}},required:['title','points']},description:'Course sections with detailed SOP steps, common mistakes, and practice instructions'},checklistItems:{type:'array',items:{type:'string'},description:'Items for create_checklist (检查单项目列表)'},quiz:{type:'array',items:{type:'object',properties:{q:{type:'string',description:'Question text'},options:{type:'array',items:{type:'string'},description:'Multiple choice options'},answer:{type:'number',description:'Correct option index (0-based)'},explanation:{type:'string',description:'Explanation'}},required:['q','options','answer']},description:'Practice quiz questions for the training module'},staffId:{type:'string',description:'Staff ID for assign_training or record_result'},staffName:{type:'string',description:'Staff name for assign_training, record_result, or list_trainings (e.g. "Rangga", "Sekar")'},startDate:{type:'string',description:'Training start date (YYYY-MM-DD)'},endDate:{type:'string',description:'Training end date (YYYY-MM-DD)'},duration:{type:'number',description:'Training duration in hours (e.g. 2)'},trainingId:{type:'string',description:'Training record ID for record_result'},evidenceMessageSeq:{type:'integer',description:'Required native human assessment message sequence for record_result. Read the actual message; it must name the employee and explicitly state the score/verdict. No invented score or automatic pass.'},score:{type:'number',description:'Assessment score (0-100) for record_result'},passed:{type:'boolean',description:'Whether the staff passed the assessment (record_result)'},status:{type:'string',enum:['scheduled','in_progress','completed','cancelled'],description:'Training status'},notes:{type:'string',description:'Training notes, objectives, or assessment feedback'},limit:{type:'number',description:'Limit for list queries (default 20)'}},['action']))
         if(g.actions.includes('employee.request.write')) tools.push(fn('employee_submit_request','Employee tool to submit leave requests (员工快速请假申请), report ingredient waste/damage (物料打翻/变质/原料报损), or record shift handover notes for the team (交接班备忘录记录). Supports Indonesian terms: izin/cuti (leave), tumpah/rusak (waste), oper shift/serah terima (handover).',{action:{type:'string',enum:['submit_leave','report_waste','leave_shift_note'],description:'Action to submit'},leaveType:{type:'string',enum:['annual','sick','unpaid','other'],description:'Leave type: annual (年假), sick (病假), unpaid (事假/无薪), other (其他)'},startDate:{type:'string',description:'Leave start date (YYYY-MM-DD)'},endDate:{type:'string',description:'Leave end date (YYYY-MM-DD)'},totalDays:{type:'number',description:'Total leave days (e.g. 0.5 for half day, 1 for full day)'},reason:{type:'string',description:'Reason for leave, waste, or shift note'},inventoryName:{type:'string',description:'Ingredient or item name for waste report (e.g. "黑糖珍珠", "鲜牛奶", "红茶")'},quantity:{type:'number',description:'Quantity of wasted/damaged item'},note:{type:'string',description:'Content of shift handover note'}},['action']))
         if(g.actions.includes('staff.write')) tools.push(fn('employee_remember_rule','Retain a source-linked preference in persistent audience-scoped memory. Store-wide publication is controlled by the operator in AI settings.',{rule:{type:'string',minLength:1,maxLength:1000,description:'The exact workflow rule, SOP, preference, or process requirement to remember'},category:{type:'string',enum:['workflow','poster_and_tv','marketing','inventory','schedule','general'],description:'Rule category'}},['rule']))
         if(g.actions.includes('messages.send')) tools.push(fn('employee_send_message','Send at most one natural operational reply in this execution to this exact current audience; set expectsReply only for a question requiring new staff facts, not an acknowledgement',{text:{type:'string',minLength:1,maxLength:4000},expectsReply:{type:'boolean'}},['text']))
@@ -326,6 +327,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
           description: z.string().optional()
         }).parse(v.args)
         let result: any = {}
+        try{Object.assign(args,normalizeMarketingIntent(args))}catch(error:any){const value={ok:false,code:error.message,message:'Specify the actual promotion type and discount value. No campaign or price was changed.'};s.tools.push({turn:s.turn,toolCallId:v.toolCallId,name:v.name,value,sources:[],mutating:false});if(s.responses.at(-1).providerMessage.tool_calls.every((c:any)=>s.tools.some(t=>t.toolCallId===c.id)))s.phase='input';return {traceVersion:s.version+1,value,sources:[]}}
         if (args.action === 'query_products') {
           const cats = await tx.category.findMany({ where: { storeId: deps.storeId } })
           const qCat = (args.category || '').toLowerCase().trim()
@@ -522,64 +524,6 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
               ? `注意：商品 [${missingImageProducts.join('、')}] 暂无 16:9 横版海报图片。请在回复中主动向管理员追问是否需要上传该商品的横版海报图片或指定其他替代饮品！`
               : undefined
           }
-        } else if (args.action === 'create_campaign') {
-          const campName = (args.name || '营销推广活动').trim()
-          const validFrom = args.startDate ? new Date(args.startDate) : new Date(now())
-          const validUntil = args.endDate ? new Date(args.endDate) : null
-          const camp = await tx.campaign.create({
-            data: { storeId: deps.storeId, name: campName, description: args.description || `管理员指令活动: ${campName}`, type: 'seasonal', triggerType: 'automatic', startDate: validFrom, endDate: validUntil, status: 'active' }
-          })
-          let unifiedActivityId = '', activityImage: string | undefined = undefined
-          const allMedia = await tx.mediaAsset.findMany({
-            where: { storeId: deps.storeId, kind: 'image' }
-          })
-          if (args.productIds && args.productIds.length) {
-            const prods = await tx.product.findMany({
-              where: { storeId: deps.storeId, id: { in: args.productIds } },
-              include: { images: { include: { media: true } } }
-            })
-            for (const p of prods) {
-              const p16x9 = p.images?.find((img: any) => img.media && /_16x9|16:9|16x9|landscape|horizontal/i.test(img.media.name))?.media?.url
-              if (p16x9 && !activityImage) activityImage = p16x9
-            }
-          }
-          if (!activityImage) {
-            const matchedProd = await tx.product.findFirst({
-              where: { storeId: deps.storeId, image: { not: null }, OR: (args.productIds && args.productIds.length) ? [{ id: { in: args.productIds } }] : [{ name: { contains: campName.slice(0, 4), mode: 'insensitive' } }] },
-              select: { image: true }
-            })
-            if (matchedProd?.image) activityImage = matchedProd.image
-            else {
-              const fallbackMedia = allMedia.find((m: any) => /16x9/i.test(m.name))
-              if (fallbackMedia) activityImage = fallbackMedia.url
-            }
-          }
-          const posterConfig = createCampaignPosterConfig({
-            activityType: 'percent',
-            rule: { percent: 10, minAmount: 0 },
-            products: (args.productIds || []).map((id: string) => ({ id, name: id })),
-            customHeadline: sanitizeCommercialCopy(campName),
-            customSubheadline: sanitizeCommercialCopy(args.description),
-            preferredTemplate: (args as any).template,
-            preferredRatio: (args as any).imageAspectRatio,
-          })
-          try {
-            const unified = await saveActivityInTransaction(tx,deps.storeId, {
-              name: campName,
-              type: 'percent',
-              status: 'published',
-              description: args.description || `管理员指令活动: ${campName}`,
-              startsAt: validFrom.toISOString(),
-              endsAt: validUntil ? validUntil.toISOString() : undefined,
-              imageUrl: activityImage,
-              posterConfig,
-              rule: { percent: 10, minAmount: 0 }
-            })
-            unifiedActivityId = unified.id
-          } catch (e: any) {
-            throw e // Roll back the native business change and its trace together.
-          }
-          result = { success: true, message: '营销活动创建成功并已在后台活动列表激活发布', unifiedActivityId, imageUrl: activityImage || null, campaignId: camp.id, name: campName, startDate: validFrom.toISOString(), endDate: validUntil ? validUntil.toISOString() : '长期有效' }
         } else if (args.action === 'cancel_campaign') {
           const targetId = (args.campaignId || args.name || '').trim()
           let affectedUnified = 0
@@ -1325,6 +1269,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
           endDate: z.string().optional(),
           duration: z.number().optional(),
           trainingId: z.string().optional(),
+          evidenceMessageSeq:z.number().int().positive().optional(),
           score: z.number().optional(),
           passed: z.boolean().optional(),
           status: z.enum(['scheduled', 'in_progress', 'completed', 'cancelled']).optional(),
@@ -1528,9 +1473,14 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
               message: `未找到匹配的培训记录 (trainingId: ${args.trainingId || '无'}, staffName: ${args.staffName || '无'})`
             }
           } else {
+            let assessmentSource:any
+            try{assessmentSource=verifyTrainingAssessment(args,training,s.scope,s.sources)}catch(error:any){const value={ok:false,code:error.message,message:'Read the actual human assessment naming this employee and its score/verdict. Without that evidence, do not mark training passed or completed.'};s.tools.push({turn:s.turn,toolCallId:v.toolCallId,name:v.name,value,sources:[],mutating:false});if(s.responses.at(-1).providerMessage.tool_calls.every((c:any)=>s.tools.some(t=>t.toolCallId===c.id)))s.phase='input';return {traceVersion:s.version+1,value,sources:[]}}
+            const assessmentKey='employeeRuntime.trainingAssessment.'+hash([assessmentSource.channelId,assessmentSource.seq]);
+            const priorAssessment=await readTeam<any>(tx,deps.storeId,assessmentKey);
+            if(priorAssessment){const value=priorAssessment.trainingId===training.id?{ok:true,alreadyRecorded:true,trainingId:training.id,status:training.status}:{ok:false,code:'TRAINING_ASSESSMENT_ALREADY_BOUND',message:'This assessment was already used for a different training record. Read its original receipt instead of reusing it.'};s.tools.push({turn:s.turn,toolCallId:v.toolCallId,name:v.name,value,sources:[],mutating:false});if(s.responses.at(-1).providerMessage.tool_calls.every((c:any)=>s.tools.some(t=>t.toolCallId===c.id)))s.phase='input';return {traceVersion:s.version+1,value,sources:[]}}
             const score = args.score !== undefined ? args.score : training.score
-            const passed = args.passed !== undefined ? args.passed : (score !== null && score !== undefined ? score >= 60 : training.passed)
-            const status = args.status || (passed ? 'completed' : 'in_progress')
+            const passed = args.passed !== undefined ? args.passed : training.passed
+            const status = args.status || training.status
 
             const updated = await tx.training.update({
               where: { id: training.id, storeId: deps.storeId, updatedAt: training.updatedAt },
@@ -1538,11 +1488,12 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
                 score,
                 passed,
                 status,
-                notes: args.notes ? (training.notes ? `${training.notes}; ${args.notes}` : args.notes) : training.notes
+                notes: [training.notes,`Assessment source ${assessmentSource.channelId}:${assessmentSource.seq}`].filter(Boolean).join('; ')
               },
               include: { staff: true }
             })
 
+            await writeTeam(tx,deps.storeId,assessmentKey,{trainingId:training.id,assessmentSource,score,passed,status,executionId:s.ticket.executionId});
             result = {
               success: true,
               message: `员工 "${updated.staff.name}" 培训《${updated.title}》考核结果登记完成：${score !== null ? score + '分' : '已记录'}，${passed ? '考核合格 ✅' : '未合格 ❌'}，状态已更新为 ${status}。`,

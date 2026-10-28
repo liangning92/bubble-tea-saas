@@ -16,7 +16,7 @@ export interface EmployeeGatewayReceipt {
 }
 export interface EmployeeGatewayConfig { origin: string; bearer: string; timeoutMs?: number }
 export interface EmployeeGatewayHealth {
-  status: 'ok'; protocol: 'employee_work_trace_v1'; maxConcurrency: 1; queued: number; running: number
+  status: 'ok'; protocol: 'employee_work_trace_v1'; maxConcurrency: 1; queued: number; running: number; scheduling?:'admin_priority_fair'; adminBurstLimit?:3; preemptRunning?:false
 }
 export function createEmployeeGatewayClient(config: EmployeeGatewayConfig) {
   const origin = new URL(config.origin)
@@ -45,7 +45,7 @@ export function createEmployeeGatewayClient(config: EmployeeGatewayConfig) {
       if(!value||value.status!=='ok'||value.protocol!=='employee_work_trace_v1'||value.maxConcurrency!==1||
         !Number.isSafeInteger(value.queued)||value.queued<0||!Number.isSafeInteger(value.running)||value.running<0||value.running>1)
         throw Error('EMPLOYEE_GATEWAY_SINGLE_SLOT_REQUIRED')
-      return {status:'ok',protocol:'employee_work_trace_v1',maxConcurrency:1,queued:value.queued,running:value.running}
+      return {status:'ok',protocol:'employee_work_trace_v1',maxConcurrency:1,queued:value.queued,running:value.running,...(value.scheduling==='admin_priority_fair'&&value.adminBurstLimit===3&&value.preemptRunning===false?{scheduling:'admin_priority_fair' as const,adminBurstLimit:3 as const,preemptRunning:false as const}:{})}
     },
     /** Never retry automatically: a missing HTTP response is not non-admission. */
     async start(envelope:EmployeeGatewayEnvelope):Promise<EmployeeGatewayReceipt|{executionId:string;state:'admission_unknown'}> {

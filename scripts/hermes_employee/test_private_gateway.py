@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import request, error
 
-from private_gateway import Gateway
+from private_gateway import Gateway, FairOperationQueue
 
 CHILD = r'''
 import json,sys,time
@@ -117,12 +117,34 @@ class TestGateway(unittest.TestCase):
         self.assertEqual(self.http('/employee-runs',second)['state'],'queued')
         self.assertEqual(self.starts,[first['ticket']['executionId']])
         self.assertEqual(self.gateway.db.execute("SELECT count(*) FROM admission WHERE state='queued'").fetchone()[0],2)
-        health=self.http('/health');self.assertEqual(health['maxConcurrency'],1);self.assertEqual(health['queued'],2)
+        health=self.http('/health');self.assertEqual(health['maxConcurrency'],1);self.assertEqual(health['queued'],2);self.assertEqual(health['scheduling'],'admin_priority_fair');self.assertEqual(health['adminBurstLimit'],3);self.assertFalse(health['preemptRunning'])
         raw=(self.root/'admissions.sqlite').read_bytes()
         self.assertNotIn(second['providerCredential'].encode(),raw);self.assertNotIn(second['callbackCredential'].encode(),raw)
         (self.root/'release-child').touch()
         for e in [first,second,third]:self.assertEqual(self.final(e)['state'],'complete')
         self.assertEqual(self.starts,[e['ticket']['executionId'] for e in [first,second,third]])
+
+    def test_admin_priority_is_between_runs_and_does_not_interrupt_current_employee(self):
+        first=self.envelope('wait_gate');self.http('/employee-runs',first)
+        for _ in range(100):
+            if self.starts:break
+            time.sleep(.01)
+        employee,admin=self.envelope(),self.envelope();admin['ticket']['isAdmin']=True
+        self.assertEqual(self.http('/employee-runs',employee)['state'],'queued')
+        self.assertEqual(self.http('/employee-runs',admin)['state'],'queued')
+        self.assertEqual(self.starts,[first['ticket']['executionId']])
+        (self.root/'release-child').touch()
+        for e in [first,admin,employee]:self.assertEqual(self.final(e)['state'],'complete')
+        self.assertEqual(self.starts,[e['ticket']['executionId'] for e in [first,admin,employee]])
+
+    def test_admin_burst_is_bounded_so_employee_reply_cannot_starve(self):
+        q=FairOperationQueue()
+        employee=({'ticket':{'executionId':'staff','isAdmin':False}},None)
+        q.put(employee)
+        for i in range(7):q.put(({'ticket':{'executionId':'admin'+str(i),'isAdmin':True}},None))
+        order=[q.get(timeout=.01)[0]['ticket']['executionId'] for _ in range(8)]
+        self.assertEqual(order[:4],['admin0','admin1','admin2','staff'])
+        self.assertEqual(order[4:],['admin3','admin4','admin5','admin6'])
 
     def test_expired_queue_does_not_start_model_or_business_callback(self):
         first=self.envelope('wait_gate');self.http('/employee-runs',first)

@@ -223,3 +223,24 @@ product, training and staff updates retain store-scoped predicates.
 These source and isolated PostgreSQL checks do not constitute production setup,
 installed POS verification, an actual paid qualifying order, or independent
 business acceptance. Those remain separate recorded stages.
+
+
+### One operator, several conversations
+
+There is one store operating identity. Skills do not create additional operating
+agents. Employee and administrator channels keep distinct audience-scoped sources
+and memory. The single Gateway executor never interrupts a running business
+operation. Waiting administrator jobs have priority; after three consecutive
+administrator starts, a waiting employee job receives a turn. Jobs of the same
+priority preserve arrival order. Health reports `scheduling:admin_priority_fair`,
+`adminBurstLimit:3` and `preemptRunning:false` only for this implementation.
+Queue priority does not grant data access or business authority. Recheck current
+source, account, versions and grant when each task actually begins.
+
+Campaign creation requires an explicit supported rule; the legacy create_campaign
+name delegates to that rule path and no longer silently creates ten percent off.
+Training results require a verified native human assessment naming the employee,
+course and scheduled date with an explicit score/verdict. Multiple scores, missing
+verdicts, old sources and reuse for a different training are rejected without a
+write. Human-reported assessment remains distinct from independent business
+acceptance and is not proof of a physical action performed by the Agent.

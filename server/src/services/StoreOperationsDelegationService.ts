@@ -331,6 +331,7 @@ async function operationsGatewayState(db: any, ports: OperationsTaskPorts = task
       maxConcurrency: 1,
       queued: raw.queued,
       running: raw.running,
+      ...(raw.scheduling==='admin_priority_fair'&&raw.adminBurstLimit===3&&raw.preemptRunning===false?{scheduling:raw.scheduling,adminBurstLimit:3,preemptRunning:false}:{}),
       checkedAt,
     }
   } catch (error: any) {

@@ -38,6 +38,30 @@ def private_url(value):
     return value
 
 
+class FairOperationQueue:
+    """One executor, separate waiting priorities; at most three admin starts
+    while employee work is waiting. Never interrupt an in-flight operation."""
+    def __init__(self):
+        from collections import deque
+        self.admin,self.staff=deque(),deque()
+        self.condition=threading.Condition()
+        self.admin_streak=0
+    def put(self,item):
+        with self.condition:
+            target=self.admin if item[0].get('ticket',{}).get('isAdmin') is True else self.staff
+            target.append(item);self.condition.notify()
+    def get(self,timeout=None):
+        with self.condition:
+            if not self.condition.wait_for(lambda:self.admin or self.staff,timeout):raise queue.Empty()
+            if self.admin and (not self.staff or self.admin_streak<3):
+                self.admin_streak+=1
+                return self.admin.popleft()
+            self.admin_streak=0
+            return self.staff.popleft()
+    def task_done(self):
+        pass
+
+
 class Gateway:
     def __init__(self, *, journal, bearer, backend_rpc_url, python=None, repository=None,
                  hermes_source=None, hermes_sha=None, isolated_root=None, provider_base_url=None,
@@ -49,7 +73,7 @@ class Gateway:
         self.max_seconds = min(max_seconds, 86400)
         self.lock, self.capacity = threading.Lock(), threading.BoundedSemaphore(1)
         self.stopping = threading.Event()
-        self.pending = queue.Queue()
+        self.pending = FairOperationQueue()
         self.children = {}
         # One live gateway owns a journal. A second process cannot relabel a
         # still-running child's admission as interrupted and start competing work.
@@ -129,7 +153,7 @@ class Gateway:
         return self.receipt(execution)
 
     def _dispatch(self):
-        """FIFO, one real child at a time; a busy model slot is normal waiting."""
+        """One real child at a time; fair admin priority only affects waiting work."""
         while not self.stopping.is_set():
             try:
                 envelope, until = self.pending.get(timeout=.1)
@@ -333,7 +357,7 @@ class Gateway:
                 if self.path == "/health":
                     with gateway.lock:
                         counts = dict(gateway.db.execute("SELECT state,count(*) FROM admission WHERE state IN ('queued','running') GROUP BY state").fetchall())
-                    return self.respond(200, {"status": "ok", "protocol": "employee_work_trace_v1", "maxConcurrency": 1, "queued": counts.get('queued',0), "running": counts.get('running',0)})
+                    return self.respond(200, {"status": "ok", "protocol": "employee_work_trace_v1", "maxConcurrency": 1, "scheduling":"admin_priority_fair", "adminBurstLimit":3, "preemptRunning":False, "queued": counts.get('queued',0), "running": counts.get('running',0)})
                 if not self.allowed(): return self.respond(401, {"error": "UNAUTHORIZED"})
                 try:
                     if not self.path.startswith("/employee-runs/"): raise KeyError()

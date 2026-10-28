@@ -78,6 +78,26 @@ async function main(){
   await orchestration.drain(1);const status=await operationsTaskStatus(binding.credential,submitted.requestId,db);
   assert.equal(status.execution.id,ticket.executionId);assert.equal(status.executionCompleted,true);assert.equal(status.businessCompleted,false);assert.equal(status.independentAcceptance,'not_reviewed');assert.equal(status.operationReceipts.length,3);assert.equal(status.outbound.length,1);assert.equal(status.outbound[0].text,final.content);
  });
+ await check('actual human assessment evidence closes the matching training once; a fabricated result never overwrites it',async()=>{
+  const trainingId=results[1].value.trainingId,training=await db.training.findUnique({where:{id:trainingId}});
+  async function assess(text,score,passed){
+   const intake=await submitOperationsTask(binding.credential,{requestId:randomUUID(),channelId,text},db,ports);
+   captured=null;await orchestration.drain(1);assert(captured);const t=captured,request={model:t.model,messages:[...system,{role:'user',content:t.sealedUserContent}],tools:t.tools,stream:true};
+   let v=(await runtime.host.recordInput({executionId:t.executionId,expectedTraceVersion:t.traceVersion,turn:1,inputHash:hash(request),toolSchemaHash:t.toolSchemaHash,isolation:t.isolation,providerRequest:request})).traceVersion;
+   const call={id:'assessment-'+intake.messageId,type:'function',function:{name:'employee_manage_training',arguments:JSON.stringify({action:'record_result',trainingId,evidenceMessageSeq:intake.sourceSeq,score,passed,status:'completed'})}},assistant={role:'assistant',content:null,tool_calls:[call]};
+   v=(await runtime.host.recordResponse({executionId:t.executionId,expectedTraceVersion:v,turn:1,providerRequestId:'assessment-1-'+intake.messageId,finishReason:'tool_calls',providerMessage:assistant})).traceVersion;
+   const tool=await runtime.host.executeTool({executionId:t.executionId,expectedTraceVersion:v,turn:1,callOrdinal:0,toolCallId:call.id,name:call.function.name,args:JSON.parse(call.function.arguments)});v=tool.traceVersion;
+   request.messages.push({...assistant,content:''},{role:'tool',tool_call_id:call.id,content:JSON.stringify(tool.value)});
+   v=(await runtime.host.recordInput({executionId:t.executionId,expectedTraceVersion:v,turn:2,inputHash:hash(request),toolSchemaHash:t.toolSchemaHash,isolation:t.isolation,providerRequest:request})).traceVersion;
+   const reply={role:'assistant',content:tool.value.success?'Hasil penilaian dicatat berdasarkan pesan asli. Verifikasi independen belum selesai.':'Bukti penilaian belum sesuai. Hasil latihan tidak diubah.'};
+   v=(await runtime.host.recordResponse({executionId:t.executionId,expectedTraceVersion:v,turn:2,providerRequestId:'assessment-2-'+intake.messageId,finishReason:'stop',providerMessage:reply})).traceVersion;
+   await runtime.host.recordOutput({executionId:t.executionId,expectedTraceVersion:v,providerRequestId:'assessment-2-'+intake.messageId,providerMessage:reply});await orchestration.drain(1);return tool.value;
+  }
+  const positive=await assess(`${employee.staffId}, ${training.title}, 2026-10-28: nilai 85 lulus.`,85,true);
+  assert.equal(positive.success,true);const confirmed=await db.training.findUnique({where:{id:trainingId}});assert.equal(confirmed.score,85);assert.equal(confirmed.passed,true);assert.equal(confirmed.status,'completed');
+  const negative=await assess(`${employee.staffId}, ${training.title}, 2026-10-28: tolong periksa latihan.`,100,true);
+  assert.equal(negative.ok,false);assert.match(negative.code,/ASSESSMENT/);const unchanged=await db.training.findUnique({where:{id:trainingId}});assert.equal(unchanged.score,85);assert.equal(unchanged.updatedAt.toISOString(),confirmed.updatedAt.toISOString());
+ });
  await check('normal owner instructions in the employee channel remain readable but cannot import private owner sources/memory',async()=>{
   const group=await teamCommunication(db).create(owner,{requestId:randomUUID(),title:'Routine employee work',kind:'group',members:[employee.staffId,'agent:'+agentId]});
   const message=await teamCommunication(db).send(owner,group.id,{requestId:randomUUID(),text:'Hari ini bersihkan bar dan gunakan SOP yang sudah diterbitkan untuk latihan.'});
@@ -90,7 +110,7 @@ async function main(){
   const requestScope={...employeeScope,requesterStaffId:employee.staffId};await assert.rejects(()=>assertOperationRequester(db,g,requestScope,'employee_manage_staff',{action:'set_schedule'}),/REQUESTER_DENIED/);
  });
  await check('no payments, inventory mutations, production-like completion or employee penalties were fabricated',async()=>{
-  assert.equal(await db.order.count({where:{storeId}}),0);assert.equal(await db.expense.count({where:{storeId}}),0);assert.equal(await db.stockOutLog.count({where:{inventory:{storeId}}}),0);assert.equal((await db.hygieneTask.findFirst({where:{storeId}})).status,'pending');assert.equal((await db.training.findFirst({where:{storeId}})).status,'scheduled');
+  assert.equal(await db.order.count({where:{storeId}}),0);assert.equal(await db.expense.count({where:{storeId}}),0);assert.equal(await db.stockOutLog.count({where:{inventory:{storeId}}}),0);assert.equal((await db.hygieneTask.findFirst({where:{storeId}})).status,'pending');assert.equal((await db.training.findFirst({where:{storeId}})).status,'completed');
  });
  console.log(JSON.stringify({passed,realPg:true,actualNativeIntake:true,actualNativeRecords:true,syntheticProvider:true,syntheticGatewayHealth:true,realHermes:false,modelCalls:0,productionWrites:0,businessAccepted:false}));
 }
