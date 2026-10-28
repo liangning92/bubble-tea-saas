@@ -2,7 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
- employeeRuntime:{paths:/(?:teamAgentBridge\/(?:employee|directDelegation)|scripts\/hermes_employee\/|employee-(?:runtime|cutover|continuation|orchestration|intake|inventory-evidence|private-gateway)|team-agent-direct-delegation|hermes-employee-system-template)/i,tests:/(?:employee-runtime|employee-private-gateway)/i},
+ employeeRuntime:{paths:/(?:AgentMemoryService|conversation-isolation|teamAgentBridge\/(?:employee|directDelegation)|scripts\/hermes_employee\/|employee-(?:runtime|cutover|continuation|orchestration|intake|inventory-evidence|private-gateway)|team-agent-direct-delegation|hermes-employee-system-template)/i,tests:/(?:employee-runtime|employee-private-gateway)/i},
  teamWorkItems:{paths:/(?:externalMcp\/workItem(?:Contract|Service|Tools)|TeamTaskReminder|TeamWorkItemLinks|teamWorkTarget|team-work-items|team-work-item-(?:target|replay)|^(?:shared\/(?:TeamCommunication|TeamChatMessages|TeamTasks|TeamManagementActions)\.tsx|client-staff\/src\/components\/StaffTeamConversation\.tsx|server\/src\/services\/(?:TeamCommunicationService|TeamChatReminderService|EmployeeReminderService|NotificationApprovalService)\.ts)$)/i,tests:/team-work-items|team-work-item-(?:target|replay)/i},
  teamAgentBridge:{paths:/(?:teamAgentBridge\/|externalMcp\/teamCommunicationTools|TeamChatMessages|team-agent-bridge)/i,tests:/team-agent-bridge/i},
  agentTasks:{paths:/(?:agentTasks\/|agentPilot|test-hermes-pdca|hermes\/(?:pdca_|requirements-|plugin\/|tests\/)|hermesTransport|productionAgentBindings|TeamStockReadOnlySource|agent-tasks|agent-dispatch|agent-tool-scopes|agent-pilot-host|agent-supervision|agent-runtime|agent-model-relay|production-agent-bindings|team-ai-agent-transport|team-stock-readonly)/i,tests:/agent-tasks|agent-dispatch|agent-tool-scopes|agent-pilot-host|agent-supervision|agent-runtime|agent-model-relay|production-agent-bindings|team-ai-agent-transport|team-stock-readonly/i},
@@ -98,7 +98,7 @@ const browserChecks={
  payroll:{scripts:['tests/stoploss/payroll-finance-page-check.cjs','tests/stoploss/payroll-estimate-page-check.cjs','tests/stoploss/payroll-settlement-page-check.cjs'],components:['admin','staff']},
  media:{scripts:['tests/media-insights/browser-check.cjs'],components:['admin'],preview:{component:'admin',port:5187}},
  marketing:{scripts:['tests/stoploss/unified-activity-page-check.cjs','tests/stoploss/marketing-operations-page-check.cjs','tests/stoploss/coupon-code-page-check.cjs'],components:['admin','pos']},
- dashboard:{scripts:['tests/stoploss/admin-dashboard-page-check.cjs','tests/stoploss/dashboard-refund-flow-page-check.cjs'],components:['admin']},
+ dashboard:{scripts:['tests/stoploss/dashboard-message-read-page-check.cjs','tests/stoploss/admin-dashboard-page-check.cjs','tests/stoploss/dashboard-refund-flow-page-check.cjs'],components:['admin']},
  receipt:{scripts:['tests/stoploss/receipt-layout-page-check.cjs','tests/stoploss/receipt-handover-ui-check.cjs','tests/stoploss/handover-receipt-settings-page-check.cjs'],components:['admin','pos']},
  barcode:{scripts:['tests/stoploss/barcode-page-check.cjs'],components:['pos']},
  display:{scripts:['tests/stoploss/customer-display-parity-page-check.cjs','tests/stoploss/independent-logo-page-check.cjs'],components:['pos','admin']},
