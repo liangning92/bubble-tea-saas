@@ -7,6 +7,7 @@ import prisma from '../config/database'
 const router = Router()
 
 const logActionSchema = z.object({
+  eventId: z.string().uuid().optional(),
   action: z.string(),
   sessionId: z.string(),
   entityId: z.string().optional(),
@@ -18,7 +19,7 @@ const logActionSchema = z.object({
 // POST /api/pos-action-logs - Log a POS action
 router.post('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { action, sessionId, entityId, description, metadata, severity } = req.body
+    const { action, sessionId, entityId, description, metadata, severity, eventId } = req.body
 
     if (!action || !sessionId || !description) {
       res.status(400).json({ code: 400, message: 'Missing required fields' })
@@ -30,6 +31,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
     if (action === 'cash_drawer' && (!['automatic', 'manual', 'test', 'admin_test'].includes(metadata?.source) || !['requested', 'sent', 'unconfirmed'].includes(metadata?.status) || (metadata.source !== 'automatic' && (typeof metadata.reason !== 'string' || metadata.reason.trim().length < 2 || metadata.reason.length > 200)))) {
       return res.status(400).json({ code: 400, message: 'Drawer source, status and reason required' })
     }
+    if (eventId && action !== 'checkout_failed') return res.status(400).json({code:400,message:'Event identity is reserved for checkout failures'})
     const storeId = req.user!.storeId
     const staffId = req.user!.staffId || ''
 
@@ -44,6 +46,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
     }
 
     const log = await logPOSAction({
+      eventId,
       storeId,
       staffId,
       staffName,

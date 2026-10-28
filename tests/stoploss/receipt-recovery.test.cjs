@@ -24,3 +24,15 @@ test('initial multi-copy printing has a deadline and records late success withou
  await new Promise(resolve=>setImmediate(resolve));assert.equal(ctx.row().value.status,'unknown');
  release({success:true});await new Promise(resolve=>setImmediate(resolve));assert.equal(ctx.row().value.status,'sent');assert.equal(calls,1);
 });
+test('a UI deadline does not allow a second send while the original native request is still active',async()=>{
+ const ctx=setup();let release,calls=0;const pending=ctx.submitSavedReceipt('key',()=>{calls++;return new Promise(resolve=>release=resolve)},()=>{},true);
+ await new Promise(resolve=>setImmediate(resolve));ctx.deadline();await pending;
+ await assert.rejects(ctx.submitSavedReceipt('key',async()=>{calls++;return {success:true}},()=>{},true),/STILL_PROCESSING/);
+ release({success:true});await new Promise(resolve=>setImmediate(resolve));assert.equal(calls,1);
+});
+test('different receipt jobs wait for native completion instead of racing the Windows busy guard',async()=>{
+ const ctx=setup();let release;const events=[];
+ const first=ctx.submitSavedReceipt('first',()=>{events.push('first');return new Promise(resolve=>release=resolve)},()=>{});
+ await new Promise(resolve=>setImmediate(resolve));const second=ctx.submitSavedReceipt('second',async()=>{events.push('second');return {success:true}},()=>{});
+ await new Promise(resolve=>setImmediate(resolve));assert.deepEqual(events,['first']);release({success:true});await Promise.all([first,second]);assert.deepEqual(events,['first','second']);
+});

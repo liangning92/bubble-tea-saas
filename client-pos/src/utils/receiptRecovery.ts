@@ -6,7 +6,17 @@ export function receiptResultStatus(result:ReceiptResult):'sent'|'failed'|'unkno
 export function receiptNeedsPaperCheck(value:{status:string;error?:string}){
  return value.status!=='failed'||!/RECEIPT_(?:PAINT|RENDER|SIZE|PDF|BITMAP|RENDERER|TEMPLATE)|UnknownVizError|BARCODE_TOO_WIDE|No printer available|PRINTER_(?:API|TARGET)_UNAVAILABLE/.test(value.error||'')
 }
+// Native Windows accepts one receipt at a time. Keep queued output independent of checkout.
+let receiptDeliveryTail:Promise<unknown> = Promise.resolve()
+const activeReceiptJobs = new Set<string>()
+function queueReceiptDelivery(send:(payload:any)=>Promise<ReceiptResult>,payload:any):Promise<ReceiptResult> {
+ const queuedAt=Date.now()
+ const job=receiptDeliveryTail.then(()=>Date.now()-queuedAt>=30000 ? {success:false,deliveryStatus:'not-sent',error:'RECEIPT_QUEUE_EXPIRED'} : send(payload))
+ receiptDeliveryTail=job.catch(()=>{})
+ return job
+}
 export async function submitSavedReceipt(key:string,send:(payload:any)=>Promise<ReceiptResult>,audit:(status:string,error?:string)=>void,reprint=false):Promise<ReceiptResult>{
+ if(reprint&&activeReceiptJobs.has(key))throw Error('RECEIPT_STILL_PROCESSING')
  const record=await db.transaction('rw',db.config,async()=>{
   const job=await db.config.get(key)
   if(!job?.value?.payload)throw Error('RECEIPT_COPY_UNAVAILABLE')
@@ -21,9 +31,10 @@ export async function submitSavedReceipt(key:string,send:(payload:any)=>Promise<
  audit('pending')
  let timer:ReturnType<typeof setTimeout>|undefined
  // Continue recording a late native result; a UI deadline does not cancel printer delivery.
- const native=Promise.resolve().then(()=>send({...record.value.payload,...(reprint?{openCashDrawer:false,printCopies:1}: {})})).then(async result=>{
+ activeReceiptJobs.add(key)
+ const native=queueReceiptDelivery(send,{...record.value.payload,...(reprint?{openCashDrawer:false,printCopies:1}: {})}).then(async result=>{
   await persist(receiptResultStatus(result),result.error);return result
- },async error=>{await persist('unknown',String(error).slice(0,500));return {success:false,deliveryStatus:'unconfirmed',error:String(error)}})
+ },async error=>{await persist('unknown',String(error).slice(0,500));return {success:false,deliveryStatus:'unconfirmed',error:String(error)}}).finally(()=>activeReceiptJobs.delete(key))
  try{
   return await Promise.race([native,new Promise<ReceiptResult>(resolve=>{timer=setTimeout(()=>{resolve({success:false,deliveryStatus:'unconfirmed',error:'RECEIPT_DELIVERY_TIMEOUT'});void persist('unknown','RECEIPT_DELIVERY_TIMEOUT').catch(()=>{})},45000)})])
  }finally{if(timer)clearTimeout(timer)}
