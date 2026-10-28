@@ -67,7 +67,7 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
       if (!author?.userId || author.user?.id !== author.userId || author.user?.storeId !== grant.storeId || typeof message.text !== 'string') deny()
       const isAdmin = author.user?.role === 'admin' || author.user?.role === 'manager'
       const photos=message.files?.length?await employeeMessagePhotos(db,grant,scope,message):[]
-      value = { messageId: message.id, seq: message.seq, authorStaffId: author.id, role: 'user', text: message.text.trim()||(photos.length?'The employee shared a verified work photo without text. Ask what help is needed if intent is unclear.':'An attachment was shared without text. Ask what should be checked; attachment contents have not been loaded.'), ...(message.files?.length?{attachmentCount:message.files.length,attachmentAccess:photos.length?'verified_images':'not_loaded',photos}:{}), createdAt: message.createdAt }
+      value = { messageId: message.id, seq: message.seq, authorStaffId: author.id, sourceAdmission:{kind:'native_same_audience_human_message',channelId:c.id,audienceHash:scope.audienceHash,fromSeq}, role: 'user', text: message.text.trim()||(photos.length?'The employee shared a verified work photo without text. Ask what help is needed if intent is unclear.':'An attachment was shared without text. Ask what should be checked; attachment contents have not been loaded.'), ...(message.files?.length?{attachmentCount:message.files.length,attachmentAccess:photos.length?'verified_images':'not_loaded',photos}:{}), createdAt: message.createdAt }
     }
   } else if (source.kind === 'employee_task') {
     if (!grant.actions.includes('tasks.read') || source.taskId !== scope.task.taskId || source.version !== scope.task.version) deny()
@@ -108,7 +108,9 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence
   } else if(source.kind==='marketing_evidence') {
-    if(!grant.actions.includes('marketing.write')&&!(grant.actions.includes('marketing.read')&&['list_active','query_products'].includes(source.action)))deny()
+    if(source.action==='membership.inspect'){if(!grant.actions.includes('members.read'))deny()}
+    else if(source.action==='membership.apply'){if(!grant.actions.includes('members.write')||!grant.actions.includes('marketing.write'))deny()}
+    else if(!grant.actions.includes('marketing.write')&&!(grant.actions.includes('marketing.read')&&['list_active','query_products'].includes(source.action)))deny()
     const evidence=await readEmployeeMarketingEvidence(db,grant.storeId,source.action,source.fingerprint)
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence
@@ -138,7 +140,7 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence
   } else if(source.kind==='training_evidence') {
-    if(!grant.actions.includes('training.write'))deny()
+    if(!grant.actions.includes('training.write')&&!(grant.actions.includes('training.read')&&['list_trainings','list_courses'].includes(source.action)))deny()
     const evidence=await readEmployeeTrainingEvidence(db,grant.storeId,source.action,source.fingerprint)
     if(evidence.fingerprint!==source.fingerprint)deny()
     value=evidence

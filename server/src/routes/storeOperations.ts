@@ -4,6 +4,8 @@ import {
   applyOperationsPolicy,
   readOperationsState,
   quoteOperationsSpecials,
+  submitOperationsTask,
+  operationsTaskStatus,
 } from '../services/StoreOperationsDelegationService'
 
 /** This router has its own opaque, revocable capability authentication, not administrator JWTs. */
@@ -30,17 +32,15 @@ const run = (apply: boolean) => async (req: any, res: any) => {
           : /OWNER|AUTHORIZATION|NOT_GRANTED/.test(error.message)
             ? 403
             : 409
-    res
-      .status(status)
-      .json({
-        code: status,
-        message:
-          error instanceof z.ZodError
-            ? 'OPERATIONS_INPUT_INVALID'
-            : String(error.message).startsWith('OPERATIONS_')
-              ? error.message
-              : 'OPERATIONS_UNAVAILABLE',
-      })
+    res.status(status).json({
+      code: status,
+      message:
+        error instanceof z.ZodError
+          ? 'OPERATIONS_INPUT_INVALID'
+          : String(error.message).startsWith('OPERATIONS_')
+            ? error.message
+            : 'OPERATIONS_UNAVAILABLE',
+    })
   }
 }
 storeOperationsRouter.get('/daily-member-specials', run(false))
@@ -60,6 +60,36 @@ storeOperationsRouter.post('/daily-member-specials/quote', async (req, res) => {
           : /OWNER|AUTHORIZATION|NOT_GRANTED/.test(error.message)
             ? 403
             : 409
+    res.status(status).json({
+      code: status,
+      message:
+        error instanceof z.ZodError
+          ? 'OPERATIONS_INPUT_INVALID'
+          : /^(OPERATIONS_|ACTIVITY_|MEMBERSHIP_)/.test(error.message)
+            ? error.message
+            : 'OPERATIONS_UNAVAILABLE',
+    })
+  }
+})
+
+const taskCall = (submit: boolean) => async (req: any, res: any) => {
+  try {
+    const header = req.get('Authorization') || ''
+    if (!header.startsWith('Bearer '))
+      return res.status(401).json({ code: 401, message: 'OPERATIONS_CREDENTIAL_REQUIRED' })
+    const data = submit
+      ? await submitOperationsTask(header.slice(7), req.body)
+      : await operationsTaskStatus(header.slice(7), req.params.requestId)
+    res.json({ code: 200, data })
+  } catch (error: any) {
+    const status =
+      error instanceof z.ZodError
+        ? 400
+        : /CREDENTIAL/.test(error.message)
+          ? 401
+          : /OWNER|ROLE|AUTHORIZATION|NOT_GRANTED/.test(error.message)
+            ? 403
+            : 409
     res
       .status(status)
       .json({
@@ -67,9 +97,11 @@ storeOperationsRouter.post('/daily-member-specials/quote', async (req, res) => {
         message:
           error instanceof z.ZodError
             ? 'OPERATIONS_INPUT_INVALID'
-            : /^(OPERATIONS_|ACTIVITY_|MEMBERSHIP_)/.test(error.message)
+            : String(error.message).startsWith('OPERATIONS_')
               ? error.message
               : 'OPERATIONS_UNAVAILABLE',
       })
   }
-})
+}
+storeOperationsRouter.post('/tasks', taskCall(true))
+storeOperationsRouter.get('/tasks/:requestId', taskCall(false))

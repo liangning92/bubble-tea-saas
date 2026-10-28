@@ -1,3 +1,6 @@
+import {applyInput,assertNarrowDailySpecial,applyDailyMembershipPolicy} from './DailyMembershipOperationsService'
+export {applyInput,assertNarrowDailySpecial} from './DailyMembershipOperationsService'
+import { configuredEmployeeDeployment } from './teamAgentBridge/employeeConfigured'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -15,7 +18,15 @@ import {
   membershipPolicy,
   paidAmountMeetsMembershipPolicy,
 } from './MembershipQualificationService'
-import { readTeam } from './TeamCommunicationService'
+import { readTeam, teamCommunication, lockTeam } from './TeamCommunicationService'
+import {
+  employeeRouteSchema,
+  employeeRouteKey,
+  employeeGrantKey,
+  employeeIntakeKey,
+} from './teamAgentBridge/employeeIntake'
+import { grantSchema } from './teamAgentBridge/contract'
+import { readAuthorizedBridgeChannel } from './teamAgentBridge/directDelegation'
 
 const PREFIX = 'store.operations.delegation.'
 const hash = (v: string) => createHash('sha256').update(v).digest('hex')
@@ -24,21 +35,12 @@ const fail = (code: string): never => {
 }
 export const delegationInput = z
   .object({
-    activityIds: z.array(z.string().min(1)).min(1).max(20),
+    activityIds: z.array(z.string().min(1)).max(20),
     expiresAt: z.string().datetime().nullable(),
-    confirm: z.literal('daily_member_specials_and_single_paid_order_30000'),
-  })
-  .strict()
-export const applyInput = z
-  .object({
-    requestId: z.string().uuid(),
-    expectedPolicyVersion: z.number().int().min(0),
-    activities: z
-      .array(z.object({ id: z.string().min(1), version: z.number().int().positive() }).strict())
-      .min(1)
-      .max(20),
-    minimumPaidAmount: z.literal(30000),
-    memberOnly: z.literal(true),
+    confirm: z.enum([
+      'daily_member_specials_and_single_paid_order_30000',
+      'full_store_operations_role',
+    ]),
   })
   .strict()
 export const operationsQuoteInput = z
@@ -60,15 +62,6 @@ export const operationsQuoteInput = z
     taxEnabled: z.boolean().optional(),
   })
   .strict()
-export function assertNarrowDailySpecial(activity: any) {
-  if (
-    activity?.type !== 'special_price' ||
-    !Array.isArray(activity.weekdays) ||
-    !activity.weekdays.length ||
-    activity.status === 'ended'
-  )
-    fail('OPERATIONS_DAILY_SPECIAL_REQUIRED')
-}
 async function ownerAllowed(
   db: any,
   ownerId: string,
@@ -112,6 +105,7 @@ export async function operationsOwnerState(storeId: string, ownerId: string, db:
   const rows = await db.config.findMany({ where: { storeId, key: { startsWith: PREFIX } } })
   return {
     canDelegate,
+    operationProfile: settings?.operationProfile || 'custom',
     authorizationExpiresAt: settings?.expiresAt || null,
     policy: await membershipPolicy(storeId, db),
     activities: (await listActivities(storeId, db)).filter(
@@ -132,6 +126,15 @@ export async function createOperationsDelegation(
 ) {
   const v = delegationInput.parse(raw),
     { owner, settings } = await ownerAllowed(db, ownerId, storeId)
+  const fullRole = v.confirm === 'full_store_operations_role'
+  if (
+    fullRole &&
+    (settings.operationProfile !== 'store_operations' ||
+      !settings.employeeBridgeEnabled ||
+      !owner.staff?.id)
+  )
+    fail('OPERATIONS_ROLE_PROFILE_REQUIRED')
+  if (!fullRole && !v.activityIds.length) fail('OPERATIONS_DAILY_SPECIAL_REQUIRED')
   const expiry = v.expiresAt ? Date.parse(v.expiresAt) : null
   if (
     (expiry !== null && expiry <= Date.now()) ||
@@ -155,6 +158,7 @@ export async function createOperationsDelegation(
       'marketing.daily_specials.member_only',
       'marketing.daily_specials.quote',
       'membership.single_paid_order_policy',
+      ...(fullRole ? ['hermes.owner_tasks.submit', 'hermes.owner_tasks.status'] : []),
     ],
     forbidden: ['payments', 'over_budget', 'employee_penalties', 'permission_changes'],
     activityIds: ids,
@@ -163,11 +167,93 @@ export async function createOperationsDelegation(
     revoked: false,
     secretHash: hash(secret),
   }
-  await db.config.create({
-    data: { storeId, key: PREFIX + id, value: JSON.stringify(grant), category: 'agent_operations' },
-  })
-  const { secretHash, ownerSecurityFingerprint, ...publicGrant } = grant
-  return { delegation: publicGrant, credential: id + '.' + secret, credentialShownOnce: true }
+  const persist = async (target: any) => {
+    if (fullRole) {
+      const current = await ownerAllowed(target, ownerId, storeId, grant.ownerSecurityFingerprint)
+      if (
+        current.settings.operationProfile !== 'store_operations' ||
+        !current.settings.employeeBridgeEnabled ||
+        !current.owner.staff?.id
+      )
+        fail('OPERATIONS_ROLE_PROFILE_REQUIRED')
+      if (
+        current.settings.expiresAt &&
+        (!grant.expiresAt || Date.parse(grant.expiresAt) > Date.parse(current.settings.expiresAt))
+      )
+        fail('OPERATIONS_EXPIRY_OUT_OF_SCOPE')
+    }
+    await target.config.create({
+      data: {
+        storeId,
+        key: PREFIX + id,
+        value: JSON.stringify(grant),
+        category: 'agent_operations',
+      },
+    })
+    const credential = id + '.' + secret
+    let ownerTaskChannels: any[] = []
+    if (fullRole) {
+      const rows = await target.config.findMany({
+        where: { storeId, key: { startsWith: 'team.communication.channel.' } },
+      })
+      for (const row of rows) {
+        const c = JSON.parse(row.value)
+        if (!c.id || !Array.isArray(c.members) || c.members.length !== 2) continue
+        try {
+          const ctx = await ownerTaskContext(target, credential, c.id)
+          ownerTaskChannels.push({
+            id: c.id,
+            title: c.title,
+            taskId: ctx.route.task.taskId,
+            agentId: ctx.grant.agentId,
+          })
+        } catch {}
+      }
+      if (!ownerTaskChannels.length) {
+        const agentId = process.env.EMPLOYEE_HERMES_AGENT_ID
+        if (!agentId || process.env.EMPLOYEE_HERMES_STORE_ID !== storeId)
+          fail('OPERATIONS_HERMES_RUNTIME_NOT_CONFIGURED')
+        const row = await target.config.findUnique({
+          where: { storeId_key: { storeId, key: employeeGrantKey(agentId) } },
+        })
+        const installed = grantSchema.parse(row && JSON.parse(row.value))
+        if (
+          installed.sponsorUserId !== ownerId ||
+          installed.storeId !== storeId ||
+          installed.revoked ||
+          Date.parse(installed.expiresAt) <= Date.now()
+        )
+          fail('OPERATIONS_OWNER_ROUTE_REQUIRED')
+        const facade = { ...target, $transaction: async (fn: any) => fn(target) }
+        const channel = await teamCommunication(facade).create(
+          { id: ownerId, storeId, staffId: owner.staff.id, role: 'admin', employeeApp: false },
+          {
+            requestId: id,
+            title: 'Operasional pribadi pemilik · Hermes',
+            kind: 'direct',
+            members: ['agent:' + agentId],
+          },
+        )
+        const ctx = await ownerTaskContext(target, credential, channel.id)
+        ownerTaskChannels = [
+          {
+            id: channel.id,
+            title: channel.title,
+            taskId: ctx.route.task.taskId,
+            agentId: ctx.grant.agentId,
+          },
+        ]
+      }
+    }
+    const { secretHash, ownerSecurityFingerprint, ...publicGrant } = grant
+    return {
+      delegation: publicGrant,
+      credential,
+      credentialShownOnce: true,
+      ...(fullRole ? { ownerTaskChannels } : {}),
+    }
+  }
+  return fullRole ? db.$transaction(persist, { isolationLevel: 'Serializable' }) : persist(db)
 }
 export async function revokeOperationsDelegation(
   storeId: string,
@@ -215,6 +301,47 @@ async function resolve(db: any, credential: string, lock = false) {
     fail('OPERATIONS_CREDENTIAL_INVALID')
   await ownerAllowed(db, grant.ownerId, grant.storeId, grant.ownerSecurityFingerprint)
   return grant
+}
+export interface OperationsTaskPorts {
+  gatewayHealth(db: any): Promise<unknown>
+}
+const taskPorts: OperationsTaskPorts = {
+  gatewayHealth: async (db) => {
+    const deployment = configuredEmployeeDeployment(db)
+    if (!deployment) throw Error('EMPLOYEE_GATEWAY_NOT_CONFIGURED')
+    return deployment.gatewayHealth()
+  },
+}
+async function operationsGatewayState(db: any, ports: OperationsTaskPorts = taskPorts) {
+  const checkedAt = new Date().toISOString()
+  try {
+    const raw: any = await ports.gatewayHealth(db)
+    if (
+      raw?.status !== 'ok' ||
+      raw.protocol !== 'employee_work_trace_v1' ||
+      raw.maxConcurrency !== 1 ||
+      !Number.isInteger(raw.queued) ||
+      raw.queued < 0 ||
+      ![0, 1].includes(raw.running)
+    )
+      throw Error('EMPLOYEE_GATEWAY_SINGLE_SLOT_REQUIRED')
+    return {
+      verified: true,
+      protocol: raw.protocol,
+      maxConcurrency: 1,
+      queued: raw.queued,
+      running: raw.running,
+      checkedAt,
+    }
+  } catch (error: any) {
+    return {
+      verified: false,
+      checkedAt,
+      reason: /^EMPLOYEE_GATEWAY_[A-Z_]+$/.test(error?.message || '')
+        ? error.message
+        : 'EMPLOYEE_GATEWAY_HEALTH_UNAVAILABLE',
+    }
+  }
 }
 export async function readOperationsState(credential: string, db: any = prisma) {
   const grant = await resolve(db, credential)
@@ -308,7 +435,33 @@ export async function readOperationsState(credential: string, db: any = prisma) 
     orderBy: { createdAt: 'desc' },
     take: 20,
   })
+  const ownerTaskChannels: any[] = []
+  if (grant.capabilities?.includes('hermes.owner_tasks.submit')) {
+    const channels = await db.config.findMany({
+      where: { storeId: grant.storeId, key: { startsWith: 'team.communication.channel.' } },
+    })
+    for (const row of channels) {
+      const c = JSON.parse(row.value)
+      if (!c.id || !Array.isArray(c.members) || c.members.length !== 2) continue
+      try {
+        const context = await ownerTaskContext(db, credential, c.id)
+        ownerTaskChannels.push({
+          id: c.id,
+          title: c.title,
+          taskId: context.route.task.taskId,
+          agentId: context.grant.agentId,
+        })
+      } catch {
+        /* unavailable/changed routes are not advertised */
+      }
+    }
+  }
   return {
+    gateway: grant.capabilities?.includes('hermes.owner_tasks.submit')
+      ? await operationsGatewayState(db)
+      : { verified: false, reason: 'OPERATIONS_ROLE_DELEGATION_REQUIRED' },
+    capabilities: grant.capabilities || [],
+    ownerTaskChannels,
     quoteCandidates,
     qualificationAudit,
     verificationProfiles: {
@@ -383,75 +536,270 @@ export async function quoteOperationsSpecials(credential: string, raw: unknown, 
   }
 }
 /** Fixed capability, no product/price/schedule mutation and no model/provider calls. */
-export async function applyOperationsPolicy(credential: string, raw: unknown, db: any = prisma) {
-  const v = applyInput.parse(raw),
-    fingerprint = hash(JSON.stringify(v))
-  const receipt = await db.$transaction(
-    async (tx: any) => {
-      const grant = await resolve(tx, credential, true),
-        storeId = grant.storeId,
-        key = 'store.operations.receipt.' + grant.id + '.' + v.requestId
-      await tx.store.update({ where: { id: storeId }, data: { updatedAt: new Date() } })
-      const prior = await tx.config.findUnique({ where: { storeId_key: { storeId, key } } })
-      if (prior) {
-        const p = JSON.parse(prior.value)
-        if (p.fingerprint !== fingerprint) fail('OPERATIONS_IDEMPOTENCY_CONFLICT')
-        return { ...p, alreadyApplied: true }
-      }
-      if (
-        new Set(v.activities.map((a) => a.id)).size !== v.activities.length ||
-        v.activities.some((a) => !grant.activityIds.includes(a.id))
-      )
-        fail('OPERATIONS_ACTIVITY_NOT_GRANTED')
-      const current = await membershipPolicy(storeId, tx)
-      if (current.version !== v.expectedPolicyVersion) fail('OPERATIONS_POLICY_VERSION_CHANGED')
-      const policy = {
-        ...defaultMembershipPolicy(),
-        version: current.version + 1,
-        enabled: true,
-        minimumPaidAmount: 30000,
-        activatedAt: current.activatedAt || new Date().toISOString(),
-      }
-      const policyRow = await tx.config.findUnique({
-        where: { storeId_key: { storeId, key: MEMBERSHIP_POLICY_KEY } },
-      })
-      if (policyRow) await casRecord(tx, policyRow, policy)
-      else await putRecord(tx, storeId, MEMBERSHIP_POLICY_KEY, policy)
-      const activities = []
-      for (const wanted of v.activities) {
-        const row = await tx.config.findUnique({
-          where: { storeId_key: { storeId, key: ACTIVITY_PREFIX + 'activity.' + wanted.id } },
-        })
-        if (!row) fail('OPERATIONS_ACTIVITY_NOT_FOUND')
-        const old = JSON.parse(row.value)
-        assertNarrowDailySpecial(old)
-        if (old.version !== wanted.version) fail('OPERATIONS_ACTIVITY_VERSION_CHANGED')
-        const memberNotice =
-          'Promo Harian Khusus Member. Belanja minimal Rp30.000 dalam satu transaksi untuk menjadi member. Berlaku untuk pembelian berikutnya tanpa minimum belanja berulang.'
-        const description = old.description?.includes(memberNotice)
-          ? old.description
-          : [old.description, memberNotice].filter(Boolean).join('\n\n')
-        if (description.length > 1000) fail('OPERATIONS_DESCRIPTION_REVIEW_REQUIRED')
-        const next = { ...old, memberOnly: true, version: old.version + 1, description }
-        await casRecord(tx, row, next)
-        activities.push(next)
-      }
-      const value = {
-        requestId: v.requestId,
-        fingerprint,
-        storeId,
-        delegationId: grant.id,
-        ownerId: grant.ownerId,
-        policy,
-        activities,
-        appliedAt: new Date().toISOString(),
-        newSpendCents: 0,
-      }
-      await putRecord(tx, storeId, key, value)
-      return value
-    },
-    { isolationLevel: 'Serializable' },
-  )
+export async function applyOperationsPolicy(credential:string,raw:unknown,db:any=prisma) {
+  const v=applyInput.parse(raw)
+  const receipt=await db.$transaction(async(tx:any)=>{
+    const grant=await resolve(tx,credential,true)
+    return applyDailyMembershipPolicy(tx,grant,v)
+  },{isolationLevel:'Serializable'})
   notifyActivities(receipt.storeId)
   return receipt
+}
+
+const operationsTaskInput = z
+  .object({
+    requestId: z.string().uuid(),
+    channelId: z.string().uuid(),
+    text: z.string().trim().min(1).max(4000),
+  })
+  .strict()
+async function ownerTaskContext(db: any, credential: string, channelId: string, lock = false) {
+  const delegation = await resolve(db, credential, lock)
+  if (!delegation.capabilities?.includes('hermes.owner_tasks.submit'))
+    fail('OPERATIONS_ROLE_DELEGATION_REQUIRED')
+  const { owner, settings } = await ownerAllowed(
+    db,
+    delegation.ownerId,
+    delegation.storeId,
+    delegation.ownerSecurityFingerprint,
+  )
+  if (
+    settings.operationProfile !== 'store_operations' ||
+    !settings.employeeBridgeEnabled ||
+    !owner.staff?.id
+  )
+    fail('OPERATIONS_ROLE_PROFILE_REQUIRED')
+  const channel = await readTeam<any>(db, delegation.storeId, 'channel.' + channelId)
+  if (!channel || channel.archived) fail('OPERATIONS_OWNER_CHANNEL_REQUIRED')
+  const route = employeeRouteSchema.parse(
+    await db.config
+      .findUnique({
+        where: { storeId_key: { storeId: delegation.storeId, key: employeeRouteKey(channelId) } },
+      })
+      .then((r: any) => r && JSON.parse(r.value)),
+  )
+  const row = await db.config.findUnique({
+    where: { storeId_key: { storeId: delegation.storeId, key: employeeGrantKey(route.agentId) } },
+  })
+  const grant = grantSchema.parse(row && JSON.parse(row.value))
+  if (
+    process.env.EMPLOYEE_HERMES_AGENT_ID &&
+    grant.agentId !== process.env.EMPLOYEE_HERMES_AGENT_ID
+  )
+    fail('OPERATIONS_OWNER_ROUTE_REQUIRED')
+  if (
+    grant.sponsorUserId !== owner.id ||
+    route.sourceStaffId !== owner.staff.id ||
+    !route.enabled ||
+    route.paused ||
+    Date.parse(route.expiresAt) <= Date.now()
+  )
+    fail('OPERATIONS_OWNER_ROUTE_REQUIRED')
+  const humans = channel.members.filter((m: any) => !m.staffId.startsWith('agent:'))
+  if (
+    humans.length !== 1 ||
+    humans[0].staffId !== owner.staff.id ||
+    channel.members.some(
+      (m: any) => m.staffId.startsWith('agent:') && m.staffId !== 'agent:' + grant.agentId,
+    )
+  )
+    fail('OPERATIONS_OWNER_PRIVATE_AUDIENCE_REQUIRED')
+  if (
+    !grant.channelIds.includes(channelId) ||
+    !['messages.read', 'messages.send', 'tasks.read'].every((action) =>
+      grant.actions.includes(action as any),
+    )
+  )
+    fail('OPERATIONS_OWNER_ROUTE_REQUIRED')
+  const task = await readTeam<any>(
+    db,
+    delegation.storeId,
+    'task.' + channelId + '.' + route.task.taskId,
+  )
+  if (
+    !task ||
+    task.id !== route.task.taskId ||
+    task.version !== route.task.version ||
+    task.ownerId !== 'agent:' + grant.agentId ||
+    !['assigned', 'accepted', 'submitted', 'changes_requested'].includes(task.status)
+  )
+    fail('OPERATIONS_OWNER_TASK_CHANGED')
+  await readAuthorizedBridgeChannel(db, grant, route.task, channelId, channel)
+  return { delegation, owner, route, grant, channel }
+}
+/** Enqueue into the existing native Hermes worker. Never run a second model loop.
+ * The owner identity is resolved from the explicit role delegation, not caller JSON.
+ */
+export async function submitOperationsTask(
+  credential: string,
+  raw: unknown,
+  db: any = prisma,
+  ports: OperationsTaskPorts = taskPorts,
+) {
+  const input = operationsTaskInput.parse(raw)
+  const initialGrant = await resolve(db, credential)
+  if (!initialGrant.capabilities?.includes('hermes.owner_tasks.submit'))
+    fail('OPERATIONS_ROLE_DELEGATION_REQUIRED')
+  const gateway = await operationsGatewayState(db, ports)
+  if (!gateway.verified) fail('OPERATIONS_SINGLE_SLOT_GATEWAY_REQUIRED')
+  return db.$transaction(async (tx: any) => {
+    const context = await ownerTaskContext(tx, credential, input.channelId, true)
+    if (
+      process.env.EMPLOYEE_HERMES_ENABLED !== '1' ||
+      process.env.EMPLOYEE_HERMES_STORE_ID !== context.delegation.storeId ||
+      process.env.EMPLOYEE_HERMES_AGENT_ID !== context.grant.agentId
+    )
+      fail('OPERATIONS_HERMES_RUNTIME_NOT_CONFIGURED')
+    const { delegation, owner, route } = context
+    const key = 'store.operations.task.' + delegation.id + '.' + input.requestId
+    await lockTeam(tx, delegation.storeId, key)
+    const old = await readTeam<any>(tx, delegation.storeId, key),
+      fingerprint = hash(JSON.stringify(input))
+    if (old) {
+      if (old.fingerprint !== fingerprint) fail('OPERATIONS_TASK_REQUEST_CONFLICT')
+      return { ...old, alreadySubmitted: true }
+    }
+    const facade = { ...tx, $transaction: async (fn: any) => fn(tx) }
+    const message = await teamCommunication(facade).send(
+      {
+        id: owner.id,
+        storeId: delegation.storeId,
+        staffId: owner.staff.id,
+        role: 'admin',
+        employeeApp: false,
+      },
+      input.channelId,
+      {
+        requestId: input.requestId,
+        text: input.text,
+        files: [],
+        expectedLastSeq: context.channel.lastSeq,
+      },
+      undefined,
+      undefined,
+      undefined,
+      { id: delegation.id, requestId: input.requestId },
+    )
+    const eventId = hash(JSON.stringify(['employee_work', input.channelId, message.id]))
+    const pending = await tx.config.findUnique({
+      where: { storeId_key: { storeId: delegation.storeId, key: employeeIntakeKey(eventId) } },
+    })
+    if (!pending || JSON.parse(pending.value).state !== 'pending')
+      fail('OPERATIONS_HERMES_NOT_QUEUED')
+    const receipt = {
+      requestId: input.requestId,
+      fingerprint,
+      delegationId: delegation.id,
+      agentId: context.grant.agentId,
+      origin: 'owner_operations_delegation',
+      channelId: input.channelId,
+      taskId: route.task.taskId,
+      messageId: message.id,
+      sourceSeq: message.seq,
+      eventId,
+      submittedAt: new Date().toISOString(),
+      state: 'queued',
+      businessCompleted: false,
+      gateway,
+    }
+    await tx.config.create({
+      data: {
+        storeId: delegation.storeId,
+        key: 'team.communication.' + key,
+        category: 'agent_operations',
+        value: JSON.stringify(receipt),
+      },
+    })
+    await tx.financeAuditLog.create({
+      data: {
+        storeId: delegation.storeId,
+        userId: 'service:operations-delegation',
+        action: 'create',
+        entityType: 'hermes_owner_operations_task',
+        entityId: input.requestId,
+        description: 'Submit owner-delegated internal task to the existing Hermes runtime',
+        newValue: JSON.stringify(receipt),
+      },
+    })
+    return receipt
+  })
+}
+export async function operationsTaskStatus(
+  credential: string,
+  requestId: string,
+  db: any = prisma,
+) {
+  z.string().uuid().parse(requestId)
+  const delegation = await resolve(db, credential)
+  const receipt = await readTeam<any>(
+    db,
+    delegation.storeId,
+    'store.operations.task.' + delegation.id + '.' + requestId,
+  )
+  if (!receipt) fail('OPERATIONS_TASK_NOT_FOUND')
+  await ownerTaskContext(db, credential, receipt.channelId)
+  const row = await db.config.findUnique({
+    where: {
+      storeId_key: { storeId: delegation.storeId, key: employeeIntakeKey(receipt.eventId) },
+    },
+  })
+  const pending = row && JSON.parse(row.value)
+  const mappings = await db.config.findMany({
+    where: {
+      storeId: delegation.storeId,
+      key: { startsWith: 'team.communication.employeeOrchestration.mapping.' },
+    },
+  })
+  const mapping = mappings
+    .map((r: any) => JSON.parse(r.value))
+    .find((m: any) => m.sourceMessageId === receipt.messageId)
+  const execution = mapping?.executionId
+    ? await readTeam<any>(
+        db,
+        delegation.storeId,
+        'employeeRuntime.execution.' + mapping.executionId,
+      )
+    : null
+  if (
+    execution &&
+    (execution.scope?.channelId !== receipt.channelId ||
+      execution.scope?.task?.taskId !== receipt.taskId)
+  )
+    fail('OPERATIONS_TASK_EXECUTION_SCOPE_CHANGED')
+  const outbound: any[] = []
+  for (const t of execution?.tools || [])
+    if (t.name === 'employee_send_message' && t.value?.messageId && Number.isInteger(t.value.seq)) {
+      const message = await readTeam<any>(
+        db,
+        delegation.storeId,
+        'message.' + receipt.channelId + '.' + String(t.value.seq).padStart(12, '0'),
+      )
+      if (
+        message?.id === t.value.messageId &&
+        message.authorId === 'agent:' + execution.grant.agentId
+      )
+        outbound.push({
+          messageId: message.id,
+          seq: message.seq,
+          text: message.text,
+          expectsReply: t.value.expectsReply === true,
+          delivery: 'stored',
+        })
+    }
+  return {
+    ...receipt,
+    intake: pending
+      ? { state: pending.state, reason: pending.reason || null, updatedAt: pending.updatedAt }
+      : null,
+    execution: execution
+      ? { id: mapping.executionId, phase: execution.phase, fault: execution.fault || null }
+      : null,
+    outbound,
+    operationReceipts: (execution?.tools || [])
+      .filter((t: any) => t.mutating && t.name !== 'employee_send_message')
+      .map((t: any) => ({ toolCallId: t.toolCallId, tool: t.name, value: t.value })),
+    executionCompleted: execution?.phase === 'complete',
+    businessCompleted: false,
+    independentAcceptance: 'not_reviewed',
+  }
 }

@@ -128,3 +128,98 @@ Rp29,999/Rp30,000 boundaries, pending/full-price checkout and a later low-value
 member-price quote using isolated in-memory test evidence. These are not real
 production transactions. Production configuration readback, actual web/phone
 layout, and cashier read-only quote verification must be recorded separately.
+
+## Full operations role, shared Hermes runtime
+
+The administrator may select `operationProfile: "store_operations"` on the existing
+Agent settings page. A normal audited settings save expands all existing module
+permissions and synchronizes the existing Hermes grant. It does not change staff
+roles or create SQL/shell access. Custom profiles and explicit disable/revocation
+remain supported; expiry follows the owner's existing saved authorization.
+
+A new operations delegation using `confirm: "full_store_operations_role"` receives
+`hermes.owner_tasks.submit` and `hermes.owner_tasks.status`. This requires the full
+profile and enabled employee bridge. Old daily-specials credentials never acquire
+these capabilities automatically. For this confirmation `activityIds` may be empty.
+The selected daily-special IDs still scope any daily-special mutation.
+
+State discovery adds `capabilities`, `ownerTaskChannels:[{id,title,taskId}]`, and
+`gateway`. A verified gateway is `{verified:true,protocol:"employee_work_trace_v1",
+maxConcurrency:1,queued,running,checkedAt}`. A missing/old/unverifiable installation
+returns `{verified:false,reason,checkedAt}` without exposing origin or credentials.
+Submit rechecks the real private gateway before writing a native task message.
+
+`POST /api/internal/store-operations/tasks` accepts only
+`{requestId,channelId,text}`. IDs must be UUIDs and text 1–4000 characters. The backend
+resolves owner identity from the explicit role delegation, checks an already-bound
+owner-only native channel and the same Hermes grant/task/route, and writes the
+native source message plus intake in one transaction. It never accepts a caller-
+supplied requester or adds a group, staff role, new model loop or provider.
+The message is visibly marked as Operations Agent acting under owner delegation;
+its source/audit records retain `origin:"owner_operations_delegation"`.
+
+The response contains `{requestId,fingerprint,delegationId,origin,channelId,taskId,
+messageId,sourceSeq,eventId,submittedAt,state:"queued",businessCompleted:false,
+gateway,alreadySubmitted?}`. Reuse requestId after an unknown response; changed
+inputs conflict. Queueing is not execution or acceptance.
+
+`GET /api/internal/store-operations/tasks/:requestId` rechecks current authorization
+and private audience, then adds `intake:{state,reason,updatedAt}|null`,
+`execution:{id,phase,fault}|null`, actual stored `outbound` message references/text,
+`operationReceipts`, `executionCompleted`, and `independentAcceptance:"not_reviewed"`.
+`businessCompleted` remains false. Missing executions/replies remain null/empty.
+Only actual stored source-bound receipts can support subsequent independent review.
+
+Employee conversations continue to use their real recipient permissions before
+sources, model facts and memory are assembled. Every business mutation also checks
+the real requesting employee's account operation permission; sponsor authority is
+not an employee's permission. Read access to private details is not required to
+perform an otherwise authorized mutation: its model-facing write receipt is a
+fixed minimal acknowledgement, without raw private prose or amounts.
+
+Content writes cannot publish private planning facts through another surface.
+Standard daily hygiene and training avoid manual per-item approvals through the
+same existing tools: `employee_manage_hygiene/assign_standard` accepts exactly
+`{action,staffId,date,areaCode}` and `employee_manage_training/assign_published_course`
+accepts exactly `{action,staffId,date,courseKey}`. Real same-store targets and existing
+public sources are resolved server-side; free-text notes/titles/scores are rejected.
+They create native pending cleaning tasks and scheduled training, retain source
+versions/fingerprints, and never claim physical completion. New free-text public
+content requires an audience-safe context; no private owner draft is forwarded as
+employee-facing content by default.
+
+Procurement orders produced here remain pending drafts and do not place supplier
+orders or pay. Non-cash expense evidence recording is autonomous with the proper
+account permission and explicit `amountUnit:"IDR"`; the backend converts rupiah to
+native expense cents. Cash-drawer effects and an unspecified payment source require
+approval. Expense reads normalize cents back to rupiah; salary records additionally
+require the actual account's salary permission. Payments, spending commitments,
+unknown/over-budget expenditure and employee penalties are not granted by a model
+request. No existing production records are migrated or automatically corrected.
+
+### Membership in the existing Hermes runtime
+
+The existing `employee_manage_membership` tool now supports `inspect` and `apply`.
+It uses the same transactional daily-membership service as the opaque operations
+endpoint; it does not maintain another qualification policy or activate customers
+manually. `apply` requires both the actual requesting account's `members.write`
+and `marketing.write`, live role settings, and current policy/activity versions.
+It preserves existing product prices, weekdays, activity publication status and
+existing active members. Inspect before applying; a fully configured rule is a
+read-only no-op. Tool receipts omit unpublished activity prices from employee
+conversation contexts. No receipt claims cashier or paid-order verification.
+
+Ordinary stale versions return an actionable no-write tool result. A concurrent
+change during the business transaction rolls the whole configuration and trace
+back; a transport failure can still leave execution status unknown. Query the
+original execution before retrying. No blind replay or fabricated payment is used.
+
+Marketing writes from this runtime use `saveActivityInTransaction` with the same
+outer native trace transaction. A failed unified activity write aborts the legacy
+campaign/rule and receipt too. Notifications run only after that transaction
+commits. References used by mutations are checked against the current store;
+product, training and staff updates retain store-scoped predicates.
+
+These source and isolated PostgreSQL checks do not constitute production setup,
+installed POS verification, an actual paid qualifying order, or independent
+business acceptance. Those remain separate recorded stages.

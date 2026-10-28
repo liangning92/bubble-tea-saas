@@ -67,5 +67,5 @@ export function createEmployeeDeployment(db:any,config:EmployeeDeploymentConfig)
       try{await runtime.inspect(c.executionId)}catch{return null}
       return {executionId:c.executionId,expiresAt:c.expiresAt,runtime}
     }})
-  return {router,runtime,orchestration,runBatch:(limit=10)=>orchestration.drain(limit)}
+  return {router,runtime,orchestration,gatewayHealth:async()=> (await gatewayClient()).health(),runBatch:(limit=10)=>orchestration.drain(limit)}
 }

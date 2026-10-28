@@ -26,10 +26,10 @@ export async function audienceAllows(db:any, g:BridgeGrant, scope:CommunicationS
 
 /** These checks concern data returned by business tools, not the vocabulary of a question. */
 export function toolAudiencePermissions(name:string,args:any):string[] {
-  return name==='employee_manage_finance'?(args?.action==='list_recent_expenses'?['finance.read','cost.read']:['finance.read'])
-    :name==='employee_manage_procurement'?['purchases.read','cost.read']
+  return name==='employee_manage_finance'&&['query_revenue_summary','list_recent_expenses'].includes(args?.action)?(args?.action==='list_recent_expenses'?['finance.read','cost.read']:['finance.read'])
+    :name==='employee_manage_procurement'&&['list_low_stock','list_suppliers'].includes(args?.action)?['purchases.read','cost.read']
     :name==='employee_manage_marketing'&&args?.action==='query_products'?['profit.read','cost.read']
-    :name==='employee_manage_operations'&&['list_pending_leaves','review_leave'].includes(args?.action)?['staff.private.read']
+    :name==='employee_manage_operations'&&args?.action==='list_pending_leaves'?['staff.private.read']
 
     :[]
 }
@@ -48,8 +48,8 @@ export async function visibleBusinessData(db:any,g:BridgeGrant,scope:Communicati
     return Object.fromEntries(Object.entries(v).filter(([k])=>
       !/password|credential|token|secret/i.test(k)&&
       (bank||!/bankAccount|bankCard/i.test(k))&&
-      (cost||!/cost|purchasePrice|buyPrice/i.test(k))&&
-      (profit||!/profit|margin/i.test(k))&&
+      (cost||!/cost|purchasePrice|buyPrice|totalExpenses/i.test(k))&&
+      (profit||!/profit|margin|netIncome/i.test(k))&&
       (salary||!/salary|wage|payroll/i.test(k))&&
       (privateStaff||!/idCard|identityNumber|phone|address|birthday|medical|health|leaveReason|issueDescription/i.test(k))
     ).map(([k,x])=>[k,walk(x)]))
@@ -60,8 +60,8 @@ export async function visibleBusinessData(db:any,g:BridgeGrant,scope:Communicati
 export async function assertToolSettings(db:any,storeId:string,name:string,args:any) {
   const s=await assertEmployeeSettings(db,storeId)
   if(!s)return
-  const readActions=['list','list_stock_out','list_active','list_products','query_products','list_low_stock','list_suppliers','query_revenue_summary','list_recent_expenses','list_pending_leaves','list_staff','list_tasks','list_areas']
-  const module=name.includes('inventory')||name.includes('procurement')?'inventory':name.includes('hygiene')?'hygiene'
+  const readActions=['inspect','list','list_stock_out','list_active','list_products','query_products','list_low_stock','list_suppliers','query_revenue_summary','list_recent_expenses','list_pending_leaves','list_staff','list_tasks','list_areas','list_trainings','list_courses']
+  const module=name==='employee_manage_membership'?'members':name.includes('inventory')||name.includes('procurement')?'inventory':name.includes('hygiene')?'hygiene'
     :name.includes('marketing')?'marketing':name.includes('product')?'products':name.includes('finance')?'finance'
     :name.includes('schedule')||name.includes('staff')||name.includes('operations')||name.includes('training')||name==='employee_submit_request'?'staff'
     :name==='employee_send_message'?'channels':null
@@ -85,6 +85,18 @@ export async function visibleScheduleStaff(db:any,g:BridgeGrant,scope:Communicat
     const one={...scope,audienceStaffIds:[staffId],requesterStaffId:staffId}
     if(staffId===scope.requesterStaffId){if(!await audienceAllows(db,g,one,'personal.schedule'))return []}
     else if(!await audienceAllows(db,g,one,'schedules.read'))return []
+  }
+  return [scope.requesterStaffId]
+}
+
+/** Personal training is not permission to query the store's assessments/HR notes. */
+export async function visibleTrainingStaff(db:any,g:BridgeGrant,scope:CommunicationScope):Promise<string[]|undefined>{
+  if(await audienceAllows(db,g,scope,'training.read'))return undefined
+  if(!scope.requesterStaffId)return []
+  for(const staffId of scope.audienceStaffIds){
+    const one={...scope,audienceStaffIds:[staffId],requesterStaffId:staffId}
+    if(staffId===scope.requesterStaffId){if(!await audienceAllows(db,g,one,'personal.training'))return []}
+    else if(!await audienceAllows(db,g,one,'training.read'))return []
   }
   return [scope.requesterStaffId]
 }

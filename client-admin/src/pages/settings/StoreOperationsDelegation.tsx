@@ -52,7 +52,10 @@ export function StoreOperationsDelegation({
       const result: any = await client.request('post', '/api/team/ai/operations-delegations', {
         activityIds: selected,
         expiresAt: state.authorizationExpiresAt,
-        confirm: 'daily_member_specials_and_single_paid_order_30000',
+        confirm:
+          state.operationProfile === 'store_operations'
+            ? 'full_store_operations_role'
+            : 'daily_member_specials_and_single_paid_order_30000',
       })
       if (client.current()) {
         setCredential(result.credential)
@@ -98,18 +101,30 @@ export function StoreOperationsDelegation({
       )}
     >
       <h3 className="font-semibold">
-        {l(
-          '运营 Agent · 每日会员特价接口',
-          'Agent Operasional · Promo Harian Member',
-          'Operations Agent · Daily Member Specials',
-        )}
+        {state?.operationProfile === 'store_operations'
+          ? l(
+              '运营 Agent · 完整门店运营接口',
+              'Agent Operasional · Operasional Toko Lengkap',
+              'Operations Agent · Full Store Operations',
+            )
+          : l(
+              '运营 Agent · 每日会员特价接口',
+              'Agent Operasional · Promo Harian Member',
+              'Operations Agent · Daily Member Specials',
+            )}
       </h3>
       <p className="text-sm text-gray-600">
-        {l(
-          '只授权将所选既有每日特价设为会员专享，以及单笔已完成实付满 Rp30,000 后入会。后续会员订单不重复要求满额；不改商品、特价、排期，不支付或发布新活动。',
-          'Izin hanya untuk membuat promo harian terpilih khusus member, serta mengaktifkan member setelah satu transaksi selesai dibayar minimal Rp30.000. Pembelian member berikutnya tidak perlu mencapai batas itu lagi. Produk, harga, jadwal, dan pembayaran tidak diubah.',
-          'Only makes selected daily specials member-only and activates membership after one completed paid order of Rp30,000. Later member orders have no repeated threshold. Cannot change products, prices, schedules, payments, or publish new campaigns.',
-        )}
+        {state?.operationProfile === 'store_operations'
+          ? l(
+              '把本店经营任务交给现有 Hermes，执行已接入的库存、卫生、排班、培训、营销与经营核查工具。员工沟通仍遵守对方账户权限；付款、超预算和处罚需批准。',
+              'Serahkan tugas operasional toko kepada Hermes yang sudah ada. Gunakan alat stok, kebersihan, jadwal, pelatihan, pemasaran, dan pemeriksaan usaha yang tersedia. Izin akun pegawai tetap berlaku; pembayaran, belanja melampaui anggaran, dan hukuman perlu persetujuan.',
+              'Assign store operations to the existing Hermes and its connected stock, hygiene, scheduling, training, marketing and business-check tools. Employee account permissions still apply; payments, over-budget spending and penalties require approval.',
+            )
+          : l(
+              '只授权将所选既有每日特价设为会员专享，以及单笔已完成实付满 Rp30,000 后入会。后续会员订单不重复要求满额；不改商品、特价、排期，不支付或发布新活动。',
+              'Izin hanya untuk membuat promo harian terpilih khusus member, serta mengaktifkan member setelah satu transaksi selesai dibayar minimal Rp30.000. Pembelian member berikutnya tidak perlu mencapai batas itu lagi. Produk, harga, jadwal, dan pembayaran tidak diubah.',
+              'Only makes selected daily specials member-only and activates membership after one completed paid order of Rp30,000. Later member orders have no repeated threshold. Cannot change products, prices, schedules, payments, or publish new campaigns.',
+            )}
       </p>
       <button
         type="button"
@@ -177,6 +192,15 @@ export function StoreOperationsDelegation({
               </p>
             )}
           </fieldset>
+          {state.operationProfile === 'store_operations' && (
+            <p className="rounded border p-3 text-sm">
+              {l(
+                '本次凭据同时授予完整运营岗位：自动复用或建立仅老板本人和现有 Hermes 的私有经营会话，再提交经营任务；员工会话不会取得老板权限。沿用当前可撤销业务授权，付款、无预算或超预算采购、处罚仍需批准。',
+                'Kredensial ini juga mengizinkan tugas operasional melalui percakapan pribadi pemilik dengan Hermes yang sama; percakapan tersebut dipakai kembali atau dibuat otomatis. Pegawai tidak memperoleh izin pemilik. Izin tetap dapat dicabut; pembayaran, anggaran belanja yang belum jelas atau terlampaui, dan hukuman perlu persetujuan.',
+                'This credential also authorizes operations tasks through an owner-private conversation with the same Hermes, reused or created automatically. Employee conversations do not gain owner authority. Current authorization remains revocable; payments, unknown or exceeded budgets, and penalties require approval.',
+              )}
+            </p>
+          )}
           <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
@@ -193,7 +217,12 @@ export function StoreOperationsDelegation({
           </label>
           <button
             type="button"
-            disabled={busy || !confirmed || !selected.length || !state.canDelegate}
+            disabled={
+              busy ||
+              !confirmed ||
+              (!selected.length && state.operationProfile !== 'store_operations') ||
+              !state.canDelegate
+            }
             onClick={() => void create()}
             className="rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50"
           >

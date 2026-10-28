@@ -18,6 +18,10 @@ from private_gateway import Gateway
 CHILD = r'''
 import json,sys,time
 first=json.loads(sys.stdin.readline());t=first['ticket'];v=t['traceVersion'];mode=t.get('testMode')
+if mode=='wait_gate':
+ from pathlib import Path
+ gate=Path(first['config']['isolatedRoot'])/'release-child'
+ while not gate.exists():time.sleep(.01)
 if mode=='closed_stdin':
  import os
  os.close(0)
@@ -74,12 +78,12 @@ class TestGateway(unittest.TestCase):
     def final(self,e):
         for _ in range(150):
             value=self.http('/employee-runs/'+e['ticket']['executionId'])
-            if value['state']!='running':return value
+            if value['state'] not in ['queued','running']:return value
             time.sleep(.02)
         self.fail('child did not terminate')
 
     def test_real_http_stdio_callbacks_and_no_secret_journal(self):
-        e=self.envelope();self.assertIn(self.http('/employee-runs',e)['state'],['running','complete']);self.assertEqual(self.final(e)['state'],'complete')
+        e=self.envelope();self.assertIn(self.http('/employee-runs',e)['state'],['queued','running','complete']);self.assertEqual(self.final(e)['state'],'complete')
         self.assertEqual([c[0]['method'] for c in self.calls],['recordInput','recordResponse','executeTool','recordOutput'])
         self.assertTrue(all(c[1]=='Bearer '+e['callbackCredential'] for c in self.calls))
         raw=(self.root/'admissions.sqlite').read_bytes();self.assertNotIn(e['providerCredential'].encode(),raw);self.assertNotIn(e['callbackCredential'].encode(),raw)
@@ -99,6 +103,33 @@ class TestGateway(unittest.TestCase):
         changed={**e,'callbackCredential':'changed-'+'z'*32}
         with self.assertRaises(error.HTTPError) as denied:self.http('/employee-runs',changed)
         self.assertEqual(denied.exception.code,409);denied.exception.close();self.assertEqual(len(self.starts),1)
+
+    def test_busy_slot_is_fifo_durable_queued_not_unknown_or_duplicate_execution(self):
+        first=self.envelope('wait_gate');self.http('/employee-runs',first)
+        for _ in range(100):
+            if self.starts:break
+            time.sleep(.01)
+        second,third=self.envelope(),self.envelope()
+        self.assertEqual(self.http('/employee-runs',second)['state'],'queued')
+        self.assertEqual(self.http('/employee-runs',third)['state'],'queued')
+        self.assertEqual(self.http('/employee-runs',second)['state'],'queued')
+        self.assertEqual(self.starts,[first['ticket']['executionId']])
+        self.assertEqual(self.gateway.db.execute("SELECT count(*) FROM admission WHERE state='queued'").fetchone()[0],2)
+        health=self.http('/health');self.assertEqual(health['maxConcurrency'],1);self.assertEqual(health['queued'],2)
+        raw=(self.root/'admissions.sqlite').read_bytes()
+        self.assertNotIn(second['providerCredential'].encode(),raw);self.assertNotIn(second['callbackCredential'].encode(),raw)
+        (self.root/'release-child').touch()
+        for e in [first,second,third]:self.assertEqual(self.final(e)['state'],'complete')
+        self.assertEqual(self.starts,[e['ticket']['executionId'] for e in [first,second,third]])
+
+    def test_expired_queue_does_not_start_model_or_business_callback(self):
+        first=self.envelope('wait_gate');self.http('/employee-runs',first)
+        expired=self.envelope(seconds=.1);self.assertEqual(self.http('/employee-runs',expired)['state'],'queued')
+        time.sleep(.15);(self.root/'release-child').touch()
+        self.assertEqual(self.final(first)['state'],'complete')
+        result=self.final(expired);self.assertEqual(result['state'],'unknown');self.assertEqual(result['code'],'GATEWAY_QUEUE_DEADLINE')
+        self.assertNotIn(expired['ticket']['executionId'],self.starts)
+        self.assertFalse(any(c[0]['executionId']==expired['ticket']['executionId'] for c in self.calls))
 
     def test_finished_without_output_is_unknown(self):
         e=self.envelope('fake');self.http('/employee-runs',e);self.assertEqual(self.final(e)['state'],'unknown')
@@ -133,6 +164,15 @@ class TestGateway(unittest.TestCase):
         restarted=Gateway(**self.kw)
         self.gateway=restarted
         self.assertEqual(restarted.admit(e)['state'],'unknown');self.assertEqual(self.starts,[])
+
+    def test_restart_of_queued_admission_never_replays_or_persists_credentials(self):
+        e=self.envelope();digest=__import__('hashlib').sha256(json.dumps(e,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        self.gateway.db.execute("INSERT INTO admission VALUES (?,?, 'queued',NULL)",(e['ticket']['executionId'],digest))
+        self.gateway.stopping.set();self.gateway.dispatcher.join(timeout=1)
+        self.gateway.db.close();__import__('fcntl').flock(self.gateway.journal_lock,__import__('fcntl').LOCK_UN);__import__('os').close(self.gateway.journal_lock)
+        self.gateway=Gateway(**self.kw)
+        result=self.gateway.admit(e)
+        self.assertEqual(result['state'],'unknown');self.assertEqual(result['code'],'GATEWAY_RESTARTED_BEFORE_START');self.assertEqual(self.starts,[])
 
     def test_unauthorized_external_urls_listener_and_redirect_rejected(self):
         e=self.envelope()

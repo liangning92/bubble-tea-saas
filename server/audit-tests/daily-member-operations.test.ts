@@ -1,4 +1,5 @@
-import { test } from '@jest/globals'
+import { test, jest } from '@jest/globals'
+import * as TeamService from '../src/services/TeamCommunicationService'
 import assert from 'node:assert/strict'
 import {
   createOperationsDelegation,
@@ -7,6 +8,8 @@ import {
   revokeOperationsDelegation,
   operationsOwnerState,
   quoteOperationsSpecials,
+  submitOperationsTask,
+  operationsTaskStatus,
 } from '../src/services/StoreOperationsDelegationService'
 import {
   paidOrderQualifies,
@@ -510,4 +513,60 @@ test('state exposes minimal real qualification audit with same-store order, not 
   assert.equal(audit.policyVersion, 1)
   assert.equal(audit.qualifiedAt, '2026-10-28T00:00:00.000Z')
   assert.equal(JSON.stringify(audit).includes('private'), false)
+})
+
+
+test('owner task handoff requires explicit full role and private live route; replay does not resubmit', async () => {
+ const f=fixture(), add=(key:string,value:any)=>f.rows.push({id:String(f.rows.length+1),storeId:'store',key,value:JSON.stringify(value)})
+ const channelId='11111111-1111-4111-8111-111111111111', agentId='22222222-2222-4222-8222-222222222222', taskId='33333333-3333-4333-8333-333333333333'
+ const previous={enabled:process.env.EMPLOYEE_HERMES_ENABLED,store:process.env.EMPLOYEE_HERMES_STORE_ID,agent:process.env.EMPLOYEE_HERMES_AGENT_ID}
+ const settingsRow=f.rows.find(r=>r.key==='team.communication.ai.agent.settings')
+ const settings=JSON.parse(settingsRow.value);settings.operationProfile='store_operations';settings.employeeBridgeEnabled=true;settingsRow.value=JSON.stringify(settings)
+ f.db.user.findUnique=async()=>({id:'owner',role:'admin',storeId:'store',password:'bcrypt-security-version',staff:{id:'owner-staff',storeId:'store',status:'active'}})
+ f.db.staff={findMany:async()=>[{id:'owner-staff',userId:'owner',user:{id:'owner',storeId:'store'}}]}
+ f.db.financeAuditLog={create:jest.fn(async()=>({}))}
+ const route={version:1,agentId,task:{taskId,version:1},sourceStaffId:'owner-staff',fromSeq:1,enabled:true,paused:false,expiresAt:new Date(Date.now()+3600000).toISOString()}
+ const channel={id:channelId,title:'Owner private operations',ownerId:'owner-staff',kind:'direct',archived:false,lastSeq:0,members:[{staffId:'owner-staff',fromSeq:1},{staffId:'agent:'+agentId,fromSeq:1}]}
+ add('team.communication.channel.'+channelId,channel)
+ add('team.communication.task.'+channelId+'.'+taskId,{id:taskId,version:1,ownerId:'agent:'+agentId,status:'assigned'})
+ add('externalAgent.teamBridge.v1.employeeRoute.'+channelId,route)
+ add('externalAgent.teamBridge.v1.channel.'+channelId,{agentId,task:route.task})
+ add('externalAgent.teamBridge.v1.grant.'+agentId,{agentId,displayName:'Hermes',storeId:'store',sponsorUserId:'owner',version:1,clientRevision:1,expiresAt:route.expiresAt,revoked:false,actions:['messages.read','messages.send','tasks.read'],staffIds:['owner-staff'],channelIds:[channelId]})
+ const narrow=await createOperationsDelegation('store','owner',{activityIds:['special'],expiresAt:route.expiresAt,confirm:'daily_member_specials_and_single_paid_order_30000'},f.db)
+ const input={requestId:'44444444-4444-4444-8444-444444444444',channelId,text:'Review today and assign authorized routine work.'}
+ const ports={gatewayHealth:async()=>({status:'ok',protocol:'employee_work_trace_v1',maxConcurrency:1,queued:0,running:0})}
+ await assert.rejects(()=>submitOperationsTask(narrow.credential,input,f.db,ports),/ROLE_DELEGATION_REQUIRED/)
+ let full:any
+ const send=jest.fn(async(actor:any,id:string,v:any,...rest:any[])=>{
+  assert.equal(actor.staffId,'owner-staff');assert.equal(actor.role,'admin');assert.equal(id,channelId)
+  assert.equal(rest.at(-1).id,full.delegation.id)
+  const message={id:'native-message',seq:1}; const eventId=require('crypto').createHash('sha256').update(JSON.stringify(['employee_work',id,message.id])).digest('hex')
+  add('externalAgent.teamBridge.v1.employeePending.'+eventId,{state:'pending',updatedAt:new Date().toISOString()})
+  return message
+ })
+ const create=jest.fn(async(actor:any,input:any)=>{assert.equal(actor.staffId,'owner-staff');assert.equal(input.kind,'direct');assert.deepEqual(input.members,['agent:'+agentId]);add('team.communication.channel.'+channelId,channel);return channel})
+ const spy=jest.spyOn(TeamService,'teamCommunication').mockImplementation(()=>({send,create}) as any)
+ try {
+  process.env.EMPLOYEE_HERMES_ENABLED='1';process.env.EMPLOYEE_HERMES_STORE_ID='store';process.env.EMPLOYEE_HERMES_AGENT_ID=agentId
+  full=await createOperationsDelegation('store','owner',{activityIds:[],expiresAt:route.expiresAt,confirm:'full_store_operations_role'},f.db)
+  assert.equal(create.mock.calls.length,0)
+  assert.equal((await readOperationsState(full.credential,f.db)).ownerTaskChannels[0].id,channelId)
+  await assert.rejects(()=>submitOperationsTask(full.credential,input,f.db,{gatewayHealth:async()=>({status:'ok',protocol:'employee_work_trace_v1',maxConcurrency:4,queued:0,running:0})}),/SINGLE_SLOT_GATEWAY_REQUIRED/)
+  assert.equal(send.mock.calls.length,0)
+  const submitted=await submitOperationsTask(full.credential,input,f.db,ports)
+  assert.equal(submitted.origin,'owner_operations_delegation');assert.equal(submitted.businessCompleted,false)
+  assert.equal((await submitOperationsTask(full.credential,input,f.db,ports)).alreadySubmitted,true);assert.equal(send.mock.calls.length,1)
+  await assert.rejects(()=>submitOperationsTask(full.credential,{...input,text:'Changed'},f.db,ports),/REQUEST_CONFLICT/)
+  await assert.rejects(()=>submitOperationsTask(full.credential,{...input,requesterStaffId:'owner'},f.db,ports))
+  const status=await operationsTaskStatus(full.credential,input.requestId,f.db)
+  assert.equal(status.execution,null);assert.deepEqual(status.outbound,[]);assert.equal(status.executionCompleted,false);assert.equal(status.independentAcceptance,'not_reviewed')
+  f.rows.splice(f.rows.findIndex(r=>r.key==='team.communication.channel.'+channelId),1)
+  const bootstrapped=await createOperationsDelegation('store','owner',{activityIds:[],expiresAt:route.expiresAt,confirm:'full_store_operations_role'},f.db)
+  assert.equal(create.mock.calls.length,1);assert.equal(bootstrapped.ownerTaskChannels[0].agentId,agentId)
+  channel.members.push({staffId:'another-employee',fromSeq:1});f.rows.find(r=>r.key==='team.communication.channel.'+channelId).value=JSON.stringify(channel)
+  await assert.rejects(()=>operationsTaskStatus(full.credential,input.requestId,f.db),/PRIVATE_AUDIENCE_REQUIRED/)
+ }finally{
+  spy.mockRestore()
+  for(const [name,value] of Object.entries({EMPLOYEE_HERMES_ENABLED:previous.enabled,EMPLOYEE_HERMES_STORE_ID:previous.store,EMPLOYEE_HERMES_AGENT_ID:previous.agent}))if(value===undefined)delete process.env[name];else process.env[name]=value
+ }
 })

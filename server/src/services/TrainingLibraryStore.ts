@@ -119,20 +119,20 @@ async function publicationReminders(db: any, actor: Actor, previous: any, next: 
       trainingUpdate, createdAt: new Date().toISOString(), read: false, status: 'pending'}, db)
   }
 }
-export async function readTrainingLibrary(actor: Actor) {
+export async function readTrainingLibrary(actor: Actor, db: any = prisma) {
   scope(actor)
-  const current = await head(prisma, actor.storeId)
+  const current = await head(db, actor.storeId)
   if (!current.value) return getTrainingLibrary()
   // Keep reviewed defaults readable while the store's first draft is being edited.
   // A persisted publication, including an intentionally empty one, always wins.
   if (!current.value.published) return getTrainingLibrary()
-  const saved = await revision(prisma, actor.storeId, current.value.published)
+  const saved = await revision(db, actor.storeId, current.value.published)
   return { ...validateLibrary(saved.catalogue), revision: saved.id, preview: false }
 }
-export async function editTrainingLibrary(actor: Actor) {
+export async function editTrainingLibrary(actor: Actor, db: any = prisma) {
   scope(actor, true)
-  const current = await head(prisma, actor.storeId)
-  const saved = current.value ? await revision(prisma, actor.storeId, current.value.draft) : null
+  const current = await head(db, actor.storeId)
+  const saved = current.value ? await revision(db, actor.storeId, current.value.draft) : null
   return { generation: current.value?.generation || null, publishedRevision: current.value?.published || null, draftRevision: current.value?.draft || null, catalogue: validateLibrary(saved?.catalogue || seed), limits: LIBRARY_LIMITS }
 }
 export async function getTrainingRevision(actor: Actor, id: string) {
@@ -148,7 +148,7 @@ export async function trainingHistory(actor: Actor, limit: number = 20, cursor?:
   const rows = await prisma.config.findMany({ where, take: limit + 1, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}), orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { id: true, value: true } })
   return { list: rows.slice(0, limit).map(row => JSON.parse(row.value)), nextCursor: rows.length > limit ? rows[limit - 1].id : null }
 }
-export async function writeTrainingLibrary(actor: Actor, kind: 'save' | 'restore' | 'publish', input: unknown, restoreId?: string) {
+export async function writeTrainingLibrary(actor: Actor, kind: 'save' | 'restore' | 'publish', input: unknown, restoreId?: string, db: any = prisma) {
   scope(actor, true)
   const parsed = libraryWriteSchema.safeParse(input)
   if (!parsed.success) fail(400, 'TRAINING_WRITE_INVALID')
@@ -165,10 +165,10 @@ export async function writeTrainingLibrary(actor: Actor, kind: 'save' | 'restore
     if (saved.fingerprint !== fingerprint) fail(409, 'TRAINING_REQUEST_CONFLICT')
     return { revision: saved.id, generation: saved.id, replayed: true }
   }
-  const prior = await replay(prisma)
+  const prior = await replay(db)
   if (prior) return prior
   try {
-    return await prisma.$transaction(async tx => {
+    return await db.$transaction(async tx => {
       const prior = await replay(tx)
       if (prior) return prior
       const current = await head(tx, actor.storeId)
@@ -201,7 +201,7 @@ export async function writeTrainingLibrary(actor: Actor, kind: 'save' | 'restore
   } catch (error: any) {
     // Competing first saves / SQLite busy / serialization failure: never overwrite.
     if (['P2002','P2034','P2028','P1008'].includes(error?.code) || /SQLITE_BUSY|database is locked/.test(error?.message || '')) {
-      const saved = await replay(prisma)
+      const saved = await replay(db)
       if (saved) return saved
       fail(409, 'TRAINING_VERSION_CONFLICT')
     }

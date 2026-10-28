@@ -78,9 +78,8 @@ async function validateReferences(storeId:string,a:any,db:any=prisma){
  const coupons=[...new Set([a.rule.couponId,...(a.rule.prizes||[]).map((p:any)=>p.couponId)].filter(Boolean))]
  if(coupons.length&&(await db.coupon.count({where:{storeId,id:{in:coupons},status:'active'}}))!==coupons.length)throw Error('ACTIVITY_COUPON_STORE_MISMATCH')
 }
-export async function saveActivity(storeId:string,input:unknown,id?:string,expectedVersion?:number){
- const data=activitySchema.parse(input);await validateReferences(storeId,data)
- const activity=await prisma.$transaction(async tx=>{
+export async function saveActivityInTransaction(tx:any,storeId:string,input:unknown,id?:string,expectedVersion?:number){
+ const data=activitySchema.parse(input);await validateReferences(storeId,data,tx)
  if(data.categoryId&&!await tx.campaignCategory.findFirst({where:{id:data.categoryId,storeId}}))throw Error('ACTIVITY_CATEGORY_STORE_MISMATCH')
  const row=id?await tx.config.findUnique({where:{storeId_key:{storeId,key:activityKey(id)}}}):null
  if(id&&!row)throw Error('ACTIVITY_NOT_FOUND')
@@ -90,8 +89,14 @@ export async function saveActivity(storeId:string,input:unknown,id?:string,expec
  if(row)await casRecord(tx,row,value);else await putRecord(tx,storeId,activityKey(value.id),value)
  if(value.type==='lottery')await putRecord(tx,storeId,ACTIVITY_PREFIX+`prizes.${value.id}.${value.version}`,{prizes:value.rule.prizes})
  return value
- },data.categoryId?{isolationLevel:'Serializable'}:undefined);notifyActivities(storeId);return {...activity,state:activityState(activity)}
+
 }
+export async function saveActivity(storeId:string,input:unknown,id?:string,expectedVersion?:number){
+ const data=activitySchema.parse(input)
+ const activity=await prisma.$transaction(tx=>saveActivityInTransaction(tx,storeId,data,id,expectedVersion),data.categoryId?{isolationLevel:'Serializable'}:undefined)
+ notifyActivities(storeId);return {...activity,state:activityState(activity)}
+}
+
 const arr=(value:any):any[]=>{if(Array.isArray(value))return value;try{const x=JSON.parse(value||'[]');return Array.isArray(x)?x:[]}catch{return []}}
 export async function migrateActivities(storeId:string,dryRun=true){
  return prisma.$transaction(async tx=>{
