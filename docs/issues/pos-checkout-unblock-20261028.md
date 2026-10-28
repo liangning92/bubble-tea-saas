@@ -47,3 +47,5 @@ Validation now includes focused tests for the outbox, warning emission and idemp
 Actual administrator screenshots: `output/pos-checkout-unblock-20261028/cash-limit-before.png` and `cash-limit-after.png`. Existing payment controls and provider selections were preserved. Windows/printer and new recovery-panel responsive validation remain pending; these screenshots verify the configuration change only.
 
 Publication status: independent PR #341. Automatic approval review refused default-branch merge/publication because real Windows/page acceptance was incomplete. No merge, installation or production API deployment was performed. Prior CI run 40677005326 passed for the initial b0c8e9d4 target only; subsequent expanded changes require a fresh exact-SHA run.
+
+Final queue audit also checks a permanently stalled native request: queued jobs expire and leave the queue after 30 seconds without ever being sent, so later orders cannot accumulate unbounded waiting callbacks. The original active receipt keeps its duplicate-send guard until its native result arrives. The focused suite now has 50 passing tests.

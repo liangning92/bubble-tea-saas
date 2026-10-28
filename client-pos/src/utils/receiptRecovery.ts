@@ -4,16 +4,33 @@ export function receiptResultStatus(result:ReceiptResult):'sent'|'failed'|'unkno
  return result.success?'sent':result.deliveryStatus==='unconfirmed'||(result.copiesSubmitted||0)>0?'unknown':'failed'
 }
 export function receiptNeedsPaperCheck(value:{status:string;error?:string}){
- return value.status!=='failed'||!/RECEIPT_(?:PAINT|RENDER|SIZE|PDF|BITMAP|RENDERER|TEMPLATE)|UnknownVizError|BARCODE_TOO_WIDE|No printer available|PRINTER_(?:API|TARGET)_UNAVAILABLE/.test(value.error||'')
+ return value.status!=='failed'||!/RECEIPT_(?:QUEUE_EXPIRED|PAINT|RENDER|SIZE|PDF|BITMAP|RENDERER|TEMPLATE)|UnknownVizError|BARCODE_TOO_WIDE|No printer available|PRINTER_(?:API|TARGET)_UNAVAILABLE/.test(value.error||'')
 }
 // Native Windows accepts one receipt at a time. Keep queued output independent of checkout.
-let receiptDeliveryTail:Promise<unknown> = Promise.resolve()
+type QueuedReceipt = {send:(payload:any)=>Promise<ReceiptResult>;payload:any;resolve:(result:ReceiptResult)=>void;reject:(error:unknown)=>void;timer?:ReturnType<typeof setTimeout>}
+const receiptDeliveryQueue:QueuedReceipt[] = []
+let receiptDeliveryBusy = false
 const activeReceiptJobs = new Set<string>()
+function drainReceiptQueue():void {
+ if(receiptDeliveryBusy)return
+ const job=receiptDeliveryQueue.shift()
+ if(!job)return
+ if(job.timer)clearTimeout(job.timer)
+ receiptDeliveryBusy=true
+ void Promise.resolve().then(()=>job.send(job.payload)).then(job.resolve,job.reject).finally(()=>{receiptDeliveryBusy=false;drainReceiptQueue()})
+}
 function queueReceiptDelivery(send:(payload:any)=>Promise<ReceiptResult>,payload:any):Promise<ReceiptResult> {
- const queuedAt=Date.now()
- const job=receiptDeliveryTail.then(()=>Date.now()-queuedAt>=30000 ? {success:false,deliveryStatus:'not-sent',error:'RECEIPT_QUEUE_EXPIRED'} : send(payload))
- receiptDeliveryTail=job.catch(()=>{})
- return job
+ return new Promise((resolve,reject)=>{
+  const job:QueuedReceipt={send,payload,resolve,reject}
+  job.timer=setTimeout(()=>{
+   const index=receiptDeliveryQueue.indexOf(job)
+   if(index<0)return
+   receiptDeliveryQueue.splice(index,1)
+   resolve({success:false,deliveryStatus:'not-sent',error:'RECEIPT_QUEUE_EXPIRED'})
+  },30000)
+  receiptDeliveryQueue.push(job)
+  drainReceiptQueue()
+ })
 }
 export async function submitSavedReceipt(key:string,send:(payload:any)=>Promise<ReceiptResult>,audit:(status:string,error?:string)=>void,reprint=false):Promise<ReceiptResult>{
  if(reprint&&activeReceiptJobs.has(key))throw Error('RECEIPT_STILL_PROCESSING')
