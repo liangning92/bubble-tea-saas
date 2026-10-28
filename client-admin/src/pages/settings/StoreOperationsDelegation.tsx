@@ -19,9 +19,20 @@ export function StoreOperationsDelegation({
     [busy, setBusy] = useState(false)
   const load = async () => {
     try {
-      setState(await client.request('get', '/api/team/ai/operations-delegations'))
+      const next = await client.request('get', '/api/team/ai/operations-delegations')
+      if (
+        !next ||
+        !Array.isArray(next.activities) ||
+        !Array.isArray(next.delegations) ||
+        !next.policy ||
+        typeof next.policy.enabled !== 'boolean'
+      ) {
+        throw new Error('OPERATIONS_STATE_INVALID')
+      }
+      setState(next)
       setError('')
     } catch (e: any) {
+      setState(null)
       setError(
         l(
           '需先在智能体权限中启用营销与会员写入，且授权未到期。',
