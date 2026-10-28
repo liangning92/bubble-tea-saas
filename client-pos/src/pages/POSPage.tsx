@@ -4293,7 +4293,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             </div>
 
             {activityPriceNeedsConfirmation && <div role="alert" className="shrink-0 px-4 py-3 bg-amber-50"><button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 font-semibold" onClick={()=>setActivityPriceNeedsConfirmation(false)}>{t('checkoutIntent.acceptUpdatedPrice',{amount:formatCurrency(total)})}</button></div>}
-            {!quoteLoading && !currentQuote && <div role="alert" className="shrink-0 px-4 py-3 bg-amber-50 text-amber-950"><p>{quoteError || t('activityPricing.wait')}</p><button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 mt-2" onClick={()=>setActivityRevision(value=>value+1)}>{t('common.retry')}</button></div>}
+            {!quoteLoading && !currentQuote && <div role="alert" className="shrink-0 px-4 py-3 bg-amber-50 text-amber-950"><p>{quoteError || t('activityPricing.wait')}</p><button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 mt-2" onClick={()=>setActivityRevision(value=>value+1)}>{t('pos.retry')}</button></div>}
             {paymentIssue && <p role="alert" className="text-red-700 px-4 py-2 text-base font-semibold">{t(`paymentValidation.${paymentIssue}`)}</p>}
             {!isCheckingOut && (offlineSaveFailed || !recovery || recovery.blocked || recovery.confirmed.length > 0) && (
               <div role="alert" data-testid="payment-recovery" className="shrink-0 bg-amber-50 text-amber-950 text-sm px-4 py-3 border-t border-amber-200 max-h-[30vh] overflow-y-auto">
