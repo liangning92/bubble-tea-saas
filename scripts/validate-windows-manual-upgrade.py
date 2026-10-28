@@ -298,7 +298,9 @@ def verify_started_runtime(expected_version, startup_timeout=60, on_ready=None):
     verified = False
     # A CI proxy must never intercept this owned loopback health check. The
     # service probes DB (2s) and optional Redis (1.5s), so a 2s client timeout
-    # could hide its actual response. Keep the 60s/120s startup gates intact.
+    # could hide its actual response. Ordinary launches retain the 60s window;
+    # a concurrently observed install is bounded by its existing 180s setup
+    # timeout and still must meet the separate 120s readiness gate.
     health_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     last_health = None
     deadline = time.monotonic() + startup_timeout

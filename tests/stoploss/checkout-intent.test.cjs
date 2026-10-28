@@ -7,3 +7,10 @@ test('legacy, mismatched store/identity and empty snapshots cannot be silently r
 test('only definite first-send refusals release intent; 5xx, conflicts and transport stay uncertain',()=>{for(const status of [400,401,403,404,422])assert.equal(definiteFirstRejection({response:{status}}),true);for(const message of ['OPEN_SHIFT_REQUIRED','SHIFT_DISABLED','PAYMENT_METHOD_DISABLED','PAYMENT_CONFIG_UNAVAILABLE'])assert.equal(definiteFirstRejection({response:{status:409,data:{message}}}),true);for(const e of [{code:'ERR_NETWORK'},{response:{status:500,data:{message:'Unique constraint'}}},{response:{status:503}},{response:{status:409,data:{message:'ORDER_IDEMPOTENCY_CONFLICT'}}}])assert.equal(definiteFirstRejection(e),false);});
 
 test('inventory refusal releases only matching structured 409 rollback proof; text 500, missing proof and other identity stay unknown',()=>{const proof={response:{status:409,data:{message:'INVENTORY_INSUFFICIENT',rejection:{code:'INVENTORY_INSUFFICIENT',outcome:'not_committed',orderNumber:request.orderNumber}}}};assert.equal(definiteFirstRejection(proof,request.orderNumber),true);assert.equal(definiteFirstRejection(proof,'other'),false);assert.equal(definiteFirstRejection({response:{status:500,data:proof.response.data}},request.orderNumber),false);assert.equal(definiteFirstRejection({response:{status:409,data:{message:'INVENTORY_INSUFFICIENT'}}},request.orderNumber),false);});
+
+
+test('backoffice failure diagnostics keep financial evidence without reusable admission grants',()=>{
+ const {checkoutReviewEvidence}=actual('client-pos/src/utils/checkoutIntent.ts');
+ const proof=checkoutReviewEvidence({localId:'LOCAL-proof',request:{...request,paymentMethod:'cash',offlineMemberToken:'secret-member',activityOfflineToken:'secret-activity',activityQuoteSignature:'secret-signature',approvalId:'secret-approval'},cart:[],createdAt:'synthetic'});
+ assert.equal(proof.orderNumber,request.orderNumber);assert.deepEqual(proof.items,request.items);assert.equal(proof.paymentMethod,'cash');assert.equal(JSON.stringify(proof).includes('secret-'),false);
+});

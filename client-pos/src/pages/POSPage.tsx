@@ -31,12 +31,12 @@ import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplaySt
 import type { CustomerLayoutColumn } from '../../../shared/components/CustomerDisplayLayout'
 import type { CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
 import type { PromotionTextStyle } from '../../../shared/components/PromotionText'
-import { reportReceivedPayment } from '../utils/receivedReceipt'
+import { reportReceivedPayment, syncBackendCheckoutReviews } from '../utils/receivedReceipt'
 import { paymentProblem } from '../utils/paymentValidation'
 import { recordLocalSale } from '../utils/offlineSale'
 import { backendAuthHeaders, currentBackendIdentity } from '../utils/backendIdentity'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, discardPreparedCheckout, definiteFirstRejection, acknowledgeRecoveredCheckout, quarantineCheckoutRecovery, type CheckoutIntent } from '../utils/checkoutIntent'
+import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, definiteFirstRejection, handoffCheckoutToBackend, checkoutReviewEvidence, type CheckoutIntent } from '../utils/checkoutIntent'
 import { ScanPage } from './ScanPage'
 import { decodeScanIdentity, resolveScanProduct, validCatalogSpec, validCatalogPrice, ScanIdentity } from '../utils/barcodeIdentity'
 import { selectPrinter, PrinterPurpose, PrinterSettings } from '../utils/printerRouting'
@@ -224,7 +224,6 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [basketGeneration, setBasketGeneration] = useState('0')
   const [scanRequestVersion, setScanRequestVersion] = useState(0)
   const scanIntentVersion = useRef(0)
-  const [quarantineAcknowledged, setQuarantineAcknowledged] = useState(false)
   const [recoveryRevision, setRecoveryRevision] = useState(0)
   const recovery = useLiveQuery(async () => {
     if (!user?.storeId) return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null }
@@ -753,9 +752,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if(actor?.id!==scope.actorId || actor?.storeId!==scope.storeId || currentBackendIdentity()!==scope.backend)return Promise.reject(Error('CHECKOUT_AUTH_CHANGED'))
       return posApi.logPOSAction(event)
     }).catch(error=>console.warn('[POS Failure Retry]',error))}
-    flush();window.addEventListener('online',flush)
-    const timer=window.setInterval(flush,30000)
-    return ()=>{window.removeEventListener('online',flush);window.clearInterval(timer)}
+    const transfer=()=>{flush();void syncBackendCheckoutReviews().catch(error=>console.warn('[POS Backend Review Retry]',error?.message))}
+    transfer();window.addEventListener('online',transfer)
+    const timer=window.setInterval(transfer,30000)
+    return ()=>{window.removeEventListener('online',transfer);window.clearInterval(timer)}
   },[user?.id,user?.storeId])
 
   useEffect(() => {
@@ -2409,7 +2409,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 挂单 - 同时在服务端创建订单记录
   const suspendOrder = async () => {
     if (useOrderStore.getState().isCheckingOut) return
-    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
+    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.backendProcessing'), 'warning'); return }
     if (cart.length === 0) {
       showToast(t('pos.emptyCart'), 'warning')
       return
@@ -2490,10 +2490,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     } catch (err: any) {
       if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
       if (!sent && err?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
-      if (!sent) { showToast(t(err?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : 'checkoutIntent.saveFailed'), 'error'); return }
+      if (!sent) { showToast(t(err?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.backendProcessing' : 'checkoutIntent.saveFailed'), 'error'); return }
       const definite = definiteFirstRejection(err, intent?.request.orderNumber)
       try { if (intent) await finishCheckout(intent, definite ? 'rejected' : 'review') } catch { /* durable journal remains */ }
-      showToast(definite ? err?.response?.data?.message || t('pos.paymentError') : t('checkoutIntent.review'), 'warning')
+      showToast(definite ? err?.response?.data?.message || t('pos.paymentError') : t('checkoutIntent.backendProcessing'), 'warning')
     } finally { setIsCheckingOut(false) }
   }
 
@@ -2949,7 +2949,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     // Read the synchronous store value too: two clicks can share one render.
     if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut || useOrderStore.getState().isInstallingUpdate) return
 
-    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
+    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.backendProcessing'), 'warning'); return }
 
     if(isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
     const checkoutStarted=performance.now()
@@ -3185,10 +3185,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if (!sent && error?.message === 'OPEN_SHIFT_REQUIRED') { showOpenShiftRequired(); return }
       if (!sent && !paymentReportStarted) {
         const failureCode = String(error?.message || error?.name || 'LOCAL_CHECKOUT_FAILED').slice(0,160)
-        logPOSAction({action:'checkout_failed',entityId:intent?.request.orderNumber,description:`本机结账准备失败: ${failureCode}`,metadata:{failureCode,errorName:error?.name,appVersion,outcome:'not_submitted',orderNumber:intent?.request.orderNumber,totalAmount:total,paymentMethod},severity:'warning'})
+        logPOSAction({action:'checkout_failed',entityId:intent?.request.orderNumber,description:`本机结账准备失败: ${failureCode}`,metadata:{failureCode,errorName:error?.name,checkoutEvidence:intent?.backendUrl===currentBackendIdentity()?checkoutReviewEvidence(intent):undefined,appVersion,outcome:'not_submitted',orderNumber:intent?.request.orderNumber,totalAmount:total,paymentMethod},severity:'warning'})
         setCheckoutFailureCode(error?.name && error.name !== 'Error' ? String(error.name) : failureCode)
         setOfflineSaveFailed(true)
-        showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
+        if (await handoffFailedSale(true)) return
+        showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.backendProcessing' : error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
         return
       }
       const failureCode = String(error?.response?.data?.message || error?.code || error?.message || 'CHECKOUT_FAILED').slice(0, 160)
@@ -3197,13 +3198,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         action: 'checkout_failed',
         entityId: intent?.request.orderNumber,
         description: `结账提交未完成: ${failureCode}`,
-        metadata: { orderNumber: intent?.request.orderNumber, totalAmount: total, paymentMethod, httpStatus: error?.response?.status, failureCode, appVersion, stage: sent ? 'order_submission' : 'payment_report', outcome: sent && definiteFirstRejection(error, intent?.request.orderNumber) ? 'rejected' : 'review' },
+        metadata: { orderNumber: intent?.request.orderNumber, totalAmount: total, paymentMethod, httpStatus: error?.response?.status, failureCode, appVersion, checkoutEvidence:intent?.backendUrl===currentBackendIdentity()?checkoutReviewEvidence(intent):undefined, stage: sent ? 'order_submission' : 'payment_report', outcome: sent && definiteFirstRejection(error, intent?.request.orderNumber) ? 'rejected' : 'review' },
         severity: 'warning',
       })
       const definite = sent && definiteFirstRejection(error, intent?.request.orderNumber)
       try { if (intent) await finishCheckout(intent, definite ? 'rejected' : 'review') }
       catch { /* The pre-send recovery intent remains durable; do not manufacture another sale. */ }
       setOfflineSaveFailed(false)
+      if (await handoffFailedSale(true)) return
       if (definite) {
         const rawMsg = error?.response?.data?.message || ''
         const translation = rawMsg === 'PAYMENT_METHOD_DISABLED' ? 'pos.paymentMethodDisabled'
@@ -3214,7 +3216,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           const [, itemName, available, needed] = details.split(':')
           showToast(t('pos.inventoryInsufficient', {itemName, available, needed}), 'error')
         } else showToast(translation ? t(translation) : rawMsg || t('pos.paymentError'), 'error')
-      } else showToast(t('checkoutIntent.review'), 'warning')
+      } else showToast(t('checkoutIntent.backendProcessing'), 'warning')
       // Preserve cart and immutable request. Uncertain responses never print or clear it.
     } finally {
       setIsCheckingOut(false)
@@ -3402,30 +3404,43 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
   }, [user?.storeId, recovery?.generation, basketGeneration])
 
-  const preserveAndStartNewSale = async () => {
-    if (continuingSale.current || useOrderStore.getState().isCheckingOut || !recovery || recovery.readError || !recovery.blocked || recovery.confirmed.length) return
+  const handoffFailedSale = async (duringCheckout = false, recovered = false): Promise<boolean> => {
+    if (continuingSale.current || (!duringCheckout && useOrderStore.getState().isCheckingOut) || !user?.storeId) return false
     continuingSale.current = true
     setIsContinuingSale(true)
     try {
-      await quarantineCheckoutRecovery(user!.storeId!, user!.id, JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}))
+      const result = await handoffCheckoutToBackend(user.storeId, user.id)
+      if (!result.changed) return false
+      const ownRecords=result.records.filter(row=>row.backendUrl===currentBackendIdentity())
+      const ownIntent=result.intent?.backendUrl===currentBackendIdentity()?result.intent:null
+      if (recovered && result.requiresReview && (ownIntent || ownRecords.length)) logPOSAction({action:'checkout_failed',entityId:ownIntent?.request.orderNumber || ownRecords[0]?.orderNumber,description:'未完成交易已自动交后台处理',metadata:{failureCode:'CHECKOUT_RECOVERED_FOR_BACKEND',stage:'startup_recovery',outcome:'review',checkoutEvidence:{intent:ownIntent?checkoutReviewEvidence(ownIntent):undefined,records:ownRecords.map(checkoutReviewEvidence)},appVersion},severity:'warning'})
       clearCart('recovered')
       setPaidAmount('')
       setOrderNote('')
       setOfflineSaveFailed(false)
       setCheckoutFailureCode('')
-      setQuarantineAcknowledged(false)
       setShowPaymentModal(false)
       setShowChannelModal(true)
       setRecoveryRevision(value=>value+1)
-      showToast(t('checkoutIntent.quarantined'), 'warning')
+      void syncBackendCheckoutReviews().catch(error=>console.warn('[POS Backend Review Transfer]',error?.message))
+      showToast(t(result.requiresReview ? 'checkoutIntent.backendHandoff' : 'checkoutIntent.nextReady'), result.requiresReview ? 'warning' : 'success')
+      return true
     } catch (error: any) {
       setCheckoutFailureCode(String(error?.message || error?.name || 'CHECKOUT_RECOVERY_UNAVAILABLE'))
-      showToast(t('checkoutIntent.continueFailed'), 'error')
+      return false
     } finally {
       continuingSale.current = false
       setIsContinuingSale(false)
     }
   }
+  useEffect(()=>{
+    if (!user?.storeId || !recovery || recovery.readError || (!recovery.blocked && !recovery.confirmed.length) || useOrderStore.getState().isCheckingOut) return
+    let live = true
+    const transfer = () => {if(live)void handoffFailedSale(false,true)}
+    transfer()
+    const timer=window.setInterval(transfer,2000)
+    return ()=>{live=false;window.clearInterval(timer)}
+  },[user?.id,user?.storeId,recovery,isCheckingOut])
 
   if (loading) {
     return (
@@ -3442,23 +3457,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     return (
       <div className="h-screen flex flex-col bg-gray-50" style={fontSizeStyle}>
-        {(!recovery || recovery.readError || recovery.intent || recovery.rows.some(row=>!row.locallyAcceptedAt) || recovery.confirmed.length > 0) && <section data-testid="checkout-recovery" role="alert" className="shrink-0 max-h-[45vh] overflow-y-auto p-3 bg-amber-100 border-b border-amber-300 text-gray-900">
-          {(!recovery || recovery.readError) && <button type="button" className="block border rounded px-3 py-2 mb-2" onClick={()=>setRecoveryRevision(value=>value+1)}>{t('checkoutIntent.recheckStorage')}</button>}
-          <strong>{t(recovery?.confirmed.length ? 'checkoutIntent.confirmed' : recovery?.intent?.phase === 'prepared' ? 'checkoutIntent.prepared' : 'checkoutIntent.review')}</strong>
-          {recovery?.intent && <p className="text-sm break-all">{recovery.intent.request.orderNumber}</p>}
-          <p className="text-sm">{t(recovery?.intent ? 'checkoutIntent.preserve' : 'checkoutIntent.verifyRecords')}</p>
-          {recovery?.intent && <details className="text-sm mt-1"><summary>{t('checkoutIntent.snapshot')}</summary><ul>{recovery.intent.request.items.map((item: any, index: number) => <li key={index} className="grid grid-cols-[1fr_auto] gap-4"><span>{item.productName} · {item.specName} · {formatCurrency(item.unitPrice)}{item.addons?.map((addon: any) => ` + ${addon.name} ${formatCurrency(addon.price)}`).join('')}</span><span>{t('pos.quantity')}: {item.quantity}</span></li>)}</ul></details>}
-          {recovery?.intent?.phase === 'prepared' && <button type="button" className="border rounded px-3 py-1 mt-2" onClick={async () => {
-            try { await discardPreparedCheckout(user!.storeId!); setOfflineSaveFailed(false) }
-            catch { showToast(t('checkoutIntent.review'), 'warning') }
-          }}>{t('checkoutIntent.discard')}</button>}
-          {recovery?.rows.some(row => row.status === 'review' && row.checkoutRequest && row.error !== 'CHECKOUT_SNAPSHOT_REQUIRED') && <button type="button" className="border rounded px-3 py-1 mt-2" onClick={() => { void syncManager.syncPendingOrders(true) }}>{t('checkoutIntent.retry')}</button>}
-          {!!recovery?.confirmed.length && <button type="button" onClick={async () => {try {await acknowledgeRecoveredCheckout(user!.storeId!,user!.id);clearCart();setShowPaymentModal(false)} catch {showToast(t('checkoutIntent.review'),'warning')}}}>{t('checkoutIntent.nextEmpty')}</button>}
-          {!!recovery?.blocked && recovery.intent?.phase !== 'prepared' && <div className="mt-2">
-            <label><input type="checkbox" checked={quarantineAcknowledged} onChange={e=>setQuarantineAcknowledged(e.target.checked)} /> {t('checkoutIntent.quarantineNotice')}</label>
-            <button type="button" disabled={!quarantineAcknowledged || isCheckingOut} className="block border rounded px-3 py-1 disabled:opacity-50" onClick={async()=>{try {await quarantineCheckoutRecovery(user!.storeId!,user!.id,JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}));clearCart();setShowPaymentModal(false);setQuarantineAcknowledged(false)} catch {showToast(t('checkoutIntent.review'),'warning')}}}>{t('checkoutIntent.quarantine')}</button>
-          </div>}
-        </section>}
+        {recovery?.readError && <section role="status" className="shrink-0 p-3 bg-amber-50 text-gray-900"><p>{t('checkoutIntent.storageUnavailable')}</p><button type="button" className="min-h-12 border rounded px-3 py-2" onClick={()=>setRecoveryRevision(value=>value+1)}>{t('checkoutIntent.recheckStorage')}</button></section>}
+        {isContinuingSale && <p role="status" className="shrink-0 px-3 py-2 bg-amber-50 text-sm">{t('checkoutIntent.backendProcessing')}</p>}
 
         {showOfflineStatus && <div data-testid="offline-status-details">
         {!!recovery?.rows.some(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()) && <details role="status" className="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950">
@@ -4323,16 +4323,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             {activityPriceNeedsConfirmation && <div role="alert" className="shrink-0 px-4 py-3 bg-amber-50"><button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 font-semibold" onClick={()=>setActivityPriceNeedsConfirmation(false)}>{t('checkoutIntent.acceptUpdatedPrice',{amount:formatCurrency(total)})}</button></div>}
             {!quoteLoading && !currentQuote && <div role="alert" className="shrink-0 px-4 py-3 bg-amber-50 text-amber-950"><p>{quoteError || t('activityPricing.wait')}</p><button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 mt-2" onClick={()=>setActivityRevision(value=>value+1)}>{t('pos.retry')}</button></div>}
             {paymentIssue && <p role="alert" className="text-red-700 px-4 py-2 text-base font-semibold">{t(`paymentValidation.${paymentIssue}`)}</p>}
-            {!isCheckingOut && (offlineSaveFailed || !recovery || recovery.blocked || recovery.confirmed.length > 0) && (
-              <div role="alert" data-testid="payment-recovery" className="shrink-0 bg-amber-50 text-amber-950 text-sm px-4 py-3 border-t border-amber-200 max-h-[30vh] overflow-y-auto">
-                <p>{t(offlineSaveFailed ? 'pos.offlineSaveFailed' : 'checkoutIntent.review')}</p>
+            {!isCheckingOut && offlineSaveFailed && (
+              <div role="alert" data-testid="payment-storage-error" className="shrink-0 bg-amber-50 text-amber-950 text-sm px-4 py-3 border-t border-amber-200">
+                <p>{t('checkoutIntent.storageUnavailable')}</p>
                 {checkoutFailureCode && <p className="mt-1 break-all font-mono text-xs">{t('checkoutIntent.failureCode')}: {checkoutFailureCode}</p>}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {recovery?.blocked && !recovery.readError && recovery.confirmed.length === 0 && <button type="button" data-testid="preserve-and-next-sale" disabled={isContinuingSale} className="min-h-12 rounded-lg bg-primary text-white px-3 py-2 font-semibold disabled:opacity-50" onClick={()=>void preserveAndStartNewSale()}>{t('checkoutIntent.continueNew')}</button>}
-                  <button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 font-semibold" onClick={()=>{setShowPaymentModal(false);setRecoveryRevision(value=>value+1)}}>{t('checkoutIntent.openRecovery')}</button>
-                  {(!recovery || recovery.readError) && <button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2" onClick={()=>setRecoveryRevision(value=>value+1)}>{t('checkoutIntent.recheckStorage')}</button>}
-                </div>
-                {recovery?.blocked && !recovery.readError && <p className="mt-2 text-xs">{t('checkoutIntent.continueNotice')}</p>}
+                <button type="button" className="min-h-12 border rounded px-3 py-2 mt-2" onClick={()=>setRecoveryRevision(value=>value+1)}>{t('checkoutIntent.recheckStorage')}</button>
               </div>
             )}
             {/* 确认支付操作栏 - 紧凑固定底栏 */}

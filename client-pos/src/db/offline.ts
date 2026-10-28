@@ -24,6 +24,8 @@ export interface LocalOrder {
   paymentReportedAt?: Date
   cashTender?: {receivedCash:number;changeGiven:number}
   cloudJournalId?: string
+  backendReviewRejectedAt?: Date
+  backendReviewError?: string
   locallyAcceptedAt?: Date
   occurredAt?: Date
   cloudReceipt?: Record<string, unknown>
@@ -161,7 +163,8 @@ export class SyncManager {
     return ''
   }
 
-  // A claimed row is never uploaded by another tab. Review requires an explicit retry.
+  // Only durably accepted offline sales may upload as orders. Unknown payments
+  // are retained for administrator review, including when retry is requested.
   async syncPendingOrders(review = false) {
     if (!this.isOnline) return
     if (this.isSyncing) { this.resyncRequested = true; return }
@@ -185,7 +188,7 @@ export class SyncManager {
   private async uploadClaimedOrders(auth: any, review: boolean) {
     this.emit({type:'sync:start'})
     let syncedCount = 0, failedCount = 0
-    const rows = await db.orders.where('status').anyOf(review ? ['review'] : ['pending','syncing']).and(row=>row.storeId===auth.user.storeId).toArray()
+    const rows = await db.orders.where('status').anyOf(review ? ['review'] : ['pending','syncing']).and(row=>row.storeId===auth.user.storeId && !!row.locallyAcceptedAt).toArray()
     const {syncOperationsBefore}=await import('../utils/offlineOperations')
     rows.sort((a,b)=>new Date(a.occurredAt||a.createdAt).getTime()-new Date(b.occurredAt||b.createdAt).getTime())
     let blocked=false
