@@ -24,10 +24,12 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
   router.post('/rpc',async(req,res)=>{
     let v:any
     try{
-      const a=await access(req,'callback'); v=z.object({executionId:uuid,method:z.enum(['recordInput','recordResponse','executeTool','recordOutput','markUnknown']),params:z.record(z.unknown())}).strict().parse(req.body)
-      if(v.executionId!==a.executionId||v.params.executionId!==a.executionId)throw Error('EMPLOYEE_INGRESS_UNAUTHORIZED')
+      const a=await access(req,'callback'); v=z.object({executionId:uuid,method:z.enum(['recordInput','recordResponse','executeTool','executeNativeTool','beginChild','beginAuxiliary','recordOutput','markUnknown']),params:z.record(z.unknown())}).strict().parse(req.body)
+      if(v.params.executionId!==v.executionId)throw Error('EMPLOYEE_INGRESS_UNAUTHORIZED')
+      await a.runtime.authorizeExecution(a.executionId,v.executionId)
       const host=a.runtime.host
-      const result=v.method==='markUnknown' ? await host.markUnknown(a.executionId,z.number().int().positive().parse(v.params.expectedTraceVersion),z.string().regex(/^[A-Z0-9_]{1,100}$/).parse(v.params.code)) : await host[v.method](v.params as any)
+      if(typeof host[v.method]!=='function')throw Error('EMPLOYEE_NATIVE_RUNTIME_NOT_CONFIGURED')
+      const result=v.method==='markUnknown' ? await host.markUnknown(v.executionId,z.number().int().positive().parse(v.params.expectedTraceVersion),z.string().regex(/^[A-Z0-9_]{1,100}$/).parse(v.params.code)) : await host[v.method](v.params as any)
       res.json({result:result??null})
     }catch(error:any){
       console.error('[EmployeeRuntimeHttp] RPC error in', v?.method, error?.message || error, error?.stack)
@@ -39,7 +41,9 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
     let admission:Awaited<ReturnType<Runtime['provider']['claim']>>|undefined,runtime:Runtime|undefined
     try{
       const a=await access(req,'provider');runtime=a.runtime
-      admission=await runtime.provider.claim(a.executionId,employeeRuntimeDigest(req.body))
+      const executionId=req.headers['x-hermes-execution-id']===undefined?a.executionId:uuid.parse(req.headers['x-hermes-execution-id'])
+      await runtime.authorizeExecution(a.executionId,executionId)
+      admission=await runtime.provider.claim(executionId,employeeRuntimeDigest(req.body))
       // This is the complete approved SDK input. The explicit server transform
       // uses a non-streaming provider request and model-default reasoning, with no output cap.
       const p=admission.request,request={model:p.model,messages:p.messages,tools:p.tools,tool_choice:'auto' as const,
@@ -48,12 +52,13 @@ export function createEmployeeRuntimeHttp(deps:{enabled?:boolean;
         if(Date.now()>=Math.min(admission!.deadlineAt,Date.parse(a.expiresAt)))throw Error('EMPLOYEE_INGRESS_EXPIRED')
         // Credential revocation is checked again immediately before transport.
         const live=await access(req,'provider');if(live.executionId!==a.executionId)throw Error('EMPLOYEE_INGRESS_UNAUTHORIZED')
+        await runtime!.authorizeExecution(a.executionId,admission!.executionId)
         await runtime!.provider.assertFresh(admission!.executionId,admission!.turn,admission!.inputHash,request)
       },Math.min(admission.deadlineAt,Date.parse(a.expiresAt)))
       if (!raw?.choices?.[0]?.message) {
         console.error('[EmployeeRuntimeHttp] Invalid MiniMax response:', JSON.stringify(raw))
       }
-      await runtime.provider.settle(a.executionId,admission.turn,admission.inputHash,{state:'response',value:raw})
+      await runtime.provider.settle(admission.executionId,admission.turn,admission.inputHash,{state:'response',value:raw})
       if(p.stream===true){
         const choice=raw?.choices?.[0],message=choice?.message
         if(!raw?.id||!message)throw Error('EMPLOYEE_PROVIDER_RESPONSE_INVALID')

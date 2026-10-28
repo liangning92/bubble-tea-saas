@@ -18,6 +18,11 @@ def main(*, provider_send=None):
     wire_out = sys.stdout
     first = json.loads(sys.stdin.readline())
     ticket, config = first["ticket"], first["config"]
+    if ticket.get('native'):
+        sys.path.insert(0,str(Path(__file__).resolve().parent))
+        from native_host_stdio import launch_native
+        launch_native(first,wire_out)
+        return
     root = Path(config["isolatedRoot"])
     if not root.is_absolute() or root.resolve() != root or root.is_symlink():
         raise ValueError("CANONICAL_ISOLATED_ROOT_REQUIRED")

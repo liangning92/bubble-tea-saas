@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID, createHash, timingSafeEqual } from 'crypto'
 import { readTeam, writeTeam, TeamTask } from '../TeamCommunicationService'
 import { createTeamAgentMiniMaxTransport } from '../TeamAiService'
-import { createEmployeeRuntime } from './employeeRuntime'
+import { createEmployeeRuntime, EmployeeRuntimeDependencies } from './employeeRuntime'
 import { createEmployeeRuntimeHttp } from './employeeRuntimeHttp'
 import { createEmployeeGatewayClient, EmployeeGatewayConfig } from './employeeGatewayClient'
 import { createEmployeeOrchestration } from './employeeOrchestration'
@@ -15,6 +15,7 @@ const digest=(s:string)=>createHash('sha256').update(s).digest('hex')
 export interface EmployeeDeploymentConfig {
   enabled?:boolean;storeId:string;agentId:string;gateway:EmployeeGatewayConfig;
   reviewedSystemTemplate:{hash:string;isolatedRoot:string}
+  nativeRuntime?:EmployeeRuntimeDependencies['nativeRuntime']
 }
 export function createEmployeeDeployment(db:any,config:EmployeeDeploymentConfig) {
   if(config.enabled!==true)throw Error('EMPLOYEE_DEPLOYMENT_DISABLED')
@@ -26,7 +27,7 @@ export function createEmployeeDeployment(db:any,config:EmployeeDeploymentConfig)
   }
   // The gateway serves one execution for at most 120 seconds; give the execution the
   // same bounded window so a full multi-turn conversation is not cut off mid-flight.
-  const runtime=createEmployeeRuntime(db,{enabled:true,storeId:config.storeId,resolveGrant,approvedSystemHashes:[],reviewedSystemTemplate:config.reviewedSystemTemplate,maxExecutionMs:600000,
+  const runtime=createEmployeeRuntime(db,{enabled:true,storeId:config.storeId,resolveGrant,approvedSystemHashes:[],reviewedSystemTemplate:config.reviewedSystemTemplate,nativeRuntime:config.nativeRuntime,maxExecutionMs:600000,
     tasks:{assert:async(tx,g,task,channelId)=>{
       const row=await tx.config.findUnique({where:{storeId_key:{storeId:g.storeId,key:employeeRouteKey(channelId!)}}})
       const route=employeeRouteSchema.parse(row&&JSON.parse(row.value))

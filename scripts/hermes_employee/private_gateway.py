@@ -28,6 +28,7 @@ import uuid
 
 PROTOCOL = "employee_work_trace_v1"
 METHODS = {"recordInput", "recordResponse", "executeTool", "recordOutput", "markUnknown"}
+NATIVE_METHODS = METHODS | {'beginChild','beginAuxiliary','executeNativeTool'}
 MAX_BODY = 2_000_000
 
 
@@ -184,7 +185,7 @@ class Gateway:
                 self.pending.task_done()
 
     def _rpc(self, envelope, method, params, until):
-        payload = {"executionId": envelope["ticket"]["executionId"], "method": method, "params": params}
+        payload = {"executionId": params['executionId'], "method": method, "params": params}
         endpoint = parse.urlsplit(self.rpc_url)
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=max(.001, min(10, until-time.time())))
         def expire():
@@ -236,6 +237,9 @@ class Gateway:
     def _run(self, envelope, until):
         ticket, child = envelope["ticket"], None
         execution, version = ticket["executionId"], ticket["traceVersion"]
+        versions={execution:version}
+        request_ids={execution:ticket['requestId']}
+        child_states={}
         finished, output_stored, state, code = False, False, "unknown", "GATEWAY_CHILD_UNCONFIRMED"
         try:
             child = subprocess.Popen(self.command_factory(envelope), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -274,18 +278,34 @@ class Gateway:
                         raise ValueError("FINISHED_WITHOUT_STORED_OUTPUT")
                     finished = True
                     continue
-                if finished or method not in METHODS or params.get("executionId") != execution or params.get("expectedTraceVersion") != version:
+                target=params.get('executionId')
+                allowed=NATIVE_METHODS if ticket.get('native') else METHODS
+                if finished or method not in allowed or target not in versions or params.get("expectedTraceVersion") != versions[target]:
                     raise ValueError("FRAME_ORDER")
                 result = self._rpc(envelope, method, params, until)
                 if method == "markUnknown":
-                    raise ValueError("CHILD_UNKNOWN")
-                if not isinstance(result, dict) or result.get("traceVersion") != version+1:
+                    if target==execution:raise ValueError("CHILD_UNKNOWN")
+                    child_states[target]='unknown'
+                    child.stdin.write(json.dumps({'result':result})+'\n');child.stdin.flush()
+                    continue
+                if not isinstance(result, dict) or result.get("traceVersion") != versions[target]+1:
                     raise ValueError("RPC_VERSION")
-                version = result["traceVersion"]
+                versions[target]=result['traceVersion']
+                version=versions[execution]
+                if method in {'beginChild','beginAuxiliary'}:
+                    issued=result.get('ticket',{});native=issued.get('native',{})
+                    child_id=issued.get('executionId')
+                    if (not child_id or child_id in versions or native.get('parentExecutionId')!=target or native.get('delivery')!='parent_only'
+                        or method=='beginChild' and native.get('parentToolCallId')!=params.get('toolCallId') or issued.get('compartmentKey')!=ticket.get('compartmentKey')):
+                        raise ValueError('NATIVE_CHILD_LINEAGE')
+                    versions[child_id]=issued['traceVersion'];request_ids[child_id]=issued['requestId'];child_states[child_id]='running'
                 if method == "recordOutput":
-                    if result.get("requestId") != ticket["requestId"] or result.get("text") != params.get("providerMessage", {}).get("content"):
+                    if result.get("requestId") != request_ids[target] or result.get("text") != params.get("providerMessage", {}).get("content"):
                         raise ValueError("OUTPUT_RECEIPT")
-                    output_stored = True
+                    if target==execution:
+                        if any(s=='running' for s in child_states.values()):raise ValueError('NATIVE_CHILDREN_UNRESOLVED')
+                        output_stored = True
+                    else:child_states[target]='complete'
                 child.stdin.write(json.dumps({"result": result})+"\n"); child.stdin.flush()
             if child.wait(timeout=max(.001, until-time.time())) == 0 and finished:
                 state, code = "complete", None
