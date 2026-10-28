@@ -49,3 +49,10 @@ Actual administrator screenshots: `output/pos-checkout-unblock-20261028/cash-lim
 Publication status: independent PR #341. Automatic approval review refused default-branch merge/publication because real Windows/page acceptance was incomplete. No merge, installation or production API deployment was performed. Prior CI run 40677005326 passed for the initial b0c8e9d4 target only; subsequent expanded changes require a fresh exact-SHA run.
 
 Final queue audit also checks a permanently stalled native request: queued jobs expire and leave the queue after 30 seconds without ever being sent, so later orders cannot accumulate unbounded waiting callbacks. The original active receipt keeps its duplicate-send guard until its native result arrives. The focused suite now has 50 passing tests.
+
+
+## Windows installer downtime follow-up
+
+Exact f2ef052b862167e035f6f8fad38ba66cd328d14a scoped CI 40686425052 passed against published Windows baseline ce0b7d471bd1dcf1201c81333c355f1e9d79272e. Native builds 40689394278 (530) and 40691429947 (531) were not published: respectively silent downtime 145.203s and interactive downtime 128.640s exceeded the unchanged 120s gate. Login visibility remained below one second; a successful package build alone does not pass this upgrade acceptance.
+
+The installer previously started its frozen, self-extracting helper four times during the closed-POS interval (request-stop, prepare, wait-stopped, verify). Consolidate these operations into one `prepare-install` invocation, retaining the eight-second quiet period, graceful shutdown retry, verified original profile and durable receipt, program/database backup checks, historical fingerprints and final stopped-process/local-service check. Reject a different installation directory before preparing data. Fresh installations keep their existing stopped-process checks. No timeout/threshold, database validation or upgrade permission was relaxed. The helper suite passes 42 tests, including corrupt-backup and process-relaunch rejection; updater tests pass 12. A new exact-source native build is required before asserting a downtime improvement.

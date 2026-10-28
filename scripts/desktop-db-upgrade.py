@@ -943,6 +943,29 @@ def load_receipt(result_path, catalog):
     return receipt
 
 
+def prepare_from_args(args, catalog, processes):
+    if args.diagnostic:
+        diagnostic = regular(args.diagnostic)
+        diagnostic.parent.mkdir(parents=True, exist_ok=True)
+    upgrade_stage('profile-database')
+    db = profile_database()
+    if db is None:
+        fail('LEGACY_PROFILE_DATABASE_NOT_FOUND')
+    old_app = regular(args.old_app)
+    staged = None
+    if args.staged_pointer and pathlib.Path(args.staged_pointer).exists():
+        if not args.installer:
+            fail('STAGED_INSTALLER_REQUIRED')
+        staged = installer_stage(args.staged_pointer, args.installer, db, old_app)
+    receipt = prepare(db, old_app, catalog, processes, registry_snapshot(), staged)
+    durable_json(args.result, receipt)
+    # The new Electron process must reopen exactly the verified database.
+    selector = regular(pathlib.Path(os.environ['APPDATA']) / 'BTPS' / 'upgrade-active-profile.json')
+    selector.parent.mkdir(parents=True, exist_ok=True)
+    durable_json(selector, {'format': 1, 'profile': str(db.parent.parent), 'sourceSha': catalog['sourceSha']})
+    return receipt
+
+
 def main():
     global LAST_DIAGNOSTIC
     parser = argparse.ArgumentParser()
@@ -958,13 +981,14 @@ def main():
     stop = sub.add_parser('request-stop')
     stop.add_argument('--old-app', required=True)
     stop.add_argument('--diagnostic')
-    plan = sub.add_parser('prepare')
-    plan.add_argument('--old-app', required=True)
-    plan.add_argument('--result', required=True)
-    plan.add_argument('--operator-confirmed', action='store_true', required=True)
-    plan.add_argument('--diagnostic')
-    plan.add_argument('--installer')
-    plan.add_argument('--staged-pointer')
+    for name in ('prepare', 'prepare-install'):
+        plan = sub.add_parser(name)
+        plan.add_argument('--old-app', required=True)
+        plan.add_argument('--result', required=True)
+        plan.add_argument('--operator-confirmed', action='store_true', required=True)
+        plan.add_argument('--diagnostic')
+        plan.add_argument('--installer')
+        plan.add_argument('--staged-pointer')
     stage = sub.add_parser('stage')
     stage.add_argument('--old-app', required=True)
     stage.add_argument('--installer', required=True)
@@ -1040,29 +1064,27 @@ def main():
         if args.diagnostic:
             durable_json(diagnostic, {'status': 'staged', 'reason': None})
         print(json.dumps({'status': 'staged', 'receiptPath': receipt['receiptPath']}))
-    elif args.command == 'prepare':
+    elif args.command in ('prepare', 'prepare-install'):
+        if args.command == 'prepare-install':
+            upgrade_stage('automatic-pos-shutdown')
+            try:
+                request_stop_until_closed(windows_processes, args.old_app, 60)
+            except PosStillRunningError as error:
+                report = failure_report(error)
+                if args.diagnostic:
+                    durable_json(args.diagnostic, report)
+                print(json.dumps(report))
+                sys.exit(74)  # Only the initial shutdown is safe to retry.
+        prepare_from_args(args, catalog, windows_processes)
+        if args.command == 'prepare-install':
+            # Keep the same on-disk receipt/profile and final shutdown checks as
+            # separate verify/wait invocations, without restarting the frozen
+            # helper (and extracting/scanning it) three more times.
+            upgrade_stage('final-receipt-verification')
+            verify_receipt(load_receipt(args.result, catalog), catalog, windows_processes)
+            require_stopped(windows_processes)
         if args.diagnostic:
-            diagnostic = regular(args.diagnostic)
-            diagnostic.parent.mkdir(parents=True, exist_ok=True)
-        upgrade_stage('profile-database')
-        db = profile_database()
-        if db is None:
-            fail('LEGACY_PROFILE_DATABASE_NOT_FOUND')
-        old_app = regular(args.old_app)
-        staged = None
-        if args.staged_pointer and pathlib.Path(args.staged_pointer).exists():
-            if not args.installer:
-                fail('STAGED_INSTALLER_REQUIRED')
-            staged = installer_stage(args.staged_pointer, args.installer, db, old_app)
-        receipt = prepare(db, old_app, catalog, windows_processes, registry_snapshot(), staged)
-        durable_json(args.result, receipt)
-        # The new Electron process must reopen exactly the database verified
-        # above even when another old profile remains on disk.
-        selector = regular(pathlib.Path(os.environ['APPDATA']) / 'BTPS' / 'upgrade-active-profile.json')
-        selector.parent.mkdir(parents=True, exist_ok=True)
-        durable_json(selector, {'format': 1, 'profile': str(db.parent.parent), 'sourceSha': catalog['sourceSha']})
-        if args.diagnostic:
-            durable_json(diagnostic, {'status': 'prepared', 'reason': None})
+            durable_json(args.diagnostic, {'status': 'prepared', 'reason': None})
         print(json.dumps({'status': 'prepared', 'historicalRowsPreserved': True}))
     else:
         receipt = load_receipt(args.receipt, catalog)
