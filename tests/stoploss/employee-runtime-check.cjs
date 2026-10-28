@@ -1,7 +1,7 @@
 /* Real disposable PG + native message writes; synthetic captured provider turns.
  * This is NOT a real Hermes/model/OAuth/production test. */
 const assert=require('node:assert/strict'),path=require('node:path'),{randomUUID}=require('node:crypto');
-const root=path.resolve(__dirname,'../..'),built=n=>require(root+'/server/dist/services/'+n);
+const root=path.resolve(__dirname,'../..'),build=process.env.OPERATIONS_BUILD_ROOT||root+'/server/dist',built=n=>require(build+'/services/'+n);
 const {PrismaClient}=require(root+'/server/node_modules/@prisma/client');
 const {createEmployeeRuntime}=built('teamAgentBridge/employeeRuntime'),{employeeRuntimeDigest:hash}=built('teamAgentBridge/employeeRuntimeSources');
 const {readCommunicationScope}=built('teamAgentBridge/confidentiality'),{teamCommunication,readTeam,writeTeam}=built('TeamCommunicationService');

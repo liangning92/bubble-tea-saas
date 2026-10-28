@@ -36,15 +36,15 @@ export async function readAgentMemories(db:any,g:BridgeGrant,scope:Communication
  if(!await enabled(db,g))return []
  const fingerprint=await privacyHash(db,g,scope)
  const scopes:any[]=[{AND:[{value:{contains:'"scope":"store"'}},{value:{contains:'"confirmed":true'}}]},{AND:[{value:{contains:'"scope":"channel"'}},{value:{contains:'"channelId":'+JSON.stringify(scope.channelId)}}]}]
- if(scope.audienceStaffIds.length===1)scopes.push({AND:[{value:{contains:'"scope":"personal"'}},{value:{contains:'"audienceStaffIds":'+JSON.stringify(scope.audienceStaffIds)}}]})
+ if(scope.audienceStaffIds.length===1)scopes.push({AND:[{value:{contains:'"scope":"personal"'}},{value:{contains:'"audienceStaffIds":'+JSON.stringify(scope.audienceStaffIds)}},{value:{contains:'"channelId":'+JSON.stringify(scope.channelId)}}]})
  const rows=await db.config.findMany({where:{storeId:g.storeId,key:{startsWith:'team.communication.'+prefix(g.agentId)},OR:scopes,...(query?{value:{contains:query,mode:'insensitive'}}:{})},orderBy:{updatedAt:'desc'},take:500})
  return rows.map((r:any)=>JSON.parse(r.value) as AgentMemory).filter(m=>m.status==='active'&&m.agentId===g.agentId&&
-  (m.scope==='store'&&m.confirmed||m.policyHash===fingerprint&&(m.scope==='personal'&&scope.audienceStaffIds.length===1&&m.audienceStaffIds[0]===scope.audienceStaffIds[0]||m.scope==='channel'&&m.channelId===scope.channelId))&&
+  (m.scope==='store'&&m.confirmed||m.policyHash===fingerprint&&(m.scope==='personal'&&m.channelId===scope.channelId&&scope.audienceStaffIds.length===1&&m.audienceStaffIds[0]===scope.audienceStaffIds[0]||m.scope==='channel'&&m.channelId===scope.channelId))&&
   (!query||m.text.toLocaleLowerCase().includes(query.toLocaleLowerCase()))).sort((a,b)=>(Number(b.confirmed)*20+(b.kind==='preference'?10:0))-(Number(a.confirmed)*20+(a.kind==='preference'?10:0))||b.updatedAt.localeCompare(a.updatedAt)).slice(0,take)
 }
 export async function storeAgentMemory(db:any,g:BridgeGrant,scope:CommunicationScope,execution:any,input:unknown) {
  if(!await enabled(db,g,true))return {ok:false,code:'AGENT_MEMORY_LEARNING_DISABLED'}
- const v=memoryInput.parse(input),textHash=hash({kind:v.kind,text:v.text}),scopeKey=scope.audienceStaffIds.length===1?'personal:'+scope.audienceStaffIds[0]:scope.channelId,key=prefix(g.agentId)+hash([scopeKey,scope.audienceStaffIds,textHash])
+ const v=memoryInput.parse(input),textHash=hash({kind:v.kind,text:v.text}),scopeKey=scope.audienceStaffIds.length===1?'personal:'+scope.audienceStaffIds[0]+':channel:'+scope.channelId:scope.channelId,key=prefix(g.agentId)+hash([scopeKey,scope.audienceStaffIds,textHash])
  for(const k of [...new Set([key,...(v.supersedesId?[prefix(g.agentId)+v.supersedesId]:[])])].sort())await lockTeam(db,g.storeId,k)
  const priorVisible=v.supersedesId?(await readAgentMemories(db,g,scope,'',500)).find(m=>m.id===v.supersedesId):undefined
  if(v.supersedesId&&(!priorVisible||priorVisible.scope==='store'))return {ok:false,code:'AGENT_MEMORY_CORRECTION_NOT_AUTHORIZED'}

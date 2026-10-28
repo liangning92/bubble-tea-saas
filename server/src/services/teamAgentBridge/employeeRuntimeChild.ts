@@ -33,6 +33,7 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
   })
   const decoder=new StringDecoder('utf8')
   let version=ticket.traceVersion,buffer='',finished=false,failed=false,outputStored=false,bytes=0,failureCode='EMPLOYEE_RUNTIME_CHILD_UNCONFIRMED'
+  const versions=new Map([[ticket.executionId,version]]),requestIds=new Map([[ticket.executionId,ticket.requestId]]),childStates=new Map<string,'running'|'complete'|'unknown'>()
   let queue:Promise<void>=Promise.resolve()
   const stop=(error?:unknown)=>{const code=(error as any)?.code||(error as any)?.message;if(typeof code==='string'&&/^[A-Z0-9_]{1,100}$/.test(code))failureCode=code;failed=true;child.kill('SIGTERM')}
   const timer=setTimeout(stop,remaining)
@@ -54,17 +55,29 @@ export async function runEmployeeRuntimeChild(ticket: EmployeeRuntimeTicket, por
           if(!outputStored||finished||frame.params?.unknown||frame.params?.stored?.requestId!==ticket.requestId||frame.params?.stored?.traceVersion!==version)throw Error('EMPLOYEE_RUNTIME_UNCONFIRMED')
           finished=true;return
         }
-        if(finished||!frame.params||frame.params.executionId!==ticket.executionId||frame.params.expectedTraceVersion!==version)throw Error('EMPLOYEE_RUNTIME_FRAME_ORDER_INVALID')
+        const executionId=frame.params?.executionId,expected=versions.get(executionId)
+        if(finished||!frame.params||expected===undefined||frame.params.expectedTraceVersion!==expected)throw Error('EMPLOYEE_RUNTIME_FRAME_ORDER_INVALID')
         let result:any
         switch(frame.method){
           case 'recordInput':result=await port.recordInput(frame.params);break
           case 'recordResponse':result=await port.recordResponse(frame.params);break
           case 'executeTool':result=await port.executeTool(frame.params);break
-          case 'recordOutput':result=await port.recordOutput(frame.params);if(result?.requestId!==ticket.requestId||result?.text!==frame.params.providerMessage?.content)throw Error('EMPLOYEE_RUNTIME_OUTPUT_RECEIPT_INVALID');outputStored=true;break
-          case 'markUnknown':await port.markUnknown(ticket.executionId,version,frame.params.code);failed=true;result=null;break
+          case 'beginChild':if(!ticket.native||!port.beginChild)throw Error('EMPLOYEE_RUNTIME_METHOD_DENIED');result=await port.beginChild(frame.params);break
+          case 'executeNativeTool':if(!ticket.native||!port.executeNativeTool)throw Error('EMPLOYEE_RUNTIME_METHOD_DENIED');result=await port.executeNativeTool(frame.params);break
+          case 'beginAuxiliary':if(!ticket.native||!port.beginAuxiliary)throw Error('EMPLOYEE_RUNTIME_METHOD_DENIED');result=await port.beginAuxiliary(frame.params);break
+          case 'recordOutput':result=await port.recordOutput(frame.params);if(result?.requestId!==requestIds.get(executionId)||result?.text!==frame.params.providerMessage?.content)throw Error('EMPLOYEE_RUNTIME_OUTPUT_RECEIPT_INVALID');if(executionId===ticket.executionId){if([...childStates.values()].includes('running'))throw Error('EMPLOYEE_NATIVE_CHILDREN_UNRESOLVED');outputStored=true}else childStates.set(executionId,'complete');break
+          case 'markUnknown':await port.markUnknown(executionId,expected,frame.params.code);if(executionId===ticket.executionId)failed=true;else childStates.set(executionId,'unknown');result=null;break
           default:throw Error('EMPLOYEE_RUNTIME_METHOD_DENIED')
         }
-        if(frame.method!=='markUnknown'){if(!Number.isSafeInteger(result?.traceVersion)||result.traceVersion!==version+1)throw Error('EMPLOYEE_RUNTIME_RECEIPT_VERSION_INVALID');version=result.traceVersion}
+        if(frame.method!=='markUnknown'){
+          if(!Number.isSafeInteger(result?.traceVersion)||result.traceVersion!==expected+1)throw Error('EMPLOYEE_RUNTIME_RECEIPT_VERSION_INVALID')
+          versions.set(executionId,result.traceVersion);version=versions.get(ticket.executionId)!
+          if(frame.method==='beginChild'||frame.method==='beginAuxiliary'){
+            const issued=result.ticket,native=issued?.native
+            if(!issued||versions.has(issued.executionId)||native?.delivery!=='parent_only'||native?.parentExecutionId!==executionId||issued.compartmentKey!==ticket.compartmentKey)throw Error('EMPLOYEE_NATIVE_LINEAGE_DENIED')
+            versions.set(issued.executionId,issued.traceVersion);requestIds.set(issued.executionId,issued.requestId);childStates.set(issued.executionId,'running')
+          }
+        }
         child.stdin.write(JSON.stringify({result})+'\n')
       }).catch(stop)
     }

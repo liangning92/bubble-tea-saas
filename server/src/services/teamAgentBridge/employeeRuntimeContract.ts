@@ -9,13 +9,21 @@ export const EMPLOYEE_RUNTIME_REPLY_INSTRUCTION = PREVIOUS_EMPLOYEE_RUNTIME_INST
 export const EMPLOYEE_RUNTIME_INSTRUCTION = EMPLOYEE_RUNTIME_REPLY_INSTRUCTION + ' Treat currentRequest as the only request to answer or execute in this turn. Conversation facts are historical context, not an outstanding work queue: never resume an earlier request unless currentRequest explicitly asks to continue it. For greetings, introductions and general explanations, answer directly without unrelated business lookups. A tool permission denial is a decision, not missing evidence: explain the denied permission and who can help in the same reply. Do not retry that denied request through other tools, product queries, procurement, finance, memory or inventory lookups. Continue only independently allowed parts explicitly requested now. Describe available capabilities separately from the current account permission; never promise access merely because a tool exists.'
 
 const sha = z.string().regex(/^[a-f0-9]{64}$/), uuid = z.string().uuid(), version = z.number().int().positive()
-export const employeeRuntimeIsolationSchema = z.object({
+const legacyEmployeeRuntimeIsolationSchema = z.object({
   protocol: z.literal(EMPLOYEE_RUNTIME_PROTOCOL), profile: z.literal('employee_work'),
   sessionId: z.string().regex(/^employee_work_[a-f0-9]{64}$/), compartmentKey: sha, memoryNamespace: sha,
   memoryEnabled: z.literal(false), contextFilesEnabled: z.literal(false), auxiliaryModelsEnabled: z.literal(false),
   sharedHistoryEnabled: z.literal(false), builtinToolsEnabled: z.literal(false),
 }).strict()
+const nativeEmployeeRuntimeIsolationSchema=z.object({
+  protocol:z.literal(EMPLOYEE_RUNTIME_PROTOCOL),profile:z.literal('native_work'),
+  sessionId:z.string().regex(/^native_work_[a-f0-9]{64}$/),compartmentKey:sha,memoryNamespace:sha,
+  memoryEnabled:z.boolean(),contextFilesEnabled:z.boolean(),builtinToolsEnabled:z.boolean(),
+  auxiliaryModelsEnabled:z.literal(false),sharedHistoryEnabled:z.literal(false),
+}).strict()
+export const employeeRuntimeIsolationSchema=z.discriminatedUnion('profile',[legacyEmployeeRuntimeIsolationSchema,nativeEmployeeRuntimeIsolationSchema])
 export type EmployeeRuntimeIsolation = z.infer<typeof employeeRuntimeIsolationSchema>
+export const employeeNativeRuntimeSchema = z.object({catalogHash:sha,memoryNamespace:sha,reviewedProfileHash:sha,delivery:z.enum(['channel','parent_only']),parentExecutionId:uuid.optional(),parentToolCallId:z.string().min(1).max(256).optional(),auxiliaryKind:z.enum(['compression','memory_review']).optional(),requestBindingHash:sha.optional()}).strict()
 export interface EmployeeRuntimeTicket {
   protocol: typeof EMPLOYEE_RUNTIME_PROTOCOL; executionId: string; requestId: string; traceVersion: number;
   compartmentKey: string; audienceHash: string; inputContextHash: string; toolSchemaHash: string;
@@ -23,12 +31,15 @@ export interface EmployeeRuntimeTicket {
   model: 'MiniMax-M3.1-Flash'; tools: { type: 'function'; function: { name: string; description: string; parameters: unknown } }[];
   executionTimeoutMs?: number
   isAdmin?: boolean
+  native?: z.infer<typeof employeeNativeRuntimeSchema>
+  requestSource?: {kind:'conversation';channelId:string;messageId:string;seq:number}
+  auxiliaryMessages?: unknown[]
 }
 /** Real complete SDK wire, not ticket.providerRequest. Host validates the approved
  * isolated launcher/system assembly, first user bytes, tool schema and every later
  * assistant/tool message against this execution's persisted response/receipts. */
 export const employeeRuntimeInputSchema = z.object({ executionId: uuid, expectedTraceVersion: version, turn: version,
-  inputHash: sha, toolSchemaHash: sha, isolation: employeeRuntimeIsolationSchema, providerRequest: z.unknown() }).strict()
+  inputHash: sha, toolSchemaHash: sha, isolation: employeeRuntimeIsolationSchema, providerRequest: z.unknown(), nativeProfileHash:sha.optional() }).strict()
 export const employeeRuntimeResponseSchema = z.object({ executionId: uuid, expectedTraceVersion: version, turn: version,
   providerRequestId: z.string().min(1).max(256), finishReason: z.enum(['stop', 'tool_calls']),
   providerMessage: z.object({ role: z.literal('assistant'), content: z.string().nullable(), tool_calls: z.array(z.object({
@@ -36,11 +47,17 @@ export const employeeRuntimeResponseSchema = z.object({ executionId: uuid, expec
   }).strict()).optional() }).strict() }).strict()
 export const employeeRuntimeToolSchema = z.object({ executionId: uuid, expectedTraceVersion: version, turn: version,
   callOrdinal: z.number().int().nonnegative(), toolCallId: z.string().min(1).max(256), name: z.string().min(1), args: z.unknown() }).strict()
+export const employeeNativeToolSchema=employeeRuntimeToolSchema.extend({stage:z.enum(['start','complete']),value:z.unknown().optional(),wireResult:z.string().max(1000000).optional()}).strict()
+export const employeeRuntimeChildSchema=z.object({executionId:uuid,expectedTraceVersion:version,turn:version,toolCallId:z.string().min(1).max(256),childKey:z.string().min(1).max(256),goal:z.string().min(1).max(100000)}).strict()
+export const employeeRuntimeAuxiliarySchema=z.object({executionId:uuid,expectedTraceVersion:version,kind:z.enum(['compression','memory_review']),providerMessages:z.array(z.unknown()).min(2).max(1000)}).strict()
 export const employeeRuntimeOutputSchema = z.object({ executionId: uuid, expectedTraceVersion: version,
-  providerRequestId: z.string().min(1).max(256), providerMessage: z.object({ role: z.literal('assistant'), content: z.string().min(1).max(4000).refine(text => !!text.trim()) }).strict() }).strict()
+  providerRequestId: z.string().min(1).max(256), providerMessage: z.object({ role: z.literal('assistant'), content: z.string().min(1).max(100000).refine(text => !!text.trim()) }).strict() }).strict()
 export interface EmployeeRuntimeSource { source: CommunicationSource; fingerprint: string; value: unknown }
 export interface EmployeeRuntimeHostPort {
   begin(grant: BridgeGrant, scope: CommunicationScope, sources: CommunicationSource[]): Promise<EmployeeRuntimeTicket>
+  beginChild?(input:z.infer<typeof employeeRuntimeChildSchema>):Promise<{traceVersion:number;ticket:EmployeeRuntimeTicket}>
+  beginAuxiliary?(input:z.infer<typeof employeeRuntimeAuxiliarySchema>):Promise<{traceVersion:number;ticket:EmployeeRuntimeTicket}>
+  executeNativeTool?(input:z.infer<typeof employeeNativeToolSchema>):Promise<{traceVersion:number;value?:unknown;sources:EmployeeRuntimeSource[]}>
   /** Before each actual HTTP send; maySend=false on a repeated/unknown same turn. */
   recordInput(input: z.infer<typeof employeeRuntimeInputSchema>): Promise<{ traceVersion: number; maySend: boolean }>
   /** Complete observed response only. Partial SSE cannot authorize a tool or publish. */

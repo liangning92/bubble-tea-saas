@@ -287,7 +287,7 @@ test('notification and native employee task adapters select real MCP/PG and scop
 test('employee runtime source, child scripts and fixtures require isolated PG with server dependencies',()=>{
  const f=fixture();try{
   f.write('tests/stoploss/employee-runtime-child.test.cjs');
-  for(const file of ['server/src/services/teamAgentBridge/employeeRuntime.ts','scripts/hermes_employee/host_stdio.py','scripts/test-employee-runtime.py','tests/stoploss/employee-runtime-check.cjs']){
+  for(const file of ['server/src/services/teamAgentBridge/employeeRuntime.ts','server/src/services/teamAgentBridge/nativeRuntimePolicy.ts','scripts/hermes_employee/native_runtime.py','scripts/hermes_employee/host_stdio.py','scripts/test-employee-runtime.py','tests/stoploss/employee-runtime-check.cjs']){
    f.write(file);const p=selectScope([file],f);assert.equal(p.employeeRuntime,true,file);assert(p.unitTests.includes('tests/stoploss/employee-runtime-child.test.cjs'));assert.equal(p.needsDependencies,true);assert.equal(p.needsServer,true);assert.equal(p.electronTypes,false);assert(!p.components.includes('pos'));
   }
   assert.match(fs.readFileSync(path.resolve(__dirname,'../../scripts/run-scoped-ci.cjs'),'utf8'),/if\(plan\.employeeRuntime\).*with-docker-test\.py.*test-employee-runtime\.py/);

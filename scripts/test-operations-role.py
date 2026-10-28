@@ -18,6 +18,10 @@ with socket.socket() as probe:
 def command(args, **kwargs):
     return subprocess.run(args, cwd=root, check=True, **kwargs)
 started = False
+checks = sys.argv[1:] or ['tests/stoploss/operations-role-native-check.cjs']
+allowed_checks = {'tests/stoploss/operations-role-native-check.cjs', 'tests/stoploss/native-runtime-backend-check.cjs', 'tests/stoploss/employee-runtime-check.cjs'}
+if any(check not in allowed_checks for check in checks):
+    raise ValueError('Explicit owned operations test script required')
 try:
     command(['initdb', '-D', str(base / 'pg'), '--username=team_test', '--auth=trust', '--no-locale', '-E', 'UTF8'], stdout=subprocess.DEVNULL)
     command(['pg_ctl', '-D', str(base / 'pg'), '-l', str(base / 'pg.log'), '-o', '-h 127.0.0.1 -p ' + str(port) + ' -k ' + str(base), '-w', 'start'], stdout=subprocess.DEVNULL)
@@ -26,7 +30,8 @@ try:
     env = dict(os.environ, NODE_ENV='production', DATABASE_URL=f'postgresql://team_test@127.0.0.1:{port}/team_test',
                JWT_SECRET='synthetic-team-work-item-fixture-only', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
-    command(['node', 'tests/stoploss/operations-role-native-check.cjs'], env=env)
+    for check in checks:
+        command(['node', check], env=env)
 finally:
     try:
         if started:

@@ -18,6 +18,21 @@ from private_gateway import Gateway, FairOperationQueue
 CHILD = r'''
 import json,sys,time
 first=json.loads(sys.stdin.readline());t=first['ticket'];v=t['traceVersion'];mode=t.get('testMode')
+if mode=='native':
+ def rpc(method,execution,version,extra=None):
+  print(json.dumps({'protocol':t['protocol'],'method':method,'params':{'executionId':execution,'expectedTraceVersion':version,**(extra or {})}}),flush=True)
+  return json.loads(sys.stdin.readline())['result']
+ for m in ['recordInput','recordResponse','executeNativeTool']:
+  v=rpc(m,t['executionId'],v)['traceVersion']
+ result=rpc('beginChild',t['executionId'],v,{'toolCallId':'delegate-1'});v=result['traceVersion'];c=result['ticket'];cv=c['traceVersion']
+ for m in ['recordInput','recordResponse']:
+  cv=rpc(m,c['executionId'],cv)['traceVersion']
+ cv=rpc('recordOutput',c['executionId'],cv,{'providerMessage':{'content':'synthetic report'}})['traceVersion']
+ for m in ['executeNativeTool','recordInput','recordResponse']:
+  v=rpc(m,t['executionId'],v)['traceVersion']
+ v=rpc('recordOutput',t['executionId'],v,{'providerMessage':{'content':'synthetic report'}})['traceVersion']
+ print(json.dumps({'protocol':t['protocol'],'method':'finished','params':{'stored':{'requestId':t['requestId'],'traceVersion':v}}}),flush=True)
+ sys.exit()
 if mode=='wait_gate':
  from pathlib import Path
  gate=Path(first['config']['isolatedRoot'])/'release-child'
@@ -57,10 +72,13 @@ class TestGateway(unittest.TestCase):
                 if self.path=='/redirect':
                     self.send_response(302);self.send_header('Location',f'http://127.0.0.1:{self.server.server_port}/unexpected');self.end_headers();return
                 value=None if body['method']=='markUnknown' else {'traceVersion':body['params']['expectedTraceVersion']+1}
-                if body['method']=='recordOutput':value.update(requestId=owner.request_id,text='synthetic report')
+                if body['method']=='beginChild':
+                    child={'executionId':str(uuid.uuid4()),'requestId':str(uuid.uuid4()),'traceVersion':1,'compartmentKey':'a'*64,'native':{'delivery':'parent_only','parentExecutionId':body['params']['executionId'],'parentToolCallId':body['params']['toolCallId']}}
+                    owner.child_request_ids[child['executionId']]=child['requestId'];value['ticket']=child
+                if body['method']=='recordOutput':value.update(requestId=owner.child_request_ids.get(body['params']['executionId'],owner.request_id),text='synthetic report')
                 raw=json.dumps({'result':value}).encode();self.send_response(200);self.send_header('Content-Length',str(len(raw)));self.end_headers();self.wfile.write(raw)
         self.rpc=ThreadingHTTPServer(('127.0.0.1',0),Rpc);threading.Thread(target=self.rpc.serve_forever,daemon=True).start()
-        self.request_id=str(uuid.uuid4())
+        self.request_id=str(uuid.uuid4());self.child_request_ids={}
         def command(e):self.starts.append(e['ticket']['executionId']);return [sys.executable,'-I','-B','-c',CHILD]
         self.kw=dict(journal=str(self.root/'admissions.sqlite'),bearer=self.bearer,backend_rpc_url=f'http://127.0.0.1:{self.rpc.server_port}/rpc',isolated_root=str(self.root),command_factory=command,max_seconds=5)
         self.gateway=Gateway(**self.kw);self.server=self.gateway.server();threading.Thread(target=self.server.serve_forever,daemon=True).start()
@@ -89,6 +107,15 @@ class TestGateway(unittest.TestCase):
         self.assertEqual([c[0]['method'] for c in self.calls],['recordInput','recordResponse','executeTool','recordOutput'])
         self.assertTrue(all(c[1]=='Bearer '+e['callbackCredential'] for c in self.calls))
         raw=(self.root/'admissions.sqlite').read_bytes();self.assertNotIn(e['providerCredential'].encode(),raw);self.assertNotIn(e['callbackCredential'].encode(),raw)
+
+    def test_native_child_frames_keep_independent_versions_and_root_credential(self):
+        e=self.envelope('native');e['ticket'].update(native={'delivery':'channel'},compartmentKey='a'*64)
+        self.http('/employee-runs',e);self.assertEqual(self.final(e)['state'],'complete')
+        child_ids=set(self.child_request_ids);self.assertEqual(len(child_ids),1)
+        child_calls=[c for c in self.calls if c[0]['params']['executionId'] in child_ids]
+        self.assertEqual([c[0]['method'] for c in child_calls],['recordInput','recordResponse','recordOutput'])
+        self.assertTrue(all(c[0]['executionId']==c[0]['params']['executionId'] for c in self.calls))
+        self.assertTrue(all(c[1]=='Bearer '+e['callbackCredential'] for c in child_calls))
 
     def test_backend_failure_category_survives_without_persisting_raw_error_text(self):
         for rejection,expected in [('EMPLOYEE_BUSINESS_ACTION_NOT_GRANTED','EMPLOYEE_BUSINESS_ACTION_NOT_GRANTED'),('token=SECRET-RPC-ERROR','RPC_REJECTED')]:
