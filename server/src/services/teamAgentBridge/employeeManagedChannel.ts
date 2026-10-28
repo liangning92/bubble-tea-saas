@@ -1,12 +1,25 @@
 import { createHash, randomUUID } from 'crypto'
 import { grantSchema } from './contract'
-import { employeeGrantKey, employeeRouteKey } from './employeeIntake'
+import { employeeGrantKey, employeeRouteKey, employeeRouteSchema } from './employeeIntake'
+import { readAuthorizedBridgeChannel } from './directDelegation'
 import { assertManagementAudience } from '../TeamManagementContext'
 import { lockTeam } from '../TeamCommunicationService'
 import type { TeamChannel, TeamTask } from '../TeamCommunicationService'
 import type { WorkflowPolicy } from '../TeamWorkflowQueue'
 
 type Ports = { read(db: any, storeId: string, key: string): Promise<any>; write(db: any, storeId: string, key: string, value: unknown): Promise<unknown> }
+/** Consent still names real people after Hermes joins. Only a bound, currently
+ * authorized native agent may be omitted when validating the human audience. */
+export async function managedHumanAudience(db: any, storeId: string, channel: TeamChannel) {
+  if (!channel.members.some(member => member.staffId.startsWith('agent:'))) return channel
+  const row = await db.config.findUnique({ where: { storeId_key: { storeId, key: employeeRouteKey(channel.id) } } })
+  const route = employeeRouteSchema.parse(row && JSON.parse(row.value))
+  const grantRow = await db.config.findUnique({ where: { storeId_key: { storeId, key: employeeGrantKey(route.agentId) } } })
+  const grant = grantSchema.parse(grantRow && JSON.parse(grantRow.value))
+  if (grant.storeId !== storeId || grant.agentId !== route.agentId) throw Error('EMPLOYEE_ROUTE_BINDING_CHANGED')
+  await readAuthorizedBridgeChannel(db, grant, route.task, channel.id, channel)
+  return { ...channel, members: channel.members.filter(member => member.staffId !== 'agent:' + route.agentId) }
+}
 /** Inside the native message transaction. The saved all-channel choice plus
  * the already enabled management consent owns this route, not a text keyword.
  * No historical jobs or business writes are replayed. */

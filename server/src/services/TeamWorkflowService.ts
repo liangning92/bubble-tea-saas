@@ -4,6 +4,7 @@ import prisma from '../config/database'
 import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, accessTeamChannel, auditTeam, teamCommunication, TEAM_PREFIX } from './TeamCommunicationService'
 import { teamAi, readAiConnection } from './TeamAiService'
 import { assertLegacyConsumer } from './teamAgentBridge/employeeIntake'
+import { managedHumanAudience } from './teamAgentBridge/employeeManagedChannel'
 import { ensureAction, followupDue, beginFollowup, settleFollowup, listActions } from './TeamManagementActions'
 import { readWork, writeWork } from './EmployeeWorkspaceStore'
 import { managementConsentSchema, assertManagementAudience, assertManagementFresh, managementPrivateText, managementContext } from './TeamManagementContext'
@@ -178,7 +179,7 @@ export function teamWorkflow(db: any = prisma, ai = teamAi(db), clock = () => Da
           p.defaultsVersion = resumeManagement ? (await readTeam(tx, a.storeId, 'workflow.defaults'))?.version ?? old.defaultsVersion : old.defaultsVersion
         }
         if (p.automaticSend && p.enabled && !p.paused) {
-          if (p.management) await assertManagementAudience(tx, a, c, { ...p, management: p.management })
+          if (p.management) await assertManagementAudience(tx, a, await managedHumanAudience(tx, a.storeId, c), { ...p, management: p.management })
           else await assertRoutineAudience(tx, a, c, p)
           if (config.region !== 'cn') fail('TEAM_ROUTINE_CN_CONNECTION_REQUIRED')
         }
