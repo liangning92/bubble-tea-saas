@@ -11,6 +11,7 @@ test('plain Indonesian reply contract preserves the reviewed system template and
  const root='/synthetic/hermes',id='execution'
  const hash=instruction=>employeeSystemTemplateHash([{role:'system',content:'Pinned header\n'+instruction+'\nPinned footer'}],root,id)
  assert.equal(hash(contract.EMPLOYEE_RUNTIME_INSTRUCTION),hash(contract.LEGACY_EMPLOYEE_RUNTIME_INSTRUCTION))
+ assert.equal(hash(contract.EMPLOYEE_RUNTIME_REPLY_INSTRUCTION),hash(contract.LEGACY_EMPLOYEE_RUNTIME_INSTRUCTION))
  assert.equal(hash(contract.PREVIOUS_EMPLOYEE_RUNTIME_INSTRUCTION),hash(contract.LEGACY_EMPLOYEE_RUNTIME_INSTRUCTION))
  assert.notEqual(hash(contract.EMPLOYEE_RUNTIME_INSTRUCTION+' injected permission'),hash(contract.LEGACY_EMPLOYEE_RUNTIME_INSTRUCTION))
  assert.match(contract.EMPLOYEE_RUNTIME_INSTRUCTION,/simple everyday Indonesian/)
