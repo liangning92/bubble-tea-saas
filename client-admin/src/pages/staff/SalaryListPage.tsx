@@ -217,8 +217,8 @@ export function SalaryListPage() {
     const basis=salary?.payrollBasis
     const correction=basis?.correction
     setLateMinutes(String(correction?.lateMinutes||0));setLateMode(correction?.lateMode||'rule');setManualLateDeduction(String(correction?.manualLateDeduction||0));setOtherAttendanceDeduction(String(correction?.otherAttendanceDeduction||0))
-    setDaySource(basis?.settlementVersion===1?'estimate':basis?.daysSource==='attendance'?'attendance':'manual')
-    setUnpaidDays({probation:String(basis?.unpaidLeave?.days?.probation||0),regular:String(basis?.unpaidLeave?.days?.regular||0)})
+    setDaySource(basis?.settlementVersion===1&&basis?.fullMonthEligible!==false?'estimate':basis?.daysSource==='attendance'?'attendance':'manual')
+    setUnpaidDays({probation:String((basis?.unpaidLeave?.requestedDays??basis?.unpaidLeave?.days)?.probation||0),regular:String((basis?.unpaidLeave?.requestedDays??basis?.unpaidLeave?.days)?.regular||0)})
     appliedLeaveAmount.current=basis?.unpaidLeave?.deduction||0;setDepositRefundAmount(salary?.depositRefundAmount||0)
     const legacyMonthlyLate=salary?.compensationItems?.find(item=>item.id===`late-${salary.staffId}-${salary.month}`)?.amount||0
     appliedAttendanceAmount.current=(correction?.lateDeduction||0)+(correction?.otherAttendanceDeduction||0)+legacyMonthlyLate
@@ -294,7 +294,7 @@ export function SalaryListPage() {
       setPayrollBasis(basis)
       const nextLeave=basis.unpaidLeave?.deduction||0
       const previousLeave=appliedLeaveAmount.current;appliedLeaveAmount.current=nextLeave
-      if(daySource!=='estimate')setUnpaidDays({probation:String(basis.unpaidLeave?.days?.probation||0),regular:String(basis.unpaidLeave?.days?.regular||0)})
+      if(daySource!=='estimate')setUnpaidDays({probation:String((basis.unpaidLeave?.requestedDays??basis.unpaidLeave?.days)?.probation||0),regular:String((basis.unpaidLeave?.requestedDays??basis.unpaidLeave?.days)?.regular||0)})
       setDepositRefundAmount(data.depositRefundAmount||0)
       const nextAttendance=(basis.correction?.lateDeduction||0)+(basis.correction?.otherAttendanceDeduction||0)
       const nextComp=data.compensation||{rewards:0,penalties:0}
@@ -553,7 +553,7 @@ export function SalaryListPage() {
                 />
               </div>
 
-              {payrollBasis?.settlementVersion===1?<section className="border rounded-xl p-4 space-y-3"><h3 className="font-semibold">{pl.unpaidDays}</h3><p className="text-sm text-gray-500">{pl.calendarHint}</p>
+              {payrollBasis?.settlementVersion===1&&payrollBasis?.fullMonthEligible!==false?<section className="border rounded-xl p-4 space-y-3"><h3 className="font-semibold">{pl.unpaidDays}</h3><p className="text-sm text-gray-500">{pl.calendarHint}</p>
                 {['probation','regular'].map(type=>{const segment=payrollBasis.segments?.find((seg:any)=>seg.type===type);if(!segment)return null;return <label key={type} className="block text-sm">{type==='probation'?pl.probation:pl.regular}<input aria-label={`${pl.unpaidDays} · ${type==='probation'?pl.probation:pl.regular}`} type="number" min="0" max={segment.eligibleDays??segment.days} step="0.5" className="w-full p-2 border rounded-lg" value={unpaidDays[type as 'probation'|'regular']} onChange={e=>{setDaySource('estimate');setUnpaidDays(p=>({...p,[type]:e.target.value}))}}/></label>})}
               </section>:<>              <section className="border rounded-xl p-4 space-y-3"><h3 className="font-semibold">{l.editDays}</h3><p className="text-sm text-gray-500">{pl.daysHint}</p>
                 {payrollBasis&&['probation','regular'].map(type=>{const segment=payrollBasis.segments?.find((seg:any)=>seg.type===type);if(!segment)return null;return <label key={type} className="block text-sm">{type==='probation'?pl.probation:pl.regular} · {pl.employmentDays}: {formatNumber(segment.eligibleDays??segment.days)}<input aria-label={type==='probation'?l.probationDays:l.regularDays} type="number" min="0" max={segment.eligibleDays??segment.days} step="0.5" className="w-full p-2 border rounded-lg" value={workingDays?.[type as 'probation'|'regular']??segment.days} onChange={e=>{setDaySource('manual');setWorkingDays(previous=>({...previous||{probation:String(payrollBasis.segments.find((seg:any)=>seg.type==='probation')?.days||0),regular:String(payrollBasis.segments.find((seg:any)=>seg.type==='regular')?.days||0)},[type]:e.target.value}))}}/></label>})}

@@ -71,18 +71,21 @@ export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, mont
  const dates=new Set(records.filter(r=>r.status!=='absence').map(r=>businessDate(r.checkInTime)))
  const attendanceDays:WorkingDays={probation:0,regular:0}
  for(const date of dates){const segment=available.segments.find(s=>date>=s.startDate&&date<=s.endDate);if(segment)attendanceDays[segment.type]++}
- const basis=payrollBasis(staff,enrollment,month,workingDays || (source==='attendance'?attendanceDays:undefined))
  const rules=await getPayrollRules(db,staff.storeId)
- const fullMonthEligible=!!staff.hireDate&&businessDate(staff.hireDate)<=month+'-01'&&(!staff.terminationDate||dayNumber(businessDate(staff.terminationDate))>=dayNumber(month+'-01')+basis.daysInMonth-1)
- const credit = rules.paidRestEligibility==='prorated' ? Math.floor(rules.paidRestDays*basis.eligibleDays/basis.daysInMonth*2)/2 : rules.paidRestDays
- const paidRestDays=source!=='estimate'&&(fullMonthEligible||rules.paidRestEligibility!=='full_month')?Math.min(credit,Math.max(0,basis.eligibleDays-basis.payableDays)):0
+ const fullMonthEligible=!!staff.hireDate&&businessDate(staff.hireDate)<=month+'-01'&&(!staff.terminationDate||dayNumber(businessDate(staff.terminationDate))>=dayNumber(month+'-01')+available.daysInMonth-1)
+ // A partial month uses verified workdays, never projected employment days.
+ const basis=payrollBasis(staff,enrollment,month,workingDays || (source==='attendance'||!fullMonthEligible?attendanceDays:undefined))
+ const paidRestDays=source!=='estimate'&&fullMonthEligible?Math.min(rules.paidRestDays,Math.max(0,basis.eligibleDays-basis.payableDays)):0
  // Fixed monthly credits have no leave dates. Across probation/regular rates,
  // use the month's employment-weighted rate and disclose the credit separately.
  const workNumerator=basis.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
  const monthNumerator=available.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
- const totalAmount=Math.round((workNumerator+(basis.eligibleDays ? monthNumerator*paidRestDays/basis.eligibleDays : 0))/(100*basis.daysInMonth))
- const paidRestAmount=totalAmount-basis.amount
- return {...basis,version:2,workedAmount:basis.amount,amount:basis.amount+paidRestAmount,payableDays:basis.payableDays+paidRestDays,workedDays:basis.payableDays,daysSource:source,attendanceDays,fullMonthEligible,paidRestDays,paidRestAmount,payrollRules:rules}
+ const divisor=fullMonthEligible?basis.daysInMonth:rules.dailyRateDivisor
+ const workedAmount=Math.round(workNumerator/(100*divisor))
+ const totalAmount=Math.round((workNumerator+(basis.eligibleDays ? monthNumerator*paidRestDays/basis.eligibleDays : 0))/(100*divisor))
+ const paidRestAmount=totalAmount-workedAmount
+ if(!fullMonthEligible){basis.segments.forEach(s=>s.amount=Math.round(s.days*s.monthlyRate/divisor));if(basis.segments.length)basis.segments[basis.segments.length-1].amount+=workedAmount-basis.segments.reduce((sum,s)=>sum+s.amount,0)}
+ return {...basis,proration:fullMonthEligible?'calendar_days':'actual_workdays',dailyRateDivisor:divisor,version:2,workedAmount,amount:totalAmount,payableDays:basis.payableDays+paidRestDays,workedDays:basis.payableDays,daysSource:source,attendanceDays,fullMonthEligible,paidRestDays,paidRestAmount,payrollRules:rules}
 }
 export async function savePayrollBasis(db: PayrollDB, salary: {id:string;staffId:string;month:string;baseSalary:number}, staff: Employee, workingDays?: WorkingDays, manualCorrection=false, metadata: Record<string,unknown> = {}) {if(staff.baseSalary===null)return
  const basis=await calculatePayrollBasis(db,staff,salary.month,workingDays, (metadata.daysSource as 'estimate'|'manual'|'attendance'|undefined) || (workingDays?'manual':'estimate'));await write(db,staff.storeId,basisKey(salary.id),{...basis,...metadata,manualCorrection,recordedBaseSalary:salary.baseSalary,manualAdjustment:salary.baseSalary!==basis.amount})}
@@ -103,7 +106,7 @@ export async function refreshEmploymentPayroll(db: Prisma.TransactionClient, sta
    probation:Math.min(previous.workingDays.probation,available.segments.find(s=>s.type==='probation')?.days||0),
    regular:Math.min(previous.workingDays.regular,available.segments.find(s=>s.type==='regular')?.days||0)
   }:undefined
-  const basis=await calculatePayrollBasis(db,staff,salary.month,days)
+  const basis=await calculatePayrollBasis(db,staff,salary.month,days,previous?.daysSource || (days?'manual':'estimate'))
   const plans=await read(db,staff.storeId,`salary.depositPlan.${salary.id}`)||[]
   const leaving=staff.terminationDate&&(staff.status==='resigned'||businessDate(staff.terminationDate).slice(0,7)<=salary.month||businessDate(staff.terminationDate)<businessDate(new Date()))
   const cancelledDeposit=leaving?plans.reduce((sum:number,item:any)=>sum+Math.round(item.amountMinor/100),0):0

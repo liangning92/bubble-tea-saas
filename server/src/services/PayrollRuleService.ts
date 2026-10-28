@@ -15,7 +15,7 @@ export const payrollRuleSchema = z.object({
  tenureBonusEnabled: z.boolean().default(true), tenureBonusYears: z.number().int().min(1).max(100).default(5), tenureAnnualLeaveDays: days.default(15),
  dailyRateDivisor: z.number().min(1).max(366).default(26), overtimeMonthlyHours: z.number().min(1).max(744).default(176),
  attendanceBonusDays: z.number().min(0).max(31).multipleOf(0.5).default(24), attendanceBonusAmount: z.number().int().min(0).max(2000000000).default(200000),
-}).transform(({blockWeekendLeave,blockedLeaveWeekdays,...rest}) => ({...rest,blockedLeaveWeekdays:[...new Set(blockedLeaveWeekdays ?? (blockWeekendLeave === false ? [] : [0,6]))].sort(),blockWeekendLeave:blockedLeaveWeekdays ? blockedLeaveWeekdays.includes(0)&&blockedLeaveWeekdays.includes(6) : blockWeekendLeave ?? true}))
+}).transform(({blockWeekendLeave,blockedLeaveWeekdays,...rest}) => ({...rest,paidRestEligibility:'full_month' as const,blockedLeaveWeekdays:[...new Set(blockedLeaveWeekdays ?? (blockWeekendLeave === false ? [] : [0,6]))].sort(),blockWeekendLeave:blockedLeaveWeekdays ? blockedLeaveWeekdays.includes(0)&&blockedLeaveWeekdays.includes(6) : blockWeekendLeave ?? true}))
 export const defaultPayrollRules = payrollRuleSchema.parse({paidRestDays:2})
 export async function getPayrollRules(db:DB,storeId:string) { const row=await db.config.findUnique({where:{storeId_key:{storeId,key}}});return row?payrollRuleSchema.parse(JSON.parse(row.value)):payrollRuleSchema.parse({paidRestDays:2}) }
 export async function savePayrollRules(db:DB,storeId:string,input:unknown) {
