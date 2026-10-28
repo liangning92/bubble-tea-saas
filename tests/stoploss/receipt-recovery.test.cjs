@@ -15,3 +15,12 @@ test('a late native success replaces uncertain UI timeout; timeout never resubmi
 test('partial or uncertain printer acceptance always requires paper verification, including old failed transport records',()=>{
  const ctx=setup();assert.equal(ctx.receiptResultStatus({success:false,copiesSubmitted:1}),'unknown');assert.equal(ctx.receiptResultStatus({success:false,deliveryStatus:'unconfirmed'}),'unknown');assert.equal(ctx.receiptNeedsPaperCheck({status:'failed',error:'Print delivery unconfirmed: timeout'}),true);assert.equal(ctx.receiptNeedsPaperCheck({status:'failed',error:'RECEIPT_PAINT_TIMEOUT'}),false);assert.equal(ctx.receiptNeedsPaperCheck({status:'pending'}),true)
 });
+
+test('initial multi-copy printing has a deadline and records late success without resubmitting',async()=>{
+ const ctx=setup();let release,calls=0;
+ const pending=ctx.submitSavedReceipt('key',payload=>{calls++;assert.equal(payload.printCopies,2);return new Promise(resolve=>release=resolve)},()=>{});
+ await new Promise(resolve=>setImmediate(resolve));ctx.deadline();
+ assert.equal((await pending).deliveryStatus,'unconfirmed');assert.equal(calls,1);
+ await new Promise(resolve=>setImmediate(resolve));assert.equal(ctx.row().value.status,'unknown');
+ release({success:true});await new Promise(resolve=>setImmediate(resolve));assert.equal(ctx.row().value.status,'sent');assert.equal(calls,1);
+});

@@ -224,11 +224,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [scanRequestVersion, setScanRequestVersion] = useState(0)
   const scanIntentVersion = useRef(0)
   const [quarantineAcknowledged, setQuarantineAcknowledged] = useState(false)
+  const [recoveryRevision, setRecoveryRevision] = useState(0)
   const recovery = useLiveQuery(async () => {
     if (!user?.storeId) return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null }
-    try { return await readCheckoutRecovery(user.storeId) }
-    catch { return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null } }
-  }, [user?.storeId])
+    try { return { ...await readCheckoutRecovery(user.storeId), readError: '' } }
+    catch (error: any) { return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null, readError: String(error?.name || 'CHECKOUT_RECOVERY_UNAVAILABLE') } }
+  }, [user?.storeId, recoveryRevision])
   const { filter, setFilter, products, setProducts, searchQuery, setSearchQuery } = useProductStore()
   const [loading, setLoading] = useState(true)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -2956,6 +2957,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     })
     let intent: CheckoutIntent | undefined
     let sent = false
+    let paymentReportStarted = false
     let accepted = false
 
     // 解析出真实的数据库 channelId（仅当为有效 CUID/UUID 时传递，避免传递本地代码引发外键错误）
@@ -3034,6 +3036,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         intent = await prepareCheckout(orderData,cart,{subtotal,ppn:tax,finalAmount:total},basketGeneration)
         await claimCheckout(intent)
         checkoutTiming('recovery_saved')
+        paymentReportStarted = true
         await reportReceivedPayment(intent,total,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
         checkoutTiming('payment_recorded')
         sent = true
@@ -3086,7 +3089,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // Reuse the same unique receipt id after a lost response.
     const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
       if (shouldOpenDrawer) logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout drawer command planned', metadata: { source: 'automatic', status: 'requested', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
-      if (shouldOpenDrawer && posReceipt.autoPrint === false) {
+      if (shouldOpenDrawer && posReceipt.autoPrint === false) void (async () => {
         const target = printerTarget('receipt')
         try {
           const drawerResult = target && await electronAPI?.openCashDrawer?.({
@@ -3100,11 +3103,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         } catch (e) {
           showToast(t('printerRouting.failed'), 'warning')
         }
-      }
+      })()
 
       // Each output uses its own configured device; a stalled receipt must not block cup labels.
       void printCupStickers(orderNum, cart, finalPickupNum)
-      let receiptSent = true
+      let receiptQueued = true
       // 打印小票（遵从后台管理系统 posReceipt.autoPrint 设置，默认为 true）
       if (posReceipt.autoPrint !== false) {
         const printResult = await printReceipt(orderNum, {
@@ -3112,14 +3115,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           pickupNumber: finalPickupNum,
           openCashDrawer: shouldOpenDrawer
         })
-        if (shouldOpenDrawer) logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout receipt and drawer command result', metadata: { source: 'automatic', status: printResult ? 'sent' : 'unconfirmed', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
-        receiptSent = printResult
+        if (shouldOpenDrawer) logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout receipt and drawer command queued', metadata: { source: 'automatic', status: printResult ? 'queued' : 'unconfirmed', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
+        receiptQueued = printResult
         if (!printResult) {
           showToast(t('printerRouting.failed'), 'warning')
 
         }
       }
-      checkoutTiming('receipt_sent')
+      checkoutTiming('receipt_queued')
       // 打印厨房单
       printKitchenOrder(orderNum, cart, finalPickupNum)
       // 通知副屏结账完成
@@ -3130,7 +3133,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
       setShowPaymentModal(false)
-      showToast(`${t(receiptSent ? (currentQuote?.offline ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
+      showToast(`${t(receiptQueued ? (currentQuote?.offline ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptQueued ? 'success' : 'warning')
       void syncManager.syncPendingOrders()
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
@@ -3147,7 +3150,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
       if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent && error?.message === 'OPEN_SHIFT_REQUIRED') { showOpenShiftRequired(); return }
-      if (!sent) {
+      if (!sent && !paymentReportStarted) {
+        const failureCode = String(error?.message || error?.name || 'LOCAL_CHECKOUT_FAILED').slice(0,160)
+        logPOSAction({action:'checkout_failed',entityId:intent?.request.orderNumber,description:`本机结账准备失败: ${failureCode}`,metadata:{failureCode,errorName:error?.name,appVersion,outcome:'not_submitted',orderNumber:intent?.request.orderNumber,totalAmount:total,paymentMethod},severity:'warning'})
         setOfflineSaveFailed(true)
         showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
         return
@@ -3157,10 +3162,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         action: 'checkout_failed',
         entityId: intent?.request.orderNumber,
         description: `结账提交未完成: ${failureCode}`,
-        metadata: { orderNumber: intent?.request.orderNumber, totalAmount: total, paymentMethod, httpStatus: error?.response?.status, failureCode, appVersion, outcome: definiteFirstRejection(error, intent?.request.orderNumber) ? 'rejected' : 'review' },
+        metadata: { orderNumber: intent?.request.orderNumber, totalAmount: total, paymentMethod, httpStatus: error?.response?.status, failureCode, appVersion, outcome: sent && definiteFirstRejection(error, intent?.request.orderNumber) ? 'rejected' : 'review' },
         severity: 'warning',
       })
-      const definite = definiteFirstRejection(error, intent?.request.orderNumber)
+      const definite = sent && definiteFirstRejection(error, intent?.request.orderNumber)
       try { if (intent) await finishCheckout(intent, definite ? 'rejected' : 'review') }
       catch { /* The pre-send recovery intent remains durable; do not manufacture another sale. */ }
       setOfflineSaveFailed(false)
@@ -3266,9 +3271,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       }
       // Save the exact receipt before transport; uncertain jobs are never resent automatically.
       await db.config.put({key:receiptKey,value:{backendUrl:currentBackendIdentity(),storeId:user?.storeId,payload,status:'pending',attemptedAt:new Date()},updatedAt:new Date()})
-      const result = await submitSavedReceipt(receiptKey, electronAPI.sendPrintReceipt, audit)
-      if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
-      return result?.success ?? false
+      // The immutable receipt is durable now. Device delivery must not hold the next sale.
+      void submitSavedReceipt(receiptKey, electronAPI.sendPrintReceipt, audit).then(result => {
+        if (!result.success) showToast(`${t('checkoutIntent.outputFailed')} #${orderData?.pickupNumber || orderNum}`, 'warning')
+        if (result.success && result.warnings?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
+      }).catch(error => { audit('unknown',String(error).slice(0,500));showToast(`${t('checkoutIntent.outputFailed')} #${orderData?.pickupNumber || orderNum}`, 'warning') })
+      return true
     } catch (err) {
       audit('unknown',String(err).slice(0,500))
       console.warn('Print error:', err)
@@ -3374,7 +3382,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     return (
       <div className="h-screen flex flex-col bg-gray-50" style={fontSizeStyle}>
-        {(!recovery || recovery.intent || recovery.rows.some(row=>!row.locallyAcceptedAt) || recovery.confirmed.length > 0) && <section data-testid="checkout-recovery" role="alert" className="shrink-0 max-h-[45vh] overflow-y-auto p-3 bg-amber-100 border-b border-amber-300 text-gray-900">
+        {(!recovery || recovery.readError || recovery.intent || recovery.rows.some(row=>!row.locallyAcceptedAt) || recovery.confirmed.length > 0) && <section data-testid="checkout-recovery" role="alert" className="shrink-0 max-h-[45vh] overflow-y-auto p-3 bg-amber-100 border-b border-amber-300 text-gray-900">
+          {(!recovery || recovery.readError) && <button type="button" className="block border rounded px-3 py-2 mb-2" onClick={()=>setRecoveryRevision(value=>value+1)}>{t('checkoutIntent.recheckStorage')}</button>}
           <strong>{t(recovery?.confirmed.length ? 'checkoutIntent.confirmed' : recovery?.intent?.phase === 'prepared' ? 'checkoutIntent.prepared' : 'checkoutIntent.review')}</strong>
           {recovery?.intent && <p className="text-sm break-all">{recovery.intent.request.orderNumber}</p>}
           <p className="text-sm">{t(recovery?.intent ? 'checkoutIntent.preserve' : 'checkoutIntent.verifyRecords')}</p>
@@ -4252,9 +4261,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             </div>
 
             {paymentIssue && <p role="alert" className="text-red-700 px-4 py-2 text-base font-semibold">{t(`paymentValidation.${paymentIssue}`)}</p>}
-            {offlineSaveFailed && (
-              <div role="alert" className="bg-red-50 text-red-700 text-sm px-4 py-3 border-t border-red-200">
-                {t('pos.offlineSaveFailed')}
+            {!isCheckingOut && (offlineSaveFailed || !recovery || recovery.blocked || recovery.confirmed.length > 0) && (
+              <div role="alert" data-testid="payment-recovery" className="shrink-0 bg-amber-50 text-amber-950 text-sm px-4 py-3 border-t border-amber-200 max-h-[30vh] overflow-y-auto">
+                <p>{t(offlineSaveFailed ? 'pos.offlineSaveFailed' : 'checkoutIntent.review')}</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  <button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 font-semibold" onClick={()=>{setShowPaymentModal(false);setRecoveryRevision(value=>value+1)}}>{t('checkoutIntent.openRecovery')}</button>
+                  {(!recovery || recovery.readError) && <button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2" onClick={()=>setRecoveryRevision(value=>value+1)}>{t('checkoutIntent.recheckStorage')}</button>}
+                </div>
               </div>
             )}
             {/* 确认支付操作栏 - 紧凑固定底栏 */}

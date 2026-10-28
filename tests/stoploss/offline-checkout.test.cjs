@@ -27,3 +27,10 @@ test('manual discount without an unexpired approval preserves the basket before 
  const f=fixture();f.c.manualDiscountAmount=1000;await f.run();
  assert.equal(f.events.filter(e=>['prepare','claim','api'].includes(e[0])).length,0);assert.equal(f.c.cart.length,1);assert.equal(output(f).length,0);
 });
+
+test('lost payment-report response remains reviewable and cannot be treated as an unsent local save',async()=>{
+ const f=fixture();f.c.reportReceivedPayment=async()=>{throw {response:{status:400}}};await f.run();
+ assert.equal(f.events.some(e=>e[0]==='api'),false);assert.equal(f.state.failed,false);
+ assert.deepEqual(f.events.find(e=>e[0]==='finish'),['finish','review']);
+ assert.equal(f.c.cart.length,1);assert.equal(f.state.busy,false);
+});

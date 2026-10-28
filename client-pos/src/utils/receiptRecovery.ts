@@ -25,7 +25,6 @@ export async function submitSavedReceipt(key:string,send:(payload:any)=>Promise<
   await persist(receiptResultStatus(result),result.error);return result
  },async error=>{await persist('unknown',String(error).slice(0,500));return {success:false,deliveryStatus:'unconfirmed',error:String(error)}})
  try{
-  if((record.value.payload.printCopies||1)>1&&!reprint)return await native
-  return await Promise.race([native,new Promise<ReceiptResult>(resolve=>{timer=setTimeout(()=>{void persist('unknown','RECEIPT_DELIVERY_TIMEOUT').catch(()=>{}).finally(()=>resolve({success:false,deliveryStatus:'unconfirmed',error:'RECEIPT_DELIVERY_TIMEOUT'}))},45000)})])
+  return await Promise.race([native,new Promise<ReceiptResult>(resolve=>{timer=setTimeout(()=>{resolve({success:false,deliveryStatus:'unconfirmed',error:'RECEIPT_DELIVERY_TIMEOUT'});void persist('unknown','RECEIPT_DELIVERY_TIMEOUT').catch(()=>{})},45000)})])
  }finally{if(timer)clearTimeout(timer)}
 }
