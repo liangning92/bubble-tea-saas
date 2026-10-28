@@ -136,6 +136,11 @@ class Gateway:
         try:
             connection.request('POST',endpoint.path or '/',body=json.dumps(payload).encode(),headers={"Content-Type": "application/json", "Authorization": "Bearer " + envelope["callbackCredential"]})
             sock = connection.sock
+            remaining = until-time.time()
+            if remaining <= 0: raise ValueError('RPC_DEADLINE')
+            # The connect timeout is not a deadline for authorized backend work.
+            # Source validation may take longer; the absolute timer still owns it.
+            sock.settimeout(remaining)
             # Own the response socket lifecycle: HTTPConnection.getresponse()
             # closes its socket immediately for HTTP/1.0 Connection:close, which
             # would prevent applying the remaining absolute deadline per read.
@@ -144,7 +149,7 @@ class Gateway:
             status = response.status
             chunks, size = [], 0
             while True:
-                remaining = min(10,until-time.time())
+                remaining = until-time.time()
                 if remaining <= 0: raise ValueError('RPC_DEADLINE')
                 sock.settimeout(remaining)
                 chunk = response.read1(min(65536,MAX_BODY+1-size))
