@@ -52,6 +52,8 @@ class TestGateway(unittest.TestCase):
                 if self.path=='/slow-headers':
                     time.sleep(.6)
                     return
+                if self.path=='/validated-headers':
+                    time.sleep(10.2)
                 if self.path=='/redirect':
                     self.send_response(302);self.send_header('Location',f'http://127.0.0.1:{self.server.server_port}/unexpected');self.end_headers();return
                 value=None if body['method']=='markUnknown' else {'traceVersion':body['params']['expectedTraceVersion']+1}
@@ -183,6 +185,14 @@ class TestGateway(unittest.TestCase):
         self.gateway.rpc_url=f'http://127.0.0.1:{self.rpc.server_port}/redirect'
         self.http('/employee-runs',e);self.assertEqual(self.final(e)['state'],'unknown')
         self.assertTrue(all(c[0]['method'] in ['recordInput','markUnknown'] for c in self.calls))
+
+    def test_authorized_backend_validation_can_exceed_connect_timeout(self):
+        self.gateway.rpc_url=f'http://127.0.0.1:{self.rpc.server_port}/validated-headers'
+        e=self.envelope(seconds=15)
+        value=self.gateway._rpc(e,'recordInput',{'executionId':e['ticket']['executionId'],'expectedTraceVersion':1},time.time()+15)
+        self.assertEqual(value,{'traceVersion':2})
+        self.assertEqual(len(self.calls),1)
+        self.assertEqual(self.calls[0][1],'Bearer '+e['callbackCredential'])
 
     def test_callback_absolute_deadline_interrupts_waiting_headers(self):
         self.gateway.rpc_url=f'http://127.0.0.1:{self.rpc.server_port}/slow-headers'
