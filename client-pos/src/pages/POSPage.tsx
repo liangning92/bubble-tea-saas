@@ -1,3 +1,4 @@
+import { membershipQualificationCopy } from '../utils/membershipQualificationCopy'
 import { auditedDrawer } from '../utils/drawerAudit'
 import { DrawerReasonDialog } from '../components/DrawerReasonDialog'
 import {RefundRequestForm} from '../components/RefundRequestForm'
@@ -203,6 +204,7 @@ interface DualScreenConfig {
 
 export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const { t, i18n } = useTranslation()
+  const qualificationCopy=membershipQualificationCopy(i18n.language)
   const access=useStaffAccess(),accessText=staffAccessLabels(i18n.language)
   const [manualDiscountAmount,setManualDiscountAmount]=useState(0)
   const [discountBasketId,setDiscountBasketId]=useState(()=>crypto.randomUUID())
@@ -2804,8 +2806,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           metadata: { memberId: found.id, memberName: found.name, phone: found.phone },
           severity: 'info',
         })
-        // 获取会员优惠券
+        // Pending enrollment is not an active membership and has no member coupon benefits.
+        if(found.status==='pending')showToast(qualificationCopy.rule,'info')
         try {
+          if(found.status==='pending')return
           const couponsRes = await posApi.getMemberCoupons(found.id)
           if (couponsRes.data?.data?.list) {
             const unusedCoupons = couponsRes.data.data.list.filter((c: any) => c.status === 'unused')
@@ -3022,6 +3026,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if(manualDiscountAmount&&(!navigator.onLine||currentQuote?.offline)&&!access.can('orders.discount'))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if(manualDiscountAmount&&!access.can('orders.discount')&&(!manualDiscountGrant||new Date(manualDiscountGrant.expiresAt)<new Date()))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if (manualQris) orderData.note = [orderData.note,t('manualPayment.customerPaid')].filter(Boolean).join(' ')
+      if (member?.status==='pending'&&(!navigator.onLine||currentQuote?.offline))throw new Error(qualificationCopy.offline)
       if ((!navigator.onLine || !useAuthStore.getState().token) && (!currentQuote?.offline&&(member || pointsToRedeem || selectedCoupon || discountAmount))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
       if ((paymentMethod === 'cash' || manualQris || externalPaymentConfirmed) && (!discountAmount||currentQuote?.offline) && currentQuote?.offline) {
@@ -3818,6 +3823,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
                 {member && (
                   <div className="flex items-center gap-1 font-medium text-blue-900 truncate">
                     <span className="font-bold">{member.name}</span>
+                    {member.status==='pending'&&<span className="text-[10px] text-amber-700">{qualificationCopy.pending}</span>}
                     <span className="text-[10px] text-blue-600 bg-blue-100 px-1.5 py-0.2 rounded-full">
                       {member.points || 0}分
                     </span>
@@ -4375,6 +4381,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
             {member ? (
               <div className="p-3 bg-green-50 rounded-xl mb-4">
                 <p className="font-medium">{member.name}</p>
+                {member.status==='pending'&&<p className="mt-2 text-sm text-amber-700">{qualificationCopy.pending} · {qualificationCopy.rule}</p>}
                 <p className="text-sm text-gray-500">{member.phone}</p>
                 <p className="text-sm text-green-600">{t('pos.points')}: {member.points || 0}</p>
                 {currentQuote?.offline&&<p className="text-xs text-gray-600 mt-2 break-words">{t('offlineMembers.policy')}</p>}

@@ -1,3 +1,4 @@
+import { operationsOwnerState, createOperationsDelegation, revokeOperationsDelegation } from '../services/StoreOperationsDelegationService'
 import { agentMemoryService } from '../services/AgentMemoryService'
 import { Router } from 'express'
 import path from 'path'
@@ -117,3 +118,8 @@ router.get('/channels/:id/files/:fileId', run(async (req, res) => {
     'Content-Disposition': 'attachment; filename="team-attachment"' })
   return res.sendFile(path.join(path.resolve(process.env.UPLOADS_PATH || path.resolve(__dirname, '../../uploads'), '.employee-private'), req.params.fileId))
 }))
+
+const operationsOwner=(req:AuthRequest)=>{if(req.user?.role!=='admin'||req.user.employeeApp)throw new TeamError(403,'OPERATIONS_OWNER_REQUIRED');return req.user}
+router.get('/ai/operations-delegations',run(async(req,res)=>{const a=operationsOwner(req);ok(res,await operationsOwnerState(a.storeId,a.id))}))
+router.post('/ai/operations-delegations',run(async(req,res)=>{const a=operationsOwner(req);ok(res,await createOperationsDelegation(a.storeId,a.id,req.body))}))
+router.post('/ai/operations-delegations/:id/revoke',run(async(req,res)=>{const a=operationsOwner(req);ok(res,await revokeOperationsDelegation(a.storeId,a.id,z.string().uuid().parse(req.params.id)))}))

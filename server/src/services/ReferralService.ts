@@ -123,7 +123,7 @@ export async function processOrderReferralRewards(orderId: string) {
     include: { member: true }
   })
 
-  if (!order || !order.memberId || !order.member?.referredBy) {
+  if (!order || !order.memberId || order.member?.status !== 'active' || !order.member?.referredBy) {
     return { processed: false, reason: 'No referral to process' }
   }
 

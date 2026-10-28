@@ -1,3 +1,4 @@
+import { qualifyMembershipAfterPayment, membershipActive } from './MembershipQualificationService'
 import {verifyOfflineMember} from './MemberOfflineService'
 import {offlineEarnedPoints} from '../utils/offlineMemberPricing'
 import {consumeDiscountApproval} from './StaffActionApprovalService'
@@ -162,9 +163,10 @@ export async function updateMemberPoints(memberId: string, amount: number, store
   // Get member and points rule
   const member = await prisma.member.findUnique({
     where: { id: memberId },
-    select: { birthday: true, level: true }
+    select: { birthday: true, level: true, status: true }
   })
 
+  if (!membershipActive(member)) return 0
   const rule = await getOrCreatePointsRule(storeId)
 
   // Calculate points using PointsRuleService (applies birthday multiplier, tier multiplier, etc.)
@@ -581,10 +583,10 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
   if (data.memberId) {
     const member = await prisma.member.findUnique({
       where: { id: data.memberId },
-      select: { birthday: true, level: true }
+      select: { birthday: true, level: true, status: true }
     })
     const rule = await getOrCreatePointsRule(data.storeId)
-    calculatedPoints = calculatePoints(grandTotal, {
+    calculatedPoints = membershipActive(member) ? calculatePoints(grandTotal, {
       rule: {
         pointsPerRupiah: rule.pointsPerRupiah,
         minPurchase: rule.minPurchase,
@@ -595,7 +597,7 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
         birthday: member?.birthday || null,
         level: member?.level || 'bronze'
       }
-    })
+    }) : 0
   }
 
   if(data.offlineMemberToken){
@@ -793,7 +795,8 @@ export async function createOrder(data: CreateOrderData, context?: OrderRequestC
     }
 
     const activityEntitlements = unifiedQuote ? await enqueueActivityGrants(tx,newOrder,unifiedQuote,calculatedPoints) : []
-    const response = { ...publicOrder(newOrder), lowStockWarnings: inventoryResult.lowStockWarnings, ppnAmount, grandTotal, activityEntitlements,...((data.memberId||unifiedQuote?.couponId)&&data.status!=='suspended'?{memberEffects:{memberId:data.memberId,pointsEarned:calculatedPoints,pointsRedeemed:effectivePointsRedeemed,couponId:unifiedQuote?.couponId,couponTemplateId:unifiedQuote?.couponId?.startsWith('virtual-')?unifiedQuote.couponId.slice(8):unifiedQuote?.couponId?((await tx.memberCoupon.findUnique({where:{id:unifiedQuote.couponId},select:{couponId:true}}))?.couponId):undefined}}:{}) }
+    const membershipQualification = data.memberId && newOrder.status === 'completed' ? await qualifyMembershipAfterPayment(tx, data.storeId, data.memberId, newOrder.id) : null
+    const response = { membershipQualification, ...publicOrder(newOrder), lowStockWarnings: inventoryResult.lowStockWarnings, ppnAmount, grandTotal, activityEntitlements,...((data.memberId||unifiedQuote?.couponId)&&data.status!=='suspended'?{memberEffects:{memberId:data.memberId,pointsEarned:calculatedPoints,pointsRedeemed:effectivePointsRedeemed,couponId:unifiedQuote?.couponId,couponTemplateId:unifiedQuote?.couponId?.startsWith('virtual-')?unifiedQuote.couponId.slice(8):unifiedQuote?.couponId?((await tx.memberCoupon.findUnique({where:{id:unifiedQuote.couponId},select:{couponId:true}}))?.couponId):undefined}}:{}) }
     await tx.order.update({ where: { id: newOrder.id }, data: {
       requestFingerprint: orderRequestFingerprint(data), requestReceipt: encodeOrderReceipt(data, response)
     } })
@@ -841,7 +844,9 @@ export async function updateOrderStatus(orderId: string, status: string) {
   return prisma.$transaction(async tx => {
     const updated = await tx.order.updateMany({ where: { id: orderId, status: { in: [...previous] } }, data: { status } })
     if (updated.count !== 1) throw new Error('ORDER_STATUS_TRANSITION_CONFLICT')
-    return tx.order.findUniqueOrThrow({ where: { id: orderId } })
+    const order=await tx.order.findUniqueOrThrow({ where: { id: orderId } })
+    const membershipQualification=status==='completed'&&order.memberId?await qualifyMembershipAfterPayment(tx,order.storeId,order.memberId,order.id):null
+    return {...order,membershipQualification}
   })
 }
 

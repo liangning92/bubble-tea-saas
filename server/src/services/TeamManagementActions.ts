@@ -62,7 +62,7 @@ function affirmedClause(clause: string) {
 }
 async function citedDeadline(db: any, storeId: string, text: string, createdAt: string, proposed: string | null) {
   // Evidence qualification only; unrecognised wording remains eligible for normal AI clarification.
-  const clauses = text.match(/[^，,。！？!?；;\n]+[，,。！？!?；;\n]?/g) || []
+  const clauses: string[] = text.match(/[^，,。！？!?；;\n]+[，,。！？!?；;\n]?/g) || []
   if (proposed) {
     const exact = clauses.find(part => part.includes(proposed))
     if (exact && affirmedClause(exact)) return proposed

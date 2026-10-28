@@ -1,3 +1,4 @@
+import { membershipActive, processMembershipQualificationBenefits } from './MembershipQualificationService'
 import { posterImageVariants } from '../utils/posterImageVariants'
 import { activityPosterSchema } from '../utils/activityPosterSchema'
 import { resolveProductImageByRatio, deriveTargetAspectRatio } from '../utils/mediaResolver'
@@ -127,8 +128,9 @@ export interface QuoteInput {items:QuoteItem[];channel?:string;channelId?:string
 export interface EntitlementPlan {activity:Activity;rewardId?:string;couponId?:string;points?:number;stamps?:number;inviterId?:string;inviterPoints?:number;prize?:Activity['rule']['prizes'][number];prizeIndex?:number}
 export async function quoteActivities(storeId:string,input:QuoteInput,db:any=prisma,now=new Date(),paidAmountOverride?:number){
  const activities=await listActivities(storeId,db)
- const member=input.memberId?await db.member.findFirst({where:{id:input.memberId,storeId}}):null
- if(input.memberId&&!member)throw Error('ACTIVITY_MEMBER_STORE_MISMATCH')
+ const memberRecord=input.memberId?await db.member.findFirst({where:{id:input.memberId,storeId}}):null
+ if(input.memberId&&!memberRecord)throw Error('ACTIVITY_MEMBER_STORE_MISMATCH')
+ const member=membershipActive(memberRecord)?memberRecord:null
  const channel=input.channelId?await db.channel.findFirst({where:{id:input.channelId,storeId}}):await db.channel.findFirst({where:{storeId,code:input.channel||'DINE_IN'}})
  if(input.channelId&&!channel)throw Error('ACTIVITY_CHANNEL_STORE_MISMATCH')
  const items:QuoteItem[]=[]
@@ -151,6 +153,7 @@ export async function quoteActivities(storeId:string,input:QuoteInput,db:any=pri
  const extras:PriceCandidate[]=[];let coupon:any=null
  const subtotal=items.reduce((s,i)=>s+i.quantity*(i.unitPrice+(i.addons||[]).reduce((x,a)=>x+a.price*(a.qty||1),0)),0)
  if(input.couponId){
+ if(memberRecord&&!member)throw Error('MEMBERSHIP_NOT_QUALIFIED')
  if(input.couponId.startsWith('virtual-')){const c=await db.coupon.findFirst({where:{id:input.couponId.slice(8),storeId}});coupon=c?{id:input.couponId,coupon:c}:null}
  else coupon=await db.memberCoupon.findFirst({where:{id:input.couponId,memberId:member?.id||'__none__',status:'unused'},include:{coupon:true}})
  const c=coupon?.coupon
@@ -436,6 +439,7 @@ export function runActivityJobs():Promise<void>{
  return workerPromise
 }
 async function runActivityJobBatch(){
+ await processMembershipQualificationBenefits()
  const rows=await prisma.config.findMany({where:{key:{startsWith:ACTIVITY_PREFIX+'grant.'},category:'activity_grant_pending'},orderBy:{createdAt:'asc'},take:200})
  for(const row of rows){const g=decode<any>(row.value);if(g.status!=='pending'||g.nextAttemptAt&&Date.parse(g.nextAttemptAt)>Date.now())continue
  try{await processActivityGrant(row.storeId,g.id)}catch(error:any){

@@ -1,3 +1,4 @@
+import { createEnrollmentMember } from '../services/MembershipQualificationService'
 import { memberOfflineSnapshot } from '../services/MemberOfflineService'
 import { publicOrder } from '../services/OrderReplayService'
 import { redeemPoints, adjustPoints } from '../services/MemberService'
@@ -222,7 +223,9 @@ function generateReferralCode(): string {
 // POST /api/members
 router.post('/', authenticate, validateBody(createMemberSchema), async (req: AuthRequest, res) => {
   try {
-    const { storeId, name, phone, referredByPhone } = req.body
+    const { name, phone, referredByPhone } = req.body
+    const storeId = req.user!.storeId
+    if (req.body.storeId !== storeId) return res.status(403).json({ code: 403, message: 'Store access denied' })
 
     // Check if phone exists
     const existing = await prisma.member.findUnique({ where: { phone } })
@@ -239,6 +242,7 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
       const inputCode = referredByPhone.trim()
       const referrer = await prisma.member.findFirst({
         where: {
+          storeId, status: 'active',
           OR: [
             { phone: inputCode },
             { referralCode: inputCode.toUpperCase() }
@@ -248,15 +252,15 @@ router.post('/', authenticate, validateBody(createMemberSchema), async (req: Aut
       referredById = referrer?.id || null
     }
 
-    const member = await prisma.member.create({
-      data: {
+    const member = await createEnrollmentMember(storeId, {
         storeId,
         name,
         phone,
         referralCode,
         referredBy: referredById
-      }
     })
+
+    if (member.status === 'pending') return res.status(201).json({ code: 201, data: { ...member, membershipQualification: { state: 'pending', minimumPaidAmount: 30000, qualifyingOrderUsesRegularPrice: true } }, timestamp: new Date().toISOString() })
 
     // Create welcome point log
     await prisma.pointLog.create({
