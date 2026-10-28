@@ -43,18 +43,28 @@ function validInbox(value: AwarenessInbox): boolean {
       (chat.preview === null || !!chat.preview && typeof chat.preview.text === 'string' && typeof chat.preview.authorName === 'string' && typeof chat.preview.createdAt === 'string'))
 }
 
+// A poll started before a confirmed read must not restore that notice to unread.
+export function applyConfirmedNoticeReads(data: AwarenessInbox, confirmed: ReadonlySet<string>): AwarenessInbox {
+  const changed = data.items.filter(item => !item.read && confirmed.has(item.id))
+  if (!changed.length) return data
+  return { ...data, items: data.items.map(item => confirmed.has(item.id) ? { ...item, read: true } : item), counts: {
+    ...data.counts, unread: Math.max(0, data.counts.unread - changed.filter(item => item.kind !== 'chat').length),
+    trainingUnread: Math.max(0, data.counts.trainingUnread - changed.filter(item => item.kind === 'training_update').length)
+  } }
+}
+
 // Identity is supplied by the authenticated app, including its current store/session.
 // A prior identity's response is never exposed during a switch, even before effects run.
 export function AwarenessProvider({ client, identity, children }: { client: AwarenessClient; identity: string; children: ReactNode }) {
   const [state, setState] = useState({ identity, data: empty, loading: !!identity, failed: false })
   const current = useRef(identity), poll = useRef<(() => Promise<void>) | null>(null)
-  const reads = useRef(new Set<AbortController>())
+  const reads = useRef(new Set<AbortController>()), confirmed = useRef(new Set<string>())
   current.current = identity
   useEffect(() => {
     let active = true, inFlight = false
     let controller: AbortController | undefined
     for (const request of reads.current) request.abort()
-    reads.current.clear()
+    reads.current.clear(); confirmed.current.clear()
     setState({ identity, data: empty, loading: !!identity, failed: false })
     const refresh = async () => {
       if (!identity || !active || current.current !== identity || inFlight || document.visibilityState !== 'visible') return
@@ -63,7 +73,7 @@ export function AwarenessProvider({ client, identity, children }: { client: Awar
       try {
         const data = await client.inbox(controller.signal)
         if (!validInbox(data)) throw new Error('INVALID_NOTIFICATION_INBOX')
-        if (active && current.current === identity) setState({ identity, data, loading: false, failed: false })
+        if (active && current.current === identity) setState({ identity, data: applyConfirmedNoticeReads(data, confirmed.current), loading: false, failed: false })
       } catch (error: any) {
         if (active && current.current === identity && !controller.signal.aborted) setState(previous => ({ ...previous, data: [401, 403].includes(error?.response?.status) ? empty : previous.data, loading: false, failed: true }))
       } finally { inFlight = false }
@@ -94,6 +104,8 @@ export function AwarenessProvider({ client, identity, children }: { client: Awar
     try {
       await client.read(id, controller.signal)
       if (current.current !== identity || controller.signal.aborted) return
+      confirmed.current.add(id)
+      setState(previous => previous.identity === identity ? { ...previous, data: applyConfirmedNoticeReads(previous.data, confirmed.current) } : previous)
       // Pending is a business projection and cannot be cleared by reading.
       await poll.current?.()
     } finally { reads.current.delete(controller) }

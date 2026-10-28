@@ -340,7 +340,7 @@ export function OrderListPage() {
                 </thead>
                 <tbody>
                   {refundRequests.map((req) => (
-                    <tr key={req.id} data-notice-object={req.id} className="border-b last:border-0 hover:bg-gray-50">
+                    <tr key={req.id} data-notice-object={req.id} data-notice-status={req.status} className="border-b last:border-0 hover:bg-gray-50">
                       <td className="p-4"><OrderItemsTable items={req.order?.items} /><ReferenceDetails value={req.orderNumber}/></td>
                       <td className="p-4 text-sm">{req.reason}</td>
                       <td className="p-4 text-sm">{req.requestedByName || '-'}</td>

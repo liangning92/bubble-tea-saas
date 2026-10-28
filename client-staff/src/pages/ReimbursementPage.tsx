@@ -150,7 +150,7 @@ export function ReimbursementPage() {
             reimbursements.map((item) => {
               const receipts = parseReceiptUrls(item.receiptUrls)
               return (
-                <div key={item.id} data-notice-object={item.id} className="bg-white rounded-2xl shadow-sm p-4">
+                <div key={item.id} data-notice-object={item.id} data-notice-status={item.status} className="bg-white rounded-2xl shadow-sm p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <span className="inline-block px-2 py-1 rounded-lg text-sm font-medium bg-primary/10 text-primary">

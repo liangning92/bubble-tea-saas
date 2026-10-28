@@ -182,7 +182,7 @@ export function LeavePage() {
               </div>
             ) : (
               leaves.map((leave) => (
-                <div key={leave.id} data-notice-object={leave.id} className="bg-white rounded-2xl shadow-sm p-4">
+                <div key={leave.id} data-notice-object={leave.id} data-notice-status={leave.status} className="bg-white rounded-2xl shadow-sm p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <span className="inline-block px-2 py-1 rounded-lg text-sm font-medium bg-primary/10 text-primary">

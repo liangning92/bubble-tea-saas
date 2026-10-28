@@ -270,7 +270,7 @@ export function HygieneTodayTasksPage() {
         <div className="space-y-3">
           {tasks.map((task: any) => (
             <div
-              key={task.id} data-notice-object={task.id}
+              key={task.id} data-notice-object={task.id} data-notice-status={task.status}
               className="card cursor-pointer hover:shadow-md transition-shadow"
               onClick={() => openDetail(task)}
             >

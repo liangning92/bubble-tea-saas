@@ -276,7 +276,7 @@ export function HygienePage() {
         ) : (
           <div className="space-y-3">
             {pendingTasks.map((task) => (
-              <div key={task.id} data-notice-object={task.id} className="bg-white rounded-lg p-4 shadow-sm">
+              <div key={task.id} data-notice-object={task.id} data-notice-status={task.status} className="bg-white rounded-lg p-4 shadow-sm">
                 <div className="flex flex-wrap items-start gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
@@ -380,7 +380,7 @@ export function HygienePage() {
           <div className="space-y-2">
             {completedTasks.map((task) => (
               <div
-                key={task.id} data-notice-object={task.id}
+                key={task.id} data-notice-object={task.id} data-notice-status={task.status}
                 className="bg-gray-100 rounded-lg p-3 flex items-center gap-3"
               >
                 {task.status === "pending_approval" ? (

@@ -142,7 +142,7 @@ export function ShiftSwapPage() {
         {!!pending.length && <section className="bg-white border rounded-xl p-4 mb-4 space-y-3">
           <h2 className="font-semibold">{t('workspace.swapConfirm')}</h2>
           <p className="text-sm text-gray-500">{t('audit.swapHint')}</p>
-          {pending.map(req => <div key={req.id} data-notice-object={req.id} className="border-t pt-3 space-y-2">
+          {pending.map(req => <div key={req.id} data-notice-object={req.id} data-notice-status={req.status} className="border-t pt-3 space-y-2">
             <p>{formatDate(req.originalDate)} · {shifts.find(s => s.key === req.originalShift)?.name || req.originalShift} → {formatDate(req.targetDate)} · {shifts.find(s => s.key === req.targetShift)?.name || req.targetShift}</p>
             {req.reason && <p>{req.reason}</p>}
             <p className="text-sm text-gray-600">{req.staff?.name}</p>
@@ -291,7 +291,7 @@ export function ShiftSwapPage() {
           ) : (
             <div className="divide-y divide-gray-100">
               {requests.map((req) => (
-                <div key={req.id} data-notice-object={req.id} className="p-4">
+                <div key={req.id} data-notice-object={req.id} data-notice-status={req.status} className="p-4">
                   {req.status==='pending'&&req.staffId===user?.staffId&&<div className="flex justify-end gap-4 text-sm mb-2"><button disabled={isSubmitting} onClick={()=>{setEditingId(req.id);setEditingVersion(req.updatedAt);setFormData({targetStaffId:req.targetStaffId||'',originalDate:businessDate(new Date(req.originalDate)),originalShift:req.originalShift,targetDate:businessDate(new Date(req.targetDate)),targetShift:req.targetShift,reason:req.reason||''});setShowForm(true)}}>{t('entryFix.edit')}</button><button disabled={isSubmitting} onClick={async()=>{if(!await dialogs.confirm(t('entryFix.withdrawHint')))return;setIsSubmitting(true);try{await staffApi.withdrawRequest('shift-swap',req.id);await loadData()}catch(e:any){await dialogs.alert(e.response?.data?.message||t('entryFix.error'))}finally{setIsSubmitting(false)}}}>{t('entryFix.withdraw')}</button></div>}
 
                   <div className="flex flex-wrap items-start justify-between gap-2 mb-2">

@@ -169,7 +169,7 @@ export function ShiftSwapListPage() {
           <div className="text-center py-12 text-gray-500">{t('common.noData')}</div>
         ) : (
           filteredRequests.map(request => (
-            <div key={request.id} data-notice-object={request.id} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+            <div key={request.id} data-notice-object={request.id} data-notice-status={request.status} className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
               {/* Staff Info */}
               <div className="flex flex-wrap items-center gap-2 mb-3">
                 <User size={16} className="text-gray-400" />
