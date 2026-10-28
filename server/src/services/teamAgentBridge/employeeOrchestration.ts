@@ -63,6 +63,10 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
   if(send){
    const message=await readTeam<any>(tx,storeId,`message.${r.event.channelId}.${String(send.value?.seq).padStart(12,'0')}`)
    if(!message||message.id!==send.value?.messageId||message.agent?.agentId!==live.grant.agentId||message.authorId!=='agent:'+live.grant.agentId||message.seq<=r.event.sourceSeq)fail('EMPLOYEE_ORCHESTRATION_OUTBOUND_RECEIPT_CHANGED')
+   // An outbound tool receipt proves delivery, but the runtime still owns this
+   // compartment until its final receipt arrives. Keep later employee messages
+   // queued rather than starting them against an unfinished runtime.
+   if(!['complete','unknown'].includes(s.phase)&&Date.parse(s.expiresAt)>now())return {phase:'running' as const}
    // Intent cannot establish delivery or employee non-cooperation. Waiting needs
    // both the issued-tool flag and this exact actually stored outbound receipt.
    if(send.value.expectsReply===true){await writeTeam(tx,storeId,questionContextKey(r.event.channelId),{executionId:s.ticket.executionId,questionMessageId:message.id,taskId:r.task.taskId});return {phase:'complete' as const,question:{messageId:message.id,seq:message.seq}}}

@@ -9,7 +9,7 @@ assert(process.env.BT_TEST_RUN?.startsWith('bt-test-'));const uri=new URL(proces
 const db=new PrismaClient(),storeId='employee-orchestration-fixture',agentId=randomUUID(),task={taskId:randomUUID(),version:1},passed=[];
 const owner={id:'orchestration-owner',staffId:'orchestration-owner-staff',storeId,role:'admin'},staff={id:'orchestration-staff-user',staffId:'orchestration-staff',storeId,role:'staff',employeeApp:true};
 const grant={agentId,displayName:'Synthetic scoped Hermes',storeId,sponsorUserId:owner.id,version:1,clientRevision:1,expiresAt:new Date(Date.now()+3600000).toISOString(),revoked:false,actions:['messages.read','messages.send'],staffIds:[owner.staffId,staff.staffId],channelIds:[]};
-const system=[{role:'system',content:'Synthetic isolated employee runtime system'}];let channel,route,starts=0,sealedInputs=[],mode='question',faultCredentials=false;
+const system=[{role:'system',content:'Synthetic isolated employee runtime system'}];let channel,route,starts=0,sealedInputs=[],mode='question',faultCredentials=false,deferFinal=false,finishPending;
 const runtime=createEmployeeRuntime(db,{enabled:true,storeId,approvedSystemHashes:[hash(system)],resolveGrant:async()=>{const row=await db.config.findUnique({where:{storeId_key:{storeId,key:employeeGrantKey(agentId)}}});return JSON.parse(row.value)},tasks:{assert:async(tx,g,t,c)=>{assert.equal(g.storeId,storeId);const live=await readTeam(tx,storeId,'task.'+c+'.'+t.taskId);assert.equal(live.version,t.version);assert.equal(live.id,task.taskId)}},readAttachment:async()=>{throw Error('UNAVAILABLE')}});
 const wire=t=>({model:t.model,messages:[...system,{role:'user',content:t.sealedUserContent}],tools:t.tools,stream:true});
 async function simulate(ticket){sealedInputs.push(ticket.sealedUserContent);let p=wire(ticket),v=(await runtime.host.recordInput({executionId:ticket.executionId,expectedTraceVersion:ticket.traceVersion,turn:1,inputHash:hash(p),toolSchemaHash:ticket.toolSchemaHash,isolation:ticket.isolation,providerRequest:p})).traceVersion;
@@ -20,9 +20,13 @@ async function simulate(ticket){sealedInputs.push(ticket.sealedUserContent);let 
   p.messages.push({...message,content:''},{role:'tool',tool_call_id:call.id,content:JSON.stringify(result.value)});
   v=(await runtime.host.recordInput({executionId:ticket.executionId,expectedTraceVersion:v,turn:2,inputHash:hash(p),toolSchemaHash:ticket.toolSchemaHash,isolation:ticket.isolation,providerRequest:p})).traceVersion;
  }
+ if(deferFinal){finishPending=()=>finishFinal();return}
+ await finishFinal();
+ async function finishFinal(){
  const turn=2,message={role:'assistant',content:mode==='question'?'Menunggu fakta lapangan. Belum dinyatakan selesai.':'Laporan fakta tersimpan untuk diperiksa. Tidak ada perubahan stok atau profil.'},providerRequestId='synthetic-final-'+starts;
  v=(await runtime.host.recordResponse({executionId:ticket.executionId,expectedTraceVersion:v,turn,providerRequestId,finishReason:'stop',providerMessage:message})).traceVersion;
  await runtime.host.recordOutput({executionId:ticket.executionId,expectedTraceVersion:v,providerRequestId,providerMessage:message});
+ }
 }
 const deps={enabled:true,storeId,runtime,issueCredentials:async(t,s)=>{const rows=await db.config.findMany({where:{storeId,key:{startsWith:'team.communication.employeeOrchestration.mapping.'}}});assert(rows.some(r=>JSON.parse(r.value).executionId===t.executionId));assert(Date.parse(s.expiresAt)<=Date.parse(grant.expiresAt));if(faultCredentials)throw Error('SYNTHETIC_ISSUER_FAILURE');return{callbackCredential:'synthetic-only-callback',providerCredential:'synthetic-only-provider'}},gateway:{start:async envelope=>{starts++;assert(Date.parse(envelope.deadlineAt)<=Date.parse(grant.expiresAt));if(mode==='unknown')return{executionId:envelope.ticket.executionId,state:'admission_unknown'};try{await simulate(envelope.ticket)}catch(e){console.error("SYNTHETIC_GATEWAY_FAILURE",e.stack);throw e}return{executionId:envelope.ticket.executionId,state:'complete'}}}};
 const make=()=>createEmployeeOrchestration(db,deps),check=async(name,fn)=>{await fn();passed.push(name);console.log('PASS '+name)},send=text=>teamCommunication(db).send(staff,channel.id,{requestId:randomUUID(),text});
@@ -47,6 +51,15 @@ async function main(){const tenant=await db.tenant.create({data:{name:'Orchestra
   await db.config.create({data:{storeId,key:'externalAgent.memory.v1.revision.'+agentId,category:'staff',value:JSON.stringify({version:1})}});
   const count=starts;await send('How should we work together after the memory correction?');await make().drain();const after=await make().get(channel.id);assert.equal(after.phase,'awaiting_review');assert.equal(starts,count+1);
   const current=await readTeam(db,storeId,'employeeRuntime.execution.'+after.reportId);assert.notEqual(current.scope.compartmentKey,prior.scope.compartmentKey);assert(!current.sources.some(x=>x.source.kind==='employee_exchange'));assert(current.sources.some(x=>x.source.kind==='conversation'));
+ });
+ await check('queued employee request waits for runtime final after a stored outbound reply',async()=>{
+  mode='report';deferFinal=true;const before=starts;await send('First concurrent request.');await make().drain();
+  const running=await make().get(channel.id);assert.equal(running.phase,'running');assert.equal(starts,before+1);
+  const first=await readTeam(db,storeId,'employeeRuntime.execution.'+running.active.runtimeExecutionId);assert.equal(first.tools.filter(t=>t.name==='employee_send_message').length,1);assert.notEqual(first.phase,'complete');
+  await send('Second concurrent request must receive its own answer.');await make().drain();
+  const queued=await make().get(channel.id);assert.equal(queued.phase,'running');assert.equal(queued.queue.length,1);assert.equal(starts,before+1);
+  deferFinal=false;await finishPending();await make().drain();const done=await make().get(channel.id);assert.equal(done.phase,'awaiting_review');assert.equal(starts,before+2);assert.equal(done.queue.length,0);
+  const second=await readTeam(db,storeId,'employeeRuntime.execution.'+done.reportId);assert.equal(second.phase,'complete');assert.equal(second.tools.filter(t=>t.name==='employee_send_message').length,1);
  });
  if(process.env.EMPLOYEE_REAL_HERMES==='1')await check('actual Hermes private gateway and HTTP ingress resume a direct conversation on the same native task',async()=>{
   const fs=require('node:fs/promises'),os=require('node:os'),express=require(root+'/server/node_modules/express'),{spawn}=require('node:child_process'),{createInterface}=require('node:readline');
