@@ -8,6 +8,7 @@ try{await server.listen();browser=await chromium.launch({headless:true});fs.mkdi
 for(const scenario of (process.env.DASHBOARD_SCENARIOS||cases.join(',')).split(',')){
  const context=await browser.newContext({viewport:{width:1500,height:1200},timezoneId:scenario==='pos-alerts-utc'?'UTC':'Asia/Jakarta',serviceWorkers:'block'}),requests=[],errors=[];let fail=true;
  await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());if(url.origin!==origin)return route.abort();if(!url.pathname.startsWith('/api/'))return route.continue();requests.push({path:url.pathname,params:Object.fromEntries(url.searchParams),method:req.method()});assert.equal(req.method(),'GET','No mutations in dashboard/navigation checks');let status=200,data={};
+ if(url.pathname==='/api/staff-work/my/inbox')data={items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}};
  if(url.pathname==='/api/reports/pending-actions')data={actions:[],total:0};
  if(url.pathname==='/api/reports/dashboard'){data=dashboard();if(scenario==='dashboard-empty'){data.today={orders:0,revenue:0,averageOrder:0,cost:0,profit:0};data.recentOrders=[];data.inventory.lowStockItems=[];}if(scenario==='dashboard-malformed')data={};if(['dashboard-error','id-error','zh-error','analysis-url-change','stock-url-change','analysis-precision-change'].includes(scenario)&&fail)status=503;}
  if(url.pathname==='/api/pos-action-logs/risks')data={staff:[]};
