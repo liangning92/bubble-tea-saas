@@ -1679,10 +1679,10 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
       "cashier",
       "staff"
     ],
-    "legacyPermission": "__unclassified__",
+    "legacyPermission": "orders.create",
     "resource": null,
-    "permission": "owner.only",
-    "ownerOnly": true,
+    "permission": "orders.create",
+    "ownerOnly": false,
     "export": false,
     "personal": false
   },

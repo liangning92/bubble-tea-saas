@@ -147,16 +147,38 @@ export async function acknowledgeRecoveredCheckout(storeId: string, actorId: str
 }
 
 /** Quarantine is NOT a paid/unpaid decision. Keep all evidence and forbid automatic resubmission. */
-export async function quarantineCheckoutRecovery(storeId: string, actorId: string, expected: string): Promise<void> {
+export async function quarantineCheckoutRecovery(storeId: string, actorId: string, expected: string, decision = 'isolate_unknown_not_paid_or_unpaid'): Promise<void> {
   if (!actorId) throw new Error('CHECKOUT_ACTOR_REQUIRED')
   await withCheckoutSyncLock(storeId, () => db.transaction('rw', db.config, db.orders, async () => {
     const recovery = await readCheckoutRecovery(storeId)
     if (recovery.confirmed.length || !recovery.blocked || (!navigator.locks && recovery.rows.some(row => !row.locallyAcceptedAt && row.status === 'syncing' && row.syncClaim && row.syncClaim.expiresAt > Date.now()))) throw new Error('CHECKOUT_REVIEW_REQUIRED')
     if (JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}) !== expected) throw new Error('CHECKOUT_REVIEW_REQUIRED')
-    const audit = {actorId,at:new Date(),decision:'isolate_unknown_not_paid_or_unpaid',intent:recovery.intent,rows:recovery.rows}
+    const audit = {actorId,at:new Date(),decision,intent:recovery.intent,rows:recovery.rows}
     await db.config.add({key:`checkout.quarantine:${encodeURIComponent(storeId)}:${crypto.randomUUID()}`,value:audit,updatedAt:new Date()})
     for (const row of recovery.rows.filter(row => !row.locallyAcceptedAt)) await db.orders.update(row.id!, {status:'quarantined',quarantineAudit:{actorId,at:audit.at}})
     await advanceCheckoutGeneration(storeId)
     await db.config.delete(key(storeId))
   }))
+}
+
+/** A cashier never adjudicates an uncertain payment. Preserve it for the backend. */
+export async function handoffCheckoutToBackend(storeId: string, actorId: string) {
+  const recovery = await readCheckoutRecovery(storeId)
+  if (!recovery.blocked && recovery.confirmed.length) {
+    await acknowledgeRecoveredCheckout(storeId, actorId)
+    return {changed:true, requiresReview:false, records:recovery.confirmed, intent:recovery.intent}
+  }
+  if (!recovery.blocked) return {changed:false, requiresReview:false, records:[], intent:null}
+  await quarantineCheckoutRecovery(storeId, actorId, JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}), 'automatic_backend_review')
+  return {changed:true, requiresReview:true, records:recovery.rows.filter(row=>!row.locallyAcceptedAt), intent:recovery.intent}
+}
+
+/** Diagnostic evidence has no reusable offline grants or order-admission tokens. */
+export function checkoutReviewEvidence(value: CheckoutIntent | LocalOrder) {
+  const row = value as Partial<CheckoutIntent> & Partial<LocalOrder>
+  const request = row.request || row.checkoutRequest || {}
+  return {localId:row.localId,orderNumber:request.orderNumber || row.orderNumber,
+    items:request.items || row.items,paymentMethod:request.paymentMethod || row.paymentMethod,
+    finalAmount:row.finalAmount,cashTender:row.cashTender,paymentReportedAt:row.paymentReportedAt,
+    createdAt:row.createdAt}
 }

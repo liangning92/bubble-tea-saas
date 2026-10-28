@@ -217,6 +217,7 @@ class ConnectionManagerClass {
         baseUrl = getApiUrl().replace(/\/api$/, '')
       }
       const response = await fetch(`${baseUrl}/api/config/${storeId}/pos_api_url`, {
+        signal: AbortSignal.timeout(5000),
         headers: backendAuthHeaders(this.getCurrentUrl(), storeId),
         cache: 'no-cache'
       })

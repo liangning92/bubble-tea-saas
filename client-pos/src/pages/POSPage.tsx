@@ -1,3 +1,4 @@
+import { reportCheckoutFailure, flushCheckoutFailures } from '../utils/checkoutFailureOutbox'
 import { auditedDrawer } from '../utils/drawerAudit'
 import { DrawerReasonDialog } from '../components/DrawerReasonDialog'
 import {RefundRequestForm} from '../components/RefundRequestForm'
@@ -30,12 +31,12 @@ import { customerDisplayAppearance, CustomerDisplayAppearance, CustomerDisplaySt
 import type { CustomerLayoutColumn } from '../../../shared/components/CustomerDisplayLayout'
 import type { CustomerDisplayLogoStyle } from '../../../shared/components/CustomerDisplayLogo'
 import type { PromotionTextStyle } from '../../../shared/components/PromotionText'
-import { reportReceivedPayment } from '../utils/receivedReceipt'
+import { reportReceivedPayment, syncBackendCheckoutReviews } from '../utils/receivedReceipt'
 import { paymentProblem } from '../utils/paymentValidation'
 import { recordLocalSale } from '../utils/offlineSale'
 import { backendAuthHeaders, currentBackendIdentity } from '../utils/backendIdentity'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, discardPreparedCheckout, definiteFirstRejection, acknowledgeRecoveredCheckout, quarantineCheckoutRecovery, type CheckoutIntent } from '../utils/checkoutIntent'
+import { prepareCheckout, claimCheckout, finishCheckout, readCheckoutRecovery, definiteFirstRejection, handoffCheckoutToBackend, checkoutReviewEvidence, type CheckoutIntent } from '../utils/checkoutIntent'
 import { ScanPage } from './ScanPage'
 import { decodeScanIdentity, resolveScanProduct, validCatalogSpec, validCatalogPrice, ScanIdentity } from '../utils/barcodeIdentity'
 import { selectPrinter, PrinterPurpose, PrinterSettings } from '../utils/printerRouting'
@@ -223,12 +224,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   const [basketGeneration, setBasketGeneration] = useState('0')
   const [scanRequestVersion, setScanRequestVersion] = useState(0)
   const scanIntentVersion = useRef(0)
-  const [quarantineAcknowledged, setQuarantineAcknowledged] = useState(false)
+  const [recoveryRevision, setRecoveryRevision] = useState(0)
   const recovery = useLiveQuery(async () => {
     if (!user?.storeId) return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null }
-    try { return await readCheckoutRecovery(user.storeId) }
-    catch { return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null } }
-  }, [user?.storeId])
+    try { return { ...await readCheckoutRecovery(user.storeId), readError: '' } }
+    catch (error: any) { return { blocked: true, intent: null, rows: [], confirmed: [], quarantined: [], generation: null, readError: String(error?.name || 'CHECKOUT_RECOVERY_UNAVAILABLE') } }
+  }, [user?.storeId, recoveryRevision])
   const { filter, setFilter, products, setProducts, searchQuery, setSearchQuery } = useProductStore()
   const [loading, setLoading] = useState(true)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
@@ -356,6 +357,9 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   } = useOrderStore()
 
   const [offlineSaveFailed, setOfflineSaveFailed] = useState(false)
+  const [checkoutFailureCode, setCheckoutFailureCode] = useState('')
+  const [isContinuingSale, setIsContinuingSale] = useState(false)
+  const continuingSale = useRef(false)
 
   // 本地状态
   const [,setUnifiedActivities]=useState<any[]>([])
@@ -723,6 +727,15 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     severity?: 'info' | 'warning' | 'critical'
   }) => {
     const storeId = user?.storeId || 'default'
+    if (params.action === 'checkout_failed' && user?.id && user.storeId) {
+      const scope = { backend: currentBackendIdentity(), storeId, actorId: user.id }
+      void reportCheckoutFailure(scope,{...params,sessionId:posSessionId},event=>{
+        const actor=useAuthStore.getState().user
+        if(actor?.id!==scope.actorId || actor?.storeId!==scope.storeId || currentBackendIdentity()!==scope.backend)return Promise.reject(Error('CHECKOUT_AUTH_CHANGED'))
+        return posApi.logPOSAction(event)
+      }).catch(error=>console.warn('[POS Failure Report]',error))
+      return
+    }
     // Preserve mutation order even when requests have different network latency.
     auditQueue.current = auditQueue.current.then(() => {
       const actor = useAuthStore.getState().user
@@ -730,6 +743,20 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       return posApi.logPOSAction({ ...params, sessionId: posSessionId })
     }).catch((err: any) => console.warn('[POS Action Log]', err))
   }, [user?.id, user?.storeId, posSessionId])
+
+  useEffect(()=>{
+    if(!user?.id || !user.storeId)return
+    const scope={backend:currentBackendIdentity(),storeId:user.storeId,actorId:user.id}
+    const flush=()=>{void flushCheckoutFailures(scope,event=>{
+      const actor=useAuthStore.getState().user
+      if(actor?.id!==scope.actorId || actor?.storeId!==scope.storeId || currentBackendIdentity()!==scope.backend)return Promise.reject(Error('CHECKOUT_AUTH_CHANGED'))
+      return posApi.logPOSAction(event)
+    }).catch(error=>console.warn('[POS Failure Retry]',error))}
+    const transfer=()=>{flush();void syncBackendCheckoutReviews().catch(error=>console.warn('[POS Backend Review Retry]',error?.message))}
+    transfer();window.addEventListener('online',transfer)
+    const timer=window.setInterval(transfer,30000)
+    return ()=>{window.removeEventListener('online',transfer);window.clearInterval(timer)}
+  },[user?.id,user?.storeId])
 
   useEffect(() => {
     if (!user?.storeId || (!cart.length && !hasCartAudit.current)) return
@@ -981,6 +1008,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       try {
         // Check if server has newer products
         const versionRes = await fetch(`${connectionManager.getCurrentUrl()}/products/pos/version?storeId=${storeId}`, {
+          signal: AbortSignal.timeout(5000),
           headers: backendAuthHeaders(connectionManager.getCurrentUrl(),storeId)
         })
 
@@ -2381,7 +2409,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
   // 挂单 - 同时在服务端创建订单记录
   const suspendOrder = async () => {
     if (useOrderStore.getState().isCheckingOut) return
-    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
+    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.backendProcessing'), 'warning'); return }
     if (cart.length === 0) {
       showToast(t('pos.emptyCart'), 'warning')
       return
@@ -2462,10 +2490,10 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     } catch (err: any) {
       if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
       if (!sent && err?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
-      if (!sent) { showToast(t(err?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : 'checkoutIntent.saveFailed'), 'error'); return }
+      if (!sent) { showToast(t(err?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.backendProcessing' : 'checkoutIntent.saveFailed'), 'error'); return }
       const definite = definiteFirstRejection(err, intent?.request.orderNumber)
       try { if (intent) await finishCheckout(intent, definite ? 'rejected' : 'review') } catch { /* durable journal remains */ }
-      showToast(definite ? err?.response?.data?.message || t('pos.paymentError') : t('checkoutIntent.review'), 'warning')
+      showToast(definite ? err?.response?.data?.message || t('pos.paymentError') : t('checkoutIntent.backendProcessing'), 'warning')
     } finally { setIsCheckingOut(false) }
   }
 
@@ -2921,13 +2949,19 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     // Read the synchronous store value too: two clicks can share one render.
     if (cart.length === 0 || isCheckingOut || useOrderStore.getState().isCheckingOut || useOrderStore.getState().isInstallingUpdate) return
 
-    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.review'), 'warning'); return }
+    if (!recovery || recovery.blocked || recovery.confirmed.length > 0) { showToast(t('checkoutIntent.backendProcessing'), 'warning'); return }
 
     if(isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
     const checkoutStarted=performance.now()
     const checkoutTiming=(phase:string)=>console.info(`[CHECKOUT-TIMING] ${phase}_ms=${Math.round(performance.now()-checkoutStarted)}`)
-    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>offlineActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
-    if(!verifiedQuote||verifiedQuote.signature!==currentQuote.signature){if(verifiedQuote)setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey});setActivityRevision(v=>v+1);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>{}});return}
+    let quoteFailure: any
+    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>offlineActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(error=>{quoteFailure=error;return null})
+    if(!verifiedQuote){
+      const failureCode=String(quoteFailure?.response?.data?.message||quoteFailure?.code||quoteFailure?.message||'CHECKOUT_PRICE_UNAVAILABLE').slice(0,160)
+      logPOSAction({action:'checkout_failed',description:`结账价格核验失败: ${failureCode}`,metadata:{failureCode,appVersion,outcome:'not_submitted',stage:'price_verification',totalAmount:total,paymentMethod},severity:'warning'})
+      setQuoteError(failureCode);showToast(t('activityPricing.wait'),'warning');return
+    }
+    if(verifiedQuote.signature!==currentQuote.signature){if(verifiedQuote)setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey});setActivityRevision(v=>v+1);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>{}});return}
 
     if (paymentIssue) { showToast(t(`paymentValidation.${paymentIssue}`), 'error'); return }
 
@@ -2956,6 +2990,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     })
     let intent: CheckoutIntent | undefined
     let sent = false
+    let paymentReportStarted = false
     let accepted = false
 
     // 解析出真实的数据库 channelId（仅当为有效 CUID/UUID 时传递，避免传递本地代码引发外键错误）
@@ -3034,6 +3069,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         intent = await prepareCheckout(orderData,cart,{subtotal,ppn:tax,finalAmount:total},basketGeneration)
         await claimCheckout(intent)
         checkoutTiming('recovery_saved')
+        paymentReportStarted = true
         await reportReceivedPayment(intent,total,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined)
         checkoutTiming('payment_recorded')
         sent = true
@@ -3086,7 +3122,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // Reuse the same unique receipt id after a lost response.
     const shouldOpenDrawer = paymentMethod === 'cash' && (hardwareSettings.autoOpenCashDrawer !== false)
       if (shouldOpenDrawer) logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout drawer command planned', metadata: { source: 'automatic', status: 'requested', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
-      if (shouldOpenDrawer && posReceipt.autoPrint === false) {
+      if (shouldOpenDrawer && posReceipt.autoPrint === false) void (async () => {
         const target = printerTarget('receipt')
         try {
           const drawerResult = target && await electronAPI?.openCashDrawer?.({
@@ -3100,11 +3136,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         } catch (e) {
           showToast(t('printerRouting.failed'), 'warning')
         }
-      }
+      })()
 
       // Each output uses its own configured device; a stalled receipt must not block cup labels.
       void printCupStickers(orderNum, cart, finalPickupNum)
-      let receiptSent = true
+      let receiptQueued = true
       // 打印小票（遵从后台管理系统 posReceipt.autoPrint 设置，默认为 true）
       if (posReceipt.autoPrint !== false) {
         const printResult = await printReceipt(orderNum, {
@@ -3112,14 +3148,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           pickupNumber: finalPickupNum,
           openCashDrawer: shouldOpenDrawer
         })
-        if (shouldOpenDrawer) logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout receipt and drawer command result', metadata: { source: 'automatic', status: printResult ? 'sent' : 'unconfirmed', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
-        receiptSent = printResult
+        if (shouldOpenDrawer) logPOSAction({ action: 'cash_drawer', entityId: orderNum, description: 'Cash checkout receipt and drawer command queued', metadata: { source: 'automatic', status: printResult ? 'requested' : 'unconfirmed', orderNumber: orderNum, physicalState: 'unknown', appVersion }, severity: 'info' })
+        receiptQueued = printResult
         if (!printResult) {
           showToast(t('printerRouting.failed'), 'warning')
 
         }
       }
-      checkoutTiming('receipt_sent')
+      checkoutTiming('receipt_queued')
       // 打印厨房单
       printKitchenOrder(orderNum, cart, finalPickupNum)
       // 通知副屏结账完成
@@ -3130,7 +3166,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
       setShowPaymentModal(false)
-      showToast(`${t(receiptSent ? (currentQuote?.offline ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
+      showToast(`${t(receiptQueued ? (currentQuote?.offline ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptQueued ? 'success' : 'warning')
       void syncManager.syncPendingOrders()
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
@@ -3147,23 +3183,29 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       if (accepted) { clearCart('settled'); setShowPaymentModal(false); showToast(t('checkoutIntent.outputFailed'), 'warning'); return }
       if (!sent && error?.message === 'CHECKOUT_BASKET_STALE') { clearCart('recovered');setShowPaymentModal(false);showToast(t('checkoutIntent.staleBasket'),'warning');return }
       if (!sent && error?.message === 'OPEN_SHIFT_REQUIRED') { showOpenShiftRequired(); return }
-      if (!sent) {
+      if (!sent && !paymentReportStarted) {
+        const failureCode = String(error?.message || error?.name || 'LOCAL_CHECKOUT_FAILED').slice(0,160)
+        logPOSAction({action:'checkout_failed',entityId:intent?.request.orderNumber,description:`本机结账准备失败: ${failureCode}`,metadata:{failureCode,errorName:error?.name,checkoutEvidence:intent?.backendUrl===currentBackendIdentity()?checkoutReviewEvidence(intent):undefined,appVersion,outcome:'not_submitted',orderNumber:intent?.request.orderNumber,totalAmount:total,paymentMethod},severity:'warning'})
+        setCheckoutFailureCode(error?.name && error.name !== 'Error' ? String(error.name) : failureCode)
         setOfflineSaveFailed(true)
-        showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.review' : error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
+        if (await handoffFailedSale(true)) return
+        showToast(t(error?.message === 'CHECKOUT_REVIEW_REQUIRED' ? 'checkoutIntent.backendProcessing' : error?.message === 'OFFLINE_POLICY_UNRESOLVED' ? 'offlineSale.policy' : error?.message === 'OFFLINE_INITIALIZATION_REQUIRED' ? 'offlineSale.initialize' : error?.message?.startsWith('CHECKOUT_BACKEND') ? 'offlineSale.target' : 'checkoutIntent.saveFailed'), 'error')
         return
       }
       const failureCode = String(error?.response?.data?.message || error?.code || error?.message || 'CHECKOUT_FAILED').slice(0, 160)
+      setCheckoutFailureCode(failureCode)
       logPOSAction({
         action: 'checkout_failed',
         entityId: intent?.request.orderNumber,
         description: `结账提交未完成: ${failureCode}`,
-        metadata: { orderNumber: intent?.request.orderNumber, totalAmount: total, paymentMethod, httpStatus: error?.response?.status, failureCode, appVersion, outcome: definiteFirstRejection(error, intent?.request.orderNumber) ? 'rejected' : 'review' },
+        metadata: { orderNumber: intent?.request.orderNumber, totalAmount: total, paymentMethod, httpStatus: error?.response?.status, failureCode, appVersion, checkoutEvidence:intent?.backendUrl===currentBackendIdentity()?checkoutReviewEvidence(intent):undefined, stage: sent ? 'order_submission' : 'payment_report', outcome: sent && definiteFirstRejection(error, intent?.request.orderNumber) ? 'rejected' : 'review' },
         severity: 'warning',
       })
-      const definite = definiteFirstRejection(error, intent?.request.orderNumber)
+      const definite = sent && definiteFirstRejection(error, intent?.request.orderNumber)
       try { if (intent) await finishCheckout(intent, definite ? 'rejected' : 'review') }
       catch { /* The pre-send recovery intent remains durable; do not manufacture another sale. */ }
       setOfflineSaveFailed(false)
+      if (await handoffFailedSale(true)) return
       if (definite) {
         const rawMsg = error?.response?.data?.message || ''
         const translation = rawMsg === 'PAYMENT_METHOD_DISABLED' ? 'pos.paymentMethodDisabled'
@@ -3174,7 +3216,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
           const [, itemName, available, needed] = details.split(':')
           showToast(t('pos.inventoryInsufficient', {itemName, available, needed}), 'error')
         } else showToast(translation ? t(translation) : rawMsg || t('pos.paymentError'), 'error')
-      } else showToast(t('checkoutIntent.review'), 'warning')
+      } else showToast(t('checkoutIntent.backendProcessing'), 'warning')
       // Preserve cart and immutable request. Uncertain responses never print or clear it.
     } finally {
       setIsCheckingOut(false)
@@ -3266,9 +3308,12 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       }
       // Save the exact receipt before transport; uncertain jobs are never resent automatically.
       await db.config.put({key:receiptKey,value:{backendUrl:currentBackendIdentity(),storeId:user?.storeId,payload,status:'pending',attemptedAt:new Date()},updatedAt:new Date()})
-      const result = await submitSavedReceipt(receiptKey, electronAPI.sendPrintReceipt, audit)
-      if (result?.success && 'warnings' in result && (result.warnings as string[])?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
-      return result?.success ?? false
+      // The immutable receipt is durable now. Device delivery must not hold the next sale.
+      void submitSavedReceipt(receiptKey, electronAPI.sendPrintReceipt, audit).then(result => {
+        if (!result.success) showToast(`${t('checkoutIntent.outputFailed')} #${orderData?.pickupNumber || orderNum}`, 'warning')
+        if (result.success && result.warnings?.includes('LOGO_UNAVAILABLE')) showToast(t('receiptPrinting.logoUnavailable'), 'warning')
+      }).catch(error => { audit('unknown',String(error).slice(0,500));showToast(`${t('checkoutIntent.outputFailed')} #${orderData?.pickupNumber || orderNum}`, 'warning') })
+      return true
     } catch (err) {
       audit('unknown',String(err).slice(0,500))
       console.warn('Print error:', err)
@@ -3359,6 +3404,44 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     }
   }, [user?.storeId, recovery?.generation, basketGeneration])
 
+  const handoffFailedSale = async (duringCheckout = false, recovered = false): Promise<boolean> => {
+    if (continuingSale.current || (!duringCheckout && useOrderStore.getState().isCheckingOut) || !user?.storeId) return false
+    continuingSale.current = true
+    setIsContinuingSale(true)
+    try {
+      const result = await handoffCheckoutToBackend(user.storeId, user.id)
+      if (!result.changed) return false
+      const ownRecords=result.records.filter(row=>row.backendUrl===currentBackendIdentity())
+      const ownIntent=result.intent?.backendUrl===currentBackendIdentity()?result.intent:null
+      if (recovered && result.requiresReview && (ownIntent || ownRecords.length)) logPOSAction({action:'checkout_failed',entityId:ownIntent?.request.orderNumber || ownRecords[0]?.orderNumber,description:'未完成交易已自动交后台处理',metadata:{failureCode:'CHECKOUT_RECOVERED_FOR_BACKEND',stage:'startup_recovery',outcome:'review',checkoutEvidence:{intent:ownIntent?checkoutReviewEvidence(ownIntent):undefined,records:ownRecords.map(checkoutReviewEvidence)},appVersion},severity:'warning'})
+      clearCart('recovered')
+      setPaidAmount('')
+      setOrderNote('')
+      setOfflineSaveFailed(false)
+      setCheckoutFailureCode('')
+      setShowPaymentModal(false)
+      setShowChannelModal(true)
+      setRecoveryRevision(value=>value+1)
+      void syncBackendCheckoutReviews().catch(error=>console.warn('[POS Backend Review Transfer]',error?.message))
+      showToast(t(result.requiresReview ? 'checkoutIntent.backendHandoff' : 'checkoutIntent.nextReady'), result.requiresReview ? 'warning' : 'success')
+      return true
+    } catch (error: any) {
+      setCheckoutFailureCode(String(error?.message || error?.name || 'CHECKOUT_RECOVERY_UNAVAILABLE'))
+      return false
+    } finally {
+      continuingSale.current = false
+      setIsContinuingSale(false)
+    }
+  }
+  useEffect(()=>{
+    if (!user?.storeId || !recovery || recovery.readError || (!recovery.blocked && !recovery.confirmed.length) || useOrderStore.getState().isCheckingOut) return
+    let live = true
+    const transfer = () => {if(live)void handoffFailedSale(false,true)}
+    transfer()
+    const timer=window.setInterval(transfer,2000)
+    return ()=>{live=false;window.clearInterval(timer)}
+  },[user?.id,user?.storeId,recovery,isCheckingOut])
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -3374,22 +3457,8 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
 
     return (
       <div className="h-screen flex flex-col bg-gray-50" style={fontSizeStyle}>
-        {(!recovery || recovery.intent || recovery.rows.some(row=>!row.locallyAcceptedAt) || recovery.confirmed.length > 0) && <section data-testid="checkout-recovery" role="alert" className="shrink-0 max-h-[45vh] overflow-y-auto p-3 bg-amber-100 border-b border-amber-300 text-gray-900">
-          <strong>{t(recovery?.confirmed.length ? 'checkoutIntent.confirmed' : recovery?.intent?.phase === 'prepared' ? 'checkoutIntent.prepared' : 'checkoutIntent.review')}</strong>
-          {recovery?.intent && <p className="text-sm break-all">{recovery.intent.request.orderNumber}</p>}
-          <p className="text-sm">{t(recovery?.intent ? 'checkoutIntent.preserve' : 'checkoutIntent.verifyRecords')}</p>
-          {recovery?.intent && <details className="text-sm mt-1"><summary>{t('checkoutIntent.snapshot')}</summary><ul>{recovery.intent.request.items.map((item: any, index: number) => <li key={index} className="grid grid-cols-[1fr_auto] gap-4"><span>{item.productName} · {item.specName} · {formatCurrency(item.unitPrice)}{item.addons?.map((addon: any) => ` + ${addon.name} ${formatCurrency(addon.price)}`).join('')}</span><span>{t('pos.quantity')}: {item.quantity}</span></li>)}</ul></details>}
-          {recovery?.intent?.phase === 'prepared' && <button type="button" className="border rounded px-3 py-1 mt-2" onClick={async () => {
-            try { await discardPreparedCheckout(user!.storeId!); setOfflineSaveFailed(false) }
-            catch { showToast(t('checkoutIntent.review'), 'warning') }
-          }}>{t('checkoutIntent.discard')}</button>}
-          {recovery?.rows.some(row => row.status === 'review' && row.checkoutRequest && row.error !== 'CHECKOUT_SNAPSHOT_REQUIRED') && <button type="button" className="border rounded px-3 py-1 mt-2" onClick={() => { void syncManager.syncPendingOrders(true) }}>{t('checkoutIntent.retry')}</button>}
-          {!!recovery?.confirmed.length && <button type="button" onClick={async () => {try {await acknowledgeRecoveredCheckout(user!.storeId!,user!.id);clearCart();setShowPaymentModal(false)} catch {showToast(t('checkoutIntent.review'),'warning')}}}>{t('checkoutIntent.nextEmpty')}</button>}
-          {!!recovery?.blocked && recovery.intent?.phase !== 'prepared' && <div className="mt-2">
-            <label><input type="checkbox" checked={quarantineAcknowledged} onChange={e=>setQuarantineAcknowledged(e.target.checked)} /> {t('checkoutIntent.quarantineNotice')}</label>
-            <button type="button" disabled={!quarantineAcknowledged || isCheckingOut} className="block border rounded px-3 py-1 disabled:opacity-50" onClick={async()=>{try {await quarantineCheckoutRecovery(user!.storeId!,user!.id,JSON.stringify({intent:recovery.intent?.localId,rows:recovery.rows.map(row=>[row.id,row.localId,row.status])}));clearCart();setShowPaymentModal(false);setQuarantineAcknowledged(false)} catch {showToast(t('checkoutIntent.review'),'warning')}}}>{t('checkoutIntent.quarantine')}</button>
-          </div>}
-        </section>}
+        {recovery?.readError && <section role="status" className="shrink-0 p-3 bg-amber-50 text-gray-900"><p>{t('checkoutIntent.storageUnavailable')}</p><button type="button" className="min-h-12 border rounded px-3 py-2" onClick={()=>setRecoveryRevision(value=>value+1)}>{t('checkoutIntent.recheckStorage')}</button></section>}
+        {isContinuingSale && <p role="status" className="shrink-0 px-3 py-2 bg-amber-50 text-sm">{t('checkoutIntent.backendProcessing')}</p>}
 
         {showOfflineStatus && <div data-testid="offline-status-details">
         {!!recovery?.rows.some(row=>row.locallyAcceptedAt && row.backendUrl===currentBackendIdentity()) && <details role="status" className="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950">
@@ -4251,10 +4320,14 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
               </div>
             </div>
 
+            {activityPriceNeedsConfirmation && <div role="alert" className="shrink-0 px-4 py-3 bg-amber-50"><button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 font-semibold" onClick={()=>setActivityPriceNeedsConfirmation(false)}>{t('checkoutIntent.acceptUpdatedPrice',{amount:formatCurrency(total)})}</button></div>}
+            {!quoteLoading && !currentQuote && <div role="alert" className="shrink-0 px-4 py-3 bg-amber-50 text-amber-950"><p>{quoteError || t('activityPricing.wait')}</p><button type="button" className="min-h-12 border border-amber-700 rounded-lg px-3 py-2 mt-2" onClick={()=>setActivityRevision(value=>value+1)}>{t('pos.retry')}</button></div>}
             {paymentIssue && <p role="alert" className="text-red-700 px-4 py-2 text-base font-semibold">{t(`paymentValidation.${paymentIssue}`)}</p>}
-            {offlineSaveFailed && (
-              <div role="alert" className="bg-red-50 text-red-700 text-sm px-4 py-3 border-t border-red-200">
-                {t('pos.offlineSaveFailed')}
+            {!isCheckingOut && offlineSaveFailed && (
+              <div role="alert" data-testid="payment-storage-error" className="shrink-0 bg-amber-50 text-amber-950 text-sm px-4 py-3 border-t border-amber-200">
+                <p>{t('checkoutIntent.storageUnavailable')}</p>
+                {checkoutFailureCode && <p className="mt-1 break-all font-mono text-xs">{t('checkoutIntent.failureCode')}: {checkoutFailureCode}</p>}
+                <button type="button" className="min-h-12 border rounded px-3 py-2 mt-2" onClick={()=>setRecoveryRevision(value=>value+1)}>{t('checkoutIntent.recheckStorage')}</button>
               </div>
             )}
             {/* 确认支付操作栏 - 紧凑固定底栏 */}

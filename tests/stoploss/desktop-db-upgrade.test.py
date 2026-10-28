@@ -1,4 +1,4 @@
-from contextlib import closing
+from contextlib import closing, ExitStack
 import importlib.util
 import json
 import pathlib
@@ -137,6 +137,68 @@ class UpgradeTests(unittest.TestCase):
 
     def prepare(self, processes=lambda: []):
         return U.prepare(self.db, self.app, self.catalog, processes)
+
+    def run_installer_preflight(self, stop=None, verify=None, processes=lambda: []):
+        result = self.root / 'installer-result.json'
+        diagnostic = self.root / 'upgrade-check.json'
+        argv = ['helper', 'prepare-install', '--old-app', str(self.app),
+                '--result', str(result), '--operator-confirmed', '--diagnostic', str(diagnostic)]
+        with ExitStack() as stack:
+            for target, value in [('platform', 'win32'), ('frozen', True), ('argv', argv)]:
+                stack.enter_context(mock.patch.object(U.sys, target, value, create=True))
+            stack.enter_context(mock.patch.dict(U.os.environ, {'APPDATA': str(self.root / 'appdata')}))
+            stack.enter_context(mock.patch.object(U, 'bundled_catalog', return_value=self.catalog))
+            stack.enter_context(mock.patch.object(U, 'profile_database', return_value=self.db))
+            stack.enter_context(mock.patch.object(U, 'registry_snapshot', return_value=[]))
+            stack.enter_context(mock.patch.object(U, 'windows_local_api_listening', return_value=False))
+            stack.enter_context(mock.patch.object(U, 'windows_processes', side_effect=processes))
+            stopper = stack.enter_context(mock.patch.object(U, 'request_stop_until_closed', side_effect=stop))
+            verifier = stack.enter_context(mock.patch.object(U, 'verify_receipt', wraps=U.verify_receipt,
+                                                              **({'side_effect': verify} if verify else {})))
+            U.main()
+        return result, diagnostic, stopper, verifier
+
+    def test_single_process_preflight_verifies_durable_receipt_and_preserves_history(self):
+        result, diagnostic, stopper, verifier = self.run_installer_preflight()
+        stopper.assert_called_once()
+        self.assertEqual(stopper.call_args.args[1:], (str(self.app), 60))
+        verifier.assert_called_once()
+        receipt = json.loads(result.read_text())
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        self.assertEqual(U.tree_manifest(self.app), self.app_before)
+        self.assertEqual(json.loads(diagnostic.read_text())['status'], 'prepared')
+        selector = self.root / 'appdata/BTPS/upgrade-active-profile.json'
+        self.assertEqual(json.loads(selector.read_text())['profile'], str(self.root))
+
+    def test_preflight_shutdown_timeout_only_retries_before_database_changes(self):
+        with self.assertRaises(SystemExit) as caught:
+            self.run_installer_preflight(stop=U.PosStillRunningError(['btps.exe'], False))
+        self.assertEqual(caught.exception.code, 74)
+        self.assertEqual(U.digest(self.db), self.before)
+        self.assertFalse((self.db.parent / 'upgrade-backups').exists())
+        self.assertFalse((self.root / 'installer-result.json').exists())
+
+    def test_preflight_still_rejects_a_corrupt_backup_during_final_verification(self):
+        original_verify = U.verify_receipt
+        def corrupt_then_verify(receipt, catalog, processes):
+            pathlib.Path(receipt['databaseBackup']).write_bytes(b'corrupted-after-prepare')
+            return original_verify(receipt, catalog, processes)
+        with self.assertRaisesRegex(RuntimeError, 'BACKUP_BYTES_CHANGED'):
+            self.run_installer_preflight(verify=corrupt_then_verify)
+        self.assertEqual(U.tree_manifest(self.app), self.app_before)
+        self.assertFalse((self.root / 'upgrade-check.json').exists())
+
+    def test_preflight_final_relaunch_fails_without_reentering_shutdown_retry(self):
+        running = [False]
+        original_verify = U.verify_receipt
+        def relaunch_after_verify(receipt, catalog, processes):
+            original_verify(receipt, catalog, processes)
+            running[0] = True
+        with self.assertRaises(U.PosStillRunningError):
+            self.run_installer_preflight(verify=relaunch_after_verify,
+                                        processes=lambda: ['BTPS.exe'] if running[0] else [])
+        self.assertEqual(U.tree_manifest(self.app), self.app_before)
+        self.assertFalse((self.root / 'upgrade-check.json').exists())
 
     def test_discount_columns_upgrade_old_orders_without_repricing_or_guessing_history(self):
         template = self.root / 'empty.db'

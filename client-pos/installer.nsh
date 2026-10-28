@@ -88,11 +88,20 @@ Var BTPSUpgradeDiagnostic
     btps_upgrade_confirmed:
     StrCpy $BTPSUpgradeReceipt "$PLUGINSDIR\upgrade-result.json"
     CreateDirectory "$APPDATA\BTPS\logs"
-    Call BTPSWaitForClosedPOS
-    nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed --installer "$EXEPATH" --staged-pointer "$APPDATA\BTPS\upgrade-stage.json" --diagnostic "$BTPSUpgradeDiagnostic"'
+    ${If} $INSTDIR != $BTPSOldApp
+      MessageBox MB_OK|MB_ICONSTOP "Use the original installation directory.$\r$\n请选择原安装目录。$\r$\nGunakan direktori instalasi lama." /SD IDOK
+      SetErrorLevel 73
+      Quit
+    ${EndIf}
+    btps_prepare_again:
+    nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" prepare-install --old-app "$BTPSOldApp" --result "$BTPSUpgradeReceipt" --operator-confirmed --installer "$EXEPATH" --staged-pointer "$APPDATA\BTPS\upgrade-stage.json" --diagnostic "$BTPSUpgradeDiagnostic"'
     Pop $R0
     Pop $R1
-    ${If} $R0 != "0"
+    ${If} $R0 == "74"
+      MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Automatic POS shutdown has not completed. Resolve any prompt shown by POS, then click Retry to request shutdown again. Your orders and original program are retained. Details: $R1$\r$\n收银程序或本地服务尚未自动退出。请处理收银窗口中的提示，然后点击重试，安装器会再次自动关闭程序。订单和原程序保留。$\r$\nPOS atau layanan lokal belum ditutup otomatis. Selesaikan pesan di POS, lalu klik Retry untuk mencoba penutupan otomatis lagi. Pesanan dan program lama tetap disimpan." /SD IDCANCEL IDRETRY btps_prepare_again
+      SetErrorLevel 73
+      Quit
+    ${ElseIf} $R0 != "0"
       StrCpy $R3 $R1
       FileOpen $R2 "$BTPSUpgradeDiagnostic" r
       ${IfNot} ${Errors}
@@ -103,36 +112,28 @@ Var BTPSUpgradeDiagnostic
       SetErrorLevel 73
       Quit
     ${EndIf}
-  ${EndIf}
-  # The initial handoff already required eight quiet seconds. Check again
-  # immediately before replacing files; only repeat the graceful wait if POS
-  # has actually reappeared while the wizard was open.
-  nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" wait-stopped --timeout 0'
-  Pop $R0
-  Pop $R1
-  ${If} $R0 == "74"
-    Call BTPSWaitForClosedPOS
-  ${ElseIf} $R0 != "0"
-    MessageBox MB_OK|MB_ICONSTOP "Unable to verify POS shutdown. No program replacement.$\r$\n无法确认收银已退出，未替换程序。$\r$\nTidak dapat memverifikasi POS sudah ditutup; program belum diganti." /SD IDOK
-    SetErrorLevel 73
-    Quit
-  ${EndIf}
-  ${If} $BTPSUpgradeReceipt != ""
-    ${If} $INSTDIR != $BTPSOldApp
-      MessageBox MB_OK|MB_ICONSTOP "Use the original installation directory.$\r$\n请选择原安装目录。$\r$\nGunakan direktori instalasi lama." /SD IDOK
+  ${Else}
+    # Fresh installations still reject an active POS/local service. Existing
+    # installations perform this check and full receipt verification inside
+    # prepare-install immediately before returning to file replacement.
+    nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" wait-stopped --timeout 0'
+    Pop $R0
+    Pop $R1
+    ${If} $R0 == "74"
+      Call BTPSWaitForClosedPOS
+    ${ElseIf} $R0 != "0"
+      MessageBox MB_OK|MB_ICONSTOP "Unable to verify POS shutdown. No program replacement.$\r$\n无法确认收银已退出，未替换程序。$\r$\nTidak dapat memverifikasi POS sudah ditutup; program belum diganti." /SD IDOK
       SetErrorLevel 73
       Quit
     ${EndIf}
-    nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" verify --receipt "$BTPSUpgradeReceipt"'
-  ${Else}
     nsExec::ExecToStack '"$PLUGINSDIR\btps-db-upgrade.exe" check-stopped'
-  ${EndIf}
-  Pop $R0
-  Pop $R1
-  ${If} $R0 != "0"
-    MessageBox MB_OK|MB_ICONSTOP "Close POS and retry. Upgrade checks failed; no program replacement.$\r$\n请关闭收银后重试，检查失败，未替换程序。$\r$\nTutup POS dan coba lagi. Pemeriksaan gagal; program tidak diganti." /SD IDOK
-    SetErrorLevel 73
-    Quit
+    Pop $R0
+    Pop $R1
+    ${If} $R0 != "0"
+      MessageBox MB_OK|MB_ICONSTOP "Close POS and retry. Upgrade checks failed; no program replacement.$\r$\n请关闭收银后重试，检查失败，未替换程序。$\r$\nTutup POS dan coba lagi. Pemeriksaan gagal; program tidak diganti." /SD IDOK
+      SetErrorLevel 73
+      Quit
+    ${EndIf}
   ${EndIf}
   StrCpy $BTPSInstallStarted "1"
 !macroend

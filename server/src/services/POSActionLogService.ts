@@ -26,6 +26,7 @@ export type POSAction =
 export type Severity = 'info' | 'warning' | 'critical'
 
 export async function logPOSAction(data: {
+  eventId?: string
   storeId: string
   staffId: string
   staffName: string
@@ -43,7 +44,7 @@ export async function logPOSAction(data: {
   // Review signals, never conclusions about misconduct; the client cannot
   // suppress manual drawer or item-removal evidence by choosing info.
   if (data.action === 'cash_drawer') severity = data.metadata?.source === 'automatic' || data.metadata?.status === 'sent' ? 'info' : 'warning'
-  if (data.action === 'cart_remove') severity = 'warning'
+  if (data.action === 'cart_remove' || data.action === 'checkout_failed') severity = 'warning'
   if (data.action === 'cart_clear' && Number(data.metadata?.itemCount) > 0 && severity === 'info') severity = 'warning'
   if ((data.action === 'cash_drawer' && data.metadata?.status === 'requested' && data.metadata?.source !== 'automatic') || (data.action === 'cart_clear' && severity !== 'info')) {
     const recent = await prisma.pOSActionLog.count({ where: {
@@ -54,8 +55,19 @@ export async function logPOSAction(data: {
     } })
     if (recent >= 2) severity = 'critical'
   }
+  const failureId = data.action === 'checkout_failed' && data.eventId ? `POSFAIL-${data.storeId}-${data.staffId}-${data.eventId}` : undefined
+  const existingFailure = async () => {
+    if (!failureId) return null
+    const prior = await prisma.pOSActionLog.findUnique({where:{id:failureId}})
+    if (prior && (prior.storeId!==data.storeId || prior.staffId!==data.staffId || prior.sessionId!==data.sessionId || prior.description!==data.description || prior.entityId!==(data.entityId||null) || prior.metadata!==(data.metadata?JSON.stringify(data.metadata):null))) throw Error('POS_FAILURE_EVENT_CONFLICT')
+    return prior
+  }
+  const prior = await existingFailure()
+  if (prior) return prior
+  let created = true
   const log = await prisma.pOSActionLog.create({
     data: {
+      ...(failureId ? {id:failureId} : {}),
       storeId: data.storeId,
       staffId: data.staffId,
       staffName: data.staffName,
@@ -64,9 +76,14 @@ export async function logPOSAction(data: {
       entityId: data.entityId || null,
       description: data.description,
       metadata: data.metadata ? JSON.stringify(data.metadata) : null,
-      severity,
+      severity: data.action === 'checkout_failed' ? 'warning' : severity,
     },
+  }).catch(async error => {
+    if (failureId && error?.code === 'P2002') { const existing=await existingFailure();if(existing){created=false;return existing} }
+    throw error
   })
+
+  if (!created) return log
 
   // Broadcast to admin dashboard in real-time if warning/critical
   if (log.action !== 'receipt_print' && (severity === 'warning' || severity === 'critical')) {

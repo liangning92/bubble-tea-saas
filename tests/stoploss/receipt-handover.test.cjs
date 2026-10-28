@@ -1,9 +1,9 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),{EventEmitter}=require('node:events');
 function setup(){
- const ipcMain=new EventEmitter(),m={exports:{}};
- vm.runInNewContext(ts.transpileModule(fs.readFileSync('client-pos/electron/receiptHandover.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{module:m,exports:m.exports,require:name=>name==='electron'?{ipcMain}:require(name)});
+ const ipcMain=new EventEmitter(),m={exports:{}};let expire;
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync('client-pos/electron/receiptHandover.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{module:m,exports:m.exports,setTimeout:fn=>{expire=fn;return 1},clearTimeout:()=>{},require:name=>name==='electron'?{ipcMain}:require(name)});
  class Sender extends EventEmitter{isDestroyed(){return false}send(channel,prompt){this.channel=channel;this.prompt=prompt}}
- return {ipcMain,Sender,request:m.exports.requestReceiptHandover};
+ return {ipcMain,Sender,request:m.exports.requestReceiptHandover,expire:()=>expire()};
 }
 test('only matching job and sender can release next copy; duplicate responses cannot release future jobs',async()=>{
  const {ipcMain,Sender,request}=setup(),sender=new Sender(),other=new Sender();let finished=false;
@@ -18,3 +18,5 @@ for(const event of ['destroyed','render-process-gone','did-navigate'])test(event
 test('unavailable renderer returns cancellation without sending',async()=>{
  const {request}=setup();assert.equal(await request(null,{}),false);assert.equal(await request({isDestroyed:()=>true},{}),false);assert.equal(await request(Object.assign(new (setup().Sender)(),{send(){throw Error('closed')}}),{}),false);
 });
+
+test('unanswered handover releases native receipt busy state by cancelling remaining copies',async()=>{const ctx=setup(),sender=new ctx.Sender(),pending=ctx.request(sender,{orderNum:'A01'});ctx.expire();assert.equal(await pending,false);assert.equal(sender.listenerCount('destroyed'),0)});

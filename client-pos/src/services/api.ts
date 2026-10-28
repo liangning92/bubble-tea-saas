@@ -19,6 +19,7 @@ declare module 'axios' {
 
 const api = axios.create({
   baseURL: getApiUrl(),
+  timeout: 15000,
   headers: { 'Content-Type': 'application/json' }
 })
 
@@ -52,6 +53,7 @@ export async function fetchApiUrlFromServer(): Promise<string | null> {
     // baseUrl already ends with /api, so use /config not /api/config
     const baseUrl = getApiUrl().replace(/\/$/, '')  // Remove trailing slash
     const response = await fetch(`${baseUrl}/config/${storeId}/pos_api_url`, {
+      signal: AbortSignal.timeout(5000),
       headers: backendAuthHeaders(baseUrl, storeId)
     })
 
@@ -104,8 +106,10 @@ api.interceptors.response.use(
     const path = response.config.method === 'get' && snapshotPath(response.config.url || '')
     const auth = JSON.parse(sessionStorage.getItem('pos-auth') || '{}').state
     if (path && !response.config.posCachedSnapshot && auth?.user?.storeId === response.config.posStoreId && auth?.user?.id === response.config.posActorId) {
-      await saveSnapshot(path,response.data,backendIdentity(response.config.baseURL!),auth.user.storeId,response.config.posSnapshotComplete === true)
-      if(path==='/pos-cash/shifts/current'&&response.data?.data?.offlineAuthorization?.actorId===auth.user.id&&response.config.headers?.Authorization===`Bearer ${auth.token}`)await refreshOfflineCredentialLease(backendIdentity(response.config.baseURL!),auth.user.id,auth.token)
+      try {
+        await saveSnapshot(path,response.data,backendIdentity(response.config.baseURL!),auth.user.storeId,response.config.posSnapshotComplete === true)
+        if(path==='/pos-cash/shifts/current'&&response.data?.data?.offlineAuthorization?.actorId===auth.user.id&&response.config.headers?.Authorization===`Bearer ${auth.token}`)await refreshOfflineCredentialLease(backendIdentity(response.config.baseURL!),auth.user.id,auth.token)
+      } catch (error) { console.warn('[POS Snapshot Cache]',error) }
     }
     return response
   },
@@ -201,6 +205,7 @@ export const posApi = {
 
   // POS Action Log
   logPOSAction: (data: {
+    eventId?: string
     action: string
     sessionId: string
     entityId?: string

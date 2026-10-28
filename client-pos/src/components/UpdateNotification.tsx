@@ -71,23 +71,17 @@ export function UpdateNotification({className = ''}: {className?: string}) {
     return () => {clearInterval(poll); restoreState.current = null; document.removeEventListener('visibilitychange', restoreWhenVisible); window.removeEventListener('pos-update-check-requested', manualCheck); disposed = true; offStatus?.(); offProgress?.(); offError?.()}
   }, [])
   useEffect(() => {
-    if (status !== 'downloaded') return
-    // An explicit Download and install request proceeds as soon as the verified
-    // backup is ready. Background downloads still wait for an idle cashier.
-    let lastActivity = Date.now()
-    const touch = () => {lastActivity = Date.now()}
-    window.addEventListener('pointerdown', touch)
-    window.addEventListener('keydown', touch)
+    if (status !== 'downloaded' || !installAfterDownload.current) return
+    // Only an explicit install request may restart POS; background downloads stay informational.
     const attempt = () => {
       const state = useOrderStore.getState()
-      if ((!installAfterDownload.current && Date.now() - lastActivity < 60000) ||
-          state.isCheckingOut || state.isInstallingUpdate ||
+      if (state.isCheckingOut || state.isInstallingUpdate ||
           !window.dispatchEvent(new Event('pos-before-update', {cancelable:true}))) return
       void run('install')
     }
     const timer = setInterval(attempt, 1000)
     attempt()
-    return () => {clearInterval(timer);window.removeEventListener('pointerdown', touch);window.removeEventListener('keydown', touch)}
+    return () => clearInterval(timer)
   }, [status])
   const run = async (action: 'check'|'download'|'show'|'install') => {
     const api = window.electronAPI

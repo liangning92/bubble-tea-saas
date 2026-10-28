@@ -291,17 +291,19 @@ def startup_metrics(log_text, launched):
     return metrics
 
 
-def verify_started_runtime(expected_version):
+def verify_started_runtime(expected_version, startup_timeout=60, on_ready=None):
     env = dict(os.environ, BTPS_OWNED_RUNTIME=str(APP / 'BTPS.exe'))
     query = "$rows=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $env:BTPS_OWNED_RUNTIME} | Select-Object ProcessId,ExecutablePath); ConvertTo-Json -InputObject $rows -Compress"
     launched = []
     verified = False
     # A CI proxy must never intercept this owned loopback health check. The
     # service probes DB (2s) and optional Redis (1.5s), so a 2s client timeout
-    # could hide its actual response. Keep the 60s/120s startup gates intact.
+    # could hide its actual response. Ordinary launches retain the 60s window;
+    # a concurrently observed install is bounded by its existing 180s setup
+    # timeout and still must meet the separate 120s readiness gate.
     health_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     last_health = None
-    deadline = time.monotonic() + 60
+    deadline = time.monotonic() + startup_timeout
     try:
         while time.monotonic() < deadline:
             raw = subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', query], env=env, text=True).strip()
@@ -328,6 +330,17 @@ def verify_started_runtime(expected_version):
                     ready_at = time.monotonic()
                     trace(f'runtime-ready at={ready_at:.3f} version={expected_version}')
                     print(json.dumps({'startupMetrics': metrics, 'loginVisibleLimitMs': 10000}), flush=True)
+                    if on_ready is not None:
+                        # Silent NSIS starts POS before cleaning its temporary
+                        # payload. Observe the same fresh healthy runtime while
+                        # setup is running, then still require successful setup
+                        # and healthy SAME-process operation before teardown.
+                        on_ready(ready_at)
+                        after = json.loads(subprocess.check_output(['powershell.exe', '-NoProfile', '-Command', query], env=env, text=True).strip() or '[]')
+                        boot_pid = int(re.findall(r'\[STARTUP\] window-created pid=(\d+)', crash.read_text(errors='replace'))[-1])
+                        assert boot_pid in {row['ProcessId'] for row in after}, 'Verified POS disappeared before installer completion'
+                        with health_opener.open(request, timeout=5) as response:
+                            assert response.status == 200 and json.load(response).get('status') == 'ok', 'POS became unhealthy before installer completion'
                     return {'startupMetrics': metrics,'readyAtMonotonic': ready_at, 'normalExit': True, 'executable': str(APP / 'BTPS.exe'), 'version': expected_version, 'processStarted': True, 'localApiReady': True, 'originalProfileUsed': True}
             time.sleep(1)
         print('Owned restart processes: ' + json.dumps(launched), flush=True)
@@ -493,14 +506,26 @@ try:
     invoke('stage')
     invoke('refresh-stage')
     silent_started = time.monotonic()
-    silent = subprocess.run([str(installer), '/S', '--updated', '--force-run'], timeout=180)
-    assert silent.returncode == 0, ('Silent online installer failed', silent.returncode)
-    silent_runtime = verify_started_runtime(expected_version)
+    trace('silent-installer-start')
+    silent = subprocess.Popen([str(installer), '/S', '--updated', '--force-run'])
+    def require_silent_completion(ready_at):
+        code = silent.wait(timeout=max(1, 180 - (time.monotonic() - silent_started)))
+        installer_finished = time.monotonic()
+        trace(f'silent-installer-exit code={code}')
+        assert code == 0, ('Silent online installer failed', code)
+        print(json.dumps({'silentRuntimeReadySeconds': round(ready_at-silent_started, 3),
+                          'silentInstallerCompleteSeconds': round(installer_finished-silent_started, 3)}), flush=True)
+    try:
+        silent_runtime = verify_started_runtime(expected_version, startup_timeout=180, on_ready=require_silent_completion)
+    finally:
+        if silent.poll() is None:
+            # Owned test installer only; never used as a successful handoff.
+            subprocess.run(['taskkill', '/PID', str(silent.pid), '/T', '/F'], check=False, capture_output=True)
     assert historic() == history, 'Silent update must preserve all historical rows'
     silent_ready_at = silent_runtime.pop('readyAtMonotonic')
     silent_downtime = silent_ready_at - silent_started
     assert silent_downtime >= 0
-    print(json.dumps({'silentDowntimeSeconds': round(silent_downtime, 3), 'testCleanupSeconds': round(time.monotonic() - silent_ready_at, 3), 'localApiReady': silent_runtime['localApiReady']}), flush=True)
+    print(json.dumps({'silentDowntimeSeconds': round(silent_downtime, 3), 'postReadyVerificationAndCleanupSeconds': round(time.monotonic() - silent_ready_at, 3), 'localApiReady': silent_runtime['localApiReady']}), flush=True)
     assert silent_downtime <= 120, ('Silent update exceeded downtime limit', silent_downtime)
     CASES.append('silent-nsis-online-install-restarts-original-profile-and-preserves-history')
     verify_shortcuts('silent-upgrade-restores-missing-links')

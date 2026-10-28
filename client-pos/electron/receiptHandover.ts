@@ -22,11 +22,13 @@ export function requestReceiptHandover(sender:WebContents,prompt:ReceiptHandover
   const cancel=()=>finish(false)
   const finish=(confirmed:boolean)=>{
    if(!pending.delete(requestId))return
+   clearTimeout(timer)
    sender.removeListener('destroyed',cancel)
    sender.removeListener('render-process-gone',cancel)
    sender.removeListener('did-navigate',cancel)
    resolve(confirmed)
   }
+  const timer=setTimeout(cancel,30000)
   pending.set(requestId,{sender,finish})
   sender.once('destroyed',cancel)
   sender.once('render-process-gone',cancel)
