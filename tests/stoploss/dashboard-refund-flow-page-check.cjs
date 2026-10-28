@@ -12,7 +12,8 @@ for(const [width,height,lang] of [[1440,1000,'zh'],[820,1180,'en'],[390,844,'id'
  const context=await browser.newContext({viewport:{width,height},serviceWorkers:'block'});
  await context.addInitScript(lang=>{localStorage.setItem('bubble-tea-language',lang);sessionStorage.setItem('auth-storage',JSON.stringify({state:{isAuthenticated:true,token:'synthetic-only',user:{id:'owner',role:'admin',storeId:'owned',staff:null}},version:0}));},lang);
  await context.route('**/*',async route=>{const req=route.request(),url=new URL(req.url());assert.equal(url.origin,origin,'No external requests');if(!url.pathname.startsWith('/api/'))return route.continue();let data={},status=200;
- if(req.method()!=='GET'){assert.equal(url.pathname,'/api/orders/refund-requests/synthetic-request/approve');assert.equal(req.postDataJSON().verifiedUnprepared,true);mutations++;approved=true;data={};}
+ if(url.pathname==='/api/staff-work/my/inbox'){data={items:[],chats:[],counts:{unread:0,chatUnread:0,trainingUnread:0,approvalPending:0}};}
+ else if(req.method()!=='GET'){assert.equal(url.pathname,'/api/orders/refund-requests/synthetic-request/approve');assert.equal(req.postDataJSON().verifiedUnprepared,true);mutations++;approved=true;data={};}
  else if(url.pathname==='/api/reports/pending-actions'){status=pendingError?503:200;data={actions:[{key:'refunds',count:approved?0:1,to:'/finance/orders?tab=refunds'}],total:approved?0:1};}
  else if(url.pathname==='/api/reports/dashboard')data={...dashboard,today:{...dashboard.today,orders:approved?0:1,revenue:approved?0:44000}};
  else if(url.pathname==='/api/orders/refund-requests')data={list:approved?[]:[request]};
@@ -25,7 +26,7 @@ for(const [width,height,lang] of [[1440,1000,'zh'],[820,1180,'en'],[390,844,'id'
  else if(url.pathname.includes('alerts')||url.pathname==='/api/orders/received-receipts')data=[];
  await route.fulfill({status,contentType:'application/json',body:JSON.stringify({code:status,data})});});
  const page=await context.newPage();page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));await page.goto(origin+'/dashboard');
- const panel=page.locator('section').filter({has:page.locator('a[href="/finance/orders?tab=refunds"]')});await expect(panel).toBeVisible();
+ const panel=page.locator('section').filter({has:page.locator('a[href="/finance/orders?tab=refunds"]')});await expect(panel).toBeVisible();await panel.locator('summary').click();
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'responsive dashboard must fit viewport');await page.screenshot({path:path.join(out,`${lang}-${width}-pending.png`),fullPage:false});
  await panel.locator('a[href="/finance/orders?tab=refunds"]').click();await expect(page.getByText('Synthetic only',{exact:true})).toBeVisible();
  // The red count belongs to the refund tab; deep linking survives reload.
@@ -38,8 +39,8 @@ for(const [width,height,lang] of [[1440,1000,'zh'],[820,1180,'en'],[390,844,'id'
  assert.ok(layers.find(x=>x.confirmation).z>layers.find(x=>!x.confirmation).z,'confirmation must be above busy refund dialog');
  await page.screenshot({path:path.join(out,`${lang}-${width}-confirmation.png`),fullPage:false});
  await confirmation.locator('.admin-dialog-footer button').last().click();await expect(page.getByRole('dialog')).toHaveCount(0);assert.equal(mutations,1,'exactly one approval');await expect(page.getByText('Synthetic only',{exact:true})).toHaveCount(0);
- await page.goto(origin+'/dashboard');await expect(page.getByText(lang==='zh'?'暂无待处理申请或审批':lang==='id'?'Tidak ada pengajuan atau persetujuan tertunda':'No pending requests or approvals',{exact:true})).toBeVisible();await expect(page.locator('a[href="/finance/orders?tab=refunds"]')).toHaveCount(0);await page.screenshot({path:path.join(out,`${lang}-${width}-approved.png`),fullPage:false});
- pendingError=true;await page.reload();await expect(page.getByTestId('dashboard-read-failure')).toBeVisible();await expect(page.locator('a[href="/finance/orders?tab=refunds"]')).toHaveCount(0);assert.equal(mutations,1);assert.deepEqual(errors,[]);console.log(`PASS ${lang} ${width}px: top notification, deep link/reload, confirmation stacking, one approval, dialog close, pending count refresh, responsive width`);await context.close();
+ await page.goto(origin+'/dashboard');await page.locator('details[aria-label]').filter({has:page.locator('summary')}).first().locator('summary').click();await expect(page.getByText(lang==='zh'?'暂无待处理申请或审批':lang==='id'?'Tidak ada pengajuan atau persetujuan tertunda':'No pending requests or approvals',{exact:true})).toBeVisible();await expect(page.locator('a[href="/finance/orders?tab=refunds"]')).toHaveCount(0);await page.screenshot({path:path.join(out,`${lang}-${width}-approved.png`),fullPage:false});
+ pendingError=true;await page.reload();await page.locator('details[aria-label]').first().locator('summary').click();await expect(page.getByTestId('dashboard-read-failure')).toBeVisible();await expect(page.locator('a[href="/finance/orders?tab=refunds"]')).toHaveCount(0);assert.equal(mutations,1);assert.deepEqual(errors,[]);console.log(`PASS ${lang} ${width}px: top notification, deep link/reload, confirmation stacking, one approval, dialog close, pending count refresh, responsive width`);await context.close();
 }
 for(const role of ['admin','manager']){
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
