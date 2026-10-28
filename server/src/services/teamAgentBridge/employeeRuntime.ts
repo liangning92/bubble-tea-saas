@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { employeeGrantExtends } from './employeeGrantAuthority'
 import {formatDate} from '../../utils/dateUtils'
 import {employeeMessagePhotos,employeeStockPhotoEvidence} from './employeePhotos'
@@ -72,6 +73,7 @@ export interface EmployeeRuntimeDependencies extends Omit<BridgeDependencies, 'c
  * writes and their exact tool receipts share the same outer database transaction. */
 export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies) {
   const now = deps.now || Date.now
+  const executionContext = new AsyncLocalStorage<State>()
   const atomic = (tx: any) => ({ config: tx.config, staff: tx.staff, user: tx.user, financeAuditLog: tx.financeAuditLog, store: tx.store, inventory:tx.inventory, inventoryCountItem:tx.inventoryCountItem, stockInLog:tx.stockInLog, batch:tx.batch, bOMItem:tx.bOMItem, processRecipeItem:tx.processRecipeItem, processRecipe:tx.processRecipe, hygieneTask:tx.hygieneTask, hygieneTaskLog:tx.hygieneTaskLog, hygieneArea:tx.hygieneArea, stockOutLog: tx.stockOutLog, schedule: tx.schedule, shift: tx.shift, discountRule: tx.discountRule, campaign: tx.campaign, coupon: tx.coupon, product: tx.product, category: tx.category, spec: tx.spec, supplier: tx.supplier, purchaseOrder: tx.purchaseOrder, purchaseOrderItem: tx.purchaseOrderItem, expense: tx.expense, order: tx.order, announcement: tx.announcement, leave: tx.leave, leaveType: tx.leaveType, mediaAsset: tx.mediaAsset, productImage: tx.productImage, mediaReference: tx.mediaReference, training: tx.training, $transaction: async (operation: any) => operation(atomic(tx)) })
   async function fresh(tx: any, s?: State, verifySources=true) {
     if (deps.enabled !== true) fail('EMPLOYEE_RUNTIME_DISABLED')
@@ -88,6 +90,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       await binding(tx,g,s.scope)
       const scope = await readCommunicationScope(tx,g,s.scope.task,c,s.scope.requesterStaffId)
       if (hash(scope) !== hash(s.scope)) fail('EMPLOYEE_RUNTIME_AUDIENCE_CHANGED')
+      if(s.ticket.requestSource&&!s.sources.some(source=>source.source.kind==='conversation'&&source.source.channelId===s.ticket.requestSource!.channelId&&source.source.messageId===s.ticket.requestSource!.messageId&&source.source.seq===s.ticket.requestSource!.seq&&(source.value as any)?.role==='user'))fail('EMPLOYEE_RUNTIME_CURRENT_REQUEST_CHANGED')
       if(verifySources)for (const source of s.sources) if (!source.source.kind.endsWith('_evidence') && hash(await readEmployeeRuntimeSource(tx,g,scope,source.source)) !== hash(source)) fail('EMPLOYEE_RUNTIME_SOURCE_CHANGED')
     }
     return g
@@ -108,7 +111,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       await lockTeam(tx,deps.storeId,key(id))
       const s = await load(tx,id); await fresh(tx,s)
       if (s.version !== version) fail('EMPLOYEE_RUNTIME_VERSION_CHANGED')
-      const value = await operation(atomic(tx),s)
+      const value = await executionContext.run(s,()=>operation(atomic(tx),s))
       s.version++; s.ticket.traceVersion = s.version
       await writeTeam(tx,deps.storeId,key(id),s)
       return value
@@ -119,7 +122,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
   // recursively re-reading the entire historical exchange for every source.
   const communication: CommunicationPolicyPort = {
     async assertContext(tx,g,scope) {
-      const p = await readTeam<any>(tx,g.storeId,pointer(scope)), s = p && await load(tx,p.executionId)
+      const s = executionContext.getStore()
       // Channel authorization precedes the native send's reply-to resolution.
       // Only its omitted requester can be filled from this server-owned trace;
       // actual outbound admission still requires the exact resolved requester.
@@ -130,14 +133,14 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     },
     async authorizeSource(tx,g,scope,source) {
       if(source.kind.endsWith('_evidence')){
-        const p=await readTeam<any>(tx,g.storeId,pointer(scope)),s=p&&await load(tx,p.executionId)
+        const s=executionContext.getStore()
         if(!s||!s.sources.some(x=>hash(x.source)===hash(source)))fail('EMPLOYEE_RUNTIME_SOURCE_CHANGED')
         await fresh(tx,s,false)
       }else await readEmployeeRuntimeSource(tx,g,scope,source)
       return { dataClasses:['operational'] }
     },
     async admitOutput(tx,g,scope,input) {
-      const p = await readTeam<any>(tx,g.storeId,pointer(scope)), s = p && await load(tx,p.executionId)
+      const s = executionContext.getStore()
       if (!s || !['tools','final'].includes(s.phase) || !employeeGrantExtends(s.grant,g) || hash({...scope,executionId:undefined})!==hash(s.scope)) fail()
       await fresh(tx,s,false)
       const response = s.responses.at(-1)
@@ -206,6 +209,10 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
         const ticket:EmployeeRuntimeTicket={ protocol:EMPLOYEE_RUNTIME_PROTOCOL,executionId,requestId,traceVersion:1,compartmentKey:scope.compartmentKey,audienceHash:scope.audienceHash,isAdmin,executionTimeoutMs,
           inputContextHash:hash(facts),toolSchemaHash:hash(canonicalTools(tools)),sealedUserContent:JSON.stringify({clock:{asOf:new Date(now()).toISOString(),timeZone:"Asia/Jakarta",localDate:formatDate(new Date(now()),"YYYY-MM-DD")},replyStyle:{language:isAdmin?'follow_administrator_request':'id',style:'simple everyday words; short sentences; one clear step at a time',required:'answer, focused clarification, or plain explanation of a blocker; never silence',history:'continue authorized non-confidential conversation and scoped memory; do not reset the conversation or invent new authority'},task:scope.task,storeRules:storedRules,capabilities:{directAction:directActionDesc,replyRoute:'Communicate naturally with the user. You can call employee_send_message or formulate clear conversational output which will be automatically delivered to the channel. Proactively ask clarifying questions whenever needed!',conversation:'Free operational questions and clarification about tea/beverage store operations, ingredients, stock, marketing campaigns, training, and tasks.',actions:'Only the issued tools can execute actions.',operationAuthority:'Execute issued business operations using the agent grant and operator-saved module settings. Recipient data visibility does not remove an authorized business operation. Use actual tool receipts to determine the result.',outputAuthority:'Return only data visible under every current recipient account permission. Administrators retain administrator data access; a manager title alone is not an administrator role. Explain withheld details or missing authorization clearly instead of remaining silent.',evidence:'Ledger book stock is not a physical count.'},facts:facts.map(f=>f.value),currentRequest:latestQuestion?.value}),instruction:EMPLOYEE_RUNTIME_INSTRUCTION,
           isolation:{protocol:EMPLOYEE_RUNTIME_PROTOCOL,profile:'employee_work',sessionId:'employee_work_'+hash([executionId,scope.compartmentKey]),compartmentKey:scope.compartmentKey,memoryNamespace:scope.compartmentKey,memoryEnabled:false,contextFilesEnabled:false,auxiliaryModelsEnabled:false,sharedHistoryEnabled:false,builtinToolsEnabled:false},model:'MiniMax-M3.1-Flash',tools }
+        if(latestQuestion?.source.kind==='conversation'){
+          if(scope.requesterStaffId&&(latestQuestion.value as any)?.authorStaffId!==scope.requesterStaffId)fail('EMPLOYEE_RUNTIME_CURRENT_REQUEST_CHANGED')
+          ticket.requestSource=structuredClone(latestQuestion.source)
+        }
         if((latestQuestion?.value as any)?.photos?.length){
           const message=await readTeam<any>(tx,g.storeId,`message.${scope.channelId}.${String((latestQuestion.value as any).seq).padStart(12,'0')}`)
           const photos=await employeeMessagePhotos(tx,g,scope,message,true)
@@ -1624,7 +1631,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       }else if(v.name==='employee_send_message'){
         const args=sendMessage.parse(v.args)
         const bridge=createTeamAgentBridge(tx,{...deps,communication,messageCommitted:undefined})
-        const reply=s.scope.requesterStaffId?s.sources.filter(x=>x.source.kind==='conversation'&&(x.value as any)?.authorStaffId===s.scope.requesterStaffId).sort((a,b)=>(b.value as any).seq-(a.value as any).seq)[0]:undefined
+        const reply=s.scope.requesterStaffId?s.sources.filter(x=>x.source.kind==='conversation'&&(s.ticket.requestSource?x.source.messageId===s.ticket.requestSource.messageId:(x.value as any)?.authorStaffId===s.scope.requesterStaffId)).sort((a,b)=>(b.value as any).seq-(a.value as any).seq)[0]:undefined
         if(s.scope.requesterStaffId&&!reply)fail('EMPLOYEE_RUNTIME_REQUESTER_SOURCE_REQUIRED')
         const r=await bridge.send({channelId:s.scope.channelId,task:s.scope.task,requestId:s.ticket.requestId,expectedLastSeq:(await readTeam<any>(tx,deps.storeId,'channel.'+s.scope.channelId)).lastSeq,text:args.text,...(reply?.source.kind==='conversation'?{replyToSeq:reply.source.seq}:{})})
         value={messageId:r.id,seq:r.seq,delivery:'stored',device:'unknown',expectsReply:args.expectsReply===true};s.lastSeq=r.seq
@@ -1645,7 +1652,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       if(s.grant.actions.includes('messages.send')&&!s.tools.some(t=>t.name==='employee_send_message')){
         await assertToolSettings(_tx,deps.storeId,'employee_send_message',{})
         const bridge=createTeamAgentBridge(_tx,{...deps,communication,messageCommitted:undefined})
-        const reply=s.scope.requesterStaffId?s.sources.filter(x=>x.source.kind==='conversation'&&(x.value as any)?.authorStaffId===s.scope.requesterStaffId).sort((a,b)=>(b.value as any).seq-(a.value as any).seq)[0]:undefined
+        const reply=s.scope.requesterStaffId?s.sources.filter(x=>x.source.kind==='conversation'&&(s.ticket.requestSource?x.source.messageId===s.ticket.requestSource.messageId:(x.value as any)?.authorStaffId===s.scope.requesterStaffId)).sort((a,b)=>(b.value as any).seq-(a.value as any).seq)[0]:undefined
         const c=await readTeam<any>(_tx,deps.storeId,'channel.'+s.scope.channelId)
         const r=await bridge.send({channelId:s.scope.channelId,task:s.scope.task,requestId:s.ticket.requestId,expectedLastSeq:c.lastSeq,text:v.providerMessage.content,...(reply?.source.kind==='conversation'?{replyToSeq:reply.source.seq}:{})})
         const value={messageId:r.id,seq:r.seq,delivery:'stored',device:'unknown',expectsReply:false}

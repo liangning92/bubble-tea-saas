@@ -17,6 +17,8 @@ export const employeeRuntimeIsolationSchema = z.object({
 }).strict()
 export type EmployeeRuntimeIsolation = z.infer<typeof employeeRuntimeIsolationSchema>
 export interface EmployeeRuntimeTicket {
+  /** Original human question; output must retain this exact message/sequence binding. */
+  requestSource?: Extract<CommunicationSource,{kind:'conversation'}>
   protocol: typeof EMPLOYEE_RUNTIME_PROTOCOL; executionId: string; requestId: string; traceVersion: number;
   compartmentKey: string; audienceHash: string; inputContextHash: string; toolSchemaHash: string;
   sealedUserContent: string | ({type:'text';text:string}|{type:'image_url';image_url:{url:string;detail:'high'}})[]; instruction: string; isolation: EmployeeRuntimeIsolation;
