@@ -4,6 +4,7 @@ import type { ManagementConsent } from './TeamManagementContext'
 import type { ManagementResult } from './TeamManagementPolicy'
 import { inheritManagementPolicy } from './TeamManagementDefaults'
 import type { TeamActor, TeamChannel } from './TeamCommunicationService'
+import { ensureManagedEmployeeChannel } from './teamAgentBridge/employeeManagedChannel'
 import { enqueueEmployeeIntake } from './teamAgentBridge/employeeIntake'
 
 export const workflowHash = (v: unknown) => createHash('sha256').update(JSON.stringify(v)).digest('hex')
@@ -82,6 +83,7 @@ export async function enqueueTeamWorkflow(db: any, a: TeamActor, c: TeamChannel,
   }
   const p: WorkflowPolicy = await ports.read(db, a.storeId, `workflow.policy.${c.id}`)
   if (!p?.enabled || !(p.employeeIds.includes(a.staffId) || p.management && a.staffId === p.operatorStaffId) || a.staffId === p.operatorStaffId && !p.management || a.role === 'admin' && !p.automaticSend || message.ai) return
+  if (await ensureManagedEmployeeChannel(db, a.storeId, c, message, p, ports)) { await enqueueEmployeeIntake(db, a.storeId, c, message); return }
   const key = workflowJobKey(c.id, message.seq)
   if (await ports.read(db, a.storeId, key)) return
   const job: WorkflowJob = { id: message.id, channelId: c.id, sourceSeq: message.seq, sourceAuthorId: a.staffId,

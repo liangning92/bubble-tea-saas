@@ -1,3 +1,5 @@
+import { sendEmployeeFailureReply } from './employeeFailureReply'
+import { employeeGrantAuthority } from './employeeGrantAuthority'
 import { createHash } from 'crypto'
 import { TeamError, TeamTask, lockTeam, readTeam, writeTeam } from '../TeamCommunicationService'
 import { grantSchema } from './contract'
@@ -46,7 +48,7 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
   if(!source||source.id!==e.sourceMessageId||source.authorId!==e.sourceStaffId||source.seq!==e.sourceSeq||source.ai||source.agent||typeof source.text!=='string'||(!source.text.trim()&&!source.files?.length))fail('EMPLOYEE_ORCHESTRATION_SOURCE_CHANGED')
   const task=await readTeam<TeamTask>(tx,storeId,`task.${e.channelId}.${route.task.taskId}`)
   if(!task||task.id!==route.task.taskId||task.channelId!==e.channelId||task.version!==route.task.version||!['assigned','accepted','submitted','changes_requested'].includes(task.status)||task.agentTask?.state==='accepted')fail('EMPLOYEE_ORCHESTRATION_TASK_CHANGED')
-  return {route,grant,channel:access.channel,source,task,authorizationVersion:hash([route,grant])}
+  return {route,grant,channel:access.channel,source,task,authorizationVersion:hash([route,employeeGrantAuthority(grant)])}
  }
  async function observed(tx:any,r:EmployeeContinuationReservation) {
   const live=await current(tx,r.event)
@@ -71,7 +73,11 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
    await writeTeam(tx,storeId,questionContextKey(r.event.channelId),send?{executionId:s.ticket.executionId,questionMessageId:send.value.messageId,taskId:r.task.taskId}:null)
    return {phase:'complete' as const,reportId:id}
   }
-  if(s.phase==='unknown'){await writeTeam(tx,storeId,'employeeOrchestration.lastOutcome.'+r.event.channelId,{executionId:s.ticket.executionId,taskId:r.task.taskId});return {phase:'unknown' as const}}
+  if(s.phase==='unknown'||s.phase!=='complete'&&Date.parse(s.expiresAt)<=now()){
+    await writeTeam(tx,storeId,'employeeOrchestration.lastOutcome.'+r.event.channelId,{executionId:s.ticket.executionId,taskId:r.task.taskId})
+    try { await sendEmployeeFailureReply(tx,storeId,r.event,s) } catch { /* Disabled/revoked channel authority still stops publication; source failure remains visible. */ }
+    return {phase:'unknown' as const}
+  }
   if(s.phase!=='complete')return {phase:Date.parse(s.expiresAt)<=now()?'unknown' as const:'running' as const}
   const final=s.responses?.at(-1)
   if(final?.finishReason!=='stop'||typeof final.providerMessage?.content!=='string'||!final.providerMessage.content.trim())return {phase:'unknown' as const}
