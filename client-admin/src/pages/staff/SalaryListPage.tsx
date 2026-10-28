@@ -218,7 +218,7 @@ export function SalaryListPage() {
     const correction=basis?.correction
     setLateMinutes(String(correction?.lateMinutes||0));setLateMode(correction?.lateMode||'rule');setManualLateDeduction(String(correction?.manualLateDeduction||0));setOtherAttendanceDeduction(String(correction?.otherAttendanceDeduction||0))
     setDaySource(basis?.settlementVersion===1?'estimate':basis?.daysSource==='attendance'?'attendance':'manual')
-    setUnpaidDays({probation:String(basis?.unpaidLeave?.days?.probation||0),regular:String(basis?.unpaidLeave?.days?.regular||0)})
+    setUnpaidDays({probation:String((basis?.unpaidLeave?.requestedDays??basis?.unpaidLeave?.days)?.probation||0),regular:String((basis?.unpaidLeave?.requestedDays??basis?.unpaidLeave?.days)?.regular||0)})
     appliedLeaveAmount.current=basis?.unpaidLeave?.deduction||0;setDepositRefundAmount(salary?.depositRefundAmount||0)
     const legacyMonthlyLate=salary?.compensationItems?.find(item=>item.id===`late-${salary.staffId}-${salary.month}`)?.amount||0
     appliedAttendanceAmount.current=(correction?.lateDeduction||0)+(correction?.otherAttendanceDeduction||0)+legacyMonthlyLate
@@ -294,7 +294,7 @@ export function SalaryListPage() {
       setPayrollBasis(basis)
       const nextLeave=basis.unpaidLeave?.deduction||0
       const previousLeave=appliedLeaveAmount.current;appliedLeaveAmount.current=nextLeave
-      if(daySource!=='estimate')setUnpaidDays({probation:String(basis.unpaidLeave?.days?.probation||0),regular:String(basis.unpaidLeave?.days?.regular||0)})
+      if(daySource!=='estimate')setUnpaidDays({probation:String((basis.unpaidLeave?.requestedDays??basis.unpaidLeave?.days)?.probation||0),regular:String((basis.unpaidLeave?.requestedDays??basis.unpaidLeave?.days)?.regular||0)})
       setDepositRefundAmount(data.depositRefundAmount||0)
       const nextAttendance=(basis.correction?.lateDeduction||0)+(basis.correction?.otherAttendanceDeduction||0)
       const nextComp=data.compensation||{rewards:0,penalties:0}

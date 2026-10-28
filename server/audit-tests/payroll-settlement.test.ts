@@ -61,7 +61,7 @@ test('seven-day resignation spanning month end cancels deductions even in unpaid
 test('resigning after seven days cancels planned uncollected deposits before rebasing pending wages',async()=>{
  staff.hireDate=new Date('2026-10-01');values.set('staff.probation.rule',JSON.stringify(policy));values.set('salary.probationBasis.salary',JSON.stringify({version:2,settlementVersion:1,daysSource:'estimate',confirmed:false,manualCorrection:false}));values.set('salary.depositPlan.salary',JSON.stringify([{staffDepositId:'deposit',amountMinor:30000000}]))
  const old={id:'salary',staffId:staff.id,month:'2026-10',status:'pending',baseSalary:1300000,overtime:0,commission:0,bonus:0,deduction:300000,finalAmount:1000000}
- db.salary.findMany=jest.fn(async()=>[old]);db.salary.findUnique=jest.fn(async()=>old);db.salary.updateMany=jest.fn(async()=>({count:1}));db.attendance={findMany:jest.fn(async()=>[])}
+ db.salary.findMany=jest.fn(async()=>[old]);db.salary.findUnique=jest.fn(async()=>old);db.salary.updateMany=jest.fn(async()=>({count:1}));db.attendance={findMany:jest.fn(async()=>Array.from({length:7},(_,i)=>({checkInTime:new Date(`2026-10-${String(i+1).padStart(2,'0')}T09:00:00+07:00`),status:'normal'})))}
  await refreshEmploymentPayroll(db,{...staff,status:'resigned',terminationDate:new Date('2026-10-07')})
- expect(db.salary.updateMany).toHaveBeenCalledWith({where:{id:'salary',status:'pending'},data:{baseSalary:293548,finalAmount:293548,deduction:0}});expect(JSON.parse(values.get('salary.depositPlan.salary')!)).toEqual([])
+ expect(db.salary.updateMany).toHaveBeenCalledWith({where:{id:'salary',status:'pending'},data:{baseSalary:350000,finalAmount:350000,deduction:0}});expect(JSON.parse(values.get('salary.depositPlan.salary')!)).toEqual([])
 })
