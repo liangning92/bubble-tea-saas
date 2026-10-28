@@ -463,3 +463,51 @@ test('Scoped cashier quote uses actual product prices and does not create busine
     /MEMBER_STORE_MISMATCH/,
   )
 })
+
+test('state exposes minimal real qualification audit with same-store order, not private member data', async () => {
+  const f = fixture()
+  const g = await createOperationsDelegation(
+    'store',
+    'owner',
+    {
+      activityIds: ['special'],
+      expiresAt: new Date(Date.now() + 3600000).toISOString(),
+      confirm: 'daily_member_specials_and_single_paid_order_30000',
+    },
+    f.db,
+  )
+  assert.equal((await readOperationsState(g.credential, f.db)).qualificationAudit, null)
+  f.members[0].status = 'active'
+  f.members[0].phone = 'private-phone'
+  f.rows.push({
+    storeId: 'store',
+    key: 'membership.qualification.receipt.member',
+    value: JSON.stringify({
+      memberId: 'member',
+      storeId: 'store',
+      orderId: 'earned-order',
+      paidAmount: 30000,
+      minimumPaidAmount: 30000,
+      policyVersion: 1,
+      qualifiedAt: '2026-10-28T00:00:00.000Z',
+      privateExtra: 'must-not-leak',
+    }),
+  })
+  f.orders.push({
+    id: 'earned-order',
+    storeId: 'other',
+    memberId: 'member',
+    status: 'completed',
+    finalAmount: 30000,
+  })
+  const first = await readOperationsState(g.credential, f.db)
+  assert.equal(first.qualificationAudit.currentOrder, null)
+  f.orders[0].storeId = 'store'
+  const audit = (await readOperationsState(g.credential, f.db)).qualificationAudit
+  assert.equal(audit.orderId, 'earned-order')
+  assert.equal(audit.paidAmount, 30000)
+  assert.equal(audit.currentOrder.status, 'completed')
+  assert.equal(audit.policyVersion, 1)
+  assert.equal(audit.qualifiedAt, '2026-10-28T00:00:00.000Z')
+  assert.equal(JSON.stringify(audit).includes('private'), false)
+})

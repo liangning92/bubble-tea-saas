@@ -41,12 +41,18 @@ expired or been revoked. No production database access is exposed.
 
 `GET /api/internal/store-operations/daily-member-specials` returns
 `{code:200,data:{storeId,policy,activities,receipts,expiresAt,quoteCandidates,
-verificationProfiles}}`.
+verificationProfiles,qualificationAudit}}`.
 `receipts` contains the latest 20 results belonging only to this delegation.
 `quoteCandidates` supplies real product/default specification IDs, product names,
 regular prices, and quantity 1 only for the delegated daily specials.
 `verificationProfiles` exposes actual active/pending/earned member IDs and statuses
 without names, phones, or birthdays; unavailable real samples remain null.
+`qualificationAudit` exposes the persisted qualification receipt
+`{memberId,orderId,paidAmount,minimumPaidAmount,policyVersion,qualifiedAt,evidenceType,
+currentOrder:{id,status,finalAmount}|null}` for an actual earned member, or null.
+The current order is looked up using the same store and member; profile presence
+alone cannot prove a qualifying transaction. A refund or missing order remains
+visible through current status/null and must be reviewed rather than hidden.
 
 `POST /api/internal/store-operations/daily-member-specials/quote` accepts
 `{sideEffectFree:true,items:[{productId,specId,quantity}],memberId?,taxEnabled?}`.

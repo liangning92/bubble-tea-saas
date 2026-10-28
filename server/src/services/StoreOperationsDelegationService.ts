@@ -271,6 +271,34 @@ export async function readOperationsState(credential: string, db: any = prisma) 
         select: { id: true, status: true },
       })
     : null
+  // Expose only the original qualification audit and its current same-store order.
+  // Profile status alone is never proof of an actual qualifying purchase.
+  const earnedOrder =
+    earnedMember && earned?.orderId
+      ? await db.order.findFirst({
+          where: { id: earned.orderId, storeId: grant.storeId, memberId: earnedMember.id },
+          select: { id: true, status: true, finalAmount: true },
+        })
+      : null
+  const qualificationAudit =
+    earnedMember && earned
+      ? {
+          memberId: earnedMember.id,
+          orderId: earned.orderId,
+          paidAmount: earned.paidAmount,
+          minimumPaidAmount: earned.minimumPaidAmount,
+          policyVersion: earned.policyVersion,
+          qualifiedAt: earned.qualifiedAt,
+          evidenceType: 'persisted_paid_order_qualification_receipt',
+          currentOrder: earnedOrder
+            ? {
+                id: earnedOrder.id,
+                status: earnedOrder.status,
+                finalAmount: earnedOrder.finalAmount,
+              }
+            : null,
+        }
+      : null
   const profile = (m: any) => (m ? { id: m.id, status: m.status } : null)
   const receipts = await db.config.findMany({
     where: {
@@ -282,6 +310,7 @@ export async function readOperationsState(credential: string, db: any = prisma) 
   })
   return {
     quoteCandidates,
+    qualificationAudit,
     verificationProfiles: {
       activeMember: profile(activeMember),
       pendingMember: profile(pendingMember),
