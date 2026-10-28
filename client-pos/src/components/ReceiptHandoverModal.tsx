@@ -26,10 +26,12 @@ export function ReceiptHandoverModal(){
   return ()=>window.clearTimeout(timer)
  },[prompt?.requestId])
  if(!prompt)return null
- return <aside aria-label={prompt.title} className="fixed bottom-4 right-4 z-[200] w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-amber-300 bg-white p-4 shadow-xl" data-testid="receipt-handover-assistance">
-  <div className="flex items-center justify-between gap-3"><h2 className="flex items-center gap-2 font-bold"><Printer size={20}/>{prompt.title}</h2><button type="button" onClick={()=>respond(false)} aria-label={t('common.close')} className="min-h-12 min-w-12 flex items-center justify-center rounded-lg border"><X size={20}/></button></div>
-  <p className="my-3 text-sm">{prompt.message}</p>
-  <p className="mb-3 flex justify-between gap-3 text-sm text-gray-600"><span className="font-mono break-all">#{prompt.orderNum}</span><span>{prompt.copiesSubmitted} / {prompt.printCopies}</span></p>
-  <button type="button" onClick={()=>respond(true)} className="min-h-12 w-full rounded-xl bg-primary px-3 py-3 font-bold text-white flex items-center justify-center gap-2"><CheckCircle2 size={20}/>{prompt.button}</button>
+ return <aside aria-label={prompt.title} className="fixed top-4 right-4 z-[200] w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-amber-300 bg-white p-3 shadow-xl" data-testid="receipt-handover-assistance">
+  <button type="button" onClick={()=>respond(false)} aria-label={t('common.close')} data-testid="receipt-handover-close" className="absolute top-3 right-3 min-h-12 min-w-12 flex items-center justify-center rounded-lg border"><X size={20}/></button>
+  <details key={prompt.requestId}>
+    <summary className="min-h-12 cursor-pointer pr-14 list-none flex items-center gap-3"><Printer size={20} className="shrink-0"/><span className="min-w-0 flex-1"><span className="block text-sm font-bold">{prompt.title}</span><span className="block truncate font-mono text-xs text-gray-600">#{prompt.orderNum}</span></span><span className="shrink-0 text-xs text-gray-600">{prompt.copiesSubmitted} / {prompt.printCopies}</span></summary>
+    <p className="my-3 text-sm">{prompt.message}</p>
+    <button type="button" onClick={()=>respond(true)} className="min-h-12 w-full rounded-xl bg-primary px-3 py-3 font-bold text-white flex items-center justify-center gap-2"><CheckCircle2 size={20}/>{prompt.button}</button>
+  </details>
  </aside>
 }

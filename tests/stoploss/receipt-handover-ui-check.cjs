@@ -19,20 +19,25 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),http
   await page.evaluate(p=>window.__promptListener(p),prompt);
   const dialog=page.getByTestId('receipt-handover-assistance');await dialog.waitFor();
   assert.equal(await page.getByRole('dialog').count(),0,'receipt assistance never creates a modal');
-  await page.locator('input').first().fill('cashier can continue typing');
+  await page.locator('input').first().click();await page.locator('input').first().fill('cashier can continue typing');
+  assert.equal(await dialog.locator('details').getAttribute('open'),null,'assistance stays collapsed until requested');
+  const initialBounds=await dialog.boundingBox();assert.ok(initialBounds.y+initialBounds.height<page.viewportSize().height/3,'collapsed assistance leaves footer actions uncovered');
   assert.ok(await dialog.getByText('#MEQ24TP39A').isVisible());assert.ok(await dialog.getByText('1 / 2').isVisible());
   await page.mouse.click(10,10);assert.equal(await dialog.count(),1,'outside interaction does not cancel receipt printing');
+  await dialog.locator('summary').click();
   await page.screenshot({path:'/tmp/receipt-handover-dialog.png',animations:'disabled'});
-  await page.evaluate(()=>{const button=document.querySelector('[data-testid=receipt-handover-assistance] > button');button.click();button.click()});
+  await dialog.getByRole('button',{name:prompt.button,exact:true}).evaluate(button=>{button.click();button.click()});
   assert.deepEqual(await page.evaluate(()=>window.__responses),[{id:'first',confirmed:true}]);
   for(const [lang,message,button] of [['en','Wait for printing, tear off the customer copy and hand it to the customer.','Torn off — print operator copy'],['id','Tunggu struk keluar, sobek salinan pelanggan dan berikan kepada pelanggan.','Sudah disobek — cetak salinan operator']]){
    await page.setViewportSize({width:360,height:640});await page.evaluate(p=>window.__promptListener(p),{...prompt,requestId:lang,message,button});
    await page.getByTestId('receipt-handover-assistance').waitFor();assert.equal(await page.evaluate(()=>document.body.scrollWidth>innerWidth),false);
+   const assistance=await page.getByTestId('receipt-handover-assistance').boundingBox();assert.ok(assistance.y+assistance.height<page.viewportSize().height/3);
+   await page.getByTestId('receipt-handover-assistance').locator('summary').click();
    const rect=await page.getByRole('button',{name:button}).boundingBox();assert.ok(rect.x>=0&&rect.x+rect.width<=360);assert.ok(rect.height>=48);
    await page.locator('input').first().fill('next customer');await page.getByRole('button',{name:button}).focus();
    await page.keyboard.press('Enter');await page.waitForFunction(()=>!document.querySelector('[data-testid=receipt-handover-assistance]'));
   }
-  await page.evaluate(p=>window.__promptListener(p),{...prompt,requestId:'cancel'});await page.getByTestId('receipt-handover-assistance').waitFor();await page.getByTestId('receipt-handover-assistance').getByRole('button').first().click();await page.waitForFunction(()=>!document.querySelector('[data-testid=receipt-handover-assistance]'));
+  await page.evaluate(p=>window.__promptListener(p),{...prompt,requestId:'cancel'});await page.getByTestId('receipt-handover-assistance').waitFor();await page.getByTestId('receipt-handover-close').click();await page.waitForFunction(()=>!document.querySelector('[data-testid=receipt-handover-assistance]'));
   const responses=await page.evaluate(()=>window.__responses);assert.equal(responses.length,4);assert.deepEqual(responses[3],{id:'cancel',confirmed:false});assert.deepEqual(errors,[]);
   console.log('PASS: nonmodal POS receipt assistance, continued background input, duplicate click protection, keyboard confirmation, explicit cancellation and narrow screens');
  }finally{await browser.close();await new Promise(resolve=>server.close(resolve))}
