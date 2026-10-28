@@ -161,6 +161,20 @@ class RuntimeEnvironment:
             raise RuntimeError("EMPLOYEE_ENVIRONMENT_INTEGRITY_FAILED")
 
 
+def matched_provider_final_text(presented, response):
+    """Allow Hermes' boundary-whitespace trim, retaining exact provider bytes.
+
+    Any substantive rewrite, synthesized fallback or empty response still fails.
+    The caller must supply the captured provider response, never model proof.
+    """
+    original = response.get("providerMessage", {}).get("content")
+    if (response.get("finishReason") == "stop" and isinstance(presented, str)
+            and isinstance(original, str) and original.strip()
+            and presented.strip() == original.strip()):
+        return original
+    return None
+
+
 def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callable, response_observed: Callable | None = None) -> dict:
     """One fresh process / execution / compartment. Input context comes from trusted host.
 
@@ -432,7 +446,10 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
         # harness prose is not a provider-observed completion and cannot be published.
         try:
             last_response = parse_provider_response(observed["modelResponses"][-1])
-            provider_output_matches = last_response["finishReason"] == "stop" and last_response["providerMessage"]["content"] == output
+            matched_output = matched_provider_final_text(output, last_response)
+            provider_output_matches = matched_output is not None
+            if provider_output_matches:
+                output = matched_output
         except Exception:
             provider_output_matches = False
         observed["output"] = output

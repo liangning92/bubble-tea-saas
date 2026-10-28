@@ -39,6 +39,7 @@ def worker(case, root, source_dir=None):
     calls = 0
     tool_calls = 0
     model_text = "Bisa. Siapkan gelas dan cek label bahan sebelum buka."
+    if case == "multi_boundary_whitespace": model_text = "\n  " + model_text + "  \n\n"
     expected_channel = "channel-employee-A"
     context = {"purpose": "employee_work", "compartmentKey": digest("channel-A-members-version-1"),
                "memoryNamespace": digest("channel-A-members-version-1"), "executionId": "execution-" + case,
@@ -336,6 +337,23 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(r["task"], {"taskId": "same-employee-task", "state": "awaiting_review"})
         self.assertEqual([e["params"]["name"] for e in r["hostEvents"] if e["method"] == "executeTool"], ["employee_read_sop", "employee_update_task"])
         self.assertEqual(len(r["observation"]["toolEvents"]), 2)
+
+    def test_final_match_rejects_rewrites_fallbacks_and_empty_provider_output(self):
+        from runtime_capture import matched_provider_final_text
+        response = {"finishReason": "stop", "providerMessage": {"content": "\n Jawaban asli. \n"}}
+        self.assertEqual(matched_provider_final_text("Jawaban asli.", response), "\n Jawaban asli. \n")
+        self.assertIsNone(matched_provider_final_text("Jawaban lain.", response))
+        self.assertIsNone(matched_provider_final_text("Gangguan layanan.", response))
+        self.assertIsNone(matched_provider_final_text("", {"finishReason":"stop", "providerMessage":{"content":" \n"}}))
+        self.assertIsNone(matched_provider_final_text("Jawaban asli.", {**response, "finishReason":"length"}))
+
+    def test_trimmed_runtime_presentation_preserves_exact_observed_provider_output(self):
+        r = self.run_case("multi_boundary_whitespace")
+        self.assertNotIn("unknown", r)
+        self.assertTrue(r["observation"]["complete"])
+        self.assertTrue(r["stored"]["text"].startswith("\n  "))
+        self.assertTrue(r["stored"]["text"].endswith("  \n\n"))
+        self.assertEqual(r["stored"]["text"], [e["params"]["providerMessage"]["content"] for e in r["hostEvents"] if e["method"] == "recordOutput"][0])
 
     def test_actual_catalog_hash_tamper_fails_before_host_admission(self):
         r = self.run_case("multi_schema_tamper")

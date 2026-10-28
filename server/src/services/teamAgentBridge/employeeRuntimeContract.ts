@@ -37,7 +37,7 @@ export const employeeRuntimeResponseSchema = z.object({ executionId: uuid, expec
 export const employeeRuntimeToolSchema = z.object({ executionId: uuid, expectedTraceVersion: version, turn: version,
   callOrdinal: z.number().int().nonnegative(), toolCallId: z.string().min(1).max(256), name: z.string().min(1), args: z.unknown() }).strict()
 export const employeeRuntimeOutputSchema = z.object({ executionId: uuid, expectedTraceVersion: version,
-  providerRequestId: z.string().min(1).max(256), providerMessage: z.object({ role: z.literal('assistant'), content: z.string().trim().min(1).max(4000) }).strict() }).strict()
+  providerRequestId: z.string().min(1).max(256), providerMessage: z.object({ role: z.literal('assistant'), content: z.string().min(1).max(4000).refine(text => !!text.trim()) }).strict() }).strict()
 export interface EmployeeRuntimeSource { source: CommunicationSource; fingerprint: string; value: unknown }
 export interface EmployeeRuntimeHostPort {
   begin(grant: BridgeGrant, scope: CommunicationScope, sources: CommunicationSource[]): Promise<EmployeeRuntimeTicket>

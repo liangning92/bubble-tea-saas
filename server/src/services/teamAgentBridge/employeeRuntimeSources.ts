@@ -91,7 +91,7 @@ export async function readEmployeeRuntimeSource(db: any, grant: BridgeGrant, sco
     const call=prior.responses?.flatMap((r:any)=>r.providerMessage?.tool_calls||[]).find((x:any)=>x.id===send?.toolCallId)
     let args:any;try{args=call&&JSON.parse(call.function.arguments)}catch{deny()}
     const final=prior.responses?.at(-1);const actualText=call?args?.text:final?.finishReason==='stop'?final.providerMessage?.content:undefined
-    if(!message||message.id!==source.questionMessageId||message.seq<fromSeq||message.authorId!=='agent:'+grant.agentId||message.agent?.agentId!==grant.agentId||message.text!==actualText)deny()
+    if(!message||message.id!==source.questionMessageId||message.seq<fromSeq||message.authorId!=='agent:'+grant.agentId||message.agent?.agentId!==grant.agentId||typeof actualText!=='string'||message.text!==actualText.trim())deny()
     const refs:CommunicationSource[]=prior.sources.flatMap((s:any)=>s.source.kind==='conversation'?[s.source]:s.source.kind==='employee_exchange'?(s.value?.employeeSources||[]):[])
     const unique=[...new Map(refs.map(s=>[employeeRuntimeDigest(s),s])).values()].slice(0,50)
     if(!unique.length||unique.some(s=>s.kind!=='conversation'))deny()

@@ -142,7 +142,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       await fresh(tx,s,false)
       const response = s.responses.at(-1)
       const call = response?.providerMessage.tool_calls?.find((c:any)=>c.function.name==='employee_send_message')
-      const args = s.phase==='final'&&response?.finishReason==='stop'?{text:response.providerMessage.content}:call && sendMessage.parse(JSON.parse(call.function.arguments))
+      const args = s.phase==='final'&&response?.finishReason==='stop'?{text:response.providerMessage.content.trim()}:call && sendMessage.parse(JSON.parse(call.function.arguments))
       if (!args || input.purpose !== 'message' || input.requestId !== s.ticket.requestId || textHash(args.text)!==input.textHash) fail()
       return { decision:'allow',executionId:s.ticket.executionId,compartmentKey:scope.compartmentKey,audienceHash:scope.audienceHash,textHash:input.textHash,requestId:input.requestId,dataClasses:['operational'],sources:s.sources.map(x=>x.source) }
     },
