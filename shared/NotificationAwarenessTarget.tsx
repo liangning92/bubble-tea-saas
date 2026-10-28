@@ -18,7 +18,8 @@ export function NotificationAwarenessTarget() {
     const visible = new IntersectionObserver(entries => {
       if (document.visibilityState !== 'visible') return
       for (const entry of entries) if (entry.isIntersecting && entry.intersectionRatio >= .1) {
-        const source = (entry.target as HTMLElement).dataset
+        const source = (entry.target as HTMLElement).closest<HTMLElement>('[data-notice-object]')?.dataset
+        if (!source) continue
         for (const item of items.filter(item => item.objectId === source.noticeObject &&
           (!item.kind.startsWith('approval_') || !!item.status && source.noticeStatus === item.status) &&
           (!source.noticeEvent || source.noticeEvent === item.event) &&
@@ -32,7 +33,12 @@ export function NotificationAwarenessTarget() {
     const observed = new Set<Element>()
     const observe = () => {
       for (const old of observed) if (!old.isConnected) { visible.unobserve(old); observed.delete(old) }
-      for (const element of document.querySelectorAll<HTMLElement>('[data-notice-object]')) if (items.some(item => item.objectId === element.dataset.noticeObject) && !observed.has(element)) { observed.add(element); visible.observe(element) }
+      for (const element of document.querySelectorAll<HTMLElement>('[data-notice-object]')) if (items.some(item => item.objectId === element.dataset.noticeObject)) {
+        // A long detail/table can exceed the viewport. Observe its first visible
+        // content block, rather than requiring 10% of the entire form on screen.
+        const content = element.firstElementChild || element
+        if (!observed.has(content)) { observed.add(content); visible.observe(content) }
+      }
     }
     observe()
     const mutations = new MutationObserver(changes => {
