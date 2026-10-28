@@ -489,8 +489,11 @@ export function teamCommunication(db: DB = prisma) {
           if (defaults && !defaults.enabled) fail(409, 'TEAM_WORKFLOW_PAUSED')
         }
         const policy = await read(tx, a.storeId, `workflow.policy.${id}`)
+        const agentSettings = policy?.management ? await read(tx, a.storeId, 'ai.agent.settings') : null
+        const nativeHermes = !!await tx.config.findUnique({ where: { storeId_key: { storeId: a.storeId, key: employeeRouteKey(id) } } }) ||
+          !!(policy?.management && agentSettings?.allChannelsAllowed && process.env.EMPLOYEE_HERMES_ENABLED === '1' && process.env.EMPLOYEE_HERMES_STORE_ID === a.storeId)
         const humanDraftRequiresFreshContext = !routineAuthorization && !managementAuthorization && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId
-        const humanTakeover = !routineAuthorization && !managementAuthorization && (policy?.origin !== 'store_default' || v.takeover === true) && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
+        const humanTakeover = !routineAuthorization && !managementAuthorization && (!nativeHermes && policy?.origin !== 'store_default' || v.takeover === true) && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
         if (humanTakeover && !aiDraftId && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
         let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; managementAuthorization?: ManagementAuthorization; authorizedBy?: string } | undefined
         if (aiDraftId) {
