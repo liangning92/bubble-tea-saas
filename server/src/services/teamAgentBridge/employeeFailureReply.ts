@@ -51,7 +51,10 @@ export async function sendEmployeeFailureReply(tx: any, storeId: string, event: 
   const grant = await resolveGrant(tx), access = await readAuthorizedBridgeChannel(tx, grant, route.task, event.channelId)
   const source = await readTeam<any>(tx, storeId, `message.${event.channelId}.${String(event.sourceSeq).padStart(12,'0')}`)
   if (!source || source.id !== event.sourceMessageId || source.authorId !== event.sourceStaffId || source.seq < access.fromSeq || source.ai || source.agent) deny()
-  const text = employeeFailureText(String(state.fault?.code || 'EMPLOYEE_RUNTIME_EXPIRED'), source.text || '')
+  // A saved permission refusal remains the useful explanation even if the model
+  // later exhausts its turn budget. Never replace it with a generic service error.
+  const permissionDenied = state.tools?.some((tool:any) => tool.value?.ok === false && /^(EMPLOYEE_TOOL_RESULT_NOT_VISIBLE|EMPLOYEE_TOOL_DISABLED_BY_SETTINGS|EMPLOYEE_BUSINESS_ACTION_NOT_GRANTED)$/.test(tool.value.code || ''))
+  const text = employeeFailureText(permissionDenied ? 'EMPLOYEE_PERMISSION_DENIED' : String(state.fault?.code || 'EMPLOYEE_RUNTIME_EXPIRED'), source.text || '')
   const reference = { kind: 'conversation' as const, channelId: event.channelId, messageId: source.id, seq: source.seq }
   const native: any = { config: tx.config, staff: tx.staff, user: tx.user, financeAuditLog: tx.financeAuditLog, store: tx.store }
   native.$transaction = async (operation: any) => operation(native)

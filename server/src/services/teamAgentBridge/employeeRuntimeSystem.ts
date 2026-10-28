@@ -1,4 +1,4 @@
-import { EMPLOYEE_RUNTIME_INSTRUCTION, PREVIOUS_EMPLOYEE_RUNTIME_INSTRUCTION, LEGACY_EMPLOYEE_RUNTIME_INSTRUCTION } from './employeeRuntimeContract'
+import { EMPLOYEE_RUNTIME_INSTRUCTION, EMPLOYEE_RUNTIME_REPLY_INSTRUCTION, PREVIOUS_EMPLOYEE_RUNTIME_INSTRUCTION, LEGACY_EMPLOYEE_RUNTIME_INSTRUCTION } from './employeeRuntimeContract'
 import { join } from 'path'
 import { createHash } from 'crypto'
 const digest=(s:string)=>createHash('sha256').update(s).digest('hex')
@@ -11,7 +11,7 @@ export function employeeSystemTemplateHash(messages: unknown, root: string, exec
   // Only exact reviewed server-authored instruction versions share this template.
   // No user-authored text or arbitrary prompt region is removed.
   let content=messages[0].content
-  for(const instruction of [EMPLOYEE_RUNTIME_INSTRUCTION,PREVIOUS_EMPLOYEE_RUNTIME_INSTRUCTION])content=content.split(instruction).join(LEGACY_EMPLOYEE_RUNTIME_INSTRUCTION)
+  for(const instruction of [EMPLOYEE_RUNTIME_INSTRUCTION,EMPLOYEE_RUNTIME_REPLY_INSTRUCTION,PREVIOUS_EMPLOYEE_RUNTIME_INSTRUCTION])content=content.split(instruction).join(LEGACY_EMPLOYEE_RUNTIME_INSTRUCTION)
   // Longest exact path first; arbitrary paths and any additional context survive
   // and therefore fail the pinned hash. No regex that removes unknown prose.
   for(const [path,label]of[[join(execution,'profiles','employee_work'),'$PROFILE'],[home,'$HOME'],[execution,'$EXECUTION']])content=content.split(path).join(label)

@@ -25,14 +25,16 @@ export async function audienceAllows(db:any, g:BridgeGrant, scope:CommunicationS
 }
 
 /** These checks concern data returned by business tools, not the vocabulary of a question. */
-export async function assertToolAudience(db:any,g:BridgeGrant,scope:CommunicationScope,name:string,args:any) {
-  const required=name==='employee_manage_finance'?(args?.action==='list_recent_expenses'?['finance.read','cost.read']:['finance.read'])
+export function toolAudiencePermissions(name:string,args:any):string[] {
+  return name==='employee_manage_finance'?(args?.action==='list_recent_expenses'?['finance.read','cost.read']:['finance.read'])
     :name==='employee_manage_procurement'?['purchases.read','cost.read']
     :name==='employee_manage_marketing'&&args?.action==='query_products'?['profit.read','cost.read']
     :name==='employee_manage_operations'&&['list_pending_leaves','review_leave'].includes(args?.action)?['staff.private.read']
 
     :[]
-  for(const permission of required)if(!await audienceAllows(db,g,scope,permission))throw new TeamError(403,'EMPLOYEE_TOOL_RESULT_NOT_VISIBLE')
+}
+export async function assertToolAudience(db:any,g:BridgeGrant,scope:CommunicationScope,name:string,args:any) {
+  for(const permission of toolAudiencePermissions(name,args))if(!await audienceAllows(db,g,scope,permission))throw new TeamError(403,'EMPLOYEE_TOOL_RESULT_NOT_VISIBLE')
 }
 
 export async function visibleBusinessData(db:any,g:BridgeGrant,scope:CommunicationScope,data:any) {
