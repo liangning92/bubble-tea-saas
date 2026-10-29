@@ -1,7 +1,7 @@
 import {test,expect,jest} from '@jest/globals'
 import {saveActivityInTransaction} from '../src/services/ActivityService'
 import {executeDailySpecial} from '../src/services/teamAgentBridge/employeeDailySpecials'
-import {posterVisionMessages} from '../src/services/teamAgentBridge/employeePosterPreview'
+import {posterVisionMessages,publicProductPosterUrls} from '../src/services/teamAgentBridge/employeePosterPreview'
 import {assertPublicationContext} from '../src/services/teamAgentBridge/employeeOperationAuthority'
 function fixture(){
  const rows:any[]=[],p={id:'p',storeId:'store',status:'active',name:'Brown Sugar Pearl Sundae',costPrice:4891,image:'/uploads/p.webp',specs:[{id:'spec',name:'Regular',price:16000,isDefault:true}],images:[]}
@@ -66,4 +66,10 @@ test('shared conflicts honor expiry, channel and excluded product scopes',async(
  const f=fixture(),r:any=await executeDailySpecial(f.db,'store',input);const row=f.rows.find(r=>r.key.startsWith('marketing.unified.activity.'));const a={...JSON.parse(row.value),...change};row.value=JSON.stringify(a)
  await expect(saveActivityInTransaction(f.db,'store',{name:'Separate scope',type:'fixed',status:'published',productIds:['p'],specIds:['spec'],channels:['DINE_IN'],startsAt:'2026-10-29T00:00:00Z',rule:{amount:500}})).resolves.toMatchObject({type:'fixed'})
  }
+})
+
+test('poster preview cannot read private attachments or an unlinked activity image',()=>{
+ expect(()=>publicProductPosterUrls({imageUrl:'/uploads/foreign.png'},{image:'/uploads/actual.png'})).toThrow('POSTER_LOCAL_LINKED_IMAGE_REQUIRED')
+ for(const image of ['/uploads/.employee-private/id','/uploads/.training-private/id','/uploads/%2eemployee-private/id','/uploads/media/../.employee-private/id'])expect(publicProductPosterUrls({imageUrl:image},{image})).toEqual([])
+ expect(publicProductPosterUrls({imageUrl:'/uploads/media/actual.webp'},{image:'/uploads/media/actual.webp'})).toEqual(['/uploads/media/actual.webp'])
 })

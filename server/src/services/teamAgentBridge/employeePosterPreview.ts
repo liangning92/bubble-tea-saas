@@ -6,11 +6,16 @@ import sharp from 'sharp'
 import { chromium } from 'playwright-core'
 
 const sha=(b:Buffer|string)=>createHash('sha256').update(b).digest('hex')
+export function publicProductPosterUrls(activity:any,product:any):string[]{
+  const linked=[...new Set([product.image,...(product.images||[]).map((p:any)=>p.media?.url)].filter(Boolean))] as string[]
+  if(!activity.imageUrl||!linked.includes(activity.imageUrl))throw Error('POSTER_LOCAL_LINKED_IMAGE_REQUIRED')
+  return linked.filter(url=>{try{const decoded=decodeURIComponent(url).replace(/\\/g,'/');return /^\/uploads\/[^?#]+$/.test(decoded)&&!decoded.toLowerCase().split('/').some(part=>['.employee-private','.training-private','..'].includes(part))}catch{return false}})
+}
 /** Render the exact bundled renderer used by admin and television. The isolated
  * browser has no network access; only already linked local product images enter it. */
 export async function renderDailyPoster(activity:any,product:any,format:'portrait'|'tv'='portrait'){
   const root=await fs.realpath(process.env.UPLOADS_PATH||path.resolve(__dirname,'../../../uploads'))
-  const urls=[...new Set([activity.imageUrl,product.image,...(product.images||[]).map((p:any)=>p.media?.url)].filter(Boolean))] as string[]
+  const urls=publicProductPosterUrls(activity,product)
   const images:Record<string,string>={},imageHashes:Record<string,string>={}
   for(const url of urls){
     if(!/^\/uploads\/[^?#]+$/.test(url))continue
