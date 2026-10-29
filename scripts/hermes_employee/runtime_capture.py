@@ -56,6 +56,7 @@ class AuthorizedToolResult:
     value: object
     sources: list
     trace_version: int
+    tool_call_id: str | None = None
 
 
 class RuntimeEnvironment:
@@ -258,6 +259,9 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
     capture_failed = False
     trace_lock = threading.RLock()
     tool_lock = threading.RLock()
+    # Execution-local sidecar. Only short, exact receipt references cross the
+    # SDK's text-output budgets; actual values are restored before host admission.
+    trusted_tool_results = {}
     provider_url = context["providerBaseUrl"].rstrip("/") + "/chat/completions"
     from urllib.parse import urlsplit
     parsed = urlsplit(context["providerBaseUrl"])
@@ -355,7 +359,7 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
         try:
             raw = request.content.decode("utf-8")
             actual = json.loads(raw)
-            actual["messages"] = poster_vision_messages(actual.get("messages", []))
+            actual["messages"] = poster_vision_messages(expand_trusted_tool_results(actual.get("messages", []), trusted_tool_results))
             raw = json.dumps(actual, ensure_ascii=False, separators=(",", ":"))
             request = httpx.Request(request.method, request.url, headers={k:v for k,v in request.headers.items() if k.lower() != "content-length"}, content=raw.encode(), extensions=request.extensions)
             if actual.get("model") != context["model"]:
@@ -419,6 +423,13 @@ def run_employee(context: dict, *, provider_send: Callable, tool_execute: Callab
                         result = returned
                     encoded = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
                     observed["toolEvents"][index].update(result=retain(result), resultHash=digest(encoded), complete=True)
+                    if isinstance(returned, AuthorizedToolResult) and returned.tool_call_id:
+                        call_id = returned.tool_call_id
+                        reference = {"trustedBackendReceipt": digest(execution + ":" + call_id + ":" + encoded)}
+                        if call_id in trusted_tool_results:
+                            raise RuntimeError("DUPLICATE_TRUSTED_TOOL_RECEIPT")
+                        trusted_tool_results[call_id] = {"reference": reference, "encoded": encoded}
+                        return json.dumps(reference, separators=(",", ":"))
                     return encoded
                 except Exception:
                     capture_failed = True
@@ -522,6 +533,32 @@ def parse_provider_response(record: dict) -> dict:
     return {"providerRequestId": request_id, "finishReason": finish, "providerMessage": message}
 
 
+def expand_trusted_tool_results(messages, receipts):
+    """Restore only exact server-issued references for this execution/call ID.
+
+    Model prose, unknown references, changed values and non-tool history are never
+    repaired or trusted. Backend history validation remains unchanged and strict.
+    """
+    result = []
+    for message in messages:
+        receipt = receipts.get(message.get("tool_call_id")) if message.get("role") == "tool" else None
+        if receipt is None:
+            result.append(message)
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            raise RuntimeError("TRUSTED_TOOL_REFERENCE_MISMATCH")
+        stripped = re.sub(r"\n\n\[(?:Tool loop|Tool guardrail|Identical call)[^\]]*\]", "", content, flags=re.S).strip()
+        try:
+            reference = json.loads(stripped)
+        except (ValueError, TypeError):
+            raise RuntimeError("TRUSTED_TOOL_REFERENCE_MISMATCH")
+        if reference != receipt["reference"]:
+            raise RuntimeError("TRUSTED_TOOL_REFERENCE_MISMATCH")
+        result.append({**message, "content": receipt["encoded"]})
+    return result
+
+
 def poster_vision_messages(messages):
     result, pending = [], []
     def flush():
@@ -534,10 +571,15 @@ def poster_vision_messages(messages):
         try:
             if message.get("role") == "tool" and isinstance(message.get("content"), str): value = json.loads(re.sub(r"\n\n\[(?:Tool loop|Tool guardrail|Identical call)[^\]]*\]", "", message["content"], flags=re.S).strip())
         except (ValueError, TypeError): pass
-        picture = value.get("poster", {}).get("displayImage") if isinstance(value, dict) else None
+        poster = value.get("poster") if isinstance(value, dict) else None
+        envelope = value.get("data") if isinstance(value, dict) else None
+        native = envelope.get("data") if isinstance(envelope, dict) else None
+        if not poster and isinstance(native, dict):
+            poster = native.get("poster")
+        picture = poster.get("displayImage") if isinstance(poster, dict) else None
         if isinstance(picture, dict) and str(picture.get("dataUrl", "")).startswith("data:image/jpeg;base64,"):
             pending.append({"type": "image_url", "image_url": {"url": picture["dataUrl"], "detail": "high"}})
-            del value["poster"]["displayImage"]
+            del poster["displayImage"]
             result.append({**message, "content": json.dumps(value, ensure_ascii=False, separators=(",", ":"))})
         else: result.append(message)
     flush()
@@ -628,7 +670,7 @@ def run_ticket(ticket: dict, config: dict, port, *, provider_send: Callable) -> 
                 raise RuntimeError("TRUSTED_TOOL_RECEIPT_REQUIRED")
             pending.remove(match)
             if not pending: phase = "input_ready"
-            return AuthorizedToolResult(receipt["value"], receipt["sources"], version)
+            return AuthorizedToolResult(receipt["value"], receipt["sources"], version, call["id"])
 
     tools = {item["function"]["name"]: item["function"] for item in ticket["tools"]}
     context = {**config, "purpose": "employee_work", "executionId": execution,

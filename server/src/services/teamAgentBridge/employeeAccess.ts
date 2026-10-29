@@ -2,6 +2,7 @@ import { TeamError, readTeam } from '../TeamCommunicationService'
 import { userAccessV2 } from '../StaffPermissionV2Service'
 import { defaultStaffPermissions } from '../StaffPermissionCatalog'
 import type { BridgeGrant, CommunicationScope } from './contract'
+import { backendOperation } from '../ManagementBackendRegistry'
 
 /** Resolve the current recipient's policy, never borrow the sponsoring user's role. */
 export async function audienceAllows(db:any, g:BridgeGrant, scope:CommunicationScope, permission:string):Promise<boolean> {
@@ -67,6 +68,14 @@ export async function assertToolSettings(db:any,storeId:string,name:string,args:
     :name.includes('schedule')||name.includes('staff')||name.includes('operations')||name.includes('training')||name==='employee_submit_request'?'staff'
     :name==='employee_send_message'?'channels':null
   const read=name.startsWith('employee_read_')||readActions.includes(args?.action)
+  if(name==='employee_backend'&&args?.action==='execute'){
+    const op=backendOperation(args.operationId)
+    if(op){
+      const domain=(op.permission||'').split('.')[0]
+      const module=op.path.startsWith('/api/marketing')?'marketing':({products:'products',prices:'products',inventory:'inventory',purchases:'inventory',members:'members',finance:'finance',salary:'staff',staff:'staff',attendance:'staff',schedules:'staff',training:'staff',deposits:'staff',rewards:'staff',hygiene:'hygiene',team:'channels',channels:'channels'} as Record<string,string>)[domain]
+      if(module&&!s.permissions?.[module]?.[op.httpReadMethod?'read':'write'])throw new TeamError(403,'EMPLOYEE_TOOL_DISABLED_BY_SETTINGS')
+    }
+  }
   if(module&&!s.permissions?.[module]?.[read?'read':'write'])throw new TeamError(403,'EMPLOYEE_TOOL_DISABLED_BY_SETTINGS')
 }
 

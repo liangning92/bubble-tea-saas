@@ -7,8 +7,12 @@ import prisma from '../config/database'
 import { ACTIVITY_PREFIX, ensureMigrated, listActivities, saveActivity, quoteActivities, migrateActivities, publicActivities, records, putRecord, createActivityGroup, joinActivityGroup, fulfilActivityGrant, notifyActivities, claimActivityCoupon, linkActivityReferral } from '../services/ActivityService'
 import { summarizeActivityPerformance } from '../utils/activityPerformance'
 import { activityState } from '../utils/activities'
+import { describeNativeBody } from '../utils/validation'
+import { activitySchema } from '../services/ActivityService'
+import { renderDailyPoster } from '../services/ActivityPosterPreviewService'
 
 const router=Router()
+const posterPreviewSchema=z.object({version:z.number().int().positive(),format:z.enum(['portrait','tv']).default('portrait')}).strict()
 router.use(authenticate,authorize('admin','manager','cashier'))
 router.use(async(req:AuthRequest,res,next)=>{try{if(!req.user?.storeId)return res.status(403).json({code:403,message:'Store is required'});if(req.query.storeId&&req.query.storeId!==req.user.storeId)return res.status(403).json({code:403,message:'Store access denied'});if(!req.path.startsWith('/migration'))await ensureMigrated(req.user.storeId);next()}catch(error:any){res.status(409).json({code:409,message:error.message})}})
 const run=(fn:(req:AuthRequest)=>Promise<any>)=>async(req:AuthRequest,res:any)=>{try{res.json({code:200,data:await fn(req)})}catch(error:any){res.status(error instanceof z.ZodError?400:409).json({code:error instanceof z.ZodError?400:409,message:error.message})}}
@@ -24,14 +28,24 @@ router.get('/performance',authorize('admin','manager'),run(async req=>{
 router.get('/offline-snapshot',run(req=>activityOfflineSnapshot(req.user!.storeId)))
 router.get('/display',run(req=>publicActivities(req.user!.storeId)))
 router.get('/resources',run(async req=>{const storeId=req.user!.storeId;const [products,rewards,coupons,categories,assets]=await Promise.all([prisma.product.findMany({where:{storeId,status:'active'},include:{category:true,specs:true,images:{include:{media:true}},addons:{include:{addon:true}}}}),prisma.rewardCatalog.findMany({where:{storeId,isActive:true}}),prisma.coupon.findMany({where:{storeId,status:'active'}}),prisma.campaignCategory.findMany({where:{storeId},orderBy:{sortOrder:'asc'}}),prisma.mediaAsset.findMany({where:{storeId,kind:'image'}})]);return {products:await Promise.all(products.map(async product=>({...product,imageVariants:await posterImageVariants(product,assets)}))),rewards,coupons,categories}}))
+router.post('/:id/poster-preview',authorize('admin','manager'),describeNativeBody(posterPreviewSchema),run(async req=>{
+ const input=posterPreviewSchema.parse(req.body)
+ const activity=(await listActivities(req.user!.storeId)).find(a=>a.id===req.params.id)
+ if(!activity)throw Error('ACTIVITY_NOT_FOUND')
+ if(activity.version!==input.version)throw Error('ACTIVITY_VERSION_CHANGED')
+ if(activity.type!=='special_price'||activity.productIds.length!==1)throw Error('POSTER_PREVIEW_REQUIRES_SINGLE_PRODUCT_SPECIAL_PRICE')
+ const product=await prisma.product.findFirst({where:{id:activity.productIds[0],storeId:req.user!.storeId,deletedAt:null,status:'active'},include:{specs:true,images:{include:{media:true}}}})
+ if(!product)throw Error('ACTIVITY_PRODUCT_NOT_FOUND')
+ return {poster:await renderDailyPoster(activity,product,input.format),newSpendCents:0}
+}))
 const quoteSchema=z.object({items:z.array(z.object({productId:z.string(),specId:z.string(),quantity:z.number().int().min(1).max(500),unitPrice:z.number().int().min(0),addons:z.array(z.object({name:z.string(),price:z.number().int().min(0),qty:z.number().int().min(1).max(100).optional()})).optional()})).min(1).max(100).refine(items=>items.reduce((sum,i)=>sum+i.quantity,0)<=5000,'Maximum 5000 cups'),channel:z.string().optional(),channelId:z.string().optional(),paymentMethod:z.string().optional(),memberId:z.string().optional(),couponId:z.string().optional(),pointsRequested:z.number().int().min(0).optional(),groupId:z.string().optional(),giftSelections:z.record(z.string()).optional(),taxEnabled:z.boolean().optional()})
 router.post('/claim',run(req=>{const p=z.object({activityId:z.string(),memberId:z.string(),requestId:z.string().uuid()}).parse(req.body);return claimActivityCoupon(req.user!.storeId,p.activityId,p.memberId,p.requestId)}))
 router.post('/referral',run(req=>{const p=z.object({memberId:z.string(),inviterCode:z.string().min(1).max(100)}).parse(req.body);return linkActivityReferral(req.user!.storeId,p.memberId,p.inviterCode)}))
-router.post('/quote',run(req=>quoteActivities(req.user!.storeId,quoteSchema.parse(req.body) as any)))
+router.post('/quote',describeNativeBody(quoteSchema),run(req=>quoteActivities(req.user!.storeId,quoteSchema.parse(req.body) as any)))
 router.post('/migration/preview',authorize('admin','manager'),run(req=>migrateActivities(req.user!.storeId,true)))
 router.post('/migration/apply',authorize('admin','manager'),run(async req=>{const result=await migrateActivities(req.user!.storeId,false);notifyActivities(req.user!.storeId);return result}))
-router.post('/',authorize('admin','manager'),run(req=>saveActivity(req.user!.storeId,req.body)))
-router.put('/:id',authorize('admin','manager'),run(req=>{const {version,...data}=req.body;return saveActivity(req.user!.storeId,data,req.params.id,version)}))
+router.post('/',authorize('admin','manager'),describeNativeBody(activitySchema),run(req=>saveActivity(req.user!.storeId,req.body)))
+router.put('/:id',authorize('admin','manager'),describeNativeBody(activitySchema.innerType().extend({version:z.number().int().positive()})),run(req=>{const {version,...data}=req.body;return saveActivity(req.user!.storeId,data,req.params.id,version)}))
 router.delete('/:id',authorize('admin','manager'),run(async req=>{const a=(await listActivities(req.user!.storeId)).find(a=>a.id===req.params.id);if(!a)throw Error('ACTIVITY_NOT_FOUND');const {id,storeId,version,used,source,conflict,...data}=a;return saveActivity(storeId,{...data,status:'ended'},id,version)}))
 router.get('/entitlements/list',run(async req=>{const grants=await records<any>(prisma,req.user!.storeId,'grant.');return grants.filter(g=>!req.query.orderId||g.orderId===req.query.orderId).map(({plan,memberId,inviterId,...g})=>({...g,name:plan.activity.name,type:plan.activity.type}))}))
 router.post('/entitlements/:id/fulfil',run(req=>fulfilActivityGrant(req.user!.storeId,req.params.id)))
