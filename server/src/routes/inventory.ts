@@ -1,4 +1,6 @@
 import {materialRecipeUsage} from '../services/MaterialRecipeUsageService'
+import { operationDateSchema } from '../utils/operationDate'
+import { operationRecords, operationQuerySchema } from '../services/InventoryOperationRecordsService'
 import {stockOutPhoto} from '../services/teamAgentBridge/employeePhotos'
 import { inventoryEvidenceHandler } from '../services/InventoryEvidenceHttp'
 import { getManualCorrection, correctManualStock } from '../services/ManualStockCorrectionService'
@@ -17,6 +19,7 @@ import * as InventoryService from '../services/InventoryService'
 import { getInventoryAlertConfig, saveInventoryAlertConfig, DEFAULT_INVENTORY_ALERT_CONFIG } from '../services/InventoryAlertConfigService'
 
 const router = Router()
+
 const resourceAccess = requireResourceStore(req => prisma.inventory.findUnique({ where: { id: req.params.id }, select: { storeId: true } }))
 
 // Explicitly scoped, immutable download; export permissions are declared in the route manifest.
@@ -24,6 +27,7 @@ router.get('/evidence-export', authenticate, inventoryEvidenceHandler(prisma))
 
 // Validation schemas
 const stockInSchema = z.object({
+  occurredOn: operationDateSchema.optional(),
   inventoryId: z.string(),
   storeId: z.string().optional(),
   expiryDate:z.string().optional(),
@@ -38,6 +42,7 @@ const stockInSchema = z.object({
 })
 
 const stockOutSchema = z.object({
+  occurredOn: operationDateSchema.optional(),
   inventoryId: z.string(),
   storeId: z.string().optional(),
   operationId: z.string().uuid().optional(),
@@ -99,6 +104,16 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
 router.get('/logs/stock-out/:logId/photos/:fileId',authenticate,async(req:AuthRequest,res)=>{
  try{const photo=await stockOutPhoto(prisma,getStoreId(req),req.params.logId,req.params.fileId);res.set({'Cache-Control':'private, no-store','Content-Type':photo.type,'X-Content-Type-Options':'nosniff'});res.send(photo.bytes)}
  catch(error:any){res.status(error.status||error.statusCode||404).json({code:404,message:'INVENTORY_PHOTO_NOT_FOUND'})}
+})
+
+router.get('/operation-records', authenticate, async (req: AuthRequest, res) => {
+  const query = operationQuerySchema.safeParse(req.query)
+  if (!query.success) return res.status(400).json({code:400,message:'INVALID_RECORD_QUERY'})
+  const storeId = getStoreId(req)
+  if (!storeId) return res.status(403).json({code:403,message:'STORE_REQUIRED'})
+  res.set('Cache-Control','no-store')
+  try { res.json({code:200,data:await operationRecords(storeId,query.data)}) }
+  catch (error) { console.error('Operation records query failed',error); res.status(500).json({code:500,message:'RECORD_QUERY_FAILED'}) }
 })
 
 // GET /api/inventory/logs - Get all inventory logs (combined stock-in, stock-out, and adjustments)

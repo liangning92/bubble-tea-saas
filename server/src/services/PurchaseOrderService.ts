@@ -1,4 +1,5 @@
 import { paymentFields, PaymentSource } from './ExpensePaymentService'
+import { operationDate } from '../utils/operationDate'
 import { parseBusinessDate } from '../utils/businessDate'
 import {recalculateInventoryConsumers} from './InventoryQuantityService';
 import {loadInventoryActors} from '../utils/inventoryActors';
@@ -47,7 +48,7 @@ export async function getPendingPurchaseOrders(storeId: string) { return getPurc
 export interface PurchaseInput {
  storeId:string; supplierId?:string; expectedDate?:Date; note?:string; source?:string;
  onlineOrderNumber?:string; createdBy?:string; requestId?:string;
- paymentSource?:PaymentSource; paidDate?:string;
+ paymentSource?:PaymentSource; paidDate?:string; purchasedOn?:string;
  items:Array<{inventoryId:string;quantity:number;inputUnit?:string;unitCost?:number;paidAmount?:number}>;
 }
 async function prepareItems(tx:any,data:PurchaseInput){
@@ -87,12 +88,13 @@ async function syncExpense(tx:any,order:any,payment?:{paymentSource?:PaymentSour
  else if(order.totalAmount>0)await tx.expense.create({data:{...value,...await paymentFields(tx,order.storeId,'online_payment',order.paidAt),storeId:order.storeId,type:'supplies',category:'supplies',referenceType:'purchase',referenceId:order.id}});
 }
 export async function createPurchaseOrder(data:PurchaseInput){
+ const purchasedOn=operationDate(data.purchasedOn);
  const fingerprint=createHash('sha256').update(JSON.stringify(data)).digest('hex');
  const replay=async(db:any)=>{if(!data.requestId)return null;const prior=await db.purchaseOrder.findUnique({where:{requestId:data.requestId},include});if(!prior)return null;if(prior.storeId!==data.storeId||prior.requestFingerprint!==fingerprint)throw new PurchaseOrderError('PURCHASE_IDEMPOTENCY_CONFLICT');return view(prior,db)};
  try{return await prisma.$transaction(async tx=>{
   const previous=await replay(tx);if(previous)return previous;
   const {items,totalAmount,paid}=await prepareItems(tx,data);
-  const order=await tx.purchaseOrder.create({data:{storeId:data.storeId,supplierId:data.supplierId||null,orderNumber:`PO-${randomUUID()}`,source:data.source||'admin',status:data.source==='online'?'awaiting_receipt':'pending',onlineOrderNumber:data.onlineOrderNumber,createdBy:data.createdBy,requestId:data.requestId,requestFingerprint:fingerprint,expectedDate:data.expectedDate,note:data.note,totalAmount,paidAt:paid?(data.paidDate?parseBusinessDate(data.paidDate):new Date()):null,items:{create:items}},include});
+  const order=await tx.purchaseOrder.create({data:{purchasedOn,storeId:data.storeId,supplierId:data.supplierId||null,orderNumber:`PO-${randomUUID()}`,source:data.source||'admin',status:data.source==='online'?'awaiting_receipt':'pending',onlineOrderNumber:data.onlineOrderNumber,createdBy:data.createdBy,requestId:data.requestId,requestFingerprint:fingerprint,expectedDate:data.expectedDate,note:data.note,totalAmount,paidAt:paid?(data.paidDate?parseBusinessDate(data.paidDate):new Date()):null,items:{create:items}},include});
   await syncExpense(tx,order,data);await audit(tx,order,data.createdBy||'system','create',null,order);return view(order,tx);
  })}catch(e:any){if(e.code==='P2002'){const previous=await replay(prisma);if(previous)return previous}throw e}
 }
@@ -106,7 +108,7 @@ export async function editPurchaseOrder(id:string,data:PurchaseInput,actor:strin
   const posted=await tx.expense.findFirst({where:{storeId:old.storeId,referenceType:'purchase',referenceId:id}});
   if(posted?.paymentSource==='drawer_cash'&&old.totalAmount!==totalAmount)throw new PurchaseOrderError('DRAWER_PAYMENT_AMOUNT_IMMUTABLE',400);
   if(old.paidAt&&!paid)throw new PurchaseOrderError('PAID_AMOUNT_REQUIRED',400);
-  const changed=await tx.purchaseOrder.updateMany({where:{id,status:old.status,updatedAt:new Date(expectedVersion)},data:{supplierId:data.supplierId||null,expectedDate:data.expectedDate||null,note:data.note||'',onlineOrderNumber:data.onlineOrderNumber===undefined?old.onlineOrderNumber:data.onlineOrderNumber||null,totalAmount,paidAt:old.paidAt||(paid?new Date():null)}});
+  const changed=await tx.purchaseOrder.updateMany({where:{id,status:old.status,updatedAt:new Date(expectedVersion)},data:{...(data.purchasedOn?{purchasedOn:operationDate(data.purchasedOn)}:{}),supplierId:data.supplierId||null,expectedDate:data.expectedDate||null,note:data.note||'',onlineOrderNumber:data.onlineOrderNumber===undefined?old.onlineOrderNumber:data.onlineOrderNumber||null,totalAmount,paidAt:old.paidAt||(paid?new Date():null)}});
   if(changed.count!==1)throw new PurchaseOrderError('PURCHASE_CHANGED_REFRESH');
   await tx.purchaseOrderItem.deleteMany({where:{purchaseOrderId:id}});
   await tx.purchaseOrderItem.createMany({data:items.map(i=>({...i,purchaseOrderId:id}))});
@@ -141,7 +143,8 @@ export async function updatePurchaseOrderStatus(orderId: string, status: string,
     return prisma.$transaction(async (tx) => { const order = await scopedOrder(tx, orderId, storeId); const changed = await tx.purchaseOrder.updateMany({ where: { id: order.id, status: 'pending' }, data: { status: 'approved' } }); if (!changed.count)
         throw new PurchaseOrderError('Only pending orders can be approved'); return tx.purchaseOrder.findUnique({ where: { id: order.id } }); });
 }
-export async function receivePurchaseOrder(orderId: string, staffId: string, storeId?: string, datesByItem:Array<{itemId:string;manufacturingDate?:string;expiryDate?:string}>=[]) {
+export async function receivePurchaseOrder(orderId: string, staffId: string, storeId?: string, datesByItem:Array<{itemId:string;manufacturingDate?:string;expiryDate?:string}>=[], occurredOnInput?:string) {
+    const occurredOn=operationDate(occurredOnInput);
     return prisma.$transaction(async (tx) => {
         const order = await scopedOrder(tx, orderId, storeId);
         if (order.status === 'received')
@@ -172,7 +175,7 @@ export async function receivePurchaseOrder(orderId: string, staffId: string, sto
                 throw new PurchaseOrderError('Inventory changed during receiving; retry this order');
             await tx.purchaseOrderItem.update({ where: { id: item.id }, data: { receivedQty: quantity, unitCost:receiptUnitCost } });
             const batch = await tx.batch.create({ data: { inventoryId: item.inventoryId, batchNumber: `PO-${order.id}-${item.id}-${randomUUID()}`, quantity, unitCost: receiptUnitCost, status: 'active',...dates } });
-            await tx.stockInLog.create({ data: { inventoryId: item.inventoryId, purchaseOrderId: order.id, batchId: batch.id, quantity, unitCost: receiptUnitCost, totalAmount, supplierId: order.supplierId, staffId, note: JSON.stringify({ version: 1, kind: 'receipt', purchaseOrderId: order.id, orderNumber: order.orderNumber, ledgerUnit: inventory.unit, ledgerQuantity: quantity, inputQuantity: item.inputQuantity ?? quantity, inputUnit: item.inputUnit ?? inventory.unit, inputUnitCost: item.inputUnitCost ?? item.unitCost }) } });
+            await tx.stockInLog.create({ data: { occurredOn, inventoryId: item.inventoryId, purchaseOrderId: order.id, batchId: batch.id, quantity, unitCost: receiptUnitCost, totalAmount, supplierId: order.supplierId, staffId, note: JSON.stringify({ version: 1, kind: 'receipt', purchaseOrderId: order.id, orderNumber: order.orderNumber, ledgerUnit: inventory.unit, ledgerQuantity: quantity, inputQuantity: item.inputQuantity ?? quantity, inputUnit: item.inputUnit ?? inventory.unit, inputUnitCost: item.inputUnitCost ?? item.unitCost }) } });
         }
         await recalculateInventoryConsumers(tx,order.items.map((i:any)=>i.inventoryId));
         return tx.purchaseOrder.findUnique({ where: { id: order.id }, include });

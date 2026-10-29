@@ -1,3 +1,4 @@
+import { operationDateSchema } from '../utils/operationDate'
 import { parseBusinessDate, parseDateBoundary } from '../utils/businessDate'
 import { paymentSourceSchema } from '../services/ExpensePaymentService'
 import { Router } from 'express'
@@ -11,6 +12,7 @@ const router = Router()
 
 // Validation schemas
 const createPOSchema = z.object({
+  purchasedOn: operationDateSchema.optional(),
   storeId: z.string(),
   supplierId: z.string().optional(),
   paymentSource:paymentSourceSchema.optional(),
@@ -146,11 +148,11 @@ router.put('/:id/status', authenticate, authorize('admin', 'manager'), async (re
 })
 
 // POST /api/purchase-orders/:id/receive
-router.post('/:id/receive', authenticate, authorize('admin', 'manager', 'staff'),validateBody(z.object({items:z.array(z.object({itemId:z.string(),expiryDate:z.string().optional(),manufacturingDate:z.string().optional()})).optional()})), async (req: AuthRequest, res) => {
+router.post('/:id/receive', authenticate, authorize('admin', 'manager', 'staff'),validateBody(z.object({occurredOn:operationDateSchema.optional(),items:z.array(z.object({itemId:z.string(),expiryDate:z.string().optional(),manufacturingDate:z.string().optional()})).optional()})), async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
 
-    const order = await PurchaseOrderService.receivePurchaseOrder(id, req.user!.staffId || req.user!.id, req.user!.role === 'admin' && !req.user!.employeeApp ? undefined : getStoreId(req),req.body.items)
+    const order = await PurchaseOrderService.receivePurchaseOrder(id, req.user!.staffId || req.user!.id, req.user!.role === 'admin' && !req.user!.employeeApp ? undefined : getStoreId(req),req.body.items,req.body.occurredOn)
 
     res.json({
       code: 200,
