@@ -3,17 +3,19 @@ import {isEmployeeAppRoute} from '../services/EmployeeAppAccess'
 import {ACCESS_ROUTE_MANIFEST} from '../services/StaffPermissionRouteManifest'
 import {redactAccessData} from '../services/StaffPermissionV2Core'
 import prisma from '../config/database'
+import { registerManagementRouter, BACKEND_OPERATION } from '../services/ManagementBackendRegistry'
 // Declarations attach to the concrete Express route, not the requested URL.
 export function declareAccessRoutes(base:string,router:any){
  for(const layer of router.stack||[]){const route=layer.route;if(!route)continue;const path=base+(route.path==='/'?'':route.path);const specs=Object.fromEntries(Object.keys(route.methods).map(method=>[method,{...(ACCESS_ROUTE_MANIFEST[method.toUpperCase()+' '+path]||{permission:'__unclassified__',ownerOnly:false,export:false,personal:false}),routeKey:method.toUpperCase()+' '+path}]));route.accessSpecs=specs;const methods={...route.methods};route.all(async(req:any,res:any,next:any)=>{
   req.accessDeclaration=specs[req.method.toLowerCase()]||specs.get
   try {
+   if(req[BACKEND_OPERATION]&&req[BACKEND_OPERATION]!==req.accessDeclaration?.routeKey)return res.status(409).json({code:409,message:'BACKEND_MATCHED_ROUTE_CHANGED'})
    if(req.user && !canUseManagementRoute(req.user,req.accessDeclaration))return res.status(403).json({code:403,message:'MANAGEMENT_ACCESS_REQUIRED'})
    if(req.user?.accessRole?.version===2){const denied=await enforceAccessV2(req,res,req.user);if(denied)return denied}
    next()
   } catch(error){next(error)}
  });const guard=route.stack.pop();route.methods=methods;route.stack.unshift(guard)}
- router.use((req:any,_res:any,next:any)=>{const find=(stack:any[],path:string):any=>{for(const layer of stack){if(!layer.match(path))continue;if(layer.route&&(layer.route.methods[req.method.toLowerCase()]||req.method==='HEAD'&&layer.route.methods.get))return layer.route.accessSpecs?.[req.method==='HEAD'?'get':req.method.toLowerCase()];if(layer.handle?.stack){const found=find(layer.handle.stack,path.slice(layer.path.length)||'/');if(found)return found}}};req.accessDeclaration=find(router.stack.filter((x:any)=>x!==router.stack[0]),req.path);next()});const entry=router.stack.pop();router.stack.unshift(entry);return router
+ router.use((req:any,_res:any,next:any)=>{const find=(stack:any[],path:string):any=>{for(const layer of stack){if(!layer.match(path))continue;if(layer.route&&(layer.route.methods[req.method.toLowerCase()]||req.method==='HEAD'&&layer.route.methods.get))return layer.route.accessSpecs?.[req.method==='HEAD'?'get':req.method.toLowerCase()];if(layer.handle?.stack){const found=find(layer.handle.stack,path.slice(layer.path.length)||'/');if(found)return found}}};req.accessDeclaration=find(router.stack.filter((x:any)=>x!==router.stack[0]),req.path);next()});const entry=router.stack.pop();router.stack.unshift(entry);registerManagementRouter(base,router);return router
 }
 export async function enforceAccessV2(req:any,res:any,user:any){
  const access=user.accessRole,spec=req.accessDeclaration

@@ -1,0 +1,141 @@
+/* Disposable PostgreSQL + actual native routes/auth. No production or model IO. */
+const assert=require('node:assert/strict'),path=require('node:path'),{randomUUID}=require('node:crypto');
+const root=path.resolve(__dirname,'../..'),built=n=>require(root+'/server/dist/'+n);
+assert(process.env.BT_TEST_RUN?.startsWith('bt-test-'));
+const uri=new URL(process.env.DATABASE_URL);assert.equal(uri.hostname,'127.0.0.1');assert.equal(uri.pathname,'/team_test');
+const {PrismaClient}=require(root+'/server/node_modules/@prisma/client'),db=new PrismaClient();
+const {declareAccessRoutes}=built('middlewares/staffAccessV2');
+const api=built('services/ManagementBackendRegistry'),policy=built('services/ManagementBackendPolicy');
+const tools=built('services/teamAgentBridge/employeeBackendTool');
+const {canAccessStore}=built('middlewares/auth');
+const passed=[],check=async(name,fn)=>{await fn();passed.push(name);console.log('PASS '+name)};
+const storeId='whole-backend-own-store',other='whole-backend-other-store';let owner,employee;
+const invoke=(actor,operationId,fields={})=>api.invokeManagementBackend(db,actor,{operationId,contractVersion:api.backendVersion(),...fields});
+const description=id=>({id,path:id.slice(id.indexOf(' ')+1),method:id.split(' ')[0],permission:null});
+async function main(){
+ for(const [base,name]of[['/api/products','productRouter'],['/api/config','configRouter'],['/api/categories','categoryRouter'],['/api/team','teamCommunicationRouter'],['/api/marketing/activities','activitiesRouter'],['/api/purchase-orders','purchaseOrderRouter'],['/api/salaries','salaryRouter']]){
+  const files={productRouter:'product',configRouter:'config',categoryRouter:'category',teamCommunicationRouter:'teamCommunication',activitiesRouter:'activities',purchaseOrderRouter:'purchaseOrder',salaryRouter:'salary'};
+  declareAccessRoutes(base,built('routes/'+files[name])[name]);
+ }
+ const tenant=await db.tenant.create({data:{name:'Whole backend isolated test'}});
+ for(const id of [storeId,other])await db.store.create({data:{id,tenantId:tenant.id,name:id}});
+ for(const [role,phone]of[['admin','08919101001'],['staff','08919101002']]){
+  const u=await db.user.create({data:{phone,password:'synthetic-not-login',role,storeId,staff:{create:{storeId,name:role,employeeNumber:'backend-'+role}}},include:{staff:true}});
+  const actor={id:u.id,phone:u.phone,role,staffId:u.staff.id,storeId,issuedAtMs:Date.now()+100};if(role==='admin')owner=actor;else employee={...actor,employeeApp:true};
+ }
+ const cat=await db.category.create({data:{storeId,name:'Own beverages'}}),foreignCat=await db.category.create({data:{storeId:other,name:'Foreign beverages'}});
+ const product=await db.product.create({data:{storeId,categoryId:cat.id,code:'BACKEND-OWN',name:'Own tea'}}),foreignProduct=await db.product.create({data:{storeId:other,categoryId:foreignCat.id,code:'BACKEND-FOREIGN',name:'FOREIGN_SENTINEL'}});
+ await check('catalog is compact, registered native schemas describe real fields',async()=>{
+  const list=api.backendCatalog('products',0,4);assert.equal(list.operations.length,4);assert(!('requestContract'in list.operations[0]));
+  const op=api.backendDescription('POST /api/products');assert(op.requestContract.body.properties.name);assert.equal(op.contractCoverage,'declared_native_validator_only');
+  const activity=api.backendDescription('PUT /api/marketing/activities/:id');assert(activity.requestContract.body.properties.version);assert(activity.requestContract.body.properties.memberOnly);
+  assert.equal(api.backendDescription('GET /api/team/channels').contractCoverage,'native_controller_validation_not_described');
+ });
+ await check('native read uses current account and own store; no foreign admin read',async()=>{
+  const own=await invoke(owner,'GET /api/products');assert.equal(own.ok,true);assert.equal(own.data.data.list.length,1);assert.equal(own.data.data.list[0].name,'Own tea');
+  await assert.rejects(()=>invoke(owner,'GET /api/products/:id',{pathParams:{id:foreignProduct.id}}),/NOT_IN_STORE/);
+  await assert.rejects(()=>invoke(owner,'GET /api/config/:storeId/:key',{pathParams:{storeId:other,key:'storeInfo'}}),/STORE_MISMATCH/);
+  await assert.rejects(()=>invoke(owner,'GET /api/products',{query:{storeId:other}}),/STORE_MISMATCH/);
+  assert.equal(canAccessStore({...owner,storeBound:true},other),false);assert.equal(canAccessStore(owner,other),true);
+ });
+ await check('native validator rejects invalid write; valid native update persists',async()=>{
+  const invalid=await invoke(owner,'POST /api/products',{body:{storeId,name:'Missing category'}});assert.equal(invalid.ok,false);assert.equal(invalid.statusCode,400);
+  const saved=await invoke(owner,'PUT /api/products/:id',{pathParams:{id:product.id},body:{name:'Native updated tea'}});assert.equal(saved.ok,true);assert.equal((await db.product.findUnique({where:{id:product.id}})).name,'Native updated tea');
+  const denied=await invoke(employee,'PUT /api/products/:id',{pathParams:{id:product.id},body:{name:'DENIED'}});assert.equal(denied.ok,false);assert.equal((await db.product.findUnique({where:{id:product.id}})).name,'Native updated tea');
+ });
+ await check('expired account attestation and inactive employee are not accepted',async()=>{
+  const denied=await invoke({...owner,issuedAtMs:1},'GET /api/products');assert.equal(denied.statusCode,401);
+  await db.staff.update({where:{id:employee.staffId},data:{status:'inactive'}});
+  assert.equal((await invoke(employee,'GET /api/products')).statusCode,401);
+  await db.staff.update({where:{id:employee.staffId},data:{status:'active'}});
+ });
+ await check('native config envelopes and batch items cannot expose or replace credentials',async()=>{
+  for(const key of ['apiSettings','integration.meta','xendit.connection','team.communication.ai.settings','staff.access.policy']){
+   const read=await invoke(owner,'GET /api/config/:storeId/:key',{pathParams:{storeId,key}});assert.equal(read.executed,false);assert.equal(read.code,'ACCOUNT_OR_SYSTEM_CONFIGURATION');
+   const batch=await invoke(owner,'POST /api/config/batch',{body:{configs:[{storeId,key,value:'SECRET',category:'store'}]}});assert.equal(batch.executed,false);
+  }
+  await db.config.create({data:{storeId,key:'apiSettings',category:'store',value:JSON.stringify({apiKey:'SECRET_SENTINEL'})}});
+  await db.config.create({data:{storeId,key:'storeInfo',category:'store',value:JSON.stringify({name:'Own Store',apiKey:'NESTED_SENTINEL'})}});
+  const list=await invoke(owner,'GET /api/config');assert(!JSON.stringify(list).includes('SENTINEL'));assert(!('apiSettings'in list.data.data));assert.equal(list.data.data.storeInfo.name,'Own Store');
+  assert(!JSON.stringify(policy.redactBackendSecrets({key:'ordinary',value:JSON.stringify({api_key:'ENCODED_SENTINEL',name:'safe'})})).includes('SENTINEL'));
+ });
+ await check('native payment and publication cannot escape via endpoint or omitted status',async()=>{
+  for(const id of ['POST /api/purchase-orders/:id/confirm-payment','PUT /api/salaries/:id/mark-paid']){
+   const r=await invoke(owner,id,{pathParams:{id:randomUUID()}});assert.equal(r.code,'OWNER_APPROVAL_REQUIRED');assert.equal(r.executed,false);
+  }
+  const r=await invoke(owner,'POST /api/marketing/activities',{body:{name:'not published',status:'published'}});assert.equal(r.code,'EXPLICIT_ACTIVITY_PUBLICATION_REQUIRED');assert.equal(r.executed,false);
+  for(const [id,body]of[['POST /api/staff-points/adjust',{points:-1}],['POST /api/salaries/adjustments',{type:'penalty'}]])assert.equal(policy.backendInputBoundary({...description(id),effect:'business'}, {body}),'OWNER_APPROVAL_REQUIRED');
+  assert.equal(policy.backendInputBoundary({...description('PUT /api/staff/:id'),effect:'business',permission:'staff.write'},{body:{role:'admin'}}),'ACCOUNT_OR_SYSTEM_CONFIGURATION');
+  for(const path of ['/api/marketing/discount-rules','/api/marketing/timed-specials']){
+   for(const status of ['draft','paused','ended'])assert.equal(policy.backendInputBoundary({...description('POST '+path),effect:'business'},{body:{status}}),'EXPLICIT_ACTIVITY_PUBLICATION_REQUIRED');
+   assert.equal(policy.backendInputBoundary({...description('POST '+path),effect:'business'},{body:{status:'inactive'}}),null);
+  }
+  for(const id of ['POST /api/expenses/pos','POST /api/expenses/:id/payment-source','POST /api/marketing/automation/run','POST /api/marketing/automation/run/:campaignId']){const d=description(id);assert.equal(policy.backendEffect(id,d.path,d.method,'finance.write'),'payment')}
+  assert.equal(policy.backendInputBoundary({...description('POST /api/expenses'),effect:'business'},{body:{paymentSource:'drawer_cash'}}),'OWNER_APPROVAL_REQUIRED');
+  const ai=description('POST /api/team/channels/:id/ai/drafts');assert.equal(policy.backendEffect(ai.id,ai.path,ai.method,'personal.messages'),'security');
+ });
+ await check('one entry saves and updates native draft activity with native version contract',async()=>{
+  const body={name:'Native draft fixture',type:'fixed',memberOnly:true,productIds:[product.id],rule:{amount:4000}};
+  const created=await invoke(owner,'POST /api/marketing/activities',{body});assert.equal(created.ok,true);assert.equal(created.data.data.status,'draft');
+  const a=created.data.data,{id,storeId:_store,version,used,source,conflict,state,...editable}=a;
+  const updated=await invoke(owner,'PUT /api/marketing/activities/:id',{pathParams:{id},body:{...editable,version,name:'Updated native draft fixture'}});assert.equal(updated.ok,true);assert.equal(updated.data.data.version,version+1);assert.equal(updated.data.data.status,'draft');
+  const stale=await invoke(owner,'PUT /api/marketing/activities/:id',{pathParams:{id},body:{...editable,version,name:'Stale replacement'}});assert.equal(stale.ok,false);
+  const read=await invoke(owner,'GET /api/marketing/activities');assert.equal(read.data.data.find(a=>a.id===id).name,'Updated native draft fixture');
+ });
+ await check('unified entry obeys saved module switches immediately',async()=>{
+  const {writeTeam}=built('services/TeamCommunicationService'),{assertToolSettings}=built('services/teamAgentBridge/employeeAccess');
+  await writeTeam(db,storeId,'ai.agent.settings',{enabled:true,employeeBridgeEnabled:true,permissions:{marketing:{read:true,write:false}}});
+  await assert.rejects(()=>assertToolSettings(db,storeId,'employee_backend',{action:'execute',operationId:'PUT /api/marketing/activities/:id'}),/DISABLED_BY_SETTINGS/);
+  await assertToolSettings(db,storeId,'employee_backend',{action:'execute',operationId:'GET /api/marketing/activities'});
+  await db.config.delete({where:{storeId_key:{storeId,key:'team.communication.ai.agent.settings'}}});
+ });
+ await check('upgrades invalidate captured contract before native dispatch',async()=>{
+  const prior=api.backendVersion();process.env.APP_SOURCE_SHA='synthetic-new-reviewed-sha';assert.notEqual(api.backendVersion(),prior);
+  const result=await api.invokeManagementBackend(db,owner,{operationId:'PUT /api/products/:id',contractVersion:prior,pathParams:{id:product.id},body:{name:'OLD_CONTRACT'}});assert.equal(result.code,'BACKEND_CONTRACT_CHANGED');assert.equal(result.executed,false);
+  assert.equal((await db.product.findUnique({where:{id:product.id}})).name,'Native updated tea');
+ });
+ await check('native team message writes and finish delivery hook execute normally',async()=>{
+  const channel=await invoke(owner,'POST /api/team/channels',{body:{requestId:randomUUID(),title:'Native isolated channel',kind:'group',members:[employee.staffId]}});assert.equal(channel.ok,true);
+  const id=channel.data.data.id;
+  const reminders=built('services/EmployeeReminderService'),wake=reminders.wakeEmployeeDelivery,woken=[];reminders.wakeEmployeeDelivery=s=>woken.push(s);
+  let sent;try{sent=await invoke(owner,'POST /api/team/channels/:id/messages',{pathParams:{id},body:{requestId:randomUUID(),text:'Native isolated message',files:[]}})}finally{reminders.wakeEmployeeDelivery=wake}
+  assert.equal(sent.ok,true);assert.equal(sent.data.data.text,'Native isolated message');assert.deepEqual(woken,[storeId]);
+  const read=await invoke(owner,'GET /api/team/channels/:id/messages',{pathParams:{id}});assert.equal(read.ok,true);assert(JSON.stringify(read.data).includes('Native isolated message'));
+ });
+ await check('late native completion survives caller timeout and is never dispatched twice',async()=>{
+  const {Router}=require(root+'/server/node_modules/express'),router=Router();let writes=0,finish;
+  router.post('/slow',async(_req,res)=>{await new Promise(r=>{finish=r});writes++;res.json({code:200,data:{persisted:true}})});
+  const route=router.stack[0].route;route.accessSpecs={post:{permission:'products.write',ownerOnly:false,export:false,personal:false,routeKey:'POST /api/isolated-backend-fixture/slow'}};
+  api.registerManagementRouter('/api/isolated-backend-fixture',router);
+  const scope={compartmentKey:'late-scope',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId};
+  const args={action:'execute',operationId:'POST /api/isolated-backend-fixture/slow',contractVersion:api.backendVersion(),body:{}};
+  const reservation=await tools.reserveBackendOperation(db,storeId,scope,'late-source','late-execution','late-call',args);
+  const pending=tools.executeBackendTool(db,g,scope,'late-source',args,reservation,async()=>{});
+  while(!finish)await new Promise(r=>setTimeout(r,5));
+  const during=await tools.executeBackendTool(db,g,scope,'late-source',{action:'status',receiptId:reservation.id});assert.equal(during.state,'running');assert.equal(during.retryAllowed,false);
+  const restart=await tools.reserveBackendOperation(db,storeId,scope,'late-source','late-execution','late-call',args);
+  assert.equal((await tools.executeBackendTool(db,g,scope,'late-source',args,restart,async()=>{throw Error('MUST_NOT_DISPATCH')})).code,'BACKEND_OUTCOME_UNKNOWN');
+  finish();assert.equal((await pending).ok,true);assert.equal(writes,1);
+  const result=await tools.executeBackendTool(db,g,scope,'late-source',{action:'status',receiptId:reservation.id});assert.equal(result.state,'complete');assert.equal(result.data.data.persisted,true);assert.equal(writes,1);
+ });
+ await check('two-phase operation receipt prevents replay and rechecks audience',async()=>{
+  const scope={compartmentKey:'scope-A',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId};
+  const args={action:'execute',operationId:'PUT /api/products/:id',contractVersion:api.backendVersion(),pathParams:{id:product.id},body:{name:'Once only'}};
+  const reservation=await tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-one','call-one',args);
+  const first=await tools.executeBackendTool(db,g,scope,'source-message',args,reservation,async()=>{});assert.equal(first.ok,true);assert.equal(first.state,'complete');
+  await db.product.update({where:{id:product.id},data:{name:'Later change'}});
+  const secondReservation=await tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-one','call-one',args);assert.equal(secondReservation.created,false);
+  const second=await tools.executeBackendTool(db,g,scope,'source-message',args,secondReservation,async()=>{throw Error('MUST_NOT_DISPATCH')});assert.equal(second.receiptId,first.receiptId);assert.equal((await db.product.findUnique({where:{id:product.id}})).name,'Later change');
+  await assert.rejects(()=>tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-one','call-one',{...args,body:{name:'changed'}}),/IDENTITY_CHANGED/);
+  const foreign=await tools.executeBackendTool(db,g,{...scope,compartmentKey:'scope-B'},'source-message',{action:'status',receiptId:first.receiptId});assert.equal(foreign.code,'BACKEND_RECEIPT_NOT_VISIBLE');
+  await db.staff.update({where:{id:employee.staffId},data:{status:'inactive'}});
+  const revoked=await tools.executeBackendTool(db,g,{...scope,audienceStaffIds:[employee.staffId]},'source-message',{action:'status',receiptId:first.receiptId});assert.equal(revoked.detailsWithheld,true);
+  await db.staff.update({where:{id:employee.staffId},data:{status:'active'}});
+  const reserved=await tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-crash','call-one',args);
+  const restart=await tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-crash','call-one',args);assert.equal(restart.created,false);
+  const unknown=await tools.executeBackendTool(db,g,scope,'source-message',args,restart,async()=>{throw Error('MUST_NOT_REPLAY')});assert.equal(unknown.code,'BACKEND_OUTCOME_UNKNOWN');assert.equal(unknown.retryAllowed,false);
+  const denied=await tools.executeBackendTool(db,g,scope,'source-message',args,reserved,async()=>{throw Error('AUTHORITY_REVOKED')});assert.equal(denied.state,'blocked');assert.equal(denied.mayHaveExecuted,false);
+ });
+ console.log(JSON.stringify({suite:'management-backend',passed:passed.length,checks:passed,production:false}));
+}
+main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await db.$disconnect();await built('config/database').default.$disconnect()});

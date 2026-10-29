@@ -25,6 +25,7 @@ async function photoMessage(){
  const m=await teamCommunication(db).send(staff,channel.id,{requestId:randomUUID(),text:'出库',files:[id]});return {id,bytes,m,ref:{kind:'conversation',channelId:channel.id,messageId:m.id,seq:m.seq}};
 }
 async function main(){
+ built('../middlewares/staffAccessV2').declareAccessRoutes('/api/marketing/activities',built('../routes/activities').activitiesRouter);
  const tenant=await db.tenant.create({data:{name:'Runtime synthetic isolated'}});await db.store.create({data:{id:storeId,tenantId:tenant.id,name:'Synthetic'}});
  for(const [a,phone]of[[owner,'08911117001'],[staff,'08911117002']])await db.user.create({data:{id:a.id,phone,password:'fixture-not-login',role:a.role,storeId,staff:{create:{id:a.staffId,storeId,name:a.staffId,employeeNumber:a.staffId}}}});
  channel=await teamCommunication(db).create(owner,{requestId:randomUUID(),title:'Isolated operational channel',kind:'group',members:[staff.staffId]});
@@ -116,8 +117,8 @@ async function main(){
   const original=[...grant.actions];grant.actions.push('marketing.read');
   const settings=built('AgentSettingsService').defaultAgentSettings();settings.enabled=true;settings.permissions.marketing={read:true,write:false};await writeTeam(db,storeId,'ai.agent.settings',settings);
   try{
-   const t=await next(),runtime=make(),p=wire(t);assert(t.tools.some(x=>x.function.name==='employee_manage_marketing'));
-   let v=(await input(runtime,t,p)).traceVersion;const call={id:'denied-marketing-write',type:'function',function:{name:'employee_manage_marketing',arguments:JSON.stringify({action:'create_campaign',name:'Must not be created'})}},assistant={role:'assistant',content:null,tool_calls:[call]};
+   const t=await next(),runtime=make(),p=wire(t);assert(t.tools.some(x=>x.function.name==='employee_backend'));assert(!t.tools.some(x=>x.function.name.startsWith('employee_manage_')));
+   let v=(await input(runtime,t,p)).traceVersion;const call={id:'denied-marketing-write',type:'function',function:{name:'employee_backend',arguments:JSON.stringify({action:'execute',operationId:'POST /api/marketing/activities',contractVersion:built('ManagementBackendRegistry').backendVersion(),body:{name:'Must not be created',status:'draft'}})}},assistant={role:'assistant',content:null,tool_calls:[call]};
    v=(await response(runtime,t,v,assistant)).traceVersion;const result=await runtime.host.executeTool({executionId:t.executionId,expectedTraceVersion:v,turn:1,callOrdinal:0,toolCallId:call.id,name:call.function.name,args:JSON.parse(call.function.arguments)});v=result.traceVersion;
    assert.equal(result.value.ok,false);assert.equal((await runtime.inspect(t.executionId)).phase,'input');assert.equal(await db.campaign.count({where:{storeId,name:'Must not be created'}}),0);
    p.messages.push({...assistant,content:''},{role:'tool',content:JSON.stringify(result.value),tool_call_id:call.id});v=(await input(runtime,t,p,v,2)).traceVersion;

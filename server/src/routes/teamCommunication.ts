@@ -14,6 +14,8 @@ import prisma from '../config/database'
 import { teamWorkflow } from '../services/TeamWorkflowService'
 import { wakeEmployeeDelivery } from '../services/EmployeeReminderService'
 import { agentSettingsService } from '../services/AgentSettingsService'
+import { describeNativeBody } from '../utils/validation'
+import { createChannelSchema, messageSchema, minutesSchema } from '../services/TeamCommunicationService'
 
 export const teamCommunicationRouter = Router()
 const router = teamCommunicationRouter, service = teamCommunication()
@@ -89,13 +91,13 @@ router.get('/capabilities', run(async (req, res) => { await service.directory(ac
 router.get('/channels', run(async (req, res) => ok(res, await service.channels(actor(req)))))
 router.get('/admin/audits', run(async (req, res) => ok(res, await service.audits(actor(req)))))
 router.get('/admin/channels', run(async (req, res) => ok(res, await service.channels(actor(req), true))))
-router.post('/channels', run(async (req, res) => ok(res, await service.create(actor(req), req.body))))
+router.post('/channels', describeNativeBody(createChannelSchema), run(async (req, res) => ok(res, await service.create(actor(req), req.body))))
 router.put('/channels/:id/members', run(async (req, res) => ok(res, await service.updateMembers(actor(req), req.params.id, req.body))))
 router.get('/channels/:id/messages', run(async (req, res) => {
   const after = z.coerce.number().int().min(0).max(999999999999).parse(req.query.after ?? 0)
   return ok(res, await service.messages(actor(req), req.params.id, after, reason(req)))
 }))
-router.post('/channels/:id/messages', run(async (req, res) => messageCommitted(req, res, await service.send(actor(req), req.params.id, req.body))))
+router.post('/channels/:id/messages', describeNativeBody(messageSchema), run(async (req, res) => messageCommitted(req, res, await service.send(actor(req), req.params.id, req.body))))
 router.put('/channels/:id/read', run(async (req, res) => {
   const { seq } = z.object({ seq: z.number().int().nonnegative() }).strict().parse(req.body)
   return ok(res, await service.markRead(actor(req), req.params.id, seq))
@@ -110,7 +112,7 @@ router.get('/channels/:id/minutes', run(async (req, res) => ok(res, await servic
 router.get('/channels/:id/tasks', run(async (req, res) => ok(res, await service.tasks(actor(req), req.params.id, reason(req)))))
 router.post('/channels/:id/tasks', run(async (req, res) => ok(res, await service.createTask(actor(req), req.params.id, req.body))))
 router.post('/channels/:id/tasks/:taskId/actions', run(async (req, res) => ok(res, await service.taskAction(actor(req), req.params.id, req.params.taskId, req.body))))
-router.put('/channels/:id/minutes/:roundId', run(async (req, res) => ok(res, await service.saveMinutes(actor(req), req.params.id, req.params.roundId, req.body, reason(req)))))
+router.put('/channels/:id/minutes/:roundId', describeNativeBody(minutesSchema), run(async (req, res) => ok(res, await service.saveMinutes(actor(req), req.params.id, req.params.roundId, req.body, reason(req)))))
 router.get('/channels/:id/minutes/:roundId/versions', run(async (req, res) => ok(res, await service.minuteVersions(actor(req), req.params.id, req.params.roundId, reason(req)))))
 router.get('/channels/:id/files/:fileId', run(async (req, res) => {
   const file = await service.attachment(actor(req), req.params.id, req.params.fileId, reason(req))

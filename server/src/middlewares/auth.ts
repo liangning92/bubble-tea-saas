@@ -9,6 +9,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { config } from '../config/env'
 import prisma from '../config/database'
+import { MANAGEMENT_BACKEND_IDENTITY } from '../services/ManagementBackendIdentity'
 
 export type Role = 'admin' | 'manager' | 'cashier' | 'staff'
 
@@ -20,6 +21,7 @@ export interface AuthUser {
   staffId: string
   issuedAtMs: number
   employeeApp?: boolean
+  storeBound?: boolean
   accessRole?: {id:string;name:string;baseRole:string;permissions:string[];version?:number;modes?:Record<string,string>;sources?:Record<string,string>;scopes?:Record<string,string>;revision?:number} | null
 }
 
@@ -111,6 +113,7 @@ export function hasPermission(role: Role, permission: Permission): boolean {
 
 // Check if user can access data for a specific store
 export function canAccessStore(user: AuthUser, targetStoreId: string): boolean {
+  if(user.storeBound)return user.storeId===targetStoreId
   // Admin can access all stores
   if (user.role === 'admin') return true
   // Other roles can only access their assigned store
@@ -133,8 +136,13 @@ export async function authenticateBeforeRouting(req: AuthRequest, res: Response,
 }
 
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction, beforeRouting = false) {
-  if (req.user) return requireStoreAccess(req, res, next)
+  if (req.user && !(req as any)[MANAGEMENT_BACKEND_IDENTITY]) return requireStoreAccess(req, res, next)
   try {
+    let decoded: AuthUser
+    if ((req as any)[MANAGEMENT_BACKEND_IDENTITY]) {
+      decoded = (req as any)[MANAGEMENT_BACKEND_IDENTITY]
+      delete req.user
+    } else {
     const authHeader = req.headers.authorization
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
@@ -144,7 +152,8 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     }
 
     const token = authHeader.split(' ')[1]
-    const decoded = jwt.verify(token, config.jwt.secret) as AuthUser
+    decoded = jwt.verify(token, config.jwt.secret) as AuthUser
+    }
 
     // Validate role
     if (!['admin', 'manager', 'cashier', 'staff'].includes(decoded.role)) {
@@ -171,6 +180,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       staffId: user.staff?.id || '',
       issuedAtMs: decoded.issuedAtMs,
       employeeApp: req.headers['x-client-app'] === 'employee'
+      ,storeBound:!!(req as any)[MANAGEMENT_BACKEND_IDENTITY]
     }
     if (decoded.role !== currentUser.role || decoded.storeId !== currentUser.storeId || decoded.staffId !== currentUser.staffId) {
       return res.status(401).json({ code: 401, message: 'Invalid or expired token' })

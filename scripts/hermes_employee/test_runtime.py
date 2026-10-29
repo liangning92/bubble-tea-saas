@@ -63,6 +63,9 @@ def worker(case, root, source_dir=None):
     if case == "multi_parallel_tools":
         context["tools"]["employee_read_task"] = {"name": "employee_read_task", "description": "Read the current assigned task.",
             "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False}}
+    if case == "multi_large_receipts":
+        context["tools"] = {"employee_read_large_" + str(i): {"name": "employee_read_large_" + str(i), "description": "Synthetic large poster receipt.",
+            "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False}} for i in range(4)}
     source_env_attempts = []
     mutation_denied = []
     if source_dir:
@@ -91,7 +94,10 @@ def worker(case, root, source_dir=None):
             raise httpx.ReadTimeout("synthetic response unknown", request=request)
         if calls == 1:
             channel = "channel-employee-B" if case in {"foreign_tool", "multi_foreign_tool"} else expected_channel
-            if case == "multi_parallel_tools":
+            if case == "multi_large_receipts":
+                delta = {"role": "assistant", "tool_calls": [{"index": i, "id": "call_large_" + str(i), "type": "function",
+                    "function": {"name": "employee_read_large_" + str(i), "arguments": "{}"}} for i in range(4)]}
+            elif case == "multi_parallel_tools":
                 # A model may request two issued tools in one round; the runtime has to
                 # serialize both receipts instead of interleaving them on the pipe.
                 delta = {"role": "assistant", "tool_calls": [
@@ -164,7 +170,19 @@ def worker(case, root, source_dir=None):
                     assert canonical_tools(actual["tools"]) == canonical_tools(ticket["tools"])
                     if item["turn"] >= 2:
                         tool_messages = [m for m in actual["messages"] if m["role"] == "tool"]
-                        assert json.loads(tool_messages[-1]["content"]) == self.last_value
+                        if case == "multi_large_receipts":
+                            assert len(tool_messages) == 4
+                            for i, message in enumerate(tool_messages):
+                                expected = {"poster": {"id": "poster-" + str(i)}}
+                                if i % 2:
+                                    expected = {"data": {"code": 200, "data": expected}}
+                                assert json.loads(message["content"]) == expected
+                            images = [part for m in actual["messages"] if m["role"] == "user" and isinstance(m["content"], list) for part in m["content"] if part["type"] == "image_url"]
+                            assert len(images) == 4
+                            for i, image in enumerate(images):
+                                assert image["image_url"]["url"] == "data:image/jpeg;base64," + (str(i) * 140000)
+                        else:
+                            assert json.loads(tool_messages[-1]["content"]) == self.last_value
                         if case == "multi_parallel_tools":
                             assert len(tool_messages) == 2
                     return {**self.advance("recordInput", item), "maySend": case != "multi_denied"}
@@ -172,6 +190,14 @@ def worker(case, root, source_dir=None):
                     self.responses.append(item)
                     return self.advance("recordResponse", item)
                 def executeTool(self, item):
+                    if case == "multi_large_receipts":
+                        i = item["callOrdinal"]
+                        assert item["name"] == "employee_read_large_" + str(i)
+                        self.advance("executeTool", item)
+                        large_value = {"poster": {"id": "poster-" + str(i), "displayImage": {"dataUrl": "data:image/jpeg;base64," + (str(i) * 140000)}}}
+                        if i % 2:
+                            large_value = {"data": {"code": 200, "data": large_value}}
+                        return {"traceVersion": self.version, "value": large_value, "sources": []}
                     assert item["callOrdinal"] in (0, 1)
                     self.advance("executeTool", item)
                     if item["name"] == "employee_update_task":
@@ -237,6 +263,22 @@ def worker(case, root, source_dir=None):
 
 
 class RuntimeTest(unittest.TestCase):
+    def test_four_large_native_receipts_survive_actual_hermes_sdk_text_budget(self):
+        r = self.run_case("multi_large_receipts")
+        self.assertNotIn("unknown", r)
+        self.assertEqual(r["providerCalls"], 2)
+        self.assertEqual(len([e for e in r["hostEvents"] if e["method"] == "executeTool"]), 4)
+
+    def test_trusted_receipt_reference_cannot_cross_call_or_execution(self):
+        from runtime_capture import expand_trusted_tool_results
+        receipt = {"reference": {"trustedBackendReceipt": "execution-A-call-A-hash"}, "encoded": '{"ok":true}'}
+        original = {"role": "tool", "tool_call_id": "call-A", "content": json.dumps(receipt["reference"])}
+        self.assertEqual(expand_trusted_tool_results([original], {"call-A": receipt})[0]["content"], receipt["encoded"])
+        with self.assertRaisesRegex(RuntimeError, "REFERENCE_MISMATCH"):
+            expand_trusted_tool_results([{**original,"content":'{"trustedBackendReceipt":"execution-B-call-A-hash"}'}], {"call-A": receipt})
+        self.assertEqual(expand_trusted_tool_results([{**original,"tool_call_id":"call-B"}], {"call-A": receipt})[0]["content"], original["content"])
+        self.assertEqual(expand_trusted_tool_results([original], {}), [original])
+
     def run_case(self, case):
         with tempfile.TemporaryDirectory(prefix="hermes-employee-test-") as root:
             # Seed unrelated manager and inventory roots. They must never enter actual wire input.
