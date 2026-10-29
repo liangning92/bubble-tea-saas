@@ -1,7 +1,8 @@
+import { backendVersion } from '../ManagementBackendRegistry'
 import { employeeNativeReply } from './employeeNativeReply'
 import { posterVisionMessages } from './employeePosterPreview'
 import { backendToolProperties, executeBackendTool, reserveBackendOperation } from './employeeBackendTool'
-import { dailyActions, dailyAgentActions, executeDailySpecial } from './employeeDailySpecials'
+import { dailyActions, dailyAgentActions, dailyInput, executeDailySpecial } from './employeeDailySpecials'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import {normalizeMarketingIntent,verifyTrainingAssessment} from './employeeOperationalEvidence'
 import { expenseIdrToCents, expenseCentsToIdr } from './employeeExpenseEvidence'
@@ -131,11 +132,17 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     const call=s.responses.at(-1)?.providerMessage.tool_calls?.[v.callOrdinal]
     if(s.version!==v.expectedTraceVersion||s.phase!=='tools'||v.turn!==s.turn||!call||call.id!==v.toolCallId||call.function.name!==v.name||!same(JSON.parse(call.function.arguments),v.args)||s.tools.some(t=>t.toolCallId===call.id))fail('BACKEND_TRACE_RESERVATION_CHANGED')
   }
-  async function runBackendCall(v:z.infer<typeof employeeRuntimeToolSchema>){
+  async function runBackendCall(v:z.infer<typeof employeeRuntimeToolSchema>,nativeArgs:unknown=v.args){
     const prepared=await db.$transaction(async(tx:any)=>{
       await lockTeam(tx,deps.storeId,key(v.executionId))
       const s=await load(tx,v.executionId);await fresh(tx,s);assertBackendCall(s,v)
-      const reservation=await reserveBackendOperation(tx,deps.storeId,s.scope,s.ticket.requestSource?.messageId,v.executionId,v.toolCallId,v.args)
+      if(v.name==='employee_manage_marketing'){
+        dailyInput.parse(v.args)
+        if(!s.grant.actions.includes('marketing.read')&&!s.grant.actions.includes('marketing.write'))fail('EMPLOYEE_RUNTIME_ACTION_REVOKED')
+        await assertToolSettings(tx,deps.storeId,v.name,v.args)
+        await assertToolAudience(tx,s.grant,s.scope,v.name,v.args)
+      }
+      const reservation=await reserveBackendOperation(tx,deps.storeId,s.scope,s.ticket.requestSource?.messageId,v.executionId,v.toolCallId,nativeArgs)
       return {grant:structuredClone(s.grant),scope:structuredClone(s.scope),source:s.ticket.requestSource?.messageId,reservation}
     })
     const authorizeDispatch=async()=>{await db.$transaction(async(tx:any)=>{
@@ -156,7 +163,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
         if(!c||hash(c.members)!==hash(target.members))fail('BACKEND_TARGET_AUDIENCE_CHANGED')
       }
     }}
-    const value=await executeBackendTool(db,prepared.grant,prepared.scope,prepared.source,v.args,prepared.reservation,authorizeDispatch,publication)
+    const value=await executeBackendTool(db,prepared.grant,prepared.scope,prepared.source,nativeArgs,prepared.reservation,authorizeDispatch,publication)
     // This CAS can fail after a real operation. Its independent ledger is already
     // durable; recovery reads it and must never dispatch the business action again.
     return mutate(v.executionId,v.expectedTraceVersion,async(tx,s)=>{
@@ -306,7 +313,15 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
       if(invalid)s.fault={code:'EMPLOYEE_RUNTIME_PROVIDER_RESULT_BLOCKED',at:new Date(now()).toISOString()}
       return {traceVersion:s.version+1}
     })},
-    async executeTool(raw){const v=employeeRuntimeToolSchema.parse(raw);if(v.name==='employee_backend'&&(v.args as any)?.action==='execute')return runBackendCall(v);const outcome=await mutate(v.executionId,v.expectedTraceVersion,async(tx,s)=>{
+    async executeTool(raw){const v=employeeRuntimeToolSchema.parse(raw);if(v.name==='employee_backend'&&(v.args as any)?.action==='execute')return runBackendCall(v);
+      // Historical tickets retain their issued tool schema. Route expensive
+      // previews through the SAME native two-phase dispatcher as new tickets;
+      // Chromium/image rendering must never hold the trace transaction open.
+      if(v.name==='employee_manage_marketing'&&(v.args as any)?.action==='render_daily_poster'){
+        const args=v.args as any
+        return runBackendCall(v,{action:'execute',operationId:'POST /api/marketing/activities/:id/poster-preview',contractVersion:backendVersion(),pathParams:{id:args.activityId||''},body:{version:args.expectedVersion,format:args.format||'portrait'}})
+      }
+      const outcome=await mutate(v.executionId,v.expectedTraceVersion,async(tx,s)=>{
       const call=s.responses.at(-1)?.providerMessage.tool_calls?.[v.callOrdinal]
       if(s.phase!=='tools'||v.turn!==s.turn||!call||call.id!==v.toolCallId||call.function.name!==v.name||!same(JSON.parse(call.function.arguments),v.args)||s.tools.some(t=>t.toolCallId===call.id)) fail()
       let value:any,sources:EmployeeRuntimeSource[]=[]

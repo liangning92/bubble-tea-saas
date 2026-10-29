@@ -73,7 +73,7 @@ export async function assertToolSettings(db:any,storeId:string,name:string,args:
     if(op){
       const domain=(op.permission||'').split('.')[0]
       const module=op.path.startsWith('/api/marketing')?'marketing':({products:'products',prices:'products',inventory:'inventory',purchases:'inventory',members:'members',finance:'finance',salary:'staff',staff:'staff',attendance:'staff',schedules:'staff',training:'staff',deposits:'staff',rewards:'staff',hygiene:'hygiene',team:'channels',channels:'channels'} as Record<string,string>)[domain]
-      if(module&&!s.permissions?.[module]?.[op.httpReadMethod?'read':'write'])throw new TeamError(403,'EMPLOYEE_TOOL_DISABLED_BY_SETTINGS')
+      if(module&&!s.permissions?.[module]?.[op.httpReadMethod||op.effect==='preview'?'read':'write'])throw new TeamError(403,'EMPLOYEE_TOOL_DISABLED_BY_SETTINGS')
     }
   }
   if(module&&!s.permissions?.[module]?.[read?'read':'write'])throw new TeamError(403,'EMPLOYEE_TOOL_DISABLED_BY_SETTINGS')
