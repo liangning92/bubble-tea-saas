@@ -96,3 +96,17 @@ test('daily posters pin the explicit SKU primary instead of an unrelated portrai
   expect(badge(html)).toBe('#9f1239')
  }
 })
+
+test('an exact legacy fingerprint retires its raw record even when an ended unified activity links the same ID',async()=>{
+ const f=fixture(),r:any=await executeDailySpecial(f.db,'store',input),row=f.rows.find(x=>x.key.startsWith('marketing.unified.activity.'))
+ const linked={...r.activity,status:'ended',source:'campaign:raw-linked'};row.value=JSON.stringify(linked)
+ const raw:any={id:'raw-linked',name:'Previous daily special',status:'active',type:'seasonal',actions:'{}',updatedAt:new Date('2026-10-24T00:00:00Z')}
+ const project=(select:any)=>Object.fromEntries(Object.keys(select).filter(k=>raw[k]!==undefined).map(k=>[k,raw[k]]))
+ f.db.campaign={findMany:async({select}:any)=>[project(select)],findFirst:async({where,select}:any)=>where.id===raw.id&&where.storeId==='store'?project(select):null,
+ updateMany:async({where,data}:any)=>{expect(where.storeId).toBe('store');if(where.id!==raw.id||where.status!==raw.status||where.updatedAt!==raw.updatedAt)return {count:0};Object.assign(raw,data);return {count:1}}}
+ const all:any=await executeDailySpecial(f.db,'store',{action:'list_all'}),legacy=all.legacyRecords.find((x:any)=>x.id===raw.id)
+ const ordinary:any=await executeDailySpecial(f.db,'store',{action:'get_activity',activityId:raw.id});expect(ordinary.activity.status).toBe('ended')
+ const stopped:any=await executeDailySpecial(f.db,'store',{action:'pause_activity',activityId:raw.id,expectedLegacyFingerprint:legacy.legacyFingerprint})
+ expect(stopped).toMatchObject({ok:true,affectedActivities:1,readbackVerified:true,legacy:{id:raw.id,status:'paused'}})
+ expect(JSON.parse(row.value).status).toBe('ended')
+})
