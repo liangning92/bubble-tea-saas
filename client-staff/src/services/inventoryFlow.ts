@@ -18,12 +18,13 @@ async function intent(path: string, data: Record<string, unknown>, keyField: str
     return result;
 }
 export const inventoryFlowApi = {
+    records: (kind:string, filter:{startDate:string;endDate:string;inventoryId:string;page:number}) => get('/inventory/operation-records?' + new URLSearchParams({kind,...filter,page:String(filter.page)})),
     todayStockOuts: () => get('/inventory/logs/today-stock-out'),
     updatePurchase:(id:string,data:any)=>http.put(base+`/purchase-orders/${id}`,data,{headers:headers()}),
     cancelPurchase:(id:string,reason:string)=>http.delete(base+`/purchase-orders/${id}`,{data:{reason},headers:headers()}),
     logs: async()=>{const [incoming,outgoing]=await Promise.all([get('/inventory/logs/stock-in?limit=100'),get('/inventory/logs/stock-out?limit=100')]);return {data:{list:[...incoming.data.list.map((r:any)=>({...r,type:'stock_in'})),...outgoing.data.list.map((r:any)=>({...r,type:'stock_out'}))]}}},
     list: () => get('/inventory'), counts: () => get('/inventory-counts'), purchases: () => get('/purchase-orders'), suppliers: () => get('/suppliers?isActive=true'),
-    purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string, items: any[] = []) => post(`/purchase-orders/${id}/receive`, {items}),
+    purchase: (data: Record<string, unknown>) => intent('/purchase-orders', data, 'requestId'), receive: (id: string, items: any[] = [], occurredOn?:string) => post(`/purchase-orders/${id}/receive`, {items,occurredOn}),
     stock: (kind: 'in' | 'out', data: Record<string, unknown>) => intent(`/inventory/stock-${kind}`, data, 'operationId'),
     saveCount: (id: string, items: unknown[]) => http.put(base + `/inventory-counts/${id}/items`, {items}, {headers: headers()}),
     startCount: (data: unknown) => post('/inventory-counts', data), submitCount: (id: string, items: unknown[] = []) => post(`/inventory-counts/${id}/submit`, {items})

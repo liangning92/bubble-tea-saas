@@ -13,6 +13,7 @@ import {physicalInventoryVariance} from './InventoryVarianceService'
 import {convertQuantity,normalizedUnit,validatePackage,InventoryPackage} from '../utils/inventoryUnits'
 import { containsText } from '../utils/textSearch'
 import prisma from '../config/database'
+import { operationDate } from '../utils/operationDate'
 
 // ============================================
 // BigInt 序列化辅助函数
@@ -40,6 +41,7 @@ export interface InventoryFilter {
 }
 
 export interface StockOperation {
+  occurredOn?: string
   expiryDate?:string
   manufacturingDate?:string
   operationId?: string
@@ -115,8 +117,9 @@ export async function getInventoryById(inventoryId: string) {
 // Stock in operation
 export async function stockIn(data: StockOperation & { unitCost?: number }, db:any=prisma) {
   const { inventoryId, storeId, unitCost, note, staffId, supplierId } = data
+  const occurredOn = operationDate(data.occurredOn)
 
-  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
+  const fingerprint = createHash('sha256').update(JSON.stringify({...(data.occurredOn?{occurredOn:data.occurredOn}:{}),inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId})).digest('hex')
   const replay = async (tx:any) => {
     if (!data.operationId) return null
     const log = await tx.stockInLog.findUnique({where:{operationId:data.operationId},include:{inventory:true}})
@@ -170,6 +173,7 @@ export async function stockIn(data: StockOperation & { unitCost?: number }, db:a
       data: {
         inventoryId,
         operationId: data.operationId,
+        occurredOn,
         batchId:batch.id,
         quantity,
         unitCost: baseCost,
@@ -188,8 +192,9 @@ export async function stockIn(data: StockOperation & { unitCost?: number }, db:a
 // Stock out operation
 export async function stockOut(data: StockOperation, db:any=prisma) {
   const { inventoryId, storeId, reason, note, staffId, orderId } = data
+  const occurredOn = operationDate(data.occurredOn)
 
-  const fingerprint = createHash('sha256').update(JSON.stringify({inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId,...(data.sourceEvidence?{sourceEvidence:data.sourceEvidence}:{})})).digest('hex')
+  const fingerprint = createHash('sha256').update(JSON.stringify({...(data.occurredOn?{occurredOn:data.occurredOn}:{}),inventoryId,storeId,quantity:data.quantity,inputUnit:data.inputUnit||'',unitCost:('unitCost' in data?data.unitCost:null),reason:data.reason,expiryDate:data.expiryDate||'',manufacturingDate:data.manufacturingDate||'',note:note||'',supplierId:data.supplierId||'',staffId,...(data.sourceEvidence?{sourceEvidence:data.sourceEvidence}:{})})).digest('hex')
   const replay = async (tx:any) => {
     if (!data.operationId) return null
     const log = await tx.stockOutLog.findUnique({where:{operationId:data.operationId},include:{inventory:true}})
@@ -230,6 +235,7 @@ export async function stockOut(data: StockOperation, db:any=prisma) {
       data: {
         inventoryId,
         operationId: data.operationId,
+        occurredOn,
         staffId,
         quantity,
         reason,
