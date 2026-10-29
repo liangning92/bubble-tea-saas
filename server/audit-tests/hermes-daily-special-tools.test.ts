@@ -1,3 +1,4 @@
+import {renderActivityPoster} from '../../shared/utils/activityPoster'
 import {test,expect,jest} from '@jest/globals'
 import {saveActivityInTransaction} from '../src/services/ActivityService'
 import {executeDailySpecial} from '../src/services/teamAgentBridge/employeeDailySpecials'
@@ -80,4 +81,18 @@ test('legacy creation receipt IDs can be inspected and paused with exact store/f
  const read:any=await executeDailySpecial(f.db,'store',{action:'get_activity',activityId:record.id});expect(read.legacy.kind).toBe('campaign')
  const stale:any=await executeDailySpecial(f.db,'store',{action:'pause_activity',activityId:record.id,expectedLegacyFingerprint:'0'.repeat(64)});expect(stale.ok).toBe(false);expect(record.status).toBe('active')
  const paused:any=await executeDailySpecial(f.db,'store',{action:'pause_activity',activityId:record.id,expectedLegacyFingerprint:read.legacy.legacyFingerprint});expect(paused.affectedActivities).toBe(1);expect(paused.readbackVerified).toBe(true);expect(record.status).toBe('paused')
+})
+
+test('daily posters pin the explicit SKU primary instead of an unrelated portrait and keep the active badge color',async()=>{
+ const f=fixture();f.p.image='/uploads/actual-product.webp';(f.p.images as any[]).push({media:{name:'Other Product_9x16.jpg',url:'/uploads/shared-other-product.webp'}})
+ const r:any=await executeDailySpecial(f.db,'store',input)
+ expect(r.ok).toBe(true);expect(r.activity.imageUrl).toBe(f.p.image)
+ expect(r.activity.posterConfig.cardItems[0]).toMatchObject({imageUrl:f.p.image,imageMode:'manual'})
+ const products=[{id:'p',name:f.p.name,image:'/uploads/shared-other-product.webp',image9x16:'/uploads/shared-other-product.webp',imageVariants:[{url:'/uploads/shared-other-product.webp',width:720,height:1280}],price:16000}]
+ const badge=(html:string)=>/class="badge[^"]*" style="background:([^;"]+)/.exec(html)?.[1]
+ for(const day of [4,5]){
+  const html=renderActivityPoster({...r.activity,products},{language:2,day,aspectRatio:1080/1350})
+  expect(html).toContain('src="/uploads/actual-product.webp"');expect(html).not.toContain('src="/uploads/shared-other-product.webp"')
+  expect(badge(html)).toBe('#9f1239')
+ }
 })

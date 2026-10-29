@@ -97,15 +97,17 @@ export async function executeDailySpecial(db:any,storeId:string,raw:unknown){
   if(!old&&candidates.length)return {ok:false,code:'DAILY_SPECIAL_REUSE_REQUIRED',activities:candidates.map(a=>({id:a.id,version:a.version,status:a.status}))}
   if(old&&v.expectedVersion!==old.version)return {ok:false,code:'ACTIVITY_VERSION_CHANGED',currentVersion:old.version}
 
-  const image=resolveProductImageByRatio(p,'9:16')
+  // Product primary is an explicit SKU choice. An unrelated attached portrait
+  // must not replace it merely because its aspect ratio fits the card.
+  const image=p.image||resolveProductImageByRatio(p,'9:16')
   if(!image)return {ok:false,code:'DAILY_SPECIAL_PRODUCT_IMAGE_REQUIRED',productId:p.id}
   const days=['','Senin','Selasa','Rabu','Kamis','Jumat']
   const description='Hanya untuk member. Belanja Rp30.000 dalam satu transaksi untuk menjadi member. Harga member berlaku untuk pembelian berikutnya tanpa minimum belanja berulang.'
   const input={name:`Promo Member ${days[v.weekday]}`,description,type:'special_price',status:v.status||'published',memberOnly:true,
     productIds:[p.id],specIds:[spec.id],weekdays:[v.weekday],timezone:'Asia/Jakarta',showOnTv:true,imageUrl:image,rule:{price:spec.price-4000},
-    posterConfig:{template:'daily_specials',headline:'Hanya untuk Member',subheadline:'Belanja Rp30.000 sekali untuk jadi member. Nikmati harga member pada pembelian berikutnya.',backgroundColor:'#fff7fa',columns:1,rows:1,
-      layoutMode:'row_cards',designConfig:{cardLayout:'standard',titlePosition:'top',imageFit:'contain',titleFontSize:32,priceFontSize:48,normalPriceFontSize:24,savingFontSize:24,textShadow:false,subheadlineFontSize:26,headlineFontSize:42,highlightScale:1,highlightMode:'border_only',normalPriceColor:'#475569',savingColor:'#166534',headlineColor:'#9f1239',dayBadgeBg:'#9f1239',priceColor:'#9f1239',titleColor:'#111827',subheadlineColor:'#111827',priceBoxBg:'#ffffff',priceBoxTextColor:'#9f1239',imageHeightRatio:55},
-      cardItems:[{id:p.id,productId:p.id,productName:p.name,specName:spec.name,imageUrl:image,originalPrice:spec.price,specialPrice:spec.price-4000,saving:4000,dayOfWeek:v.weekday,dayLabel:days[v.weekday]}]}}
+    posterConfig:{template:'daily_specials',themeColor:'#9f1239',headline:'Hanya untuk Member',subheadline:'Belanja Rp30.000 sekali untuk jadi member. Nikmati harga member pada pembelian berikutnya.',backgroundColor:'#fff7fa',columns:1,rows:1,
+      layoutMode:'row_cards',designConfig:{cardLayout:'standard',titlePosition:'top',imageFit:'contain',titleFontSize:32,priceFontSize:48,normalPriceFontSize:24,savingFontSize:24,textShadow:false,subheadlineFontSize:26,headlineFontSize:42,highlightScale:1,highlightMode:'border_only',highlightColor:'#9f1239',normalPriceColor:'#475569',savingColor:'#166534',headlineColor:'#9f1239',dayBadgeBg:'#9f1239',priceColor:'#9f1239',titleColor:'#111827',subheadlineColor:'#111827',priceBoxBg:'#ffffff',priceBoxTextColor:'#9f1239',imageHeightRatio:55},
+      cardItems:[{id:p.id,productId:p.id,productName:p.name,specName:spec.name,imageMode:'manual',imageUrl:image,originalPrice:spec.price,specialPrice:spec.price-4000,saving:4000,dayOfWeek:v.weekday,dayLabel:days[v.weekday]}]}}
   const current=old&&inputOf(old)
   if(current&&hash(current)===hash({...current,...input}))return {ok:true,alreadyConfigured:true,activity:old,fingerprint:hash(old)}
   const receiptKey='hermes.daily-special.operation.'+hash({storeId,raw:v})
