@@ -11,7 +11,7 @@
 
 ## 数据与兼容
 
-新增 nullable DATE 字段：StockInLog.occurredOn、StockOutLog.occurredOn、PurchaseOrder.purchasedOn。旧记录不回填推测日期，按雅加达录入日期回退显示。
+新增可空业务日期字段（DateTime，业务层统一写入 UTC 零点，仅接受日期）：StockInLog.occurredOn、StockOutLog.occurredOn、PurchaseOrder.purchasedOn。旧记录不回填推测日期，按雅加达录入日期回退显示。
 
 迁移：server/prisma/migrations/202610290001_inventory_operation_dates/migration.sql。仅新增字段和索引，旧应用可忽略。API 发布前备份并应用迁移；不得运行会删除历史数据的 schema 重建。
 
@@ -22,7 +22,7 @@
 ## 验证
 
 - API 与员工端类型检查通过；员工端三语检查通过；员工端生产构建通过。
-- PostgreSQL/SQLite 隔离回归结构均能生成；SQLite 临时库将原生 DATE 映射为可空 DateTime，不改变正式 PostgreSQL 类型。
+- 沿用项目跨 PostgreSQL/SQLite 的 DateTime 存储方式，业务日期独立校验为日期，避免原生 DATE 类型影响现有桌面模板与 SQLite 回归。
 - 真实隔离 PostgreSQL + 真实 HTTP 权限链检查通过：253 条完整分页、汇总、雅加达边界、本门店全员可见及跨店隔离、非法日期、双日期、重复出入库与采购收货、未收货采购不入库、盘点只读。
 - 隔离测试通过 with-docker-test.py 执行；失败批次与成功批次均确认清理完成，不使用正式凭据、正式数据卷或正式数据。
 - 构建后员工页面合成接口测试通过：四模块记录区、下方布局、保存并刷新、保留未提交表单、补录预选、分页、错误重试、空结果。390/768/1440 布局及三语截图保存在 output/inventory-records/synthetic。

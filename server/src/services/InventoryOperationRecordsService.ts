@@ -24,14 +24,14 @@ function source(storeId:string,kind:Query['kind']) {
     const table=kind==='in'?Prisma.sql`"StockInLog"`:Prisma.sql`"StockOutLog"`
     const reason=kind==='out'?Prisma.sql`l.reason`:Prisma.sql`'receipt'::text`
     return Prisma.sql`SELECT l.id, l.id AS "lineId", l."inventoryId", i.name, i.unit, l.quantity,
-      COALESCE(l."occurredOn", (l."createdAt" + interval '7 hours')::date)::text AS "businessDate",
+      COALESCE(l."occurredOn"::date, (l."createdAt" + interval '7 hours')::date)::text AS "businessDate",
       l."createdAt", l."staffId" AS "actorId", l.note, ${reason} AS reason,
       NULL::text AS status, NULL::text AS "orderNumber", NULL::text AS "supplierName", NULL::float8 AS "systemQty", NULL::float8 AS "receivedQty", NULL::timestamp AS "countedAt"
       FROM ${table} l JOIN "Inventory" i ON i.id=l."inventoryId"
       WHERE i."storeId"=${storeId} ${kind==='out'?Prisma.sql`AND l.reason IN (${Prisma.join(registeredStockOutReasons)})`:Prisma.empty}`
   }
   if(kind==='purchase') return Prisma.sql`SELECT p.id, x.id AS "lineId", x."inventoryId", i.name, i.unit, x.quantity,
-    COALESCE(p."purchasedOn", (p."createdAt" + interval '7 hours')::date)::text AS "businessDate",
+    COALESCE(p."purchasedOn"::date, (p."createdAt" + interval '7 hours')::date)::text AS "businessDate",
     p."createdAt", p."createdBy" AS "actorId", p.note, NULL::text AS reason, p.status,
     p."orderNumber", s.name AS "supplierName", NULL::float8 AS "systemQty", x."receivedQty", NULL::timestamp AS "countedAt"
     FROM "PurchaseOrder" p JOIN "PurchaseOrderItem" x ON x."purchaseOrderId"=p.id

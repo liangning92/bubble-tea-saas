@@ -6,7 +6,7 @@ export function operationDate(value?: string): Date | undefined {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('INVALID_OPERATION_DATE')
   parseBusinessDate(value)
   if (value > jakartaDay()) throw new Error('FUTURE_OPERATION_DATE')
-  // DATE columns represent a calendar day, never the host's local timezone.
+  // Portable DateTime columns encode a calendar day at UTC midnight, never host local time.
   return new Date(value + 'T00:00:00Z')
 }
 export const operationDateSchema = z.string().refine(value => { try { operationDate(value); return true } catch { return false } }, 'INVALID_OPERATION_DATE')

@@ -10,9 +10,7 @@ const source=fs.readFileSync('server/prisma/schema.prisma','utf8');
 const env={...process.env,PRISMA_GENERATE_SKIP_AUTOINSTALL:'1'};
 for(const provider of ['sqlite','postgresql']){
  const folder=path.join(root,provider);fs.mkdirSync(folder);
- let schema=source.replace(/generator client \{[\s\S]*?\}/,`generator client {\n provider = "prisma-client-js"\n output = "${folder}/client"\n binaryTargets = ["native"]\n}`).replace(/provider\s*=\s*"postgresql"/,`provider = "${provider}"`);
- // SQLite has no native DATE; preserve the optional calendar value as DateTime.
- if(provider==='sqlite')schema=schema.replace(/\s+@db\.Date\b/g,'');
+ const schema=source.replace(/generator client \{[\s\S]*?\}/,`generator client {\n provider = "prisma-client-js"\n output = "${folder}/client"\n binaryTargets = ["native"]\n}`).replace(/provider\s*=\s*"postgresql"/,`provider = "${provider}"`);
  const file=path.join(folder,'schema.prisma');fs.writeFileSync(file,schema);
  execFileSync(process.execPath,[cli,'generate','--schema',file],{cwd:root,env,stdio:['ignore','ignore','pipe']});
  const sql=execFileSync(process.execPath,[cli,'migrate','diff','--from-empty','--to-schema-datamodel',file,'--script'],{cwd:root,env,encoding:'utf8'});
