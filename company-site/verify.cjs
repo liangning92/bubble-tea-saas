@@ -68,6 +68,22 @@ const publicCheck = process.env.LUMBA_PUBLIC_CHECK === '1';
       assert.deepEqual(errors, [], 'Browser errors or blocked page scripts');
       assert.deepEqual(externalRequests, [], 'Unexpected external resource requests');
       checks.push({ viewport: name, width, height, languages: ['id', 'en'], languageReturn: true, anchors: true, overflow: false, browserErrors: 0, externalRequests: 0 });
+      for (const [file, heading] of [['youme-privacy.html', 'Kebijakan Privasi YOUME'], ['youme-data-deletion.html', 'Penghapusan Data YOUME']]) {
+        const legalUrl = new URL(file, url).href;
+        const legalResponse = await page.goto(legalUrl, { waitUntil: 'networkidle' });
+        assert.equal(legalResponse.status(), 200);
+        assert(await page.getByRole('heading', { name: heading, exact: true }).isVisible());
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Legal page overflow');
+        assert(await page.locator('section[lang="en"]').isVisible(), 'English policy must be accessible');
+        assert(await page.locator('a[href="mailto:kangningfushou@gmail.com"]').count() > 0);
+        const styled = await page.locator('main').evaluate(el => getComputedStyle(el).maxWidth);
+        assert.equal(styled, '860px', 'Legal stylesheet must load under CSP');
+        await page.getByRole('link', { name: 'English', exact: true }).click();
+        assert.equal(new URL(page.url()).hash, '#en');
+        await page.screenshot({ path: path.join(output, `${name}-${file}.png`), fullPage: true });
+      }
+      assert.deepEqual(errors, [], 'Legal pages must not trigger browser/CSP errors');
+      assert.deepEqual(externalRequests, [], 'Legal pages must not load third-party resources');
       await context.close();
     }
   } finally {
