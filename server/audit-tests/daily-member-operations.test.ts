@@ -1,13 +1,12 @@
+import {applyDailyMembershipPolicy} from '../src/services/DailyMembershipOperationsService'
 import { test, jest } from '@jest/globals'
 import * as TeamService from '../src/services/TeamCommunicationService'
 import assert from 'node:assert/strict'
 import {
   createOperationsDelegation,
-  applyOperationsPolicy,
   readOperationsState,
   revokeOperationsDelegation,
   operationsOwnerState,
-  quoteOperationsSpecials,
   submitOperationsTask,
   operationsTaskStatus,
 } from '../src/services/StoreOperationsDelegationService'
@@ -174,160 +173,18 @@ function fixture() {
   }
   return { db, rows, members, orders, activity, pointLogs, grantedCoupons }
 }
-const grantInput = () => ({
-  activityIds: ['special'],
-  expiresAt: new Date(Date.now() + 3600000).toISOString(),
-  confirm: 'daily_member_specials_and_single_paid_order_30000',
+const apply = () => ({requestId:'a4a64991-ed04-4f4d-82bd-f7ff77d7136a',expectedPolicyVersion:0,activities:[{id:'special',version:1}],minimumPaidAmount:30000,memberOnly:true})
+const configure=(f:any,input:any=apply())=>f.db.$transaction((tx:any)=>applyDailyMembershipPolicy(tx,{id:'normal-backend-fixture',storeId:'store',ownerId:'owner',activityIds:['special']},input))
+test('normal backend membership policy is atomic and idempotent without changing product prices or schedules',async()=>{
+ const f=fixture(),result=await configure(f);assert.equal(result.policy.minimumPaidAmount,30000);assert.equal(result.policy.qualifyOnce,true);assert.equal(result.activities[0].memberOnly,true)
+ for(const key of ['rule','weekdays','productIds','channels','status'])assert.deepEqual(result.activities[0][key],f.activity[key as keyof typeof f.activity])
+ assert.equal((await configure(f)).alreadyApplied,true)
 })
-const apply = () => ({
-  requestId: 'a4a64991-ed04-4f4d-82bd-f7ff77d7136a',
-  expectedPolicyVersion: 0,
-  activities: [{ id: 'special', version: 1 }],
-  minimumPaidAmount: 30000,
-  memberOnly: true,
+test('normal backend rejects stale activity versions atomically',async()=>{
+ const f=fixture();await assert.rejects(()=>configure(f,{...apply(),activities:[{id:'special',version:3}]}),/VERSION_CHANGED/);assert.equal(f.rows.some(r=>r.key===MEMBERSHIP_POLICY_KEY),false)
 })
-test('Agent applies member-only plus one-time qualification atomically without changing price or schedule', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db),
-    r = await applyOperationsPolicy(g.credential, apply(), f.db)
-  assert.equal(r.policy.minimumPaidAmount, 30000)
-  assert.equal(r.policy.qualifyOnce, true)
-  assert.equal(r.activities[0].memberOnly, true)
-  for (const field of ['rule', 'weekdays', 'productIds', 'channels', 'status'])
-    assert.deepEqual(r.activities[0][field], f.activity[field as keyof typeof f.activity])
-  const again = await applyOperationsPolicy(g.credential, apply(), f.db)
-  assert.equal(again.alreadyApplied, true)
-  assert.equal(again.policy.version, 1)
-  assert.equal((await readOperationsState(g.credential, f.db)).receipts.length, 1)
-})
-test('Wrong version rolls back both policy and activity mutation', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
-  await assert.rejects(
-    () =>
-      applyOperationsPolicy(
-        g.credential,
-        { ...apply(), activities: [{ id: 'special', version: 3 }] },
-        f.db,
-      ),
-    /VERSION_CHANGED/,
-  )
-  assert.equal(
-    f.rows.some((r) => r.key === MEMBERSHIP_POLICY_KEY),
-    false,
-  )
-})
-test('Unscoped activity, changed threshold, duplicate IDs, changed replay and revoked credentials fail closed', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
-  await assert.rejects(
-    () =>
-      applyOperationsPolicy(
-        g.credential,
-        { ...apply(), activities: [{ id: 'other', version: 1 }] },
-        f.db,
-      ),
-    /NOT_GRANTED/,
-  )
-  await assert.rejects(() =>
-    applyOperationsPolicy(g.credential, { ...apply(), minimumPaidAmount: 1 }, f.db),
-  )
-  await assert.rejects(
-    () =>
-      applyOperationsPolicy(
-        g.credential,
-        {
-          ...apply(),
-          activities: [
-            { id: 'special', version: 1 },
-            { id: 'special', version: 1 },
-          ],
-        },
-        f.db,
-      ),
-    /NOT_GRANTED/,
-  )
-  await applyOperationsPolicy(g.credential, apply(), f.db)
-  await assert.rejects(
-    () => applyOperationsPolicy(g.credential, { ...apply(), expectedPolicyVersion: 1 }, f.db),
-    /IDEMPOTENCY_CONFLICT/,
-  )
-  await revokeOperationsDelegation('store', 'owner', g.delegation.id, f.db)
-  await assert.rejects(() => readOperationsState(g.credential, f.db), /CREDENTIAL_INVALID/)
-})
-test('legacy module flags do not restrict the account, while master disable and wrong owner/store deny', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
-  const setting = f.rows.find((r) => r.key.endsWith('ai.agent.settings'))
-  const s = JSON.parse(setting.value)
-  s.permissions.members.write = false
-  setting.value = JSON.stringify(s)
-  await readOperationsState(g.credential,f.db)
-  s.enabled=false;setting.value=JSON.stringify(s)
-  await assert.rejects(() => readOperationsState(g.credential, f.db), /AUTHORIZATION_REQUIRED/)
-  await assert.rejects(
-    () => createOperationsDelegation('other', 'owner', grantInput(), f.db),
-    /OWNER_REVOKED/,
-  )
-})
-test('transport credential expiry is explicit and independent of retired Agent trial expiry', async () => {
-  const f = fixture(),
-    setting = f.rows.find((r) => r.key.endsWith('ai.agent.settings')),
-    s = JSON.parse(setting.value)
-  const existing = new Date(Date.now() + 200 * 86400000).toISOString()
-  s.expiresAt = existing
-  setting.value = JSON.stringify(s)
-  const g = await createOperationsDelegation(
-    'store',
-    'owner',
-    { ...grantInput(), expiresAt: existing },
-    f.db,
-  )
-  assert.equal(g.delegation.expiresAt, existing)
-  const later=await createOperationsDelegation('store','owner',{...grantInput(),expiresAt:new Date(Date.now()+201*86400000).toISOString()},f.db)
-  assert(later.delegation.expiresAt>existing)
-  const permanent=await createOperationsDelegation('store','owner',{...grantInput(),expiresAt:null},f.db)
-  assert.equal(permanent.delegation.expiresAt,null)
-  s.expiresAt = null
-  setting.value = JSON.stringify(s)
-  const continuous = await createOperationsDelegation(
-    'store',
-    'owner',
-    { ...grantInput(), expiresAt: null },
-    f.db,
-  )
-  assert.equal((await readOperationsState(continuous.credential, f.db)).expiresAt, null)
-})
-test('Ordinary profile timestamp change preserves access; password/role/store revocation does not', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
-  const owner = await f.db.user.findUnique({})
-  owner.updatedAt = new Date()
-  f.db.user.findUnique = async () => owner
-  assert.equal((await readOperationsState(g.credential, f.db)).storeId, 'store')
-  owner.password = 'changed-bcrypt-security-version'
-  await assert.rejects(() => readOperationsState(g.credential, f.db), /OWNER_REVOKED/)
-  owner.password = 'bcrypt-security-version'
-  owner.role = 'manager'
-  await assert.rejects(() => readOperationsState(g.credential, f.db), /OWNER_REVOKED/)
-  owner.role = 'admin'
-  owner.storeId = 'other'
-  owner.staff.storeId = 'other'
-  await assert.rejects(() => readOperationsState(g.credential, f.db), /OWNER_REVOKED/)
-})
-test('Withdrawn module permission does not block owner inspection and explicit revocation', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
-  const setting = f.rows.find((r) => r.key.endsWith('ai.agent.settings')),
-    s = JSON.parse(setting.value)
-  s.enabled = false
-  setting.value = JSON.stringify(s)
-  const view = await operationsOwnerState('store', 'owner', f.db)
-  assert.equal(view.canDelegate, false)
-  assert.equal('secretHash' in view.delegations[0], false)
-  assert.equal('ownerSecurityFingerprint' in view.delegations[0], false)
-  await revokeOperationsDelegation('store', 'owner', g.delegation.id, f.db)
-  await assert.rejects(() => readOperationsState(g.credential, f.db), /CREDENTIAL_INVALID/)
+test('retired per-activity connection enrollment cannot create credentials',async()=>{
+ const f=fixture();await assert.rejects(()=>createOperationsDelegation('store','owner',{activityIds:['special'],expiresAt:null,confirm:'daily_member_specials_and_single_paid_order_30000'},f.db));assert.equal(f.rows.some(r=>r.key.startsWith('store.operations.delegation.')),false)
 })
 test('Only a real same-store same-person completed order at 30000 qualifies, never cumulative or unpaid', () => {
   const member = { id: 'member', storeId: 'store' },
@@ -350,9 +207,7 @@ test('Only a real same-store same-person completed order at 30000 qualifies, nev
     assert.equal(paidOrderQualifies({ ...order, ...patch }, member, policy), false)
 })
 test('Before qualification normal price applies; after completed qualifying order later small purchases get member price', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
-  await applyOperationsPolicy(g.credential, apply(), f.db)
+  const f=fixture();await configure(f)
   const input = {
     items: [{ productId: 'product', specId: 'spec', quantity: 1, unitPrice: 16000 }],
     memberId: 'member',
@@ -380,9 +235,7 @@ test('Before qualification normal price applies; after completed qualifying orde
   assert.equal(without.finalAmount, 16000)
 })
 test('Original referral and welcome coupon are deferred durably, retried after failure, and never duplicated', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
-  await applyOperationsPolicy(g.credential, apply(), f.db)
+  const f=fixture();await configure(f)
   f.members.push({ id: 'inviter', storeId: 'store', status: 'active', points: 0 })
   f.rows.push({
     id: 'enrollment',
@@ -427,93 +280,12 @@ test('Original referral and welcome coupon are deferred durably, retried after f
   assert.equal(f.grantedCoupons.length, 1)
   assert.equal(f.pointLogs.filter((p) => p.points === 100).length, 1)
 })
-test('Scoped cashier quote uses actual product prices and does not create business records', async () => {
-  const f = fixture(),
-    g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
-  await applyOperationsPolicy(g.credential, apply(), f.db)
-  const input = {
-    sideEffectFree: true,
-    items: [{ productId: 'product', specId: 'spec', quantity: 1 }],
-    taxEnabled: false,
-  }
-  const beforeRows = f.rows.length,
-    beforeOrders = f.orders.length
-  const quoted = await quoteOperationsSpecials(g.credential, input, f.db)
-  assert.equal(quoted.finalAmount, 16000)
-  assert.equal(quoted.sideEffectFree, true)
-  assert.equal(quoted.qualificationGranted, false)
-  assert.equal(f.rows.length, beforeRows)
-  assert.equal(f.orders.length, beforeOrders)
-  await assert.rejects(
-    () =>
-      quoteOperationsSpecials(
-        g.credential,
-        { ...input, items: [{ productId: 'not-granted', specId: 'spec', quantity: 1 }] },
-        f.db,
-      ),
-    /PRODUCT_NOT_GRANTED/,
-  )
-  await assert.rejects(
-    () => quoteOperationsSpecials(g.credential, { ...input, memberId: 'foreign' }, f.db),
-    /MEMBER_STORE_MISMATCH/,
-  )
-})
-
-test('state exposes minimal real qualification audit with same-store order, not private member data', async () => {
-  const f = fixture()
-  const g = await createOperationsDelegation(
-    'store',
-    'owner',
-    {
-      activityIds: ['special'],
-      expiresAt: new Date(Date.now() + 3600000).toISOString(),
-      confirm: 'daily_member_specials_and_single_paid_order_30000',
-    },
-    f.db,
-  )
-  assert.equal((await readOperationsState(g.credential, f.db)).qualificationAudit, null)
-  f.members[0].status = 'active'
-  f.members[0].phone = 'private-phone'
-  f.rows.push({
-    storeId: 'store',
-    key: 'membership.qualification.receipt.member',
-    value: JSON.stringify({
-      memberId: 'member',
-      storeId: 'store',
-      orderId: 'earned-order',
-      paidAmount: 30000,
-      minimumPaidAmount: 30000,
-      policyVersion: 1,
-      qualifiedAt: '2026-10-28T00:00:00.000Z',
-      privateExtra: 'must-not-leak',
-    }),
-  })
-  f.orders.push({
-    id: 'earned-order',
-    storeId: 'other',
-    memberId: 'member',
-    status: 'completed',
-    finalAmount: 30000,
-  })
-  const first = await readOperationsState(g.credential, f.db)
-  assert.equal(first.qualificationAudit.currentOrder, null)
-  f.orders[0].storeId = 'store'
-  const audit = (await readOperationsState(g.credential, f.db)).qualificationAudit
-  assert.equal(audit.orderId, 'earned-order')
-  assert.equal(audit.paidAmount, 30000)
-  assert.equal(audit.currentOrder.status, 'completed')
-  assert.equal(audit.policyVersion, 1)
-  assert.equal(audit.qualifiedAt, '2026-10-28T00:00:00.000Z')
-  assert.equal(JSON.stringify(audit).includes('private'), false)
-})
-
-
-test('owner task handoff requires explicit full role and private live route; replay does not resubmit', async () => {
+test('workbench uses only real owner authority and native private channel; retired flags and trial expiry cannot block tasks', async () => {
  const f=fixture(), add=(key:string,value:any)=>f.rows.push({id:String(f.rows.length+1),storeId:'store',key,value:JSON.stringify(value)})
  const channelId='11111111-1111-4111-8111-111111111111', agentId='22222222-2222-4222-8222-222222222222', taskId='33333333-3333-4333-8333-333333333333'
  const previous={enabled:process.env.EMPLOYEE_HERMES_ENABLED,store:process.env.EMPLOYEE_HERMES_STORE_ID,agent:process.env.EMPLOYEE_HERMES_AGENT_ID}
  const settingsRow=f.rows.find(r=>r.key==='team.communication.ai.agent.settings')
- const settings=JSON.parse(settingsRow.value);settings.operationProfile='store_operations';settings.employeeBridgeEnabled=true;settingsRow.value=JSON.stringify(settings)
+ const settings=JSON.parse(settingsRow.value);settings.operationProfile='custom';settings.employeeBridgeEnabled=false;settings.expiresAt='2000-01-01T00:00:00Z';settings.permissions={};settingsRow.value=JSON.stringify(settings)
  f.db.user.findUnique=async()=>({id:'owner',role:'admin',storeId:'store',password:'bcrypt-security-version',staff:{id:'owner-staff',storeId:'store',status:'active'}})
  f.db.staff={findMany:async()=>[{id:'owner-staff',userId:'owner',user:{id:'owner',storeId:'store'}}]}
  f.db.financeAuditLog={create:jest.fn(async()=>({}))}
@@ -524,10 +296,8 @@ test('owner task handoff requires explicit full role and private live route; rep
  add('externalAgent.teamBridge.v1.employeeRoute.'+channelId,route)
  add('externalAgent.teamBridge.v1.channel.'+channelId,{agentId,task:route.task})
  add('externalAgent.teamBridge.v1.grant.'+agentId,{agentId,displayName:'Hermes',storeId:'store',sponsorUserId:'owner',version:1,clientRevision:1,expiresAt:route.expiresAt,revoked:false,actions:['messages.read','messages.send','tasks.read'],staffIds:['owner-staff'],channelIds:[channelId]})
- const narrow=await createOperationsDelegation('store','owner',{activityIds:['special'],expiresAt:route.expiresAt,confirm:'daily_member_specials_and_single_paid_order_30000'},f.db)
  const input={requestId:'44444444-4444-4444-8444-444444444444',channelId,text:'Review today and assign authorized routine work.'}
  const ports={gatewayHealth:async()=>({status:'ok',protocol:'hermes_native_api_v1',maxConcurrency:2,queued:0,running:0})}
- await assert.rejects(()=>submitOperationsTask(narrow.credential,input,f.db,ports),/ROLE_DELEGATION_REQUIRED/)
  let full:any
  const send=jest.fn(async(actor:any,id:string,v:any,...rest:any[])=>{
   assert.equal(actor.staffId,'owner-staff');assert.equal(actor.role,'admin');assert.equal(id,channelId)

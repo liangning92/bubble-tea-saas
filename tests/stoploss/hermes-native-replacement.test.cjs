@@ -28,3 +28,12 @@ test('extra per-module permissions are not evaluated by the native backend bridg
  assert(source.includes('actor.accessRole=await userAccessV2'));
  assert(source.includes('invokeManagementBackend(db,actor'));
 });
+
+test('workbench connection cannot execute the retired per-activity business proxy',()=>{
+ const service=fs.readFileSync(path.join(root,'server/src/services/StoreOperationsDelegationService.ts'),'utf8');
+ for(const marker of ['applyOperationsPolicy','quoteOperationsSpecials','applyDailyMembershipPolicy','settings.operationProfile','settings.employeeBridgeEnabled','settings.expiresAt'])assert(!service.includes(marker),marker);
+ const router=fs.readFileSync(path.join(root,'server/src/routes/storeOperations.ts'),'utf8');
+ assert(router.includes('status(410)'));assert(router.includes('OPERATIONS_LEGACY_BUSINESS_ENDPOINT_RETIRED'));
+ const ui=fs.readFileSync(path.join(root,'client-admin/src/pages/settings/StoreOperationsDelegation.tsx'),'utf8');
+ assert(!ui.includes('selected.includes'));assert(!ui.includes('state.activities.map'));assert(!ui.includes('daily_member_specials_and_single_paid_order_30000'));
+});
