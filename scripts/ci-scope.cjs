@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ recipeUsage:{paths:/(?:MaterialRecipeUsage|material-recipe-usage|recipe-usage)/i,tests:/material-recipe-usage/i},
  employeeRuntime:{paths:/(?:AgentMemoryService|conversation-isolation|teamAgentBridge\/(?:employee|directDelegation)|scripts\/hermes_employee\/|employee-(?:runtime|cutover|continuation|orchestration|intake|inventory-evidence|private-gateway)|team-agent-direct-delegation|hermes-employee-system-template)/i,tests:/(?:employee-runtime|employee-private-gateway)/i},
  teamWorkItems:{paths:/(?:externalMcp\/workItem(?:Contract|Service|Tools)|TeamTaskReminder|TeamWorkItemLinks|teamWorkTarget|team-work-items|team-work-item-(?:target|replay)|^(?:shared\/(?:TeamCommunication|TeamChatMessages|TeamTasks|TeamManagementActions)\.tsx|client-staff\/src\/components\/StaffTeamConversation\.tsx|server\/src\/services\/(?:TeamCommunicationService|TeamChatReminderService|EmployeeReminderService|NotificationApprovalService)\.ts)$)/i,tests:/team-work-items|team-work-item-(?:target|replay)/i},
  teamAgentBridge:{paths:/(?:teamAgentBridge\/|externalMcp\/teamCommunicationTools|TeamChatMessages|team-agent-bridge)/i,tests:/team-agent-bridge/i},
@@ -76,6 +77,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ recipeUsage:{scripts:['tests/stoploss/material-recipe-usage-page-check.cjs'],components:['admin']},
  teamWorkItems:{components:['admin','staff'],scripts:['tests/stoploss/team-work-item-target-browser-check.cjs']},
  teamManagement:{scripts:['tests/stoploss/team-message-ai-handling-browser-check.cjs','tests/stoploss/team-management-defaults-browser-check.cjs','tests/stoploss/team-management-owner-browser-check.cjs','tests/stoploss/team-management-actions-browser-check.cjs'],components:['admin','staff']},
  notificationAwareness:{scripts:['tests/stoploss/notification-awareness-repeat-browser-check.cjs','tests/stoploss/employee-push-device-page-check.cjs','tests/stoploss/employee-communication-path-page-check.cjs','tests/stoploss/employee-push-worker-check.cjs','output/notification-awareness-ui-20261020/browser-check.cjs','output/notification-approval-target-ui-20261020/browser-check.cjs','output/notification-admin-approval-race-20261020/browser-check.cjs','tests/stoploss/training-update-notices-page-check.cjs','tests/stoploss/training-admin-notices-page-check.cjs','tests/stoploss/training-notice-content-race-page-check.cjs'],components:['admin','staff']},
