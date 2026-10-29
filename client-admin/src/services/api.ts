@@ -174,6 +174,7 @@ export const inventoryApi = {
   updateInventoryCountItem: (countId: string, itemId: string, data: any) =>
     api.put('/inventory-counts/' + countId + '/item/' + itemId, data),
   submitInventoryCount: (id: string) => api.post('/inventory-counts/' + encodeURIComponent(id) + '/submit'),
+  returnInventoryCount: (id: string, reason: string) => api.post('/inventory-counts/' + encodeURIComponent(id) + '/return', { reason }),
   completeInventoryCount: (id: string) => api.post('/inventory-counts/' + id + '/complete'),
   cancelInventoryCount: (id: string) => api.post('/inventory-counts/' + id + '/cancel')
 }

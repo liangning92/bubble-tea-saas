@@ -1,3 +1,4 @@
+import {randomUUID} from 'crypto'
 import {actualInventorySince,ACTUAL_CALIBRATED_PREFIX} from './ActualInventoryPolicy'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy'
 import {expandProcessInputs} from './ProcessRecipeService'
@@ -7,15 +8,17 @@ import {COUNT_OBSERVATION_PREFIX,captureCountBoundary} from '../utils/countObser
 import prisma from '../config/database'
 import {validatePackage} from '../utils/inventoryUnits'
 export interface CreateInventoryCountData {storeId:string;period:'monthly'|'quarterly'|'annual'|'ad_hoc';startDate:Date;endDate:Date;notes?:string;inventoryIds?:string[]}
+const REVIEW_PREFIX='inventory.count-review.'
 const include={items:{orderBy:{inventoryId:'asc' as const},include:{inventory:{select:{id:true,name:true,unit:true,currentStock:true,updatedAt:true,avgCost:true}}}}} as const
 function view(count:any){
  if(!count)return null
  return {...count,items:count.items.map((item:any)=>({...item,inventory:{...item.inventory,avgCost:Number(item.inventory.avgCost)},movementSinceObservation:item.countedAt?item.inventory.currentStock-item.systemQty-(count.status==='completed'?(item.variance||0):0):null,varianceAmountEstimate:item.variance===null?null:Math.round(item.variance*Number(item.inventory.avgCost)),valuationBasis:'current_carrying_average_estimate'}))}
 }
 async function people(counts:any[],storeId:string){
- const [actors,packages]=await Promise.all([
+ const [actors,packages,reviews]=await Promise.all([
   loadInventoryActors(prisma,storeId,counts.flatMap(c=>c.items.map((i:any)=>i.countedBy))),
-  prisma.config.findMany({where:{storeId,key:{startsWith:'inventoryPackage:'}}})
+  prisma.config.findMany({where:{storeId,key:{startsWith:'inventoryPackage:'}}}),
+  prisma.config.findMany({where:{storeId,key:{startsWith:REVIEW_PREFIX}}})
  ])
  const equivalents=new Map<string,any[]>()
  if(await unifiedInventorySince(prisma,storeId)&&!await actualInventorySince(prisma,storeId)){
@@ -29,8 +32,9 @@ async function people(counts:any[],storeId:string){
    }catch{/* Invalid conversions are omitted; quantities must be verified directly. */}
   }
  }
+ const reviewMap=new Map(reviews.map(r=>{const history=JSON.parse(r.value);return [r.key,history.map(({reason,returnedAt,returnedBy}:any)=>({reason,returnedAt,returnedBy}))] as const}))
  const packageMap=new Map(packages.map(p=>[p.key,p.value]))
- return counts.map(c=>({...c,items:c.items.map((i:any)=>{let packaging=null;try{const raw=packageMap.get('inventoryPackage:'+i.inventoryId);if(raw)packaging=validatePackage(JSON.parse(raw),i.inventory.unit)}catch{};return {...i,inventory:{...i.inventory,packaging,countEquivalents:equivalents.get(i.inventoryId)||[]},countedByActor:actors.get(i.countedBy)||null}})}))
+ return counts.map(c=>({...c,reviewHistory:reviewMap.get(REVIEW_PREFIX+c.id)||[],items:c.items.map((i:any)=>{let packaging=null;try{const raw=packageMap.get('inventoryPackage:'+i.inventoryId);if(raw)packaging=validatePackage(JSON.parse(raw),i.inventory.unit)}catch{};return {...i,inventory:{...i.inventory,packaging,countEquivalents:equivalents.get(i.inventoryId)||[]},countedByActor:actors.get(i.countedBy)||null}})}))
 }
 export async function getInventoryCounts(storeId:string){return people((await prisma.inventoryCount.findMany({where:{storeId},include,orderBy:{createdAt:'desc'}})).map(view),storeId)}
 export async function getInventoryCountById(countId:string,storeId?:string){const count=view(await prisma.inventoryCount.findFirst({where:{id:countId,...(storeId?{storeId}:{})},include}));return count?(await people([count],count.storeId))[0]:null}
@@ -88,7 +92,7 @@ export async function completeInventoryCount(countId:string,staffId:string,store
   await tx.store.update({where:{id:storeId},data:{updatedAt:new Date()}})
   await lockCount(tx,countId,storeId,['in_progress','pending_review'])
   const count=await tx.inventoryCount.findUniqueOrThrow({where:{id:countId},include:{items:{include:{inventory:true}}}})
-  if(count.period==='ad_hoc'&&count.status!=='pending_review')throw Error('COUNT_SUBMIT_REQUIRED')
+  if(count.status!=='pending_review'&&(count.period==='ad_hoc'||await tx.config.findUnique({where:{storeId_key:{storeId,key:REVIEW_PREFIX+countId}}})))throw Error('COUNT_SUBMIT_REQUIRED')
   const observed=count.items.filter(i=>i.countedQty!==null&&i.countedAt)
   if(!observed.length)throw new Error('COUNT_INCOMPLETE')
   for(const item of [...observed].sort((a,b)=>a.inventoryId.localeCompare(b.inventoryId))){
@@ -139,4 +143,22 @@ export async function submitInventoryCount(countId:string,storeId:string,counted
   if(!count.items.some(i=>i.countedQty!==null&&i.countedAt))throw Error('COUNT_INCOMPLETE')
   return view(await tx.inventoryCount.update({where:{id:countId},data:{status:'pending_review'},include}))
  },{timeout:15000})
+}
+
+// Returning a review changes workflow only. Preserve every observation and snapshot the
+// submitted evidence before subsequent edits; serialize with approval on the count row.
+export async function returnInventoryCount(countId:string,storeId:string,returnedBy:string,reason:string){
+ const trimmed=reason?.trim()
+ if(!trimmed||trimmed.length>1000)throw Error('COUNT_RETURN_REASON_REQUIRED')
+ return prisma.$transaction(async tx=>{
+  await lockCount(tx,countId,storeId,['pending_review'])
+  const count=await tx.inventoryCount.findUniqueOrThrow({where:{id:countId},include:{items:true}})
+  const key=REVIEW_PREFIX+countId
+  const previous=await tx.config.findUnique({where:{storeId_key:{storeId,key}}})
+  const history=previous?JSON.parse(previous.value):[]
+  history.push({id:randomUUID(),reason:trimmed,returnedAt:new Date().toISOString(),returnedBy,items:count.items.map(({id,inventoryId,systemQty,countedQty,variance,countedAt,countedBy,note})=>({id,inventoryId,systemQty,countedQty,variance,countedAt,countedBy,note}))})
+  const value=JSON.stringify(history)
+  await tx.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,value,category:'inventory'},update:{value}})
+  return view(await tx.inventoryCount.update({where:{id:countId},data:{status:'in_progress'},include}))
+ })
 }
