@@ -18,6 +18,7 @@ async function main(){
   declareAccessRoutes(base,built('routes/'+files[name])[name]);
  }
  declareAccessRoutes('/api/announcement',built('routes/announcement').default);
+ declareAccessRoutes('/api/training/library',built('routes/trainingLibrary').trainingLibraryRouter);
  const tenant=await db.tenant.create({data:{name:'Whole backend isolated test'}});
  for(const id of [storeId,other])await db.store.create({data:{id,tenantId:tenant.id,name:id}});
  for(const [role,phone]of[['admin','08919101001'],['staff','08919101002']]){
@@ -182,10 +183,11 @@ async function main(){
  await check('native shared publications enforce recipients independently of private parent',async()=>{
   const {bindNativeBackendPublication}=built('services/ManagementBackendIdentity');
   owner.nativeAgent={agentId:randomUUID(),grantVersion:1,clientRevision:1,executionId:'private-parent',name:'Hermes'};
-  const body={title:'Private finance sentinel',content:'PRIVATE_OWNER_FINANCE Rp123456789',type:'general',isActive:true};
+  const body={storeId,title:'Private finance sentinel',content:'PRIVATE_OWNER_FINANCE Rp123456789',type:'general',isActive:true};
   try{
    bindNativeBackendPublication(owner,{check:async(_db,target)=>{if(target.members.some(m=>m.staffId!==owner.staffId))throw Error('BACKEND_TARGET_CONTEXT_REQUIRED')}});
-   const denied=await invoke(owner,'POST /api/announcement',{body});assert.equal(denied.ok,false);assert.equal(await db.announcement.count({where:{storeId,content:body.content}}),0);
+   const denied=await invoke(owner,'POST /api/announcement',{body});assert.equal(denied.ok,false);assert.match(denied.data.message,/BACKEND_TARGET_CONTEXT_REQUIRED/);assert.equal(await db.announcement.count({where:{storeId,content:body.content}}),0);
+   const draftDenied=await invoke(owner,'PUT /api/training/library/draft',{body:{requestId:randomUUID(),expectedGeneration:null,note:'PRIVATE_OWNER_FINANCE',catalogue:{}}});assert.equal(draftDenied.ok,false);assert.match(draftDenied.data.message,/BACKEND_TARGET_CONTEXT_REQUIRED/);
    let recipients=[];bindNativeBackendPublication(owner,{check:async(_db,target)=>{recipients=target.members.map(m=>m.staffId)}});
    const saved=await invoke(owner,'POST /api/announcement',{body:{...body,title:'Approved public hygiene guide',content:'Cuci tangan sebelum bekerja.'}});assert.equal(saved.ok,true,JSON.stringify(saved));assert(recipients.includes(employee.staffId));assert(recipients.includes(owner.staffId));
    await db.announcement.deleteMany({where:{storeId}});

@@ -8230,6 +8230,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "PUT /api/training/library/draft": {
+    publicationAudience:{allStaff:true},
     "legacyRoles": [
       "admin"
     ],
@@ -8241,6 +8242,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/training/library/restore/:id": {
+    publicationAudience:{allStaff:true},
     "legacyRoles": [
       "admin"
     ],
@@ -8264,6 +8266,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/training/library/videos": {
+    publicationAudience:{allStaff:true},
     "legacyRoles": [
       "admin"
     ],
@@ -8288,6 +8291,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/training/library/documents": {
+    publicationAudience:{allStaff:true},
     "legacyRoles": [
       "admin"
     ],
