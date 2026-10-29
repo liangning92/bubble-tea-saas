@@ -2,6 +2,7 @@
 const fs=require('node:fs'),path=require('node:path'),{execFileSync}=require('node:child_process');
 const SERVICES=['api','admin','pos','staff'];
 const domains={
+ inventoryRecords:{paths:/(?:InventoryRecords|InventoryOperationRecords|operationDate|inventory-records)/i,tests:/inventory-records\.test/i},
  recipeUsage:{paths:/(?:MaterialRecipeUsage|material-recipe-usage|recipe-usage)/i,tests:/material-recipe-usage/i},
  employeeRuntime:{paths:/(?:AgentMemoryService|conversation-isolation|teamAgentBridge\/(?:employee|directDelegation)|scripts\/hermes_employee\/|operations-role|employee-(?:runtime|cutover|continuation|orchestration|intake|inventory-evidence|private-gateway)|team-agent-direct-delegation|hermes-employee-system-template)/i,tests:/(?:employee-runtime|employee-private-gateway|operations-role-authority|operations-business-intent|hermes-daily-special-tools|daily-member-operations)/i},
  teamWorkItems:{paths:/(?:externalMcp\/workItem(?:Contract|Service|Tools)|TeamTaskReminder|TeamWorkItemLinks|teamWorkTarget|team-work-items|team-work-item-(?:target|replay)|^(?:shared\/(?:TeamCommunication|TeamChatMessages|TeamTasks|TeamManagementActions)\.tsx|client-staff\/src\/components\/StaffTeamConversation\.tsx|server\/src\/services\/(?:TeamCommunicationService|TeamChatReminderService|EmployeeReminderService|NotificationApprovalService)\.ts)$)/i,tests:/team-work-items|team-work-item-(?:target|replay)/i},
@@ -77,6 +78,7 @@ function impactedFiles(files,{reverse,inspection}){
  return affected;
 }
 const browserChecks={
+ inventoryRecords:{scripts:['tests/stoploss/inventory-records-page-check.cjs'],components:['staff']},
  recipeUsage:{scripts:['tests/stoploss/material-recipe-usage-page-check.cjs'],components:['admin']},
  teamWorkItems:{components:['admin','staff'],scripts:['tests/stoploss/team-work-item-target-browser-check.cjs']},
  teamManagement:{scripts:['tests/stoploss/team-message-ai-handling-browser-check.cjs','tests/stoploss/team-management-defaults-browser-check.cjs','tests/stoploss/team-management-owner-browser-check.cjs','tests/stoploss/team-management-actions-browser-check.cjs'],components:['admin','staff']},

@@ -700,6 +700,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
   "GET /api/team/ai/agent-memory": {permission:null,ownerOnly:true,export:false,personal:false},
   "GET /api/team/ai/agent-memory/:id/history": {permission:null,ownerOnly:true,export:false,personal:false},
   "PUT /api/team/ai/agent-memory/:id": {permission:null,ownerOnly:true,export:false,personal:false},
+  "GET /api/inventory/operation-records": {permission:"inventory.read",legacyPermission:"inventory.read",legacyRoles:["manager","cashier","staff"],ownerOnly:false,export:false,personal:false,resource:null},
   "GET /api/inventory/logs": {
     "legacyRoles": [
       "manager",

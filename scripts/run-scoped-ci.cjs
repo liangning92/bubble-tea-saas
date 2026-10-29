@@ -30,6 +30,7 @@ async function browserCheck(check){
   break;
  case 'media':if(plan.media)node('scripts/test-media-insights.cjs');break;
  case 'http':
+  if(plan.domains.includes('inventoryRecords'))run('python3',['scripts/with-docker-test.py','--','python3','scripts/check-inventory-records.py']);
   if(plan.agentTasks){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-agent-tasks.py']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-agent-pilot-host.py'])}
   if(plan.teamManagement){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--management-loop']);run('python3',['scripts/with-docker-test.py','--','python3','tests/stoploss/team-management-actions-pg.py'])}
   if(plan.routineAuto){run(npm,['run','build:server']);run('python3',['scripts/with-docker-test.py','--','python3','scripts/test-team-communication.py','--routine-auto'])}

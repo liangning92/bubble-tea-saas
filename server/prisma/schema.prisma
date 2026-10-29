@@ -751,6 +751,7 @@ model Inventory {
 }
 
 model StockInLog {
+  occurredOn DateTime? @db.Date
   id          String    @id @default(cuid())
   ledgerSequence BigInt?
   inventoryId String
@@ -771,6 +772,7 @@ model StockInLog {
 }
 
 model StockOutLog {
+  occurredOn DateTime? @db.Date
   id          String    @id @default(cuid())
   ledgerSequence BigInt?
   inventoryId String
@@ -812,6 +814,7 @@ model Supplier {
 // ============================================
 
 model PurchaseOrder {
+  purchasedOn DateTime? @db.Date
   id           String              @id @default(cuid())
   storeId      String
   store        Store               @relation(fields: [storeId], references: [id])
