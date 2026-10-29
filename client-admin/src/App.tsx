@@ -21,6 +21,7 @@ const ActivitiesPage = lazy(() => import('./pages/marketing/ActivitiesPage').the
 const StaffAdjustmentsPage = lazy(() => import('./pages/staff/StaffAdjustmentsPage').then(module => ({ default: module.StaffAdjustmentsPage })))
 const TrainingLibraryPage = lazy(() => import('./pages/TrainingLibraryPage').then(module => ({ default: module.TrainingLibraryPage })))
 const MaterialForecastPage = lazy(() => import('./pages/inventory/MaterialForecastPage').then(module => ({default:module.MaterialForecastPage})))
+const MaterialRecipeUsagePage = lazy(() => import('./pages/inventory/MaterialRecipeUsagePage').then(module => ({default:module.MaterialRecipeUsagePage})))
 const EmployeeConsumptionPage = lazy(() => import('./pages/inventory/EmployeeConsumptionPage').then(module => ({default:module.EmployeeConsumptionPage})))
 const ConsumptionAnalysisPage = lazy(() => import('./pages/inventory/ConsumptionAnalysisPage').then(module => ({ default: module.ConsumptionAnalysisPage })))
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })))
@@ -210,6 +211,7 @@ function App() {
           <Route path="alert-config" element={<StockAlertConfigPage />} />
           <Route path="count" element={<InventoryCountPage />} />
           <Route path="consumption" element={<EmployeeConsumptionPage />} />
+          <Route path="recipe-usage" element={<MaterialRecipeUsagePage />} />
           <Route path="physical-analysis" element={<ConsumptionAnalysisPage />} />
           <Route path="restock" element={<RestockSuggestionPage />} />
           <Route path="suppliers" element={<SupplierListPage />} />

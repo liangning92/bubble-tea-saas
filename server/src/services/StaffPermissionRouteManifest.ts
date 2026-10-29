@@ -915,6 +915,18 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "GET /api/inventory/recipe-usage": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "inventory.read",
+    "resource": null,
+    "permission": "inventory.read",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "GET /api/inventory/consumption-alerts": {
     "legacyRoles": [
       "admin",

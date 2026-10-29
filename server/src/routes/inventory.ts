@@ -1,3 +1,4 @@
+import {materialRecipeUsage} from '../services/MaterialRecipeUsageService'
 import {stockOutPhoto} from '../services/teamAgentBridge/employeePhotos'
 import { inventoryEvidenceHandler } from '../services/InventoryEvidenceHttp'
 import { getManualCorrection, correctManualStock } from '../services/ManualStockCorrectionService'
@@ -373,6 +374,13 @@ router.post('/alert-center/:id/handle',authenticate,authorize('admin','manager')
 })
 router.put('/alert-center/expiry',authenticate,authorize('admin','manager'),validateBody(z.object({inventoryId:z.string(),batchId:z.string().optional(),expiryDate:z.string().trim().min(1),manufacturingDate:z.string().optional()})),async(req:AuthRequest,res)=>{
  try{res.json({code:200,data:await setBatchExpiry(getStoreId(req),req.body.inventoryId,req.body.batchId,req.body.expiryDate,req.body.manufacturingDate)})}catch(error:any){res.status(409).json({code:409,message:error.message})}
+})
+
+router.get('/recipe-usage',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
+ const parsed=z.object({inventoryId:z.string().min(1),startDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),endDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).safeParse(req.query)
+ if(!parsed.success)return res.status(400).json({code:400,message:'INVALID_USAGE_QUERY'})
+ try{res.json({code:200,data:await materialRecipeUsage({storeId:getStoreId(req),inventoryId:parsed.data.inventoryId!,startDate:parsed.data.startDate!,endDate:parsed.data.endDate!})})}
+ catch(error:any){res.status(error.message==='USAGE_MATERIAL_NOT_FOUND'?404:400).json({code:400,message:error.message})}
 })
 
 router.get('/employee-consumption',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
