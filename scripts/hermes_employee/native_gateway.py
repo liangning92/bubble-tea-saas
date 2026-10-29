@@ -19,6 +19,37 @@ class NativeGateway:
         if self.capacity<1:raise ValueError('NATIVE_CAPACITY_INVALID')
         self.db=sqlite3.connect(self.root/'supervisor.sqlite',check_same_thread=False,isolation_level=None)
         self.db.execute('CREATE TABLE IF NOT EXISTS runs (key TEXT PRIMARY KEY,profile TEXT NOT NULL,digest TEXT NOT NULL,run_id TEXT,state TEXT NOT NULL)')
+    def make_room(self,name,env):
+        # Homes/memory survive eviction; live native work and background processes
+        # are never killed to make room for another account.
+        resident=[]
+        for meta in self.root.glob('*.json'):
+            profile=meta.stem
+            if profile==name or not re.fullmatch('[a-f0-9]{64}',profile):continue
+            container='bubble-tea-hermes-'+hashlib.sha256(str(self.root).encode()).hexdigest()[:12]+'-'+profile[:24]
+            inspected=subprocess.run(['docker','inspect',container],capture_output=True,text=True,env=env)
+            if inspected.returncode:continue
+            value=json.loads(inspected.stdout)[0]
+            if not value['State']['Running']:continue
+            if value['Config'].get('Labels',{}).get('com.bubbletea.native-profile')!=profile:raise ValueError('NATIVE_CONTAINER_IDENTITY_CHANGED')
+            resident.append((profile,container,value,meta))
+        limit=int(self.cfg.get('maxResidentProfiles',self.capacity))
+        while len(resident)>=limit:
+            removed=False
+            for item in list(resident):
+                profile,container,value,meta=item
+                if self.db.execute("SELECT count(*) FROM runs WHERE profile=? AND state IN ('reserved','running')",(profile,)).fetchone()[0]:continue
+                try:
+                    mapped=value['NetworkSettings']['Ports']['8643/tcp'][0]
+                    if mapped['HostIp']!='127.0.0.1':raise ValueError('NATIVE_CONTAINER_LISTENER_CHANGED')
+                    child={'port':int(mapped['HostPort']),'key':json.loads(meta.read_text())['apiKey']}
+                    with self.child_request(child,'/native/readiness',timeout=3) as response:ready=json.load(response)
+                    if any(ready.get(k,0) for k in ('activeRuns','activeProcesses','activeDelegations','pendingProcessCompletions')):continue
+                    subprocess.run(['docker','stop','--time','20',container],check=True,stdout=subprocess.DEVNULL,env=env)
+                    self.profiles.pop(profile,None);resident.remove(item);removed=True;break
+                except (OSError,ValueError,error.URLError):continue
+            if not removed:raise ValueError('NATIVE_RESOURCE_BUSY')
+
     def profile(self,name):
         if not re.fullmatch('[a-f0-9]{64}',name):raise ValueError('NATIVE_PROFILE_INVALID')
         with self.lock:
@@ -50,6 +81,7 @@ class NativeGateway:
                     p={'process':None,'port':int(mapped['HostPort']),'key':api_key,'container':container};self.profiles[name]=p;return p
                 subprocess.run(['docker','rm',container],check=True,stdout=subprocess.DEVNULL,env=env)
             cmd=['docker','run','--name',container,'--rm','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=256','--shm-size=256m','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--label','com.bubbletea.native-profile='+name,'-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes','-i',image]
+            self.make_room(name,env)
             log=open(self.root/(name+'.log'),'ab',buffering=0)
             child=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=log,stderr=log,start_new_session=True,env={'PATH':self.cfg.get('path','/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin'),'HOME':str(Path.home())})
             payload={'profileRoot':'/home/hermes','profileKey':name,'port':8643,'listenHost':'0.0.0.0','apiKey':api_key,'repository':'/opt/store-adapter','hermesSource':'/opt/hermes','hermesExpectedSha':self.cfg['hermesExpectedSha'],'path':'/opt/venv/bin:/usr/local/bin:/usr/bin:/bin'}
@@ -62,8 +94,8 @@ class NativeGateway:
                     if response.status==200:return p
             except Exception:time.sleep(.1)
         raise ValueError('NATIVE_API_START_TIMEOUT')
-    def child_request(self,p,path,body=None,headers=None):
-        return request.urlopen(request.Request('http://127.0.0.1:'+str(p['port'])+path,data=body,headers={'Authorization':'Bearer '+p['key'],**(headers or {})}),timeout=120)
+    def child_request(self,p,path,body=None,headers=None,timeout=120):
+        return request.urlopen(request.Request('http://127.0.0.1:'+str(p['port'])+path,data=body,headers={'Authorization':'Bearer '+p['key'],**(headers or {})}),timeout=timeout)
     def server(self):
         owner=self
         class Handler(BaseHTTPRequestHandler):

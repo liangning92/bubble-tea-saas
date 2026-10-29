@@ -109,7 +109,7 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
   for(const [key,value]of Object.entries(input.query||{}))appendQuery(key,value)
   // Never allow a missing store selector to mean a global administrator query.
   query.set('storeId',actor.storeId)
-  const multipart=input.files?.length?await nativeMultipart(db,actor,input.body,input.files):undefined
+  const multipart=input.files?.length?await nativeMultipart(db,actor,input.body,input.files,!!op.declaration.publicationAudience?.publicOutput):undefined
   const socket=new Duplex({read(){},write(_c,_e,done){done()}})
   const req=new IncomingMessage(socket as any) as any
   req.method=op.method;req.url=target+(query.size?'?'+query.toString():'');req.headers={'content-type':multipart?.contentType||'application/json','x-client-app':actor.employeeApp?'employee':'admin',...(multipart?{'content-length':String(multipart.bytes.length)}:{})}

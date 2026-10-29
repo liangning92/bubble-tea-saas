@@ -50,7 +50,9 @@ and delivery acceptance.
    rollback. Verify protocol, image IDs, source SHA and normal logged-in UI.
 6. Assign actual Hermes a safe read-only task first; verify real source/reply/run
    and operation receipts. Business changes must be performed by Hermes through
-   the normal backend, not by the release operator. Do not create fake production
+   the normal backend, not by the release operator. Public uploads require a public-purpose
+   audience context and files generated for that audience; a private attachment
+   cannot be laundered into a public URL. Do not create fake production
    orders/inventory or publish paused promotions as a test.
 
 ## Evidence

@@ -69,4 +69,22 @@ class NativeGatewayTests(unittest.TestCase):
     def test_only_one_supervisor_owns_journal(self):
         with self.assertRaises(BlockingIOError):NativeGateway(self.cfg)
 
+    def test_resident_limit_preserves_active_work_and_evicts_only_idle_home(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        profile='b'*64;meta=self.gateway.root/(profile+'.json');meta.write_text(json.dumps({'apiKey':'fixture'}))
+        self.cfg['maxResidentProfiles']=1
+        value={'State':{'Running':True},'Config':{'Labels':{'com.bubbletea.native-profile':profile}},'NetworkSettings':{'Ports':{'8643/tcp':[{'HostIp':'127.0.0.1','HostPort':str(self.native.server_port)}]}}}
+        stopped=[]
+        def docker(cmd,**kwargs):
+            if cmd[1]=='inspect':return SimpleNamespace(returncode=0,stdout=json.dumps([value]))
+            stopped.append(cmd);return SimpleNamespace(returncode=0)
+        self.gateway.db.execute("INSERT INTO runs VALUES ('active',?,?,?,'running')",(profile,'digest','run_active'))
+        with patch('native_gateway.subprocess.run',side_effect=docker):
+            with self.assertRaisesRegex(ValueError,'NATIVE_RESOURCE_BUSY'):self.gateway.make_room('a'*64,{})
+            self.assertEqual(stopped,[])
+            self.gateway.db.execute("UPDATE runs SET state='completed'")
+            self.gateway.make_room('a'*64,{})
+        self.assertEqual(len(stopped),1);self.assertEqual(stopped[0][1],'stop');self.assertTrue(meta.exists())
+
 if __name__=='__main__':unittest.main()

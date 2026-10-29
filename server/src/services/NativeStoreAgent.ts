@@ -155,11 +155,11 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   if(raw?.action==='file_write'){
    const value=z.object({action:z.literal('file_write'),base64:z.string().max(12*1024*1024),mimeType:z.string().regex(/^[a-zA-Z0-9.+-]+\/[a-zA-Z0-9.+-]+$/)}).strict().parse(raw)
    const bytes=Buffer.from(value.base64,'base64');if(bytes.length>8*1024*1024||bytes.toString('base64')!==value.base64)throw Error('NATIVE_ACCOUNT_UPLOAD_LIMIT')
-   const file=await storeNativeDownload(db,c.actor,bytes,value.mimeType,c.job.id,'team');res.json({ok:true,file});return
+   const file=await storeNativeDownload(db,c.actor,bytes,value.mimeType,c.job.id,'team',{staffIds:c.scope.audienceStaffIds,publicOutput:c.channel.kind==='public'});res.json({ok:true,file});return
   }
   const callId=digest([v.sessionId,v.toolCallId]),executionId=c.job.id
   const reservation=await db.$transaction(async(tx:any)=>{await lockTeam(tx,cfg.storeId,'native-backend.'+callId);return reserveBackendOperation(tx,cfg.storeId,c.scope,c.source.id,executionId,callId,v.args)})
-  const publication={check:async(tx:any,target:any)=>{const fresh=await current(c.job,tx);if(target.channelId&&target.channelId!==c.job.channelId||target.members.some((m:any)=>!fresh.channel.members.some((x:any)=>x.staffId===m.staffId)))throw Error('BACKEND_TARGET_CONTEXT_REQUIRED')}}
+  const publication={check:async(tx:any,target:any)=>{const fresh=await current(c.job,tx);if(target.publicOutput&&fresh.channel.kind!=='public'||target.channelId&&target.channelId!==c.job.channelId||target.members.some((m:any)=>!fresh.channel.members.some((x:any)=>x.staffId===m.staffId)))throw Error('BACKEND_TARGET_CONTEXT_REQUIRED')}}
   const result=await executeBackendTool(db,c.principal,c.scope,c.source.id,v.args,reservation,async()=>{await current(c.job)},publication)
   res.json(result)
  }catch(error){failure(res,error)}})

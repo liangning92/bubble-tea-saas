@@ -17,6 +17,7 @@ async function main(){
   const files={productRouter:'product',configRouter:'config',categoryRouter:'category',teamCommunicationRouter:'teamCommunication',activitiesRouter:'activities',purchaseOrderRouter:'purchaseOrder',salaryRouter:'salary'};
   declareAccessRoutes(base,built('routes/'+files[name])[name]);
  }
+ declareAccessRoutes('/api/upload',built('routes/upload').uploadRouter);
  declareAccessRoutes('/api/announcement',built('routes/announcement').default);
  declareAccessRoutes('/api/training/library',built('routes/trainingLibrary').trainingLibraryRouter);
  const tenant=await db.tenant.create({data:{name:'Whole backend isolated test'}});
@@ -135,6 +136,10 @@ async function main(){
   const queryResult=await invoke(owner,'GET /api/isolated-backend-fixture/query',{query:{status:['draft','paused'],filter:{name:'Tea'}}});assert.deepEqual(queryResult.data.query.status,['draft','paused']);assert.equal(queryResult.data.query.filter.name,'Tea');
   const {storeNativeDownload}=built('services/NativeBackendFiles'),bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWZkAAAAASUVORK5CYII=','base64');
   const inputFile=await storeNativeDownload(db,owner,bytes,'image/png','synthetic-file-input');
+  const {nativeMultipart}=built('services/NativeBackendFiles');await assert.rejects(()=>nativeMultipart(db,owner,{caption:'PRIVATE_OWNER_FINANCE'},[{field:'files',fileId:inputFile.id}],true),/PRIVATE_FILE_CANNOT_BECOME_PUBLIC/);
+  const publicDir=path.join(built('utils/mediaFiles').uploadRoot,'attachments'),before=await fs.readdir(publicDir);
+  await assert.rejects(()=>invoke(owner,'POST /api/upload/attachment',{files:[{field:'files',fileId:inputFile.id}]}),/PRIVATE_FILE_CANNOT_BECOME_PUBLIC/);
+  assert.deepEqual(await fs.readdir(publicDir),before,'private file was never written to the public directory');
   const upload=await invoke(owner,'POST /api/isolated-backend-fixture/upload',{body:{caption:'Real native multipart'},files:[{field:'image',fileId:inputFile.id}]});
   assert.equal(upload.ok,true);assert.equal(upload.data.caption,'Real native multipart');assert.equal(upload.data.file.bytes,bytes.length);assert.equal(upload.data.file.hash,inputFile.sha256);
 

@@ -1,5 +1,5 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
-export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null;publicationAudience?:{allStaff?:boolean;staffField?:string;resourceModel?:string;resourceParam?:string}}> = {
+export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null;publicationAudience?:{publicOutput?:boolean;allStaff?:boolean;staffField?:string;resourceModel?:string;resourceParam?:string}}> = {
   "GET /api/team/agent-work-guides":{permission:"personal.messages",ownerOnly:false,export:false,personal:true},
   "GET /api/team/agent-jobs":{permission:"team.audit",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"team.audit"},
   "GET /api/team/agent-jobs/:id":{permission:"team.audit",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"team.audit"},
@@ -4941,6 +4941,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/upload/tvMusic": {
+    publicationAudience:{allStaff:true,publicOutput:true},
     "legacyRoles": [
       "admin",
       "manager"
@@ -4953,6 +4954,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/upload/product": {
+    publicationAudience:{allStaff:true,publicOutput:true},
     "legacyRoles": [
       "manager",
       "cashier",
@@ -4966,6 +4968,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/upload/receipt": {
+    publicationAudience:{allStaff:true,publicOutput:true},
     "legacyRoles": [
       "manager",
       "cashier",
@@ -4979,6 +4982,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/upload/attachment": {
+    publicationAudience:{allStaff:true,publicOutput:true},
     "legacyRoles": [
       "manager",
       "cashier",
@@ -4992,6 +4996,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/upload/avatar": {
+    publicationAudience:{allStaff:true,publicOutput:true},
     "legacyRoles": [
       "manager",
       "cashier",
@@ -5005,6 +5010,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/upload/dualScreen": {
+    publicationAudience:{allStaff:true,publicOutput:true},
     "legacyRoles": [
       "manager",
       "cashier",
@@ -5037,6 +5043,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/media": {
+    publicationAudience:{allStaff:true,publicOutput:true},
     "permission": null,
     "ownerOnly": false,
     "export": false,

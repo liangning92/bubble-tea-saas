@@ -21,6 +21,8 @@ def load_config(path):
         raise ValueError("PRIVATE_LOOPBACK_LISTENER_REQUIRED")
     if not 1 <= int(value.get("maxConcurrency", 2)) <= 32:
         raise ValueError("NATIVE_CAPACITY_INVALID")
+    if not 1 <= int(value.get("maxResidentProfiles", value.get("maxConcurrency", 2))) <= 64:
+        raise ValueError("NATIVE_RESIDENT_CAPACITY_INVALID")
     secret = Path(value["gatewayBearerFile"])
     if secret.resolve() != secret or secret.stat().st_mode & 0o077:
         raise ValueError("PRIVATE_GATEWAY_BEARER_REQUIRED")
