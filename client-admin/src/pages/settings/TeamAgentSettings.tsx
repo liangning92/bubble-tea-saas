@@ -54,6 +54,7 @@ interface SystemStateData {
   employeeBridgeConfigured: boolean
   runtimeAvailable: boolean
   hostOrigin: string
+  latestExecution?: {phase:string;turn:number;inputs:number;responses:number;tools:number;faultCode:string|null;updatedAt:string}|null
   capabilities: CapabilityItem[]
 }
 
@@ -168,7 +169,7 @@ export function TeamAgentSettings({
     } catch (e: any) {
       if (current() && reqId === epoch.current) {
         const msg = e?.response?.data?.message
-        setError(msg === 'TEAM_VERSION_CONFLICT' ? c.conflictError : c.saveError)
+        setError(msg === 'TEAM_VERSION_CONFLICT' ? c.conflictError : msg === 'TEAM_AGENT_RESYNC_BUSY' ? c.resyncBusy : c.saveError)
       }
     } finally {
       if (current() && reqId === epoch.current) setBusy(false)
@@ -237,6 +238,13 @@ export function TeamAgentSettings({
             </span>
           </div>
         </div>
+
+        {systemState?.latestExecution && (
+          <p className="mt-3 break-words text-xs text-gray-600" data-testid="agent-execution-diagnostic">
+            {c.recentExecution}: {systemState.latestExecution.phase} · {c.modelRounds}: {systemState.latestExecution.inputs}/{systemState.latestExecution.responses} · {c.businessTools}: {systemState.latestExecution.tools}
+            {systemState.latestExecution.faultCode && <span className="block text-red-700">{systemState.latestExecution.faultCode}</span>}
+          </p>
+        )}
 
         {/* 诊断信息区域 */}
         <div className="mt-4 rounded-lg bg-gray-50 p-4">
@@ -520,7 +528,12 @@ export function TeamAgentSettings({
           <span className="text-sm text-gray-600">
             {busy ? c.saving : dirty ? c.dirtyWarning : `${c.saved} (v${base.version})`}
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {!dirty && (
+              <button type="button" className={button} disabled={busy || checking} onClick={() => void handleSave()}>
+                {c.resyncButton}
+              </button>
+            )}
             <button
               type="button"
               className={button}

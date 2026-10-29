@@ -1,3 +1,4 @@
+import { employeeExecutionDiagnostic } from './teamAgentBridge/employeeRuntimeDiagnostics'
 import { pdcaPilotDiagnostic } from './agentTasks/diagnostics'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -89,6 +90,24 @@ export function defaultAgentSettings(): AgentSettings {
   }
 }
 
+async function effectiveAgentSettings(db:any,storeId:string,saved:any):Promise<AgentSettings> {
+  const merged: AgentSettings = saved ? {
+    ...defaultAgentSettings(),
+    ...saved,
+    permissions: { ...defaultAgentPermissions(), ...(saved.permissions || {}) }
+  } : defaultAgentSettings()
+
+  if(saved?.permissions&&!saved.permissions.marketing)merged.permissions.marketing={...saved.permissions.members}
+  if (merged.operationProfile === 'store_operations') merged.permissions = fullStoreOperationsPermissions()
+  if(saved&&!Object.prototype.hasOwnProperty.call(saved,'expiresAt')){
+    const grants=await db.config.findMany({where:{storeId:storeId,key:{startsWith:'externalAgent.teamBridge.v1.grant.'}}})
+    const expiries=grants.map((r:any)=>JSON.parse(r.value).expiresAt).filter(Boolean).sort()
+    merged.expiresAt=expiries[0]||null
+  }
+  if(process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN&&merged.agentOrigin==='http://127.0.0.1:8642')merged.agentOrigin=process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN
+  return merged
+}
+
 export function agentSettingsService(db: any = prisma) {
   return {
     async getSettings(a: TeamActor) {
@@ -99,24 +118,15 @@ export function agentSettingsService(db: any = prisma) {
       })
 
       const saved = await readTeam(db, a.storeId, 'ai.agent.settings')
-      const merged: AgentSettings = saved ? {
-        ...defaultAgentSettings(),
-        ...saved,
-        permissions: { ...defaultAgentPermissions(), ...(saved.permissions || {}) }
-      } : defaultAgentSettings()
-
-      if(saved?.permissions&&!saved.permissions.marketing)merged.permissions.marketing={...saved.permissions.members}
-      if (merged.operationProfile === 'store_operations') merged.permissions = fullStoreOperationsPermissions()
-      if(saved&&!Object.prototype.hasOwnProperty.call(saved,'expiresAt')){
-        const grants=await db.config.findMany({where:{storeId:a.storeId,key:{startsWith:'externalAgent.teamBridge.v1.grant.'}}})
-        const expiries=grants.map((r:any)=>JSON.parse(r.value).expiresAt).filter(Boolean).sort()
-        merged.expiresAt=expiries[0]||null
-      }
-      if(process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN&&merged.agentOrigin==='http://127.0.0.1:8642')merged.agentOrigin=process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN
+      const merged = await effectiveAgentSettings(db,a.storeId,saved)
       const pdcaPilot = await pdcaPilotDiagnostic(db, a.storeId)
       const employeeEnabledEnv = process.env.EMPLOYEE_HERMES_ENABLED === '1'&&(!process.env.EMPLOYEE_HERMES_STORE_ID||process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId)
 
+      const recentExecutions=await db.config.findMany({where:{storeId:a.storeId,key:{startsWith:'team.communication.employeeRuntime.execution.',not:{contains:'.provider.'}}},orderBy:{updatedAt:'desc'},take:5,select:{value:true,updatedAt:true}})
+      const latestExecution=recentExecutions.map((row:any)=>employeeExecutionDiagnostic(row.value,row.updatedAt)).find(Boolean)||null
+
       const systemState = {
+        latestExecution,
         pilotState: pdcaPilot.state === 'valid' ? 'running' : pdcaPilot.state,
         pdcaPilot,
         employeeBridgeConfigured: employeeEnabledEnv,
@@ -166,6 +176,16 @@ export function agentSettingsService(db: any = prisma) {
           denied('TEAM_VERSION_CONFLICT', 409)
         }
 
+        // Re-materializing the exact same saved authority must wait for current
+        // conversations; a real permission change/revocation still takes effect immediately.
+        const previous = current && agentSettingsSchema.parse(await effectiveAgentSettings(tx,a.storeId,current))
+        const resyncOnly = !!previous && JSON.stringify(previous) === JSON.stringify(validated)
+        if (resyncOnly) {
+          const executions = await tx.config.findMany({where:{storeId:a.storeId,key:{startsWith:'team.communication.employeeRuntime.execution.',not:{contains:'.provider.'}}},select:{value:true}})
+          const active = executions.some((row:any)=>{const state=JSON.parse(row.value);return ['input','response','tools','final'].includes(state.phase)&&Date.parse(state.expiresAt)>Date.now()&&(!process.env.EMPLOYEE_HERMES_AGENT_ID||state.grant?.agentId===process.env.EMPLOYEE_HERMES_AGENT_ID)})
+          if(active)denied('TEAM_AGENT_RESYNC_BUSY',409)
+        }
+
         const nextVersion = currentVersion + 1
         const toSave: AgentSettings = {
           ...validated,
@@ -174,7 +194,7 @@ export function agentSettingsService(db: any = prisma) {
         }
 
         await writeTeam(tx, a.storeId, 'ai.agent.settings', toSave)
-        await synchronizeEmployeeGrants(tx,a,toSave)
+        await synchronizeEmployeeGrants(tx,a,toSave,{preserveExistingAuthority:resyncOnly})
         await auditTeam(tx, a, 'ai.agent.settings', 'update', {
           action: 'agent_settings_update',
           version: nextVersion,
@@ -256,7 +276,7 @@ export function agentSettingsService(db: any = prisma) {
 
 /** Save the operator's choices and the installed executor's grant in one transaction.
  * No dated pilot constant, direct database edit, or process restart is required. */
-export async function synchronizeEmployeeGrants(tx:any,a:TeamActor,s:AgentSettings) {
+export async function synchronizeEmployeeGrants(tx:any,a:TeamActor,s:AgentSettings,options:{preserveExistingAuthority?:boolean}={}) {
   const rows=await tx.config.findMany({where:{storeId:a.storeId,key:{startsWith:'externalAgent.teamBridge.v1.grant.'}},orderBy:{key:'asc'}})
   const mapping:Record<string,{read:string[];write:string[]}>={
     products:{read:['products.read'],write:['products.write']},
@@ -269,14 +289,14 @@ export async function synchronizeEmployeeGrants(tx:any,a:TeamActor,s:AgentSettin
     channels:{read:['messages.read','tasks.read'],write:['messages.send']}
   }
   const managed=new Set([...Object.values(mapping).flatMap(m=>[...m.read,...m.write]),'memory.read','memory.write'])
-  const expiry=s.expiresAt||'9999-12-31T23:59:59.999Z'
   for(const row of rows){
     const previous=grantSchema.parse(JSON.parse(row.value))
+    const expiry=options.preserveExistingAuthority?previous.expiresAt:s.expiresAt||'9999-12-31T23:59:59.999Z'
     if(process.env.EMPLOYEE_HERMES_AGENT_ID&&previous.agentId!==process.env.EMPLOYEE_HERMES_AGENT_ID)continue
     const selected=previous.actions.filter(x=>!managed.has(x)) as string[]
     for(const [module,modes] of Object.entries(mapping))for(const mode of ['read','write'] as const)if(s.permissions[module]?.[mode])selected.push(...modes[mode])
     if(s.memoryEnabled){selected.push('memory.read');if(s.learningEnabled)selected.push('memory.write')}
-    const grant=grantSchema.parse({...previous,displayName:s.agentName,version:previous.version+1,clientRevision:previous.clientRevision+1,expiresAt:expiry,revoked:!s.enabled||!s.employeeBridgeEnabled,actions:[...new Set(selected)].filter(x=>(actions as readonly string[]).includes(x))})
+    const grant=grantSchema.parse({...previous,displayName:s.agentName,version:previous.version+1,clientRevision:previous.clientRevision+1,expiresAt:expiry,revoked:!!(options.preserveExistingAuthority&&previous.revoked)||!s.enabled||!s.employeeBridgeEnabled,actions:[...new Set(selected)].filter(x=>(actions as readonly string[]).includes(x))})
     await tx.config.update({where:{storeId_key:{storeId:a.storeId,key:employeeGrantKey(grant.agentId)}},data:{value:JSON.stringify(grant)}})
     const routes=await tx.config.findMany({where:{storeId:a.storeId,key:{startsWith:'externalAgent.teamBridge.v1.employeeRoute.'}}})
     for(const r of routes){
@@ -285,7 +305,7 @@ export async function synchronizeEmployeeGrants(tx:any,a:TeamActor,s:AgentSettin
       const taskKey='task.'+channelId+'.'+route.task.taskId,task=await readTeam<any>(tx,a.storeId,taskKey)
       const taskRef=task?{taskId:route.task.taskId,version:(task.version||route.task.version)+1}:route.task
       if(task){const serviceOwned=task.ownerId==='agent:'+grant.agentId&&task.text?.startsWith('Hermes:');await writeTeam(tx,a.storeId,taskKey,{...task,version:taskRef.version,deadlineAt:expiry,dueDate:expiry.slice(0,10),...(serviceOwned?{text:'Hermes: answer free-form store questions and perform operations under the currently saved authorization. Use actual evidence and persistent scoped memory; never invent completion.'}:{}),updatedAt:new Date().toISOString()})}
-      await tx.config.update({where:{storeId_key:{storeId:a.storeId,key:employeeRouteKey(channelId)}},data:{value:JSON.stringify({...route,task:taskRef,version:route.version+1,enabled:s.enabled&&s.employeeBridgeEnabled,expiresAt:expiry})}})
+      await tx.config.update({where:{storeId_key:{storeId:a.storeId,key:employeeRouteKey(channelId)}},data:{value:JSON.stringify({...route,task:taskRef,version:route.version+1,enabled:s.enabled&&s.employeeBridgeEnabled&&!grant.revoked&&Date.parse(expiry)>Date.now(),expiresAt:expiry})}})
       const key='externalAgent.teamBridge.v1.channel.'+channelId
       const binding=await tx.config.findUnique({where:{storeId_key:{storeId:a.storeId,key}}})
       if(binding){const value=JSON.parse(binding.value);value.task=taskRef;if(value.delegatedDirect)value.delegatedDirect={...value.delegatedDirect,grantVersion:grant.version,clientRevision:grant.clientRevision,expiresAt:expiry};await tx.config.update({where:{storeId_key:{storeId:a.storeId,key}},data:{value:JSON.stringify(value)}})}

@@ -34,6 +34,24 @@ async function main(){
   assert.equal(route.expiresAt,grant.expiresAt);assert.equal(binding.delegatedDirect.grantVersion,grant.version);
   await assert.rejects(()=>service.saveSettings(owner,{...settings,version:settings.version-1}),/TEAM_VERSION_CONFLICT/);
  });
+ await check('same-settings resync waits for active execution without changing grants, routes or task versions',async()=>{
+  const service=agentSettingsService(db),executionKey='employeeRuntime.execution.'+randomUUID();
+  await writeTeam(db,storeId,executionKey,{phase:'response',expiresAt:new Date(Date.now()+60000).toISOString(),grant});
+  const snapshot=async()=>JSON.stringify(await db.config.findMany({where:{storeId},orderBy:{key:'asc'},select:{key:true,value:true}}));
+  const before=await snapshot();await assert.rejects(()=>service.saveSettings(owner,settings),/TEAM_AGENT_RESYNC_BUSY/);assert.equal(await snapshot(),before);
+  await writeTeam(db,storeId,executionKey,{phase:'unknown',expiresAt:new Date(Date.now()+60000).toISOString(),grant});
+  const previous=structuredClone(grant),priorSettings=structuredClone(settings);settings=await service.saveSettings(owner,settings);
+  grant=JSON.parse((await db.config.findUnique({where:{storeId_key:{storeId,key:grantKey}}})).value);
+  assert.deepEqual({...settings,version:priorSettings.version},priorSettings);assert.deepEqual(grant.actions,previous.actions);assert.equal(grant.expiresAt,previous.expiresAt);assert.equal(grant.revoked,previous.revoked);
+ });
+ await check('resync cannot renew or revive a previously expired and revoked grant',async()=>{
+  const inactiveId=randomUUID(),inactiveKey='externalAgent.teamBridge.v1.grant.'+inactiveId;
+  const inactive={...grant,agentId:inactiveId,revoked:true,expiresAt:'2020-01-01T00:00:00.000Z'};await put(inactiveKey,inactive);
+  settings=await agentSettingsService(db).saveSettings(owner,settings);
+  const after=JSON.parse((await db.config.findUnique({where:{storeId_key:{storeId,key:inactiveKey}}})).value);
+  assert.equal(after.revoked,true);assert.equal(after.expiresAt,inactive.expiresAt);
+  grant=JSON.parse((await db.config.findUnique({where:{storeId_key:{storeId,key:grantKey}}})).value);
+ });
  const item=await db.inventory.create({data:{storeId,name:'Synthetic cups',category:'supplies',unit:'pcs',currentStock:10,avgCost:2}});
  await check('broad inventory questions have a real paginated list tool, without a keyword router',async()=>{
   const result=await executeBusinessTool(db,grant,scope,'employee_manage_inventory',{action:'list'},'synthetic-inventory-list');assert(result.items.some(x=>x.id===item.id));assert.equal(result.items[0].avgCost,undefined);
