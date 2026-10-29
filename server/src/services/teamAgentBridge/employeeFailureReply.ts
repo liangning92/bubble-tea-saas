@@ -1,3 +1,4 @@
+import { employeeNativeReply } from './employeeNativeReply'
 import { createHash } from 'crypto'
 import { readTeam, writeTeam } from '../TeamCommunicationService'
 import { createTeamAgentBridge } from './service'
@@ -39,6 +40,7 @@ export async function sendEmployeeFailureReply(tx: any, storeId: string, event: 
   const stored = await readTeam<any>(tx, storeId, 'employeeRuntime.execution.' + state.ticket.executionId)
   if (!stored || JSON.stringify(stored) !== JSON.stringify(state) || !(state.phase === 'unknown' || state.phase !== 'complete' && Date.parse(state.expiresAt) <= Date.now())) deny()
   if (state.tools?.some((tool: any) => tool.name === 'employee_send_message' && tool.value?.messageId)) return null
+  if(await employeeNativeReply(tx,storeId,state))return null
   const id = requestId(state.ticket.executionId), markerKey = 'employeeRuntime.failureReply.' + state.ticket.executionId
   const routeRow = await tx.config.findUnique({ where: { storeId_key: { storeId, key: employeeRouteKey(event.channelId) } } })
   const route = employeeRouteSchema.parse(routeRow && JSON.parse(routeRow.value))

@@ -1,3 +1,4 @@
+import { bindNativeBackendPublication, NativeBackendPublication } from '../ManagementBackendIdentity'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
 import { backendCatalog, backendDescription, backendOperation, invokeManagementBackend } from '../ManagementBackendRegistry'
@@ -62,7 +63,7 @@ async function release(db:any,g:BridgeGrant,scope:CommunicationScope,row:any){
 /** Actual HTTP handlers run outside the trace transaction. Their native business
  * transactions and effects remain unchanged. Completion is durable independently
  * of trace CAS/lease, so a late result cannot disappear or invite duplicate work. */
-export async function executeBackendTool(db:any,g:BridgeGrant,scope:CommunicationScope,sourceId:string|undefined,raw:unknown,reservation?:BackendReservation,authorizeDispatch?:()=>Promise<void>){
+export async function executeBackendTool(db:any,g:BridgeGrant,scope:CommunicationScope,sourceId:string|undefined,raw:unknown,reservation?:BackendReservation,authorizeDispatch?:()=>Promise<void>,publication?:NativeBackendPublication){
   const parsed=schema.safeParse(raw)
   if(!parsed.success)return {ok:false,code:'BACKEND_INPUT_INVALID',issues:parsed.error.issues.map(i=>({path:i.path,message:i.message}))}
   const v=parsed.data
@@ -90,6 +91,7 @@ export async function executeBackendTool(db:any,g:BridgeGrant,scope:Communicatio
     const person=await db.staff.findFirst({where:{id:scope.requesterStaffId,storeId:g.storeId,status:'active'},include:{user:true}}),user=person?.user
     if(!user||(person.storeId||user.storeId)!==g.storeId||user.id!==person.userId||!['admin','manager','cashier','staff'].includes(user.role))throw Error('BACKEND_REQUESTING_ACCOUNT_UNAVAILABLE')
     const actor:any={id:user.id,phone:user.phone||'',role:user.role,storeId:g.storeId,staffId:person.id,issuedAtMs:Date.now()}
+    if(publication)bindNativeBackendPublication(actor,publication)
     actor.nativeAgent={agentId:g.agentId,grantVersion:g.version,clientRevision:g.clientRevision,executionId:journal.executionId,name:g.displayName||'Hermes'}
     actor.accessRole=await userAccessV2(actor,db)||await assignedStaffAccess(actor,db)
     actor.employeeApp=!hasManagementAccess(actor.role,actor.accessRole)
@@ -111,4 +113,11 @@ export async function executeBackendTool(db:any,g:BridgeGrant,scope:Communicatio
     await persist({...saved,state:saved?.state==='running'?'unknown':'blocked',fault:code,updatedAt:new Date().toISOString()})
     return {ok:false,code,receiptId:reservation.id,state:saved?.state==='running'?'unknown':'blocked',mayHaveExecuted:saved?.state==='running',retryAllowed:false}
   }
+}
+
+/** A trace CAS failure cannot erase an independently reserved native effect.
+ * Recovery may reconcile its journal but must not replay the source message. */
+export async function hasUnresolvedBackendEffect(db:any,storeId:string,executionId:string){
+ const rows=await db.config.findMany({where:{storeId,key:{startsWith:'team.communication.employeeRuntime.backendOperation.'},value:{contains:JSON.stringify(executionId)}}})
+ return rows.some((row:any)=>{const operation=JSON.parse(row.value);return operation.executionId===executionId&&operation.state!=='blocked'&&!(operation.state==='complete'&&operation.result?.executed===false)})
 }

@@ -128,7 +128,14 @@ async function main(){
   const scope={compartmentKey:'native-agent-scope',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId,agentId:randomUUID(),version:1,clientRevision:1,displayName:'Hermes fixture'};
   const args={action:'execute',operationId:'POST /api/team/channels/:id/messages',contractVersion:api.backendVersion(),pathParams:{id},body:{requestId:randomUUID(),text:'Agent message fixture',expectedLastSeq:channel.data.data.lastSeq,files:[]}};
   const reservation=await tools.reserveBackendOperation(db,storeId,scope,'native-agent-source','native-agent-execution','native-agent-call',args);
-  const result=await tools.executeBackendTool(db,g,scope,'native-agent-source',args,reservation,async()=>{});assert.equal(result.ok,true,JSON.stringify(result));
+  // Provenance alone is deliberately insufficient for publishing to staff.
+  const withoutCapability=await tools.executeBackendTool(db,g,scope,'native-agent-source',args,reservation,async()=>{});assert.equal(withoutCapability.ok,false);
+  assert.equal((await readTeam(db,storeId,'channel.'+id)).lastSeq,0);
+  const cleanScope={...scope,compartmentKey:'target-scoped-native-fixture',channelId:id,audienceStaffIds:[owner.staffId,employee.staffId]};
+  const cleanArgs={...args,body:{...args.body,requestId:randomUUID()}},cleanReservation=await tools.reserveBackendOperation(db,storeId,cleanScope,'target-shared-source','target-native-execution','target-native-call',cleanArgs);
+  let admitted=0;
+  const result=await tools.executeBackendTool(db,g,cleanScope,'target-shared-source',cleanArgs,cleanReservation,async()=>{},{check:async(_tx,target)=>{assert.equal(target.channelId,id);assert.deepEqual(target.members.map(m=>m.staffId).sort(),cleanScope.audienceStaffIds.slice().sort());admitted++;}});
+  assert.equal(result.ok,true,JSON.stringify(result));assert(admitted>0);
   const message=result.data.data;assert.equal(message.agent.agentId,g.agentId);assert.equal(message.authorName,'Hermes fixture');assert.equal(message.authorId,owner.staffId);
   assert.equal((await readTeam(db,storeId,'workflow.policy.'+id)).paused,false);
   await built('services/TeamWorkflowQueue').enqueueTeamWorkflow(db,owner,{id},message,{read:()=>{throw Error('AGENT_MUST_NOT_TRIGGER_ANOTHER_AI')},write:()=>{throw Error('AGENT_MUST_NOT_TRIGGER_ANOTHER_AI')}});

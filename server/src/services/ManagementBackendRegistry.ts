@@ -3,7 +3,7 @@ import { IncomingMessage, ServerResponse } from 'node:http'
 import { Duplex } from 'node:stream'
 import { createHash } from 'node:crypto'
 import type { AuthUser } from '../middlewares/auth'
-import { MANAGEMENT_BACKEND_IDENTITY } from './ManagementBackendIdentity'
+import { MANAGEMENT_BACKEND_IDENTITY, MANAGEMENT_BACKEND_PUBLICATION, nativeBackendPublication } from './ManagementBackendIdentity'
 import { backendEffect, backendInputBoundary, redactBackendSecrets, BackendEffect } from './ManagementBackendPolicy'
 
 export const BACKEND_OPERATION = Symbol('server-issued backend operation')
@@ -108,6 +108,7 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
   const req=new IncomingMessage(socket as any) as any
   req.method=op.method;req.url=target+(query.size?'?'+query.toString():'');req.headers={'content-type':'application/json','x-client-app':actor.employeeApp?'employee':'admin'}
   req.body=input.body||{};req[MANAGEMENT_BACKEND_IDENTITY]=structuredClone(actor);req[BACKEND_OPERATION]=op.id
+  req[MANAGEMENT_BACKEND_PUBLICATION]=nativeBackendPublication(actor)
   const res=new ServerResponse(req)
   res.assignSocket(socket as any)
   const chunks:Buffer[]=[];let size=0

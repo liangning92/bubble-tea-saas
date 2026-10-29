@@ -1,3 +1,5 @@
+import { hasUnresolvedBackendEffect } from './employeeBackendTool'
+import { employeeNativeReply } from './employeeNativeReply'
 import { sendEmployeeFailureReply } from './employeeFailureReply'
 import { employeeGrantAuthority } from './employeeGrantAuthority'
 import { createHash } from 'crypto'
@@ -59,10 +61,12 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
   if(!s||s.ticket?.executionId!==m.executionId||s.scope?.task?.taskId!==r.task.taskId||s.scope?.channelId!==r.event.channelId||s.grant?.agentId!==live.grant.agentId)return {phase:'unknown' as const}
   const sends=(s.tools||[]).filter((t:any)=>t.name==='employee_send_message')
   if(sends.length>1)fail('EMPLOYEE_ORCHESTRATION_OUTBOUND_RECEIPT_CHANGED')
-  const send=sends[0]
+  const nativeReply=await employeeNativeReply(tx,storeId,s)
+  if(nativeReply&&sends[0]&&sends[0].value?.messageId!==nativeReply.messageId)fail('EMPLOYEE_ORCHESTRATION_OUTBOUND_RECEIPT_CHANGED')
+  const send=sends[0]||(nativeReply?{name:'employee_send_message',value:nativeReply}:undefined)
   if(send){
    const message=await readTeam<any>(tx,storeId,`message.${r.event.channelId}.${String(send.value?.seq).padStart(12,'0')}`)
-   if(!message||message.id!==send.value?.messageId||message.agent?.agentId!==live.grant.agentId||message.authorId!=='agent:'+live.grant.agentId||message.seq<=r.event.sourceSeq)fail('EMPLOYEE_ORCHESTRATION_OUTBOUND_RECEIPT_CHANGED')
+   if(!message||message.id!==send.value?.messageId||message.agent?.agentId!==live.grant.agentId||message.authorId!==(send.value.nativeBackend?send.value.authorStaffId:'agent:'+live.grant.agentId)||message.seq<=r.event.sourceSeq)fail('EMPLOYEE_ORCHESTRATION_OUTBOUND_RECEIPT_CHANGED')
    // An outbound tool receipt proves delivery, but the runtime still owns this
    // compartment until its final receipt arrives. Keep later employee messages
    // queued rather than starting them against an unfinished runtime.
@@ -191,6 +195,8 @@ export function createEmployeeOrchestration(db:any,deps:EmployeeOrchestrationDep
    if(!m||!m.executionId)return {releasable:true,reason:'NO_RUNTIME_EXECUTION'}
    const s=await readTeam<any>(tx,storeId,'employeeRuntime.execution.'+m.executionId)
    if(!s)return {releasable:true,reason:'NO_RUNTIME_EXECUTION'}
+   if(await employeeNativeReply(tx,storeId,s))return {releasable:false,reason:'OUTBOUND_ALREADY_SENT'}
+   if(await hasUnresolvedBackendEffect(tx,storeId,s.ticket.executionId))return {releasable:false,reason:'NATIVE_BUSINESS_EFFECT_RECORDED'}
    const effect=(s.tools||[]).find((t:any)=>t.mutating===true||t.mutating===undefined&&!t.name.startsWith('employee_read_'))
    if(effect)return {releasable:false,reason:effect.name==='employee_send_message'?'OUTBOUND_ALREADY_SENT':'BUSINESS_EFFECT_RECORDED'}
    if(s.phase==='complete')return {releasable:false,reason:'RUNTIME_COMPLETED'}

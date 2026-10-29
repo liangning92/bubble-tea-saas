@@ -1,5 +1,6 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
 export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null}> = {
+  "POST /api/team/channels/:id/agent-continuations": {permission:"team.manage",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"team.manage"},
   "POST /api/marketing/activities/:id/poster-preview": {permission:"marketing.read",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"marketing.read"},
   "POST /api/purchase-orders/:id/confirm-payment": {permission:"finance.write",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"purchases.write",resource:{model:"purchaseOrder",param:"id"}},
   "GET /api/team/ai/operations-delegations": {permission:null,ownerOnly:true,export:false,personal:false},

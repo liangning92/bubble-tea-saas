@@ -7,10 +7,10 @@ import { assertRoutineSend, RoutineAuthorization } from './TeamRoutinePolicy'
 import { enqueueTeamWorkflow, workflowEvent } from './TeamWorkflowQueue'
 import { enqueueChatReminders } from './TeamChatReminderService'
 import { recordTeamAgentReply } from './teamAgentBridge/events'
-import { assertLegacyConsumer, employeeRouteKey } from './teamAgentBridge/employeeIntake'
+import { assertLegacyConsumer, employeeRouteKey, enqueueEmployeeIntake, employeeIntakeKey } from './teamAgentBridge/employeeIntake'
 import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentDirectChannelAccess, teamAgentTaskAuthority, teamAgentOutbound } from './teamAgentBridge/identity'
 import { enqueueTeamTaskReminder } from './TeamTaskReminderService'
-import { nativeBackendAgent } from './ManagementBackendIdentity'
+import { nativeBackendAgent, assertNativeBackendPublication } from './ManagementBackendIdentity'
 
 export const TEAM_PREFIX = 'team.communication.'
 export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
@@ -51,6 +51,7 @@ export const createChannelSchema = z.object({
   requestId: uuid, title: z.string().trim().min(1).max(120),
   kind: z.enum(['direct', 'group', 'public', 'meeting']), members: z.array(staffId).min(1).max(100)
 }).strict()
+export const agentContinuationSchema=z.object({requestId:uuid,sourceSeq:seq}).strict()
 export const messageSchema = z.object({
   requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional(), takeover: z.boolean().optional()
 }).strict().refine(v => v.text.length > 0 || v.files.length > 0, 'EMPTY_MESSAGE')
@@ -357,6 +358,7 @@ export function teamCommunication(db: DB = prisma) {
         const requestKey = `create.${a.staffId}.${v.requestId}`, creationHash = digest({ ...v, ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) })
         const existing = await read(tx, a.storeId, requestKey)
         if (existing) { if (existing.hash !== creationHash) fail(409, 'TEAM_REQUEST_CONFLICT'); return (await channel(tx, a, existing.channel.id)).c }
+        await assertNativeBackendPublication(tx,a,{members:ids.map(staffId=>({staffId,fromSeq:1}))},v)
         await activeMembers(tx, a.storeId, ids.filter(id => !teamAgentProvenance(a) || id !== a.staffId))
         if ((await list(tx, a.storeId, 'channel.', 501)).length >= 500) fail(409, 'TEAM_CHANNEL_LIMIT')
         if (v.kind === 'direct') {
@@ -479,10 +481,12 @@ export function teamCommunication(db: DB = prisma) {
         if (teamAgentProvenance(a)) await lock(tx, a.storeId, `request.${a.staffId}.${v.requestId}`)
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c } = await channel(tx, a, id)
+        await assertNativeBackendPublication(tx,a,{channelId:c.id,members:c.members},v)
         await teamAgentOutbound(tx, a, c, { text: v.text, files: v.files })
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v, ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{nativeAgent}: {}) })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); await teamAgentOutbound(tx, a, c, old.message); return old.message }
+        if(nativeAgent&&await read(tx,a.storeId,'employeeRuntime.nativeReply.'+nativeAgent.executionId))fail(409,'EMPLOYEE_RUNTIME_OUTBOUND_ALREADY_STORED')
         if (teamAgentProvenance(a) && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
         if(nativeAgent&&v.expectedLastSeq!==c.lastSeq)fail(409,'TEAM_MESSAGE_CONTEXT_CHANGED')
         // Serialize the final automatic effect with store revocation, before
@@ -557,6 +561,7 @@ export function teamCommunication(db: DB = prisma) {
           await workflowEvent(tx, a.storeId, id, { policyVersion: paused.version, paused: true, takeover }, { read, write })
           await audit(tx, a, id, 'update', { action: 'workflow_human_takeover', takeover, policyVersion: paused.version })
         }
+        if(nativeAgent)await write(tx,a.storeId,'employeeRuntime.nativeReply.'+nativeAgent.executionId,{executionId:nativeAgent.executionId,channelId:c.id,messageId:message.id,seq:message.seq,authorStaffId:a.staffId,delivery:'stored',device:'unknown',expectsReply:false,nativeBackend:true})
         if (!teamAgentProvenance(a)&&!nativeAgent) await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
         if (teamAgentProvenance(a)||nativeAgent) await audit(tx, a, id, 'create', { action: 'agent_message', messageId: message.id, seq: message.seq, ...(nativeAgent?{executionId:nativeAgent.executionId}: {}) })
         await recordTeamAgentReply(tx, a.storeId, c, message)
@@ -564,11 +569,40 @@ export function teamCommunication(db: DB = prisma) {
         return message
       })
     },
+    /** Wake the existing target-channel consumer using its real human source.
+     * No parent text, history, memory, tool output or attachment crosses channels.
+     * Existing intake/continuation receipts remain the sole execution authority. */
+    async continueAgent(a:TeamActor,id:string,input:unknown){
+      const v=agentContinuationSchema.parse(input),requestKey=`agentContinuationRequest.${a.staffId}.${v.requestId}`,fingerprint=digest({channelId:id,sourceSeq:v.sourceSeq})
+      return db.$transaction(async(tx:DB)=>{
+        await lock(tx,a.storeId,requestKey)
+        await lock(tx,a.storeId,'channel.'+uuid.parse(id))
+        const {c,fromSeq}=await channel(tx,a,id)
+        manage(a,c)
+        const existing=await read(tx,a.storeId,requestKey)
+        if(existing&&existing.fingerprint!==fingerprint)fail(409,'TEAM_REQUEST_CONFLICT')
+        const source=await read(tx,a.storeId,`message.${id}.${pad(v.sourceSeq)}`)
+        if(!source||source.seq<fromSeq||source.ai||source.agent||!c.members.some(m=>m.staffId===source.authorId&&source.seq>=m.fromSeq))fail(409,'TEAM_AGENT_REAL_SOURCE_REQUIRED')
+        const sourceId=createHash('sha256').update(JSON.stringify(['employee_work',id,source.id])).digest('hex'),intakeKey=employeeIntakeKey(sourceId)
+        const prior=await tx.config.findUnique({where:{storeId_key:{storeId:a.storeId,key:intakeKey}}})
+        const receipt=prior&&JSON.parse(prior.value)
+        // No recreation or requeue of consumed/unknown work. A missing receipt
+        // alone is eligible for the same normal intake as a fresh human message.
+        if(!prior){
+          if(!await enqueueEmployeeIntake(tx,a.storeId,c,source))fail(409,'TEAM_AGENT_ROUTE_NOT_CONFIGURED')
+        }
+        const saved=receipt||JSON.parse((await tx.config.findUnique({where:{storeId_key:{storeId:a.storeId,key:intakeKey}}}))?.value||'null')
+        if(!saved)fail(409,'TEAM_AGENT_SOURCE_BEFORE_ROUTE')
+        if(!existing)await write(tx,a.storeId,requestKey,{fingerprint,eventId:sourceId})
+        return {eventId:sourceId,channelId:id,sourceMessageId:source.id,sourceSeq:source.seq,state:saved.state,reason:saved.reason,alreadySubmitted:!!prior,queued:saved.state==='pending',parentContextTransferred:false,businessCompleted:false}
+      })
+    },
     async markRead(a: TeamActor, id: string, value: number) {
       seq.parse(value)
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id)
+        await assertNativeBackendPublication(tx,a,{channelId:c.id,members:c.members},value)
         if (value > c.lastSeq || value < fromSeq - 1) fail(400, 'TEAM_READ_RANGE')
         const key = `read.${id}.${a.staffId}`, old = await read(tx, a.storeId, key)
         return write(tx, a.storeId, key, { seq: Math.max(old?.seq || 0, value), readAt: new Date().toISOString() })
@@ -589,6 +623,7 @@ export function teamCommunication(db: DB = prisma) {
         const c = await read<TeamChannel>(tx, a.storeId, channelKey(id))
         if (!c) fail(404, 'TEAM_CHANNEL_NOT_FOUND')
         manage(a, c)
+        await assertNativeBackendPublication(tx,a,{channelId:c.id,members:c.members},v)
         if (c.version !== v.expectedVersion) fail(409, 'TEAM_VERSION_CONFLICT')
         const ids = [...new Set(v.members)]
         if (c.kind === 'direct' && ids.sort().join('|') !== c.members.map(m => m.staffId).sort().join('|')) fail(400, 'TEAM_DIRECT_FIXED_MEMBERS')
@@ -596,6 +631,7 @@ export function teamCommunication(db: DB = prisma) {
         if (v.ownerId !== c.ownerId && c.kind === 'direct') fail(400, 'TEAM_DIRECT_FIXED_MEMBERS')
         await activeMembers(tx, a.storeId, ids.filter(id => !c.members.some(member => member.staffId === id)))
         if (v.ownerId !== c.ownerId) await activeMembers(tx, a.storeId, [v.ownerId])
+        await assertNativeBackendPublication(tx,a,{members:ids.map(staffId=>c.members.find(m=>m.staffId===staffId)||{staffId,fromSeq:c.lastSeq+1})},v)
         c.ownerId = v.ownerId
         c.members = ids.map(id => c.members.find(m => m.staffId === id) || { staffId: id, fromSeq: c.lastSeq + 1 })
         if (v.archived && c.round) await closeRound(tx, a, c)
@@ -609,6 +645,7 @@ export function teamCommunication(db: DB = prisma) {
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c } = await channel(tx, a, id); manage(a, c)
+        await assertNativeBackendPublication(tx,a,{channelId:c.id,members:c.members},{action,expectedVersion})
         if (c.version !== expectedVersion) fail(409, 'TEAM_VERSION_CONFLICT')
         if (c.archived) fail(409, 'TEAM_CHANNEL_CLOSED')
         if (action === 'close') return closeRound(tx, a, c)
@@ -629,6 +666,7 @@ export function teamCommunication(db: DB = prisma) {
       return db.$transaction(async (tx: DB) => {
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id, auditReason); manage(a, c)
+        await assertNativeBackendPublication(tx,a,{channelId:c.id,members:c.members},v)
         const key = `minutes.${id}.${roundId}`, old = await read(tx, a.storeId, key)
         if (!old || old.fromSeq < fromSeq) fail(404, 'TEAM_MINUTES_NOT_FOUND')
         const requestKey = `minuteRequest.${a.staffId}.${v.requestId}`, hash = digest({ id, roundId, ...v })
@@ -669,6 +707,7 @@ export function teamCommunication(db: DB = prisma) {
         await lock(tx, a.storeId, `taskRequest.${a.staffId}.${v.requestId}`)
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id)
+        await assertNativeBackendPublication(tx,a,{channelId:c.id,members:c.members},v)
         const authority = await teamAgentTaskAuthority(tx, a, 'tasks.assign')
         manage(authority?.sponsor || a, c)
         if (c.archived) fail(409, 'TEAM_CHANNEL_CLOSED')
@@ -720,6 +759,7 @@ export function teamCommunication(db: DB = prisma) {
         await lock(tx, a.storeId, `taskRequest.${a.staffId}.${v.requestId}`)
         await lock(tx, a.storeId, 'channel.' + uuid.parse(id))
         const { c, fromSeq } = await channel(tx, a, id)
+        await assertNativeBackendPublication(tx,a,{channelId:c.id,members:c.members},v)
         const authority = await teamAgentTaskAuthority(tx, a, 'tasks.review')
         if (authority && !['return', 'complete'].includes(v.action)) fail(403, 'TEAM_AGENT_REVIEW_ONLY')
         const key = `task.${id}.${taskId}`, task: TeamTask = await read(tx, a.storeId, key)

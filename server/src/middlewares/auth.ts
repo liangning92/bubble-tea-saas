@@ -9,7 +9,7 @@ import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import { config } from '../config/env'
 import prisma from '../config/database'
-import { MANAGEMENT_BACKEND_IDENTITY,bindNativeBackendAgent } from '../services/ManagementBackendIdentity'
+import { MANAGEMENT_BACKEND_IDENTITY,MANAGEMENT_BACKEND_PUBLICATION,bindNativeBackendAgent,bindNativeBackendPublication } from '../services/ManagementBackendIdentity'
 
 export type Role = 'admin' | 'manager' | 'cashier' | 'staff'
 
@@ -214,7 +214,11 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       }
     }
     const nativeAgent=(req as any)[MANAGEMENT_BACKEND_IDENTITY]?.nativeAgent
-    if(nativeAgent)bindNativeBackendAgent(currentUser,nativeAgent)
+    if(nativeAgent){
+      bindNativeBackendAgent(currentUser,nativeAgent)
+      const publication=(req as any)[MANAGEMENT_BACKEND_PUBLICATION]
+      if(publication)bindNativeBackendPublication(currentUser,publication)
+    }
     req.user = currentUser
     return requireStoreAccess(req, res, next)
   } catch (error) {

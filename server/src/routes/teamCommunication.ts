@@ -15,7 +15,7 @@ import { teamWorkflow } from '../services/TeamWorkflowService'
 import { wakeEmployeeDelivery } from '../services/EmployeeReminderService'
 import { agentSettingsService } from '../services/AgentSettingsService'
 import { describeNativeBody } from '../utils/validation'
-import { createChannelSchema, messageSchema, minutesSchema } from '../services/TeamCommunicationService'
+import { createChannelSchema, messageSchema, minutesSchema, agentContinuationSchema } from '../services/TeamCommunicationService'
 
 export const teamCommunicationRouter = Router()
 const router = teamCommunicationRouter, service = teamCommunication()
@@ -92,6 +92,7 @@ router.get('/channels', run(async (req, res) => ok(res, await service.channels(a
 router.get('/admin/audits', run(async (req, res) => ok(res, await service.audits(actor(req)))))
 router.get('/admin/channels', run(async (req, res) => ok(res, await service.channels(actor(req), true))))
 router.post('/channels', describeNativeBody(createChannelSchema), run(async (req, res) => ok(res, await service.create(actor(req), req.body))))
+router.post('/channels/:id/agent-continuations',describeNativeBody(agentContinuationSchema),run(async(req,res)=>ok(res,await service.continueAgent(actor(req),req.params.id,req.body))))
 router.put('/channels/:id/members', run(async (req, res) => ok(res, await service.updateMembers(actor(req), req.params.id, req.body))))
 router.get('/channels/:id/messages', run(async (req, res) => {
   const after = z.coerce.number().int().min(0).max(999999999999).parse(req.query.after ?? 0)
