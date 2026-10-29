@@ -40,6 +40,7 @@ module.exports = async function staffUI(browser) {
     else if (p === '/api/staff-work/my/checklist') data = {};
     else if (p === '/api/staff-work/my/late-rule') data = { enabled: false };
     else if (p === '/api/inventory') data = { list: materials };
+    else if (p === '/api/inventory/operation-records') data = {list:[],summary:[],total:0,page:1,pageSize:20};
     else if (p === '/api/purchase-orders') data = { list: [purchase] };
     else if (p === '/api/inventory-counts') data = { list: [] };
     else if (p.includes('/inventory/logs/')) data = { list: [] };
@@ -93,7 +94,7 @@ module.exports = async function staffUI(browser) {
     await page.goto(origin + '/inventory?action=purchase');
     await expect(page.getByRole('option', {name:'UI Supplier',exact:true})).toHaveCount(1);
     await expect(page.getByRole('alert')).toHaveCount(0);
-    const purchaseForm=page.locator('form');
+    const purchaseForm=page.locator('main > form');
     await purchaseForm.getByLabel('Material', {exact:true}).selectOption('m');
     await purchaseForm.getByLabel('Purchase quantity', {exact:true}).fill('2.3');
     await purchaseForm.getByLabel('Purchase unit', {exact:true}).selectOption('L');
@@ -106,7 +107,7 @@ module.exports = async function staffUI(browser) {
     const count = page.getByRole('button', { name: /Start.*count|New.*count/i });
     await expect(count).toBeEnabled();
     assert.equal(await count.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(236, 109, 136)');
-    await count.click(); await expect(page.locator('form')).toBeVisible();
+    await count.click(); await expect(page.locator('main > form')).toBeVisible();
     await page.goto(origin + '/inventory');
     await expect(page.getByText(/88799\.999999/)).toHaveCount(0);
     await page.getByPlaceholder(/Search/i).fill('not-a-material');
