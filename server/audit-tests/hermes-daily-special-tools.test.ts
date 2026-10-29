@@ -1,3 +1,4 @@
+import {renderActivityPoster} from '../../shared/utils/activityPoster'
 import {test,expect,jest} from '@jest/globals'
 import {saveActivityInTransaction} from '../src/services/ActivityService'
 import {executeDailySpecial} from '../src/services/teamAgentBridge/employeeDailySpecials'
@@ -80,4 +81,33 @@ test('legacy creation receipt IDs can be inspected and paused with exact store/f
  const read:any=await executeDailySpecial(f.db,'store',{action:'get_activity',activityId:record.id});expect(read.legacy.kind).toBe('campaign')
  const stale:any=await executeDailySpecial(f.db,'store',{action:'pause_activity',activityId:record.id,expectedLegacyFingerprint:'0'.repeat(64)});expect(stale.ok).toBe(false);expect(record.status).toBe('active')
  const paused:any=await executeDailySpecial(f.db,'store',{action:'pause_activity',activityId:record.id,expectedLegacyFingerprint:read.legacy.legacyFingerprint});expect(paused.affectedActivities).toBe(1);expect(paused.readbackVerified).toBe(true);expect(record.status).toBe('paused')
+})
+
+test('daily posters pin the explicit SKU primary instead of an unrelated portrait and keep the active badge color',async()=>{
+ const f=fixture();f.p.specs[0].name='Default';f.p.image='/uploads/actual-product.webp';(f.p.images as any[]).push({media:{name:'Other Product_9x16.jpg',url:'/uploads/shared-other-product.webp'}})
+ const r:any=await executeDailySpecial(f.db,'store',input)
+ expect(r.ok).toBe(true);expect(r.activity.imageUrl).toBe(f.p.image)
+ expect(r.activity.posterConfig.cardItems[0]).toMatchObject({imageUrl:f.p.image,imageMode:'manual'})
+ expect(r.activity.posterConfig.cardItems[0].specName).toBeUndefined()
+ const products=[{id:'p',name:f.p.name,image:'/uploads/shared-other-product.webp',image9x16:'/uploads/shared-other-product.webp',imageVariants:[{url:'/uploads/shared-other-product.webp',width:720,height:1280}],price:16000}]
+ const badge=(html:string)=>/class="badge[^"]*" style="background:([^;"]+)/.exec(html)?.[1]
+ for(const day of [4,5]){
+  const html=renderActivityPoster({...r.activity,products},{language:2,day,aspectRatio:1080/1350})
+  expect(html).toContain('src="/uploads/actual-product.webp"');expect(html).not.toContain('src="/uploads/shared-other-product.webp"')
+  expect(badge(html)).toBe('#9f1239');expect(html).not.toContain('Default')
+ }
+})
+
+test('an exact legacy fingerprint retires its raw record even when an ended unified activity links the same ID',async()=>{
+ const f=fixture(),r:any=await executeDailySpecial(f.db,'store',input),row=f.rows.find(x=>x.key.startsWith('marketing.unified.activity.'))
+ const linked={...r.activity,status:'ended',source:'campaign:raw-linked'};row.value=JSON.stringify(linked)
+ const raw:any={id:'raw-linked',name:'Previous daily special',status:'active',type:'seasonal',actions:'{}',updatedAt:new Date('2026-10-24T00:00:00Z')}
+ const project=(select:any)=>Object.fromEntries(Object.keys(select).filter(k=>raw[k]!==undefined).map(k=>[k,raw[k]]))
+ f.db.campaign={findMany:async({select}:any)=>[project(select)],findFirst:async({where,select}:any)=>where.id===raw.id&&where.storeId==='store'?project(select):null,
+ updateMany:async({where,data}:any)=>{expect(where.storeId).toBe('store');if(where.id!==raw.id||where.status!==raw.status||where.updatedAt!==raw.updatedAt)return {count:0};Object.assign(raw,data);return {count:1}}}
+ const all:any=await executeDailySpecial(f.db,'store',{action:'list_all'}),legacy=all.legacyRecords.find((x:any)=>x.id===raw.id)
+ const ordinary:any=await executeDailySpecial(f.db,'store',{action:'get_activity',activityId:raw.id});expect(ordinary.activity.status).toBe('ended')
+ const stopped:any=await executeDailySpecial(f.db,'store',{action:'pause_activity',activityId:raw.id,expectedLegacyFingerprint:legacy.legacyFingerprint})
+ expect(stopped).toMatchObject({ok:true,affectedActivities:1,readbackVerified:true,legacy:{id:raw.id,status:'paused'}})
+ expect(JSON.parse(row.value).status).toBe('ended')
 })

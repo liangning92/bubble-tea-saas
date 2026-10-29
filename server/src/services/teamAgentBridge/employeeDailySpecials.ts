@@ -6,10 +6,14 @@ import { membershipPolicy, paidAmountMeetsMembershipPolicy } from '../Membership
 import { resolveProductImageByRatio } from '../../utils/mediaResolver'
 
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
+const legacySelect={
+  campaign:{id:true,name:true,status:true,description:true,type:true,triggerType:true,startDate:true,endDate:true,actions:true,updatedAt:true},
+  discount:{id:true,name:true,status:true,discountType:true,discountValue:true,minOrderAmount:true,maxDiscount:true,applicableProducts:true,excludeProducts:true,applicableChannels:true,validFrom:true,validUntil:true,updatedAt:true},
+} as const
 export const dailyActions=['list_all','get_activity','upsert_daily_special','pause_activity','quote_daily_special','inspect_membership','render_daily_poster'] as const
 export const dailyAgentActions=dailyActions.filter(action=>action!=='quote_daily_special')
 export const dailyProperties={
-  activityId:{type:'string'}, expectedLegacyFingerprint:{type:'string',description:'Exact fingerprint from get_activity for a legacy campaign/discount record; never use fuzzy names'}, expectedVersion:{type:'integer',minimum:1},
+  activityId:{type:'string'}, expectedLegacyFingerprint:{type:'string',description:'Exact raw legacy fingerprint from list_all/get_activity. Supplying it explicitly selects the raw legacy ID, even if the ID also links to an ended unified activity; never use fuzzy names'}, expectedVersion:{type:'integer',minimum:1},
   specId:{type:'string'}, weekday:{type:'integer',minimum:1,maximum:5},
   memberOnly:{type:'boolean'}, status:{type:'string',enum:['draft','published','paused']},
   format:{type:'string',enum:['portrait','tv'],description:'Formal admin/TV renderer preview format'},
@@ -32,17 +36,17 @@ export async function executeDailySpecial(db:any,storeId:string,raw:unknown){
   const all=await listActivities(storeId,db)
   if(v.action==='inspect_membership')return {ok:true,policy:await membershipPolicy(storeId,db),qualificationChanged:false}
   if(v.action==='list_all'){
-    const campaigns=db.campaign?.findMany?await db.campaign.findMany({where:{storeId},select:{id:true,name:true,status:true,actions:true,updatedAt:true}}):[]
-    const rules=db.discountRule?.findMany?await db.discountRule.findMany({where:{storeId},select:{id:true,name:true,status:true,updatedAt:true}}):[]
+    const campaigns=db.campaign?.findMany?await db.campaign.findMany({where:{storeId},select:legacySelect.campaign}):[]
+    const rules=db.discountRule?.findMany?await db.discountRule.findMany({where:{storeId},select:legacySelect.discount}):[]
     return {ok:true,activities:all,legacyRecords:[...campaigns.map((c:any)=>({...c,kind:'campaign',legacyFingerprint:hash(c)})),...rules.map((r:any)=>({...r,kind:'discount',legacyFingerprint:hash(r)}))],complete:true,scope:'all_statuses_in_this_store',fingerprint:hash(all),warning:'Legacy IDs without an explicit source link are not resolved automatically. Select the exact unified ID/version from this list; compare product, rule and dates before pausing.'}
   }
   const byId=(id:string)=>all.find(a=>a.id===id||a.source==='campaign:'+id||a.source==='discount:'+id||a.source==='special:'+id)
   if(v.action==='get_activity'||v.action==='pause_activity'){
-    const a=v.activityId?byId(v.activityId):undefined
+    const a=v.activityId&&!v.expectedLegacyFingerprint?byId(v.activityId):undefined
     if(!a){
       for(const [kind,model] of [['campaign',db.campaign],['discount',db.discountRule]] as const){
         if(!v.activityId||!model?.findFirst)continue
-        const select=kind==='campaign'?{id:true,name:true,status:true,actions:true,updatedAt:true}:{id:true,name:true,status:true,updatedAt:true}
+        const select=legacySelect[kind]
         const record=await model.findFirst({where:{id:v.activityId,storeId},select})
         if(!record)continue
         const fingerprint=hash(record)
@@ -97,15 +101,17 @@ export async function executeDailySpecial(db:any,storeId:string,raw:unknown){
   if(!old&&candidates.length)return {ok:false,code:'DAILY_SPECIAL_REUSE_REQUIRED',activities:candidates.map(a=>({id:a.id,version:a.version,status:a.status}))}
   if(old&&v.expectedVersion!==old.version)return {ok:false,code:'ACTIVITY_VERSION_CHANGED',currentVersion:old.version}
 
-  const image=resolveProductImageByRatio(p,'9:16')
+  // Product primary is an explicit SKU choice. An unrelated attached portrait
+  // must not replace it merely because its aspect ratio fits the card.
+  const image=p.image||resolveProductImageByRatio(p,'9:16')
   if(!image)return {ok:false,code:'DAILY_SPECIAL_PRODUCT_IMAGE_REQUIRED',productId:p.id}
   const days=['','Senin','Selasa','Rabu','Kamis','Jumat']
   const description='Hanya untuk member. Belanja Rp30.000 dalam satu transaksi untuk menjadi member. Harga member berlaku untuk pembelian berikutnya tanpa minimum belanja berulang.'
   const input={name:`Promo Member ${days[v.weekday]}`,description,type:'special_price',status:v.status||'published',memberOnly:true,
     productIds:[p.id],specIds:[spec.id],weekdays:[v.weekday],timezone:'Asia/Jakarta',showOnTv:true,imageUrl:image,rule:{price:spec.price-4000},
-    posterConfig:{template:'daily_specials',headline:'Hanya untuk Member',subheadline:'Belanja Rp30.000 sekali untuk jadi member. Nikmati harga member pada pembelian berikutnya.',backgroundColor:'#fff7fa',columns:1,rows:1,
-      layoutMode:'row_cards',designConfig:{cardLayout:'standard',titlePosition:'top',imageFit:'contain',titleFontSize:32,priceFontSize:48,normalPriceFontSize:24,savingFontSize:24,textShadow:false,subheadlineFontSize:26,headlineFontSize:42,highlightScale:1,highlightMode:'border_only',normalPriceColor:'#475569',savingColor:'#166534',headlineColor:'#9f1239',dayBadgeBg:'#9f1239',priceColor:'#9f1239',titleColor:'#111827',subheadlineColor:'#111827',priceBoxBg:'#ffffff',priceBoxTextColor:'#9f1239',imageHeightRatio:55},
-      cardItems:[{id:p.id,productId:p.id,productName:p.name,specName:spec.name,imageUrl:image,originalPrice:spec.price,specialPrice:spec.price-4000,saving:4000,dayOfWeek:v.weekday,dayLabel:days[v.weekday]}]}}
+    posterConfig:{template:'daily_specials',themeColor:'#9f1239',headline:'Hanya untuk Member',subheadline:'Belanja Rp30.000 sekali untuk jadi member. Nikmati harga member pada pembelian berikutnya.',backgroundColor:'#fff7fa',columns:1,rows:1,
+      layoutMode:'row_cards',designConfig:{cardLayout:'standard',titlePosition:'top',imageFit:'contain',titleFontSize:32,priceFontSize:48,normalPriceFontSize:24,savingFontSize:24,textShadow:false,subheadlineFontSize:26,headlineFontSize:42,highlightScale:1,highlightMode:'border_only',highlightColor:'#9f1239',normalPriceColor:'#475569',savingColor:'#166534',headlineColor:'#9f1239',dayBadgeBg:'#9f1239',priceColor:'#9f1239',titleColor:'#111827',subheadlineColor:'#111827',priceBoxBg:'#ffffff',priceBoxTextColor:'#9f1239',imageHeightRatio:55},
+      cardItems:[{id:p.id,productId:p.id,productName:p.name,specName:/^default$/i.test(spec.name.trim())?undefined:spec.name,imageMode:'manual',imageUrl:image,originalPrice:spec.price,specialPrice:spec.price-4000,saving:4000,dayOfWeek:v.weekday,dayLabel:days[v.weekday]}]}}
   const current=old&&inputOf(old)
   if(current&&hash(current)===hash({...current,...input}))return {ok:true,alreadyConfigured:true,activity:old,fingerprint:hash(old)}
   const receiptKey='hermes.daily-special.operation.'+hash({storeId,raw:v})
