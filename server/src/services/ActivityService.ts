@@ -86,13 +86,15 @@ export async function saveActivityInTransaction(tx:any,storeId:string,input:unkn
  if(data.status==='published'){
   const protectedDaily=(a:any)=>a.type==='special_price'&&a.memberOnly&&a.posterConfig?.template==='daily_specials'
   const intersection=(x:any[],y:any[])=>!x?.length||!y?.length||x.some(v=>y.includes(v))
-  const timeRanges=(a:any)=>{if(!a.dailyStart||!a.dailyEnd)return [[0,1440]];const minutes=(s:string)=>Number(s.slice(0,2))*60+Number(s.slice(3));const x=minutes(a.dailyStart),y=minutes(a.dailyEnd);return x<y?[[x,y]]:[[x,1440],[0,y]]}
+  const weekSlots=(a:any)=>{const minutes=(s:string)=>Number(s.slice(0,2))*60+Number(s.slice(3));const x=a.dailyStart?minutes(a.dailyStart):0,y=a.dailyEnd?minutes(a.dailyEnd):1440;return (a.weekdays.length?a.weekdays:[0,1,2,3,4,5,6]).flatMap((d:number)=>{const start=d*1440+x,end=d*1440+y+(y<=x?1440:0);return end>10080?[[start,10080],[0,end-10080]]:[[start,end]]})}
+  const productOverlap=(a:any,b:any)=>{const explicit=a.productIds.length&&b.productIds.length?a.productIds.filter((p:string)=>b.productIds.includes(p)):a.productIds.length?a.productIds:b.productIds;return !explicit.length&&!a.productIds.length&&!b.productIds.length||explicit.some((p:string)=>!a.excludedProductIds?.includes(p)&&!b.excludedProductIds?.includes(p))}
+  const priceTypes=['special_price','member_price','fixed','percent','nth_cup','buy_get']
+
   const others=await listActivities(storeId,tx)
   const overlap=others.find(a=>a.id!==id&&a.status==='published'&&(protectedDaily(data)||protectedDaily(a))&&
-    ['special_price','member_price','fixed','percent','nth_cup','buy_get'].includes(a.type)&&
-    intersection(a.productIds,data.productIds)&&intersection(a.specIds,data.specIds)&&intersection(a.channels,data.channels)&&intersection(a.paymentMethods,data.paymentMethods)&&intersection(a.weekdays,data.weekdays)&&
-    (data.productIds.length?data.productIds.some(p=>!a.excludedProductIds?.includes(p)):a.productIds.length?a.productIds.some(p=>!data.excludedProductIds?.includes(p)):true)&&
-    timeRanges(a).some(([x,y])=>timeRanges(data).some(([u,v])=>Math.max(x,u)<Math.min(y,v)))&&
+    priceTypes.includes(a.type)&&priceTypes.includes(data.type)&&
+    productOverlap(a,data)&&intersection(a.specIds,data.specIds)&&intersection(a.channels,data.channels)&&intersection(a.paymentMethods,data.paymentMethods)&&
+    (a.timezone!==data.timezone||weekSlots(a).some(([x,y])=>weekSlots(data).some(([u,v])=>Math.max(x,u)<Math.min(y,v))))&&
     Math.max(a.startsAt?Date.parse(a.startsAt):-Infinity,data.startsAt?Date.parse(data.startsAt):-Infinity)<Math.min(a.endsAt?Date.parse(a.endsAt):Infinity,data.endsAt?Date.parse(data.endsAt):Infinity))
   if(overlap)throw Error('ACTIVITY_DAILY_SPECIAL_CONFLICT:'+overlap.id)
  }
