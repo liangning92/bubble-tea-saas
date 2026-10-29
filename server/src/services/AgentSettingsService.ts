@@ -1,3 +1,4 @@
+import { employeeExecutionDiagnostic } from './teamAgentBridge/employeeRuntimeDiagnostics'
 import { pdcaPilotDiagnostic } from './agentTasks/diagnostics'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -121,7 +122,11 @@ export function agentSettingsService(db: any = prisma) {
       const pdcaPilot = await pdcaPilotDiagnostic(db, a.storeId)
       const employeeEnabledEnv = process.env.EMPLOYEE_HERMES_ENABLED === '1'&&(!process.env.EMPLOYEE_HERMES_STORE_ID||process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId)
 
+      const recentExecutions=await db.config.findMany({where:{storeId:a.storeId,key:{startsWith:'team.communication.employeeRuntime.execution.',not:{contains:'.provider.'}}},orderBy:{updatedAt:'desc'},take:5,select:{value:true,updatedAt:true}})
+      const latestExecution=recentExecutions.map((row:any)=>employeeExecutionDiagnostic(row.value,row.updatedAt)).find(Boolean)||null
+
       const systemState = {
+        latestExecution,
         pilotState: pdcaPilot.state === 'valid' ? 'running' : pdcaPilot.state,
         pdcaPilot,
         employeeBridgeConfigured: employeeEnabledEnv,

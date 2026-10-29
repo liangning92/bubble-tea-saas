@@ -54,6 +54,7 @@ interface SystemStateData {
   employeeBridgeConfigured: boolean
   runtimeAvailable: boolean
   hostOrigin: string
+  latestExecution?: {phase:string;turn:number;inputs:number;responses:number;tools:number;faultCode:string|null;updatedAt:string}|null
   capabilities: CapabilityItem[]
 }
 
@@ -237,6 +238,13 @@ export function TeamAgentSettings({
             </span>
           </div>
         </div>
+
+        {systemState?.latestExecution && (
+          <p className="mt-3 break-words text-xs text-gray-600" data-testid="agent-execution-diagnostic">
+            {c.recentExecution}: {systemState.latestExecution.phase} · {c.modelRounds}: {systemState.latestExecution.inputs}/{systemState.latestExecution.responses} · {c.businessTools}: {systemState.latestExecution.tools}
+            {systemState.latestExecution.faultCode && <span className="block text-red-700">{systemState.latestExecution.faultCode}</span>}
+          </p>
+        )}
 
         {/* 诊断信息区域 */}
         <div className="mt-4 rounded-lg bg-gray-50 p-4">
