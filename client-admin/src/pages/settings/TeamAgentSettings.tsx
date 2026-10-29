@@ -168,7 +168,7 @@ export function TeamAgentSettings({
     } catch (e: any) {
       if (current() && reqId === epoch.current) {
         const msg = e?.response?.data?.message
-        setError(msg === 'TEAM_VERSION_CONFLICT' ? c.conflictError : c.saveError)
+        setError(msg === 'TEAM_VERSION_CONFLICT' ? c.conflictError : msg === 'TEAM_AGENT_RESYNC_BUSY' ? c.resyncBusy : c.saveError)
       }
     } finally {
       if (current() && reqId === epoch.current) setBusy(false)
@@ -520,7 +520,12 @@ export function TeamAgentSettings({
           <span className="text-sm text-gray-600">
             {busy ? c.saving : dirty ? c.dirtyWarning : `${c.saved} (v${base.version})`}
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {!dirty && (
+              <button type="button" className={button} disabled={busy || checking} onClick={() => void handleSave()}>
+                {c.resyncButton}
+              </button>
+            )}
             <button
               type="button"
               className={button}

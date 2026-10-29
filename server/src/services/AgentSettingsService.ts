@@ -89,6 +89,24 @@ export function defaultAgentSettings(): AgentSettings {
   }
 }
 
+async function effectiveAgentSettings(db:any,storeId:string,saved:any):Promise<AgentSettings> {
+  const merged: AgentSettings = saved ? {
+    ...defaultAgentSettings(),
+    ...saved,
+    permissions: { ...defaultAgentPermissions(), ...(saved.permissions || {}) }
+  } : defaultAgentSettings()
+
+  if(saved?.permissions&&!saved.permissions.marketing)merged.permissions.marketing={...saved.permissions.members}
+  if (merged.operationProfile === 'store_operations') merged.permissions = fullStoreOperationsPermissions()
+  if(saved&&!Object.prototype.hasOwnProperty.call(saved,'expiresAt')){
+    const grants=await db.config.findMany({where:{storeId:storeId,key:{startsWith:'externalAgent.teamBridge.v1.grant.'}}})
+    const expiries=grants.map((r:any)=>JSON.parse(r.value).expiresAt).filter(Boolean).sort()
+    merged.expiresAt=expiries[0]||null
+  }
+  if(process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN&&merged.agentOrigin==='http://127.0.0.1:8642')merged.agentOrigin=process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN
+  return merged
+}
+
 export function agentSettingsService(db: any = prisma) {
   return {
     async getSettings(a: TeamActor) {
@@ -99,20 +117,7 @@ export function agentSettingsService(db: any = prisma) {
       })
 
       const saved = await readTeam(db, a.storeId, 'ai.agent.settings')
-      const merged: AgentSettings = saved ? {
-        ...defaultAgentSettings(),
-        ...saved,
-        permissions: { ...defaultAgentPermissions(), ...(saved.permissions || {}) }
-      } : defaultAgentSettings()
-
-      if(saved?.permissions&&!saved.permissions.marketing)merged.permissions.marketing={...saved.permissions.members}
-      if (merged.operationProfile === 'store_operations') merged.permissions = fullStoreOperationsPermissions()
-      if(saved&&!Object.prototype.hasOwnProperty.call(saved,'expiresAt')){
-        const grants=await db.config.findMany({where:{storeId:a.storeId,key:{startsWith:'externalAgent.teamBridge.v1.grant.'}}})
-        const expiries=grants.map((r:any)=>JSON.parse(r.value).expiresAt).filter(Boolean).sort()
-        merged.expiresAt=expiries[0]||null
-      }
-      if(process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN&&merged.agentOrigin==='http://127.0.0.1:8642')merged.agentOrigin=process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN
+      const merged = await effectiveAgentSettings(db,a.storeId,saved)
       const pdcaPilot = await pdcaPilotDiagnostic(db, a.storeId)
       const employeeEnabledEnv = process.env.EMPLOYEE_HERMES_ENABLED === '1'&&(!process.env.EMPLOYEE_HERMES_STORE_ID||process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId)
 
@@ -164,6 +169,15 @@ export function agentSettingsService(db: any = prisma) {
 
         if (validated.version !== currentVersion) {
           denied('TEAM_VERSION_CONFLICT', 409)
+        }
+
+        // Re-materializing the exact same saved authority must wait for current
+        // conversations; a real permission change/revocation still takes effect immediately.
+        const previous = current && agentSettingsSchema.parse(await effectiveAgentSettings(tx,a.storeId,current))
+        if (previous && JSON.stringify(previous) === JSON.stringify(validated)) {
+          const executions = await tx.config.findMany({where:{storeId:a.storeId,key:{startsWith:'team.communication.employeeRuntime.execution.',not:{contains:'.provider.'}}},select:{value:true}})
+          const active = executions.some((row:any)=>{const state=JSON.parse(row.value);return ['input','response','tools','final'].includes(state.phase)&&Date.parse(state.expiresAt)>Date.now()&&(!process.env.EMPLOYEE_HERMES_AGENT_ID||state.grant?.agentId===process.env.EMPLOYEE_HERMES_AGENT_ID)})
+          if(active)denied('TEAM_AGENT_RESYNC_BUSY',409)
         }
 
         const nextVersion = currentVersion + 1

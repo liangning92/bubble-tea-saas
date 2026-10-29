@@ -8,6 +8,7 @@ jest.mock('../src/services/TeamCommunicationService', () => ({
   readTeam: async (db: any, _store: string, key: string) => db.records[key] || null
 }))
 import fs from 'fs/promises'
+import { membershipToolSchema } from '../src/services/teamAgentBridge/employeeMembershipTools'
 import { createTeamAgentMiniMaxTransport, TeamAgentModelProviderRequest } from '../src/services/TeamAiService'
 function fixture() {
   const store = 'synthetic-store', syntheticKey = 'synthetic-provider-token-not-a-real-credential', iv = Buffer.alloc(12, 8)
@@ -51,6 +52,27 @@ describe('server-only CN Flash tool transport (all fetch/key reads synthetic moc
     const fetcher=jest.fn(async (_url:any,init:any)=>{const body=JSON.parse(init.body);expect(body).not.toHaveProperty('reasoning_effort');expect(body).not.toHaveProperty('max_tokens');expect(body.tools).toHaveLength(3);return {ok:true,text:async()=>JSON.stringify({id:'synthetic-business',choices:[]})}})
     await createTeamAgentMiniMaxTransport(f.db,{enabled:true,fetch:fetcher as any,toolProfile:'employee_work'})(f.store,5,f.body,async()=>{})
     expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+  test('actual membership tool contract reaches the employee provider relay', async () => {
+    const f=fixture(); delete f.body.reasoning_effort
+    f.body.tools=[membershipToolSchema]
+    const fetcher=jest.fn(async (_url:any,init:any)=>{
+      expect(JSON.parse(init.body).tools).toEqual([membershipToolSchema])
+      return {ok:true,text:async()=>JSON.stringify({id:'synthetic-membership',choices:[]})}
+    })
+    await createTeamAgentMiniMaxTransport(f.db,{enabled:true,fetch:fetcher as any,toolProfile:'employee_work'})(f.store,5,f.body,async()=>{})
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+  test('a day-long employee lease still bounds each provider request and never retries an unknown result', async () => {
+    const f=fixture(); delete f.body.reasoning_effort; f.body.tools=[membershipToolSchema]
+    const timeout=jest.spyOn(AbortSignal,'timeout').mockImplementation(()=>new AbortController().signal)
+    const fetcher=jest.fn(async ()=>{throw Error('synthetic-timeout')})
+    try {
+      const transport=createTeamAgentMiniMaxTransport(f.db,{enabled:true,fetch:fetcher as any,toolProfile:'employee_work'})
+      await expect(transport(f.store,5,f.body,async()=>{},Date.now()+86400000)).rejects.toThrow('AGENT_MODEL_PROVIDER_OUTCOME_UNKNOWN')
+      expect(timeout).toHaveBeenLastCalledWith(180000)
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    } finally {timeout.mockRestore()}
   })
   test.each(['config_version', 'region', 'model', 'unverified', 'output_cap', 'arbitrary_tool'])('%s is rejected before fetch', async change => {
     const f = fixture(), fetcher = jest.fn()

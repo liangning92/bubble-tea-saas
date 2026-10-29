@@ -162,6 +162,7 @@ export function createEmployeeRuntime(db: any, deps: EmployeeRuntimeDependencies
     async begin(grant,scope,sources) {
       if (!sources.length || sources.length>50 || !scope.channelId) fail()
       return db.$transaction(async (tx:any)=>{
+        await lockTeam(tx,deps.storeId,'ai.agent.settings')
         await lockTeam(tx,deps.storeId,pointer(scope))
         const g = await fresh(tx)
         if (hash(g)!==hash(grant)) fail()
