@@ -78,8 +78,7 @@ export async function executeDailySpecial(db:any,storeId:string,raw:unknown){
   if(v.activityId&&!old)return {ok:false,code:'ACTIVITY_NOT_FOUND'}
   if(!old&&candidates.length)return {ok:false,code:'DAILY_SPECIAL_REUSE_REQUIRED',activities:candidates.map(a=>({id:a.id,version:a.version,status:a.status}))}
   if(old&&v.expectedVersion!==old.version)return {ok:false,code:'ACTIVITY_VERSION_CHANGED',currentVersion:old.version}
-  const overlaps=all.filter(a=>a.id!==old?.id&&a.status==='published'&&['special_price','fixed','percent','nth_cup','buy_get','member_price'].includes(a.type)&&(!a.productIds.length||a.productIds.includes(p.id))&&(!a.weekdays.length||a.weekdays.includes(v.weekday!)))
-  if(overlaps.length&&(v.status||'published')==='published')return {ok:false,code:'DAILY_SPECIAL_DUPLICATE_REVIEW_REQUIRED',activities:overlaps.map(a=>({id:a.id,version:a.version,status:a.status,type:a.type}))}
+
   const image=resolveProductImageByRatio(p,'9:16')
   if(!image)return {ok:false,code:'DAILY_SPECIAL_PRODUCT_IMAGE_REQUIRED',productId:p.id}
   const days=['','Senin','Selasa','Rabu','Kamis','Jumat']
@@ -94,7 +93,8 @@ export async function executeDailySpecial(db:any,storeId:string,raw:unknown){
   const receiptKey='hermes.daily-special.operation.'+hash({storeId,raw:v})
   const receiptRow=await db.config.findUnique({where:{storeId_key:{storeId,key:receiptKey}}})
   if(receiptRow){const prior=JSON.parse(receiptRow.value),actual=all.find(a=>a.id===prior.activityId);if(actual&&hash(actual)===prior.fingerprint)return {ok:true,alreadyConfigured:true,activity:actual,fingerprint:prior.fingerprint,readbackVerified:true};return {ok:false,code:'DAILY_SPECIAL_RECEIPT_CHANGED',activityId:prior.activityId}}
-  const saved=await saveActivityInTransaction(db,storeId,{...(current||{}),...input},old?.id,old?.version)
+  let saved:any
+  try{saved=await saveActivityInTransaction(db,storeId,{...(current||{}),...input},old?.id,old?.version)}catch(error:any){if(String(error.message).startsWith('ACTIVITY_DAILY_SPECIAL_CONFLICT:'))return {ok:false,code:'ACTIVITY_DAILY_SPECIAL_CONFLICT',conflictingActivityId:String(error.message).slice('ACTIVITY_DAILY_SPECIAL_CONFLICT:'.length),message:'Another published price promotion overlaps this product/time/channel. Review the existing record and update or pause the intended duplicate; no new activity was saved.'};throw error}
   await db.config.create({data:{storeId,key:receiptKey,category:'marketing',value:JSON.stringify({activityId:saved.id,fingerprint:hash(saved)})}})
   const readback=(await listActivities(storeId,db)).find(a=>a.id===saved.id)
   if(hash(readback)!==hash(saved))throw Error('DAILY_SPECIAL_READBACK_MISMATCH')

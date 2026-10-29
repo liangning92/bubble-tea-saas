@@ -1,4 +1,5 @@
 import {test,expect,jest} from '@jest/globals'
+import {saveActivityInTransaction} from '../src/services/ActivityService'
 import {executeDailySpecial} from '../src/services/teamAgentBridge/employeeDailySpecials'
 import {posterVisionMessages} from '../src/services/teamAgentBridge/employeePosterPreview'
 import {assertPublicationContext} from '../src/services/teamAgentBridge/employeeOperationAuthority'
@@ -50,5 +51,19 @@ test('actual checkout engine excludes nonmembers and pending; charges each desig
 })
 test('legacy basket or multiweekday discounts must be reviewed rather than silently overlap',async()=>{
  const f=fixture();f.rows.push({id:'old',storeId:'store',key:'marketing.unified.activity.old',value:JSON.stringify({id:'old',storeId:'store',type:'fixed',status:'published',weekdays:[],productIds:[],version:1,rule:{amount:4000}})})
- const r:any=await executeDailySpecial(f.db,'store',input);expect(r.code).toBe('DAILY_SPECIAL_DUPLICATE_REVIEW_REQUIRED');expect(r.activities[0].id).toBe('old')
+ const r:any=await executeDailySpecial(f.db,'store',input);expect(r.code).toBe('ACTIVITY_DAILY_SPECIAL_CONFLICT');expect(r.conflictingActivityId).toBe('old')
+})
+
+test('shared editor and Hermes service agree about non-price offers and overnight conflicts',async()=>{
+ const f=fixture(),r:any=await executeDailySpecial(f.db,'store',input)
+ const row=f.rows.find(r=>r.key.startsWith('marketing.unified.activity.')),a=JSON.parse(row.value);a.weekdays=[1];a.dailyStart='23:00';a.dailyEnd='01:00';row.value=JSON.stringify(a)
+ await expect(saveActivityInTransaction(f.db,'store',{name:'Points',type:'points',status:'published',productIds:['p'],rule:{multiplier:2}})).resolves.toMatchObject({type:'points'})
+ await expect(saveActivityInTransaction(f.db,'store',{name:'Conflict',type:'fixed',status:'published',productIds:['p'],weekdays:[2],dailyStart:'00:30',dailyEnd:'00:45',rule:{amount:500}})).rejects.toThrow('ACTIVITY_DAILY_SPECIAL_CONFLICT')
+ await expect(saveActivityInTransaction(f.db,'store',{name:'Earlier Monday',type:'fixed',status:'published',productIds:['p'],weekdays:[1],dailyStart:'00:30',dailyEnd:'00:45',rule:{amount:500}})).resolves.toMatchObject({type:'fixed'})
+})
+test('shared conflicts honor expiry, channel and excluded product scopes',async()=>{
+ for(const change of [{endsAt:'2020-01-01T00:00:00Z'},{channels:['TAKEAWAY']},{excludedProductIds:['p']},{specIds:['other-spec']}]){
+ const f=fixture(),r:any=await executeDailySpecial(f.db,'store',input);const row=f.rows.find(r=>r.key.startsWith('marketing.unified.activity.'));const a={...JSON.parse(row.value),...change};row.value=JSON.stringify(a)
+ await expect(saveActivityInTransaction(f.db,'store',{name:'Separate scope',type:'fixed',status:'published',productIds:['p'],specIds:['spec'],channels:['DINE_IN'],startsAt:'2026-10-29T00:00:00Z',rule:{amount:500}})).resolves.toMatchObject({type:'fixed'})
+ }
 })
