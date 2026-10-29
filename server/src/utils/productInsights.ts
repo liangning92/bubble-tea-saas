@@ -81,7 +81,7 @@ export function summarizeProducts(orders:any[],catalog:any[],filters:InsightFilt
       pair.orderCount++;pairs.set(key,pair)
     }
   }
-  const list=[...rows.values()].map(({orderIds:ids,...r})=>({...r,orderCount:ids.size,penetration:orderIds.size?ids.size/orderIds.size*100:0,margin:r.quantity&&r.costKnown&&r.evidence&&r.revenue>0?(r.revenue-r.cost)/r.revenue*100:null}))
+  const list=[...rows.values()].map(({orderIds:ids,...r})=>({...r,orderCount:ids.size,penetration:orderIds.size?ids.size/orderIds.size*100:0,grossProfit:r.costKnown&&r.evidence?r.revenue-r.cost:null,margin:r.quantity&&r.costKnown&&r.evidence&&r.revenue>0?(r.revenue-r.cost)/r.revenue*100:null}))
   const sold=list.filter(r=>r.quantity>0),known=sold.filter(r=>r.margin!==null)
   const avgQuantity=sold.length?sold.reduce((s,r)=>s+r.quantity,0)/sold.length:0
   const knownRevenue=known.reduce((s,r)=>s+r.revenue,0),avgMargin=knownRevenue?(knownRevenue-known.reduce((s,r)=>s+r.cost,0))/knownRevenue*100:0
@@ -91,7 +91,7 @@ export function summarizeProducts(orders:any[],catalog:any[],filters:InsightFilt
   const channelTotals=new Map<string,number>()
   for(const c of channels.values())channelTotals.set(c.channelId||'',(channelTotals.get(c.channelId||'')||0)+c.quantity)
   for(const c of channels.values())c.percentage=channelTotals.get(c.channelId||'')?c.quantity/channelTotals.get(c.channelId||'')!*100:0
-  return {list:list.sort((a,b)=>b.quantity-a.quantity||a.productId.localeCompare(b.productId)),categories:[...categories.values()],channels:[...channels.values()].filter(c=>c.quantity>0).sort((a,b)=>b.quantity-a.quantity),pairs:[...pairs.values()].filter(p=>p.orderCount>=5).sort((a,b)=>b.orderCount-a.orderCount).slice(0,10),benchmarks:{avgQuantity,avgMargin},overview:{productsSold:sold.length,quantity:sold.reduce((s,r)=>s+r.quantity,0),unsold:list.length-sold.length,orderCount:orderIds.size,incomplete:sold.filter(r=>r.margin===null).length}}
+  return {list:list.sort((a,b)=>b.quantity-a.quantity||a.productId.localeCompare(b.productId)),categories:[...categories.values()],channels:[...channels.values()].filter(c=>c.quantity>0).sort((a,b)=>b.quantity-a.quantity),pairs:[...pairs.values()].filter(p=>p.orderCount>=5).sort((a,b)=>b.orderCount-a.orderCount).slice(0,10),benchmarks:{avgQuantity,avgMargin},overview:{profitIncomplete:sold.filter(r=>r.grossProfit===null).length,productsSold:sold.length,quantity:sold.reduce((s,r)=>s+r.quantity,0),unsold:list.length-sold.length,orderCount:orderIds.size,incomplete:sold.filter(r=>r.margin===null).length}}
 }
 export function productPreferences(orders:any[],productId:string) {
   const specs=new Map<string,any>(),addons=new Map<string,any>();let total=0

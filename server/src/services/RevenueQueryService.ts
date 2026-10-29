@@ -1,3 +1,4 @@
+import { saleLines } from '../utils/productInsights'
 import { DEFAULT_EXPENSE_CATEGORIES } from './ExpenseService'
 import { PrismaClient } from '@prisma/client'
 import { z } from 'zod'
@@ -29,7 +30,7 @@ export async function revenueQueryOptions(db:DB,storeId:string,canRefund=true) {
  let categories:{key:string;label?:string;labelEn?:string;labelZh?:string;labelId?:string}[]=DEFAULT_EXPENSE_CATEGORIES
  try{if(categoryConfig?.value){const parsed=JSON.parse(categoryConfig.value);if(Array.isArray(parsed))categories=parsed.filter(c=>typeof c?.key==='string')}}catch{}
  const categoryKeys=new Set([...categories.map(c=>c.key),...expenseRows.map(e=>e.category)])
- const datasets:QueryOption[]=[option('net','revenue','net',true,true),option('orders','revenue','orders',true,true),...([...payments].sort().map(key=>({...option('payment:'+key,'payment','payment',false,true),name:key}))),
+ const datasets:QueryOption[]=[option('net','revenue','net',true,true),option('orders','revenue','orders',true,true),option('grossProfit','revenue','grossProfit',true,true),...([...payments].sort().map(key=>({...option('payment:'+key,'payment','payment',false,true),name:key}))),
   {...option('channel:none','channel','pos',true,false),name:'POS'},...channels.map(c=>({...option('channel:'+c.id,'channel','channel',true,false),name:c.name})),option('manual:shopeefood','channel','shopeefood'),option('manual:gofood','channel','gofood'),
   ...(canRefund?[option('refund','refund','refund',true,true)]:[]),option('expense','expense','expense'),...([...categoryKeys].sort().map(key=>{const c=categories.find(c=>c.key===key);return {...option('expense:'+key,'expense','category'),name:c?.labelEn||c?.label||key,nameZh:c?.labelZh,nameId:c?.labelId}})),
   option('drawer','handover','drawer'),option('manual:cash','handover','manualCash'),option('manual:qris','handover','manualQris')]
@@ -53,6 +54,16 @@ export async function revenueQuery(db:DB,storeId:string,input:unknown,canRefund=
   const orders=await db.order.findMany({where:{...orderFilter,status:{in:['completed','paid']},createdAt:{gte:range.start,lte:range.end}},include:{items:{select:{productName:true,quantity:true}},channel:true,refundRequests:{where:{status:{in:['approved','paid']}}}},orderBy:{createdAt:'desc'}})
   await verifyIncome(orders)
   for(const o of orders)rows.push({...base(o.id,'order',o.createdAt,netReceivedAmount(o),o.orderNumber),items:o.items,paymentMethod:o.paymentMethod,channelId:o.channelId,channel:o.channel})
+ }
+ if(filter.dataset==='grossProfit'){
+  const orders=await db.order.findMany({where:{...orderFilter,status:{in:['completed','paid','refunded']},createdAt:{gte:range.start,lte:range.end}},include:{items:true,channel:true,refundRequests:{where:{status:{in:['approved','paid']}}}},orderBy:{createdAt:'desc'}})
+  await verifyIncome(orders)
+  for(const o of orders){
+   const lines=saleLines(o)
+   const known=lines.length>0&&lines.every(line=>line.costKnown&&line.evidence&&Number.isFinite(line.cost)&&Number.isFinite(line.revenue))
+   const amount=known?lines.reduce((total,line)=>total+line.revenue-line.cost,0):null
+   rows.push({...base(o.id,'order',o.createdAt,amount,o.orderNumber),items:o.items,paymentMethod:o.paymentMethod,channelId:o.channelId,channel:o.channel})
+  }
  }
  if(filter.dataset==='refund'){
   const refunds=await db.refundRequest.findMany({where:{order:orderFilter,status:{in:['approved','paid']},OR:[{approvedAt:{gte:range.start,lte:range.end}},{approvedAt:null,createdAt:{gte:range.start,lte:range.end}}]},include:{order:{include:{items:{select:{productName:true,quantity:true}},channel:true}}},orderBy:{createdAt:'desc'}})
