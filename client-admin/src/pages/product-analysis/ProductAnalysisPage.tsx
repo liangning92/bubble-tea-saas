@@ -264,6 +264,15 @@ export function ProductAnalysisPage() {
                 )}
               </div>
             </div>
+            <section className="card" data-testid="product-profit-ranking">
+              <h2 className="font-semibold">{t('grossProfitAnalysis.ranking')}</h2>
+              <p className="text-xs text-gray-500 mt-2 mb-4">{t('grossProfitAnalysis.basis')}</p>
+              {data.overview.profitIncomplete > 0 && <p className="text-sm text-amber-700 mb-3">{t('grossProfitAnalysis.excluded', { count: data.overview.profitIncomplete })}</p>}
+              {data.profitTop?.length ? <div className="overflow-x-auto"><table className="w-full min-w-[480px] text-sm">
+                <thead className="text-gray-500 text-left"><tr><th className="p-3">{t('grossProfitAnalysis.rank')}</th><th className="p-3">{t('insights.product')}</th><th className="p-3 text-right">{t('insights.revenue')}</th><th className="p-3 text-right">{t('grossProfitAnalysis.amount')}</th></tr></thead>
+                <tbody>{data.profitTop.map((r: any, index: number) => <tr key={r.productId} className="border-t"><td className="p-3">{index + 1}</td><td className="p-3"><Link className="text-primary" to={link(r.productId)}>{r.productName}</Link></td><td className="p-3 text-right tabular-nums whitespace-nowrap">{formatCurrency(r.revenue)}</td><td className={`p-3 text-right font-semibold tabular-nums whitespace-nowrap ${r.grossProfit < 0 ? 'text-red-600' : ''}`}>{formatCurrency(r.grossProfit)}</td></tr>)}</tbody>
+              </table></div> : empty}
+            </section>
             <div className="grid lg:grid-cols-2 gap-6">
               <details className="card">
                 <summary className="font-semibold cursor-pointer">
