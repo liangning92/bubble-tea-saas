@@ -90,7 +90,7 @@ export async function applyOfflineOperation(storeId:string,body:unknown) {
    if(!authorization.permissions?.includes('approvals.approve')||!permitted(actor,'approvals.approve'))throw new OfflineOperationError('STAFF_ACCESS_PERMISSION_DENIED',403)
    result=await applyOfflineRefundDecision(tx,storeId,input,actor,authorization)
   }else if(input.kind==='member'){
-   const policy=verifyMemberRegistration(input.data.registrationToken,storeId,input.occurredAt)
+   const policy=await verifyMemberRegistration(input.data.registrationToken,storeId,input.occurredAt,tx)
    const id='POSMEMBER-'+input.id
    if(input.sessionId!=='MEMBER:'+id)throw new OfflineOperationError('OFFLINE_MEMBER_ID_INVALID',400)
    if(await tx.member.findUnique({where:{phone:input.data.phone}}))throw new OfflineOperationError('MEMBER_PHONE_ALREADY_REGISTERED')

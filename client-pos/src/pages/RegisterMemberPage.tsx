@@ -1,3 +1,4 @@
+import { membershipQualificationCopy } from '../utils/membershipQualificationCopy'
 import { LocalizedDateTimeInput } from '../../../shared/components/LocalizedDateTimeInput'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -9,7 +10,8 @@ import { showToast } from '../components/ui'
 import { TextInputModal } from '../components/ui/TextInputModal'
 
 export function RegisterMemberPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const qualificationCopy=membershipQualificationCopy(i18n.language)
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const [form, setForm] = useState({
@@ -21,6 +23,7 @@ export function RegisterMemberPage() {
   })
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [qualificationPending,setQualificationPending]=useState(false)
 
   // 输入弹窗状态
   const [inputModal, setInputModal] = useState<{
@@ -77,7 +80,9 @@ export function RegisterMemberPage() {
       const responseData = res.data
       if (responseData && responseData.code === 201) {
         setSuccess(true)
-        showToast(t('member.registerSuccess'), 'success')
+        const pending=responseData.data?.status==='pending'
+        setQualificationPending(pending)
+        showToast(pending?qualificationCopy.registered:t('member.registerSuccess'), 'success')
         setTimeout(() => navigate('/'), 2000)
       } else {
         showToast(responseData?.message || t('member.registerFailed'), 'error')
@@ -96,7 +101,8 @@ export function RegisterMemberPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center p-8">
           <CheckCircle size={80} className="text-green-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-green-600">{t('member.registerSuccess')}</h2>
+          <h2 className="text-2xl font-bold text-green-600">{qualificationPending?qualificationCopy.registered:t('member.registerSuccess')}</h2>
+          {qualificationPending&&<p className="mt-3 max-w-md text-sm text-amber-700">{qualificationCopy.rule}</p>}
           <p className="text-gray-500 mt-4 text-lg">{t('member.redirecting')}</p>
         </div>
       </div>

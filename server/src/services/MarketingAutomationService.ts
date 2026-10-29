@@ -358,7 +358,7 @@ export async function triggerWelcomeCampaign(memberId: string) {
     where: { id: memberId }
   })
 
-  if (!member) return { triggered: false }
+  if (!member || member.status !== 'active') return { triggered: false }
 
   const campaign = await prisma.campaign.findFirst({
     where: {
@@ -393,6 +393,8 @@ export async function triggerWelcomeCampaign(memberId: string) {
 
 // Get member's available coupons
 export async function getMemberCoupons(memberId: string) {
+  const member=await prisma.member.findUnique({where:{id:memberId},select:{status:true}})
+  if(!member||member.status!=='active')return []
   const now = new Date()
   return prisma.memberCoupon.findMany({
     where: {

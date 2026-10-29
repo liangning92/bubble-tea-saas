@@ -1,3 +1,4 @@
+import { membershipPolicy } from './MembershipQualificationService'
 import jwt from 'jsonwebtoken'
 import prisma from '../config/database'
 import { config } from '../config/env'
@@ -33,8 +34,9 @@ export async function verifyOfflineMember(token:string,storeId:string,memberId:s
  }
  return evidence
 }
-export function verifyMemberRegistration(token:string,storeId:string,occurredAt:string){
+export async function verifyMemberRegistration(token:string,storeId:string,occurredAt:string,db:any=prisma){
  const at=Date.parse(occurredAt),policy=jwt.verify(token,config.jwt.secret,{audience:'pos-offline-member',clockTimestamp:Math.floor(at/1000)}) as any
+ if((await membershipPolicy(storeId,db)).enabled)throw Error('MEMBERSHIP_ONLINE_ENROLLMENT_REQUIRED')
  if(policy.purpose!=='pos-offline-member-registration'||policy.storeId!==storeId||policy.welcomePoints!==100||!Number.isFinite(at)||at<Date.parse(policy.issuedAt)||at>Date.parse(policy.expiresAt))throw Error('OFFLINE_MEMBER_AUTHORIZATION_INVALID')
  return policy
 }

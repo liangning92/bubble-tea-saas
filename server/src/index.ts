@@ -1,3 +1,4 @@
+import { storeOperationsRouter } from './routes/storeOperations'
 import { teamCommunicationRouter } from './routes/teamCommunication'
 import {upgradeTvSchema} from './utils/tvSchemaUpgrade'
 import { mediaRouter } from './routes/media'
@@ -233,6 +234,8 @@ app.get('/api/version', (req, res) => {
 app.use('/api/auth', declareAccessRoutes('/api/auth', authRouter))
 app.use('/api/queue', declareAccessRoutes('/api/queue', queueRouter))
 app.use('/api/import', declareAccessRoutes('/api/import', batchImportRouter))
+// A dedicated narrow operations capability authenticates inside this router.
+app.use('/api/internal/store-operations', storeOperationsRouter)
 // Enforce authentication for every API route by default. Only credential entry,
 // one-time setup/sync tickets, health checks, and the signed payment webhook are public.
 app.use('/api', (req, res, next) => {
