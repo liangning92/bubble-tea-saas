@@ -10,7 +10,7 @@ const privateRoot=()=>path.resolve(process.env.UPLOADS_PATH||path.resolve(__dirn
 /** Shared by the normal account file route and native Agent transport. */
 export async function accountFile(db:any,actor:AuthUser,id:string,channelId?:string,auditReason?:string){
  z.string().uuid().parse(id)
- const {isTeamAttachment,teamCommunication}=await import('./TeamCommunicationService.js')
+ const {isTeamAttachment,teamCommunication}=require('./TeamCommunicationService') as typeof import('./TeamCommunicationService')
  const stored=await readWork<any>(actor.storeId,'file.'+id,db)
  let file=stored
  if(stored&&await isTeamAttachment(db,actor.storeId,id,stored)){
