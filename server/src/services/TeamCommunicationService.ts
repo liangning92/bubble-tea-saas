@@ -10,6 +10,7 @@ import { recordTeamAgentReply } from './teamAgentBridge/events'
 import { assertLegacyConsumer, employeeRouteKey } from './teamAgentBridge/employeeIntake'
 import { teamAgentIdentity, teamAgentProvenance, teamAgentChannelCreated, teamAgentChannelAccess, teamAgentDirectChannelAccess, teamAgentTaskAuthority, teamAgentOutbound } from './teamAgentBridge/identity'
 import { enqueueTeamTaskReminder } from './TeamTaskReminderService'
+import { nativeBackendAgent } from './ManagementBackendIdentity'
 
 export const TEAM_PREFIX = 'team.communication.'
 export async function isTeamAttachment(db: any, storeId: string, id: string, file: any) {
@@ -471,6 +472,7 @@ export function teamCommunication(db: DB = prisma) {
     },
     async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization, managementAuthorization?: ManagementAuthorization, ownerOperationsDelegation?: { id: string; requestId: string }) {
       const v = messageSchema.parse(input)
+      const nativeAgent=nativeBackendAgent(a)
       return db.$transaction(async (tx: DB) => {
         // Agent receipts are scoped by store/author/request, not by channel.
         // Serialize that scope before inspecting or producing either channel's effects.
@@ -479,9 +481,10 @@ export function teamCommunication(db: DB = prisma) {
         const { c } = await channel(tx, a, id)
         await teamAgentOutbound(tx, a, c, { text: v.text, files: v.files })
         const requestKey = `request.${a.staffId}.${v.requestId}`
-        const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v, ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) })
+        const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v, ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{nativeAgent}: {}) })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); await teamAgentOutbound(tx, a, c, old.message); return old.message }
         if (teamAgentProvenance(a) && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
+        if(nativeAgent&&v.expectedLastSeq!==c.lastSeq)fail(409,'TEAM_MESSAGE_CONTEXT_CHANGED')
         // Serialize the final automatic effect with store revocation, before
         // acquiring ai-budget (defaults saves use defaults -> ai-budget).
         if (routineAuthorization || managementAuthorization) {
@@ -494,7 +497,7 @@ export function teamCommunication(db: DB = prisma) {
         const nativeHermes = !!await tx.config.findUnique({ where: { storeId_key: { storeId: a.storeId, key: employeeRouteKey(id) } } }) ||
           !!(policy?.management && agentSettings?.allChannelsAllowed && process.env.EMPLOYEE_HERMES_ENABLED === '1' && process.env.EMPLOYEE_HERMES_STORE_ID === a.storeId)
         const humanDraftRequiresFreshContext = !routineAuthorization && !managementAuthorization && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId
-        const humanTakeover = !routineAuthorization && !managementAuthorization && (!nativeHermes && policy?.origin !== 'store_default' || v.takeover === true) && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
+        const humanTakeover = !nativeAgent && !routineAuthorization && !managementAuthorization && (!nativeHermes && policy?.origin !== 'store_default' || v.takeover === true) && policy?.enabled && policy.automaticSend && policy.operatorStaffId === a.staffId && !policy.paused
         if (humanTakeover && !aiDraftId && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
         let ai: { provider: string; model: string; draftId: string; approvedBy?: string; routineAuthorization?: RoutineAuthorization; managementAuthorization?: ManagementAuthorization; authorizedBy?: string } | undefined
         if (aiDraftId) {
@@ -535,7 +538,7 @@ export function teamCommunication(db: DB = prisma) {
         if (!c.round.participants.includes(a.staffId)) c.round.participants.push(a.staffId)
         const employee = await identity(tx, a)
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
-          authorId: a.staffId, authorName: ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) }
+          authorId: a.staffId, authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId}}: {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
         const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
@@ -554,8 +557,8 @@ export function teamCommunication(db: DB = prisma) {
           await workflowEvent(tx, a.storeId, id, { policyVersion: paused.version, paused: true, takeover }, { read, write })
           await audit(tx, a, id, 'update', { action: 'workflow_human_takeover', takeover, policyVersion: paused.version })
         }
-        if (!teamAgentProvenance(a)) await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
-        if (teamAgentProvenance(a)) await audit(tx, a, id, 'create', { action: 'agent_message', messageId: message.id, seq: message.seq })
+        if (!teamAgentProvenance(a)&&!nativeAgent) await enqueueTeamWorkflow(tx, a, c, { ...message, sourceWrittenAt }, { read, write })
+        if (teamAgentProvenance(a)||nativeAgent) await audit(tx, a, id, 'create', { action: 'agent_message', messageId: message.id, seq: message.seq, ...(nativeAgent?{executionId:nativeAgent.executionId}: {}) })
         await recordTeamAgentReply(tx, a.storeId, c, message)
         await enqueueChatReminders(tx, a.storeId, c, message)
         return message

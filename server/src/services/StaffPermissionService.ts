@@ -25,9 +25,9 @@ export async function readStaffAccess(storeId:string,db:any=prisma) {
   const row=await db.config.findUnique({where:{storeId_key:{storeId,key:STAFF_ACCESS_KEY}}})
   return parsePolicy(row?.value)
 }
-export async function assignedStaffAccess(user:{role:string;staffId?:string;storeId:string}) {
+export async function assignedStaffAccess(user:{role:string;staffId?:string;storeId:string},db:any=prisma) {
   if (user.role==='admin' || !user.staffId || !user.storeId) return null
-  const policy=await readStaffAccess(user.storeId)
+  const policy=await readStaffAccess(user.storeId,db)
   const binding=policy.assignments.find(b=>b.staffId===user.staffId)
   if (!binding) return null
   const role=policy.roles.find(r=>r.id===binding.roleId)
