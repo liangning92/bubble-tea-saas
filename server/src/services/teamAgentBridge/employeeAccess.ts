@@ -2,10 +2,9 @@ import { TeamError, readTeam } from '../TeamCommunicationService'
 import { userAccessV2 } from '../StaffPermissionV2Service'
 import { defaultStaffPermissions } from '../StaffPermissionCatalog'
 import type { BridgeGrant, CommunicationScope } from './contract'
-import { backendOperation } from '../ManagementBackendRegistry'
 
 /** Resolve the current recipient's policy, never borrow the sponsoring user's role. */
-export async function audienceAllows(db:any, g:BridgeGrant, scope:CommunicationScope, permission:string):Promise<boolean> {
+export async function audienceAllows(db:any, g:Pick<BridgeGrant,'storeId'>, scope:CommunicationScope, permission:string):Promise<boolean> {
   const people=await db.staff.findMany({where:{storeId:g.storeId,id:{in:scope.audienceStaffIds},status:'active'},select:{id:true,user:{select:{id:true,role:true,storeId:true}}}})
   if(!people.length||people.length!==scope.audienceStaffIds.length)return false
   const legacy=await db.config.findUnique({where:{storeId_key:{storeId:g.storeId,key:'staff.access.policy'}}})
@@ -26,20 +25,7 @@ export async function audienceAllows(db:any, g:BridgeGrant, scope:CommunicationS
 }
 
 /** These checks concern data returned by business tools, not the vocabulary of a question. */
-export function toolAudiencePermissions(name:string,args:any):string[] {
-  return name==='employee_manage_marketing'&&['list_all','get_activity','quote_daily_special','inspect_membership','render_daily_poster'].includes(args?.action)?['marketing.read']
-    :name==='employee_manage_finance'&&['query_revenue_summary','list_recent_expenses'].includes(args?.action)?(args?.action==='list_recent_expenses'?['finance.read','cost.read']:['finance.read'])
-    :name==='employee_manage_procurement'&&['list_low_stock','list_suppliers'].includes(args?.action)?['purchases.read','cost.read']
-    :name==='employee_manage_marketing'&&args?.action==='query_products'?['profit.read','cost.read']
-    :name==='employee_manage_operations'&&args?.action==='list_pending_leaves'?['staff.private.read']
-
-    :[]
-}
-export async function assertToolAudience(db:any,g:BridgeGrant,scope:CommunicationScope,name:string,args:any) {
-  for(const permission of toolAudiencePermissions(name,args))if(!await audienceAllows(db,g,scope,permission))throw new TeamError(403,'EMPLOYEE_TOOL_RESULT_NOT_VISIBLE')
-}
-
-export async function visibleBusinessData(db:any,g:BridgeGrant,scope:CommunicationScope,data:any) {
+export async function visibleBusinessData(db:any,g:Pick<BridgeGrant,'storeId'>,scope:CommunicationScope,data:any) {
   const cost=await audienceAllows(db,g,scope,'cost.read'),profit=await audienceAllows(db,g,scope,'profit.read')
   const bank=await audienceAllows(db,g,scope,'staff.bank.read')
   const salary=await audienceAllows(db,g,scope,'salary.read'),privateStaff=await audienceAllows(db,g,scope,'staff.private.read')
@@ -59,34 +45,14 @@ export async function visibleBusinessData(db:any,g:BridgeGrant,scope:Communicati
   return walk(data)
 }
 
-export async function assertToolSettings(db:any,storeId:string,name:string,args:any) {
-  const s=await assertEmployeeSettings(db,storeId)
-  if(!s)return
-  const readActions=['list_all','get_activity','quote_daily_special','inspect_membership','render_daily_poster','inspect','list','list_stock_out','list_active','list_products','query_products','list_low_stock','list_suppliers','query_revenue_summary','list_recent_expenses','list_pending_leaves','list_staff','list_tasks','list_areas','list_trainings','list_courses']
-  const module=name==='employee_manage_membership'?'members':name.includes('inventory')||name.includes('procurement')?'inventory':name.includes('hygiene')?'hygiene'
-    :name.includes('marketing')?'marketing':name.includes('product')?'products':name.includes('finance')?'finance'
-    :name.includes('schedule')||name.includes('staff')||name.includes('operations')||name.includes('training')||name==='employee_submit_request'?'staff'
-    :name==='employee_send_message'?'channels':null
-  const read=name.startsWith('employee_read_')||readActions.includes(args?.action)
-  if(name==='employee_backend'&&args?.action==='execute'){
-    const op=backendOperation(args.operationId)
-    if(op){
-      const domain=(op.permission||'').split('.')[0]
-      const module=op.path.startsWith('/api/marketing')?'marketing':({products:'products',prices:'products',inventory:'inventory',purchases:'inventory',members:'members',finance:'finance',salary:'staff',staff:'staff',attendance:'staff',schedules:'staff',training:'staff',deposits:'staff',rewards:'staff',hygiene:'hygiene',team:'channels',channels:'channels'} as Record<string,string>)[domain]
-      if(module&&!s.permissions?.[module]?.[op.httpReadMethod||op.effect==='preview'?'read':'write'])throw new TeamError(403,'EMPLOYEE_TOOL_DISABLED_BY_SETTINGS')
-    }
-  }
-  if(module&&!s.permissions?.[module]?.[read?'read':'write'])throw new TeamError(403,'EMPLOYEE_TOOL_DISABLED_BY_SETTINGS')
-}
-
 /** A saved configuration is the live switch. Missing settings preserve an existing installation. */
 export async function assertEmployeeSettings(db:any,storeId:string) {
   const settings=await readTeam<any>(db,storeId,'ai.agent.settings')
-  if(settings&&(!settings.enabled||!settings.employeeBridgeEnabled||settings.expiresAt&&Date.parse(settings.expiresAt)<=Date.now()))throw new TeamError(403,'EMPLOYEE_RUNTIME_DISABLED_BY_SETTINGS')
+  if(settings&&!settings.enabled)throw new TeamError(403,'EMPLOYEE_RUNTIME_DISABLED_BY_SETTINGS')
   return settings
 }
 
-export async function visibleScheduleStaff(db:any,g:BridgeGrant,scope:CommunicationScope):Promise<string[]|undefined>{
+export async function visibleScheduleStaff(db:any,g:Pick<BridgeGrant,'storeId'>,scope:CommunicationScope):Promise<string[]|undefined>{
   if(await audienceAllows(db,g,scope,'schedules.read'))return undefined
   if(!scope.requesterStaffId)return []
   // Self-service data may be shown to the requester and authorized supervisors,
@@ -100,7 +66,7 @@ export async function visibleScheduleStaff(db:any,g:BridgeGrant,scope:Communicat
 }
 
 /** Personal training is not permission to query the store's assessments/HR notes. */
-export async function visibleTrainingStaff(db:any,g:BridgeGrant,scope:CommunicationScope):Promise<string[]|undefined>{
+export async function visibleTrainingStaff(db:any,g:Pick<BridgeGrant,'storeId'>,scope:CommunicationScope):Promise<string[]|undefined>{
   if(await audienceAllows(db,g,scope,'training.read'))return undefined
   if(!scope.requesterStaffId)return []
   for(const staffId of scope.audienceStaffIds){

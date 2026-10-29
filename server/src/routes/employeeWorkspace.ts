@@ -1,3 +1,4 @@
+import { accountFile } from '../services/NativeBackendFiles';
 import { listSalaryAdjustments, voucherStatuses } from "../services/SalaryAdjustmentService";
 import {
   pushKeys,
@@ -158,25 +159,17 @@ router.post(
 router.get(
   "/files/:id",
   handle(async (req, res) => {
-    const id = z.string().uuid().parse(req.params.id),
-      user = req.user!,
-      stored = await readWork(user.storeId, `file.${id}`);
-    let file = stored;
-    if (stored && await isTeamAttachment(prisma, user.storeId, id, stored)) {
-      if (req.query.channelId === undefined) throw new TeamError(403, 'TEAM_CHANNEL_REQUIRED');
-      const channelId = z.string().uuid().parse(req.query.channelId);
-      const auditReason = req.query.auditReason === undefined ? undefined : z.string().min(5).max(500).parse(req.query.auditReason);
-      file = await teamCommunication().attachment(user as TeamActor, channelId, id, auditReason);
-    } else if (!stored || (user.role !== "admin" && stored.staffId !== user.staffId)) {
-      throw new Error("FILE_FORBIDDEN");
-    }
+    const id=z.string().uuid().parse(req.params.id),user=req.user!;
+    const channelId=req.query.channelId===undefined?undefined:z.string().uuid().parse(req.query.channelId);
+    const auditReason=req.query.auditReason===undefined?undefined:z.string().min(5).max(500).parse(req.query.auditReason);
+    const {file,filename}=await accountFile(prisma,user,id,channelId,auditReason);
     res.set({
       "Cache-Control": "private, no-store",
       "Content-Type": file.type,
       "X-Content-Type-Options": "nosniff",
       "Content-Disposition": 'attachment; filename="document"',
     });
-    res.sendFile(path.join(privateRoot, id));
+    res.sendFile(filename);
   }),
 );
 router.get(

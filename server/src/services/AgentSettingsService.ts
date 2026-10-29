@@ -1,9 +1,8 @@
-import { employeeExecutionDiagnostic } from './teamAgentBridge/employeeRuntimeDiagnostics'
+import {nativeHermesConfig} from './HermesNativeConfig'
+import {HermesNativeClient} from './HermesNativeClient'
 import { pdcaPilotDiagnostic } from './agentTasks/diagnostics'
 import { z } from 'zod'
 import prisma from '../config/database'
-import { grantSchema, actions } from './teamAgentBridge/contract'
-import { employeeGrantKey, employeeRouteKey } from './teamAgentBridge/employeeIntake'
 import { TeamActor, TeamError, readTeam, writeTeam, lockTeam, auditTeam } from './TeamCommunicationService'
 
 const denied = (code: string, status = 403): never => { throw new TeamError(status, code) }
@@ -97,15 +96,8 @@ async function effectiveAgentSettings(db:any,storeId:string,saved:any):Promise<A
     permissions: { ...defaultAgentPermissions(), ...(saved.permissions || {}) }
   } : defaultAgentSettings()
 
-  if(saved?.permissions&&!saved.permissions.marketing)merged.permissions.marketing={...saved.permissions.members}
-  if (merged.operationProfile === 'store_operations') merged.permissions = fullStoreOperationsPermissions()
-  if(saved&&!Object.prototype.hasOwnProperty.call(saved,'expiresAt')){
-    const grants=await db.config.findMany({where:{storeId:storeId,key:{startsWith:'externalAgent.teamBridge.v1.grant.'}}})
-    const expiries=grants.map((r:any)=>JSON.parse(r.value).expiresAt).filter(Boolean).sort()
-    merged.expiresAt=expiries[0]||null
-  }
   if(process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN&&merged.agentOrigin==='http://127.0.0.1:8642')merged.agentOrigin=process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN
-  return merged
+  return {...merged,operationProfile:'store_operations',permissions:fullStoreOperationsPermissions(),expiresAt:null,employeeBridgeEnabled:true,allChannelsAllowed:true,memoryEnabled:true,learningEnabled:true,photoRecognitionEnabled:true}
 }
 
 export function agentSettingsService(db: any = prisma) {
@@ -122,32 +114,18 @@ export function agentSettingsService(db: any = prisma) {
       const pdcaPilot = await pdcaPilotDiagnostic(db, a.storeId)
       const employeeEnabledEnv = process.env.EMPLOYEE_HERMES_ENABLED === '1'&&(!process.env.EMPLOYEE_HERMES_STORE_ID||process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId)
 
-      const recentExecutions=await db.config.findMany({where:{storeId:a.storeId,key:{startsWith:'team.communication.employeeRuntime.execution.',not:{contains:'.provider.'}}},orderBy:{updatedAt:'desc'},take:5,select:{value:true,updatedAt:true}})
-      const latestExecution=recentExecutions.map((row:any)=>employeeExecutionDiagnostic(row.value,row.updatedAt)).find(Boolean)||null
+      const recentExecutions=await db.config.findMany({where:{storeId:a.storeId,key:{startsWith:'team.communication.nativeAgent.job.'}},orderBy:{updatedAt:'desc'},take:5,select:{value:true,updatedAt:true}})
+      const latestExecution=recentExecutions.map((row:any)=>{const j=JSON.parse(row.value);return {phase:j.state,turn:0,inputs:0,responses:0,tools:0,faultCode:j.fault||j.lastPollFault||null,updatedAt:j.updatedAt}}).find(Boolean)||null
 
       const systemState = {
-        latestExecution,
+        latestExecution,runtimeKind:'hermes_native_api',
         pilotState: pdcaPilot.state === 'valid' ? 'running' : pdcaPilot.state,
         pdcaPilot,
         employeeBridgeConfigured: employeeEnabledEnv,
-        runtimeAvailable: employeeEnabledEnv&&await employeeGatewayReachable(merged.agentOrigin),
+        runtimeAvailable: employeeEnabledEnv&&await employeeGatewayReachable(db,merged.agentOrigin),
         hostOrigin: merged.agentOrigin,
-        capabilities: [
-          {
-            id: 'stock_audit_pdca',
-            name: 'STOCK-RO-001 库存比对审计 (PDCA)',
-            description: '比对账本库存与现场物理盘点证据，执行自主审查并生成不可篡改报告。',
-            tools: ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report'],
-            active: merged.enabled && merged.pdcaPilotEnabled && pdcaPilot.state === 'valid'
-          },
-          {
-            id: 'employee_coordination',
-            name: '员工工作协同 (Employee Hermes Bridge)',
-            description: '在工作频道中响应员工运营问答、梳理交接与执行障碍，向主管提交结构化事实。',
-            tools: ['store_team_directory', 'store_team_channels', 'store_team_messages', 'store_team_send'],
-            active: merged.enabled && merged.employeeBridgeEnabled
-          }
-        ]
+        capabilities: [{id:'hermes_native_api',name:'Hermes',description:'Native runtime with one live backend entry; current account and audience permissions apply.',tools:['store_backend'],active:merged.enabled&&employeeEnabledEnv}]
+
       }
 
       return {
@@ -165,7 +143,6 @@ export function agentSettingsService(db: any = prisma) {
 
       const validated = agentSettingsSchema.parse(input)
       if(!privateGatewayOrigin(validated.agentOrigin))denied('TEAM_AGENT_ORIGIN_INVALID',400)
-      if(validated.expiresAt && Date.parse(validated.expiresAt)<=Date.now())denied('TEAM_AGENT_EXPIRY_INVALID',400)
 
       return await db.$transaction(async (tx: any) => {
         await lockTeam(tx, a.storeId, 'ai.agent.settings')
@@ -176,25 +153,14 @@ export function agentSettingsService(db: any = prisma) {
           denied('TEAM_VERSION_CONFLICT', 409)
         }
 
-        // Re-materializing the exact same saved authority must wait for current
-        // conversations; a real permission change/revocation still takes effect immediately.
-        const previous = current && agentSettingsSchema.parse(await effectiveAgentSettings(tx,a.storeId,current))
-        const resyncOnly = !!previous && JSON.stringify(previous) === JSON.stringify(validated)
-        if (resyncOnly) {
-          const executions = await tx.config.findMany({where:{storeId:a.storeId,key:{startsWith:'team.communication.employeeRuntime.execution.',not:{contains:'.provider.'}}},select:{value:true}})
-          const active = executions.some((row:any)=>{const state=JSON.parse(row.value);return ['input','response','tools','final'].includes(state.phase)&&Date.parse(state.expiresAt)>Date.now()&&(!process.env.EMPLOYEE_HERMES_AGENT_ID||state.grant?.agentId===process.env.EMPLOYEE_HERMES_AGENT_ID)})
-          if(active)denied('TEAM_AGENT_RESYNC_BUSY',409)
-        }
-
         const nextVersion = currentVersion + 1
         const toSave: AgentSettings = {
           ...validated,
-          permissions: validated.operationProfile === 'store_operations' ? fullStoreOperationsPermissions() : validated.permissions,
+          permissions:fullStoreOperationsPermissions(),operationProfile:'store_operations',expiresAt:null,employeeBridgeEnabled:true,allChannelsAllowed:true,memoryEnabled:true,learningEnabled:true,photoRecognitionEnabled:true,
           version: nextVersion
         }
 
         await writeTeam(tx, a.storeId, 'ai.agent.settings', toSave)
-        await synchronizeEmployeeGrants(tx,a,toSave,{preserveExistingAuthority:resyncOnly})
         await auditTeam(tx, a, 'ai.agent.settings', 'update', {
           action: 'agent_settings_update',
           version: nextVersion,
@@ -232,21 +198,8 @@ export function agentSettingsService(db: any = prisma) {
       let reachable = false
       let detailMsg = ''
 
-      try {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 2000)
-        const res = await fetch(new URL('/health',targetUrl), { method: 'GET', redirect:'error', signal: controller.signal }).catch(() => null)
-        clearTimeout(timer)
-        if (res) {
-          reachable = res.status===200
-          detailMsg = `Node responded with status ${res.status}`
-        } else {
-          reachable = false
-          detailMsg = `Node at ${targetUrl} connection refused or waiting for request`
-        }
-      } catch (err: any) {
-        detailMsg = err.message || 'Connection test timed out'
-      }
+      reachable=await employeeGatewayReachable(db,targetUrl)
+      detailMsg=reachable?'Hermes native API ready':'Hermes native API unavailable'
 
       const latencyMs = Date.now() - start
       const status = reachable ? 'ready' : (settings.enabled ? 'standby' : 'disabled')
@@ -276,46 +229,9 @@ export function agentSettingsService(db: any = prisma) {
 
 /** Save the operator's choices and the installed executor's grant in one transaction.
  * No dated pilot constant, direct database edit, or process restart is required. */
-export async function synchronizeEmployeeGrants(tx:any,a:TeamActor,s:AgentSettings,options:{preserveExistingAuthority?:boolean}={}) {
-  const rows=await tx.config.findMany({where:{storeId:a.storeId,key:{startsWith:'externalAgent.teamBridge.v1.grant.'}},orderBy:{key:'asc'}})
-  const mapping:Record<string,{read:string[];write:string[]}>={
-    products:{read:['products.read'],write:['products.write']},
-    inventory:{read:['inventory.read'],write:['inventory.write','procurement.write']},
-    marketing:{read:['marketing.read'],write:['marketing.write']},
-    members:{read:['members.read'],write:['members.write']},
-    finance:{read:['finance.read'],write:['finance.write']},
-    staff:{read:['staff.read','schedule.read','training.read'],write:['staff.write','operations.write','employee.request.write','training.write']},
-    hygiene:{read:['hygiene.read'],write:['hygiene.write']},
-    channels:{read:['messages.read','tasks.read'],write:['messages.send']}
-  }
-  const managed=new Set([...Object.values(mapping).flatMap(m=>[...m.read,...m.write]),'memory.read','memory.write'])
-  for(const row of rows){
-    const previous=grantSchema.parse(JSON.parse(row.value))
-    const expiry=options.preserveExistingAuthority?previous.expiresAt:s.expiresAt||'9999-12-31T23:59:59.999Z'
-    if(process.env.EMPLOYEE_HERMES_AGENT_ID&&previous.agentId!==process.env.EMPLOYEE_HERMES_AGENT_ID)continue
-    const selected=previous.actions.filter(x=>!managed.has(x)) as string[]
-    for(const [module,modes] of Object.entries(mapping))for(const mode of ['read','write'] as const)if(s.permissions[module]?.[mode])selected.push(...modes[mode])
-    if(s.memoryEnabled){selected.push('memory.read');if(s.learningEnabled)selected.push('memory.write')}
-    const grant=grantSchema.parse({...previous,displayName:s.agentName,version:previous.version+1,clientRevision:previous.clientRevision+1,expiresAt:expiry,revoked:!!(options.preserveExistingAuthority&&previous.revoked)||!s.enabled||!s.employeeBridgeEnabled,actions:[...new Set(selected)].filter(x=>(actions as readonly string[]).includes(x))})
-    await tx.config.update({where:{storeId_key:{storeId:a.storeId,key:employeeGrantKey(grant.agentId)}},data:{value:JSON.stringify(grant)}})
-    const routes=await tx.config.findMany({where:{storeId:a.storeId,key:{startsWith:'externalAgent.teamBridge.v1.employeeRoute.'}}})
-    for(const r of routes){
-      const route=JSON.parse(r.value);if(route.agentId!==grant.agentId)continue
-      const channelId=r.key.slice('externalAgent.teamBridge.v1.employeeRoute.'.length)
-      const taskKey='task.'+channelId+'.'+route.task.taskId,task=await readTeam<any>(tx,a.storeId,taskKey)
-      const taskRef=task?{taskId:route.task.taskId,version:(task.version||route.task.version)+1}:route.task
-      if(task){const serviceOwned=task.ownerId==='agent:'+grant.agentId&&task.text?.startsWith('Hermes:');await writeTeam(tx,a.storeId,taskKey,{...task,version:taskRef.version,deadlineAt:expiry,dueDate:expiry.slice(0,10),...(serviceOwned?{text:'Hermes: answer free-form store questions and perform operations under the currently saved authorization. Use actual evidence and persistent scoped memory; never invent completion.'}:{}),updatedAt:new Date().toISOString()})}
-      await tx.config.update({where:{storeId_key:{storeId:a.storeId,key:employeeRouteKey(channelId)}},data:{value:JSON.stringify({...route,task:taskRef,version:route.version+1,enabled:s.enabled&&s.employeeBridgeEnabled&&!grant.revoked&&Date.parse(expiry)>Date.now(),expiresAt:expiry})}})
-      const key='externalAgent.teamBridge.v1.channel.'+channelId
-      const binding=await tx.config.findUnique({where:{storeId_key:{storeId:a.storeId,key}}})
-      if(binding){const value=JSON.parse(binding.value);value.task=taskRef;if(value.delegatedDirect)value.delegatedDirect={...value.delegatedDirect,grantVersion:grant.version,clientRevision:grant.clientRevision,expiresAt:expiry};await tx.config.update({where:{storeId_key:{storeId:a.storeId,key}},data:{value:JSON.stringify(value)}})}
-    }
-  }
-}
-
-async function employeeGatewayReachable(origin:string):Promise<boolean>{
-  if(!privateGatewayOrigin(origin))return false
-  try{const response=await fetch(new URL('/health',origin),{redirect:'error',signal:AbortSignal.timeout(2000)});if(!response.ok)return false;const body:any=await response.json();return body.status==='ok'&&body.protocol==='employee_work_trace_v1'}catch{return false}
+async function employeeGatewayReachable(db:any,origin:string):Promise<boolean>{
+ if(!privateGatewayOrigin(origin)||origin!==process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN)return false
+ try{const cfg=nativeHermesConfig();if(!cfg)return false;const health=await new HermesNativeClient(cfg.gatewayOrigin,cfg.gatewayKey).gatewayHealth();return health?.status==='ok'&&health?.protocol==='hermes_native_api_v1'}catch{return false}
 }
 
 function privateGatewayOrigin(value:string):boolean{

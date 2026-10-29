@@ -26,8 +26,7 @@ try:
     env = dict(os.environ, NODE_ENV='production', DATABASE_URL=f'postgresql://team_test@127.0.0.1:{port}/team_test',
                JWT_SECRET='synthetic-team-work-item-fixture-only', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
-    command(['node', 'tests/stoploss/employee-runtime-check.cjs'], env=env)
-    command(['node', 'tests/stoploss/hermes-background-check.cjs'], env=env)
+    command(['node', 'tests/stoploss/management-backend-check.cjs'], env=env)
 finally:
     try:
         if started:

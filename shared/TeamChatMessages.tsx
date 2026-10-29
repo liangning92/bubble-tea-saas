@@ -72,6 +72,7 @@ export function TeamChatMessages({ messages, client, staffId, channelId, query, 
     {(!i || day(messages[i - 1].createdAt) !== day(message.createdAt)) && <div className="team-day"><span>{day(message.createdAt)}</span></div>}
     <article id={`team-message-${message.seq}`} data-team-target-kind="message" data-team-target-id={String(message.seq)} style={!historyFailed&&message.seq===targetSeq?teamWorkTargetStyle:undefined} className={`team-bubble ${message.authorId === staffId ? 'team-bubble-own' : 'team-bubble-other'}`}>
      <p className="team-message-author">{message.authorName}</p>
+     {message.agent?.replyToSeq!==undefined&&<a className="team-ai-label" href={`#team-message-${message.agent.replyToSeq}`} data-testid="team-agent-reply-source">{language.startsWith('zh')?'回复':language.startsWith('en')?'Reply to':'Balasan untuk'} #{message.agent.replyToSeq}</a>}
      {message.text && <p className="team-message-text">{message.text}</p>}
      {message.agent && <p className="team-ai-label" data-testid="team-agent-source">{language.startsWith('zh') ? '运营智能体' : language.startsWith('en') ? 'Operations agent' : 'Agen operasional'}</p>}
      {message.ai && <p className="team-ai-label">{(message.ai.routineAuthorization || message.ai.managementAuthorization) ? work.aiRoutine : work.aiApproved} · {message.ai.model}</p>}

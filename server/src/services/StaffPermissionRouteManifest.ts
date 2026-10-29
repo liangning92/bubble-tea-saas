@@ -1,5 +1,8 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
-export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null}> = {
+export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null;publicationAudience?:{allStaff?:boolean;staffField?:string;resourceModel?:string;resourceParam?:string}}> = {
+  "GET /api/team/agent-work-guides":{permission:"personal.messages",ownerOnly:false,export:false,personal:true},
+  "GET /api/team/agent-jobs":{permission:"team.audit",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"team.audit"},
+  "GET /api/team/agent-jobs/:id":{permission:"team.audit",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"team.audit"},
   "POST /api/team/channels/:id/agent-continuations": {permission:"team.manage",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"team.manage"},
   "POST /api/marketing/activities/:id/poster-preview": {permission:"marketing.read",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"marketing.read"},
   "POST /api/purchase-orders/:id/confirm-payment": {permission:"finance.write",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"purchases.write",resource:{model:"purchaseOrder",param:"id"}},
@@ -3515,6 +3518,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/staff-management/training": {
+    publicationAudience:{staffField:'staffId'},
     "legacyRoles": [
       "admin",
       "manager"
@@ -3527,6 +3531,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "PUT /api/staff-management/training/:id": {
+    publicationAudience:{staffField:'staffId',resourceModel:'training',resourceParam:'id'},
     "legacyRoles": [
       "admin",
       "manager"
@@ -4098,6 +4103,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": true
   },
   "POST /api/training/categories": {
+    publicationAudience:{allStaff:true},
     "legacyRoles": [
       "admin",
       "manager"
@@ -4110,6 +4116,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/training/push": {
+    publicationAudience:{staffField:'staffId',allStaff:true},
     "legacyRoles": [
       "admin",
       "manager"
@@ -8038,6 +8045,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": true
   },
   "POST /api/announcement": {
+    publicationAudience:{allStaff:true},
     "legacyRoles": [
       "admin"
     ],
@@ -8060,6 +8068,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "PUT /api/announcement/:id": {
+    publicationAudience:{allStaff:true},
     "legacyRoles": [
       "admin"
     ],
@@ -8243,6 +8252,7 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "personal": false
   },
   "POST /api/training/library/publish": {
+    publicationAudience:{allStaff:true},
     "legacyRoles": [
       "admin"
     ],

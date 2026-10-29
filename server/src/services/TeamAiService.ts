@@ -400,13 +400,13 @@ export interface TeamAgentModelProviderRequest {
 }
 export type TeamAgentModelTransport = (storeId: string, configVersion: number, request: TeamAgentModelProviderRequest,
   beforeSend: () => Promise<void>, deadlineAt?: number) => Promise<any>
-export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: boolean; fetch?: typeof fetch; toolProfile?: 'stock_readonly'|'employee_work' } = {}): TeamAgentModelTransport {
+export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: boolean; fetch?: typeof fetch; toolProfile?: 'stock_readonly' } = {}): TeamAgentModelTransport {
   return async (storeId, configVersion, request, beforeSend, deadlineAt) => {
     if (options.enabled !== true) denied('AGENT_MODEL_RELAY_DISABLED')
-    const toolNames = options.toolProfile === 'employee_work' ? ['employee_backend','employee_recall_memory','employee_store_memory','employee_manage_inventory','employee_manage_hygiene','employee_manage_staff','employee_read_message','employee_read_task','employee_read_inventory','employee_read_schedule','employee_manage_marketing','employee_manage_procurement','employee_manage_finance','employee_manage_operations','employee_manage_membership','employee_submit_request','employee_manage_product','employee_manage_training','employee_remember_rule','employee_send_message'] : ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report']
+    const toolNames = ['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report']
     if (Object.keys(request).some(k => !['model', 'stream', 'reasoning_effort', 'reasoning_split', 'messages', 'tools', 'tool_choice'].includes(k)) ||
       !request.tools.every(t => t?.type === 'function' && toolNames.includes(t.function?.name)) ||
-      request.model !== 'MiniMax-M3.1-Flash' || request.stream !== false || (request.reasoning_effort !== 'low' && !(options.toolProfile === 'employee_work' && request.reasoning_effort === undefined)) || request.reasoning_split !== true ||
+      request.model !== 'MiniMax-M3.1-Flash' || request.stream !== false || request.reasoning_effort !== 'low' || request.reasoning_split !== true ||
       'max_tokens' in request || 'max_completion_tokens' in request) denied('AGENT_MODEL_REQUEST_INVALID', 400)
     const config = await readTeam(db, storeId, 'ai.settings')
     const connection = config && await readAiConnection(db, storeId, config)
@@ -416,10 +416,10 @@ export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: bo
     // decrypt() calls masterKey() in read-only mode; no new key/secret/config is created.
     const key = await decrypt(storeId, config.secret, 'cn')
     await beforeSend()
-    const remaining = deadlineAt === undefined ? (options.toolProfile==='employee_work'?180000:25000) : deadlineAt - Date.now()
+    const remaining = deadlineAt === undefined ? 25000 : deadlineAt - Date.now()
     if (!Number.isFinite(remaining) || remaining <= 0) denied('AGENT_MODEL_DEADLINE_BEFORE_SEND', 409)
     // A long business lease must not turn one unresponsive model request into a day of silence.
-    const ceiling=options.toolProfile==='employee_work'?180000:25000
+    const ceiling=25000
     const timeoutMs = Math.max(1, Math.min(ceiling, Math.floor(remaining)))
     let response: Response
     try { response = await (options.fetch || fetch)(endpoint('cn'), { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
@@ -427,12 +427,27 @@ export function createTeamAgentMiniMaxTransport(db: any, options: { enabled?: bo
     catch { return denied('AGENT_MODEL_PROVIDER_OUTCOME_UNKNOWN', 502) }
     // Do not forward error bodies, headers or diagnostics that could contain secrets.
     if (!response.ok) {
-      const errBody = await response.text().catch(() => '')
-      console.error('[TeamAiService] MiniMax rejected with status:', response.status, errBody)
+      await response.body?.cancel().catch(()=>{})
       return denied('AGENT_MODEL_PROVIDER_REJECTED_OR_UNKNOWN', 502)
     }
     let raw: string
     try { raw = await response.text() } catch { return denied('AGENT_MODEL_PROVIDER_OUTCOME_UNKNOWN', 502) }
     try { return JSON.parse(raw) } catch { return denied('AGENT_MODEL_PROVIDER_INVALID_JSON', 502) }
   }
+}
+
+/** Native Hermes transport: the installed SDK owns its tool catalog and request
+ * shape. Authentication and the existing subscribed connection stay server-side. */
+export async function openNativeSubscribedResponse(db:any,storeId:string,configVersion:number,request:any,beforeSend:()=>Promise<void>,deadlineAt:number):Promise<Response>{
+ const config=await readTeam<any>(db,storeId,'ai.settings')
+ const connection=config&&await readAiConnection(db,storeId,config)
+ if(!config?.enabled||config.provider!=='minimax'||config.version!==configVersion||config.model!==request?.model||!config.secret||connection?.status!=='ready'||!Number.isSafeInteger(connection.checkRevision)||connection.checkRevision<=0)denied('NATIVE_SUBSCRIBED_CONNECTION_UNAVAILABLE',409)
+ if(!Array.isArray(request.messages))denied('NATIVE_PROVIDER_REQUEST_INVALID',400)
+ const key=await decrypt(storeId,config.secret,config.region)
+ await beforeSend()
+ const remaining=deadlineAt-Date.now();if(!Number.isFinite(remaining)||remaining<=0)denied('NATIVE_PROVIDER_DEADLINE',409)
+ let response:Response
+ try{response=await fetch(endpoint(config.region),{method:'POST',redirect:'error',signal:AbortSignal.timeout(Math.min(remaining,180000)),headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify(request)})}catch{denied('NATIVE_PROVIDER_OUTCOME_UNKNOWN',502)}
+ if(!response!.ok)denied(response!.status===429?'NATIVE_SUBSCRIPTION_EXHAUSTED':'NATIVE_PROVIDER_REJECTED',response!.status===429?429:502)
+ return response!
 }

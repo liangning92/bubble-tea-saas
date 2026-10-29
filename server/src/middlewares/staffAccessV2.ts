@@ -1,3 +1,4 @@
+import {assertDeclaredPublication} from '../services/ManagementBackendIdentity'
 import {canUseManagementRoute} from '../services/ManagementRouteAccess'
 import {isEmployeeAppRoute} from '../services/EmployeeAppAccess'
 import {ACCESS_ROUTE_MANIFEST} from '../services/StaffPermissionRouteManifest'
@@ -12,6 +13,7 @@ export function declareAccessRoutes(base:string,router:any){
    if(req[BACKEND_OPERATION]&&req[BACKEND_OPERATION]!==req.accessDeclaration?.routeKey)return res.status(409).json({code:409,message:'BACKEND_MATCHED_ROUTE_CHANGED'})
    if(req.user && !canUseManagementRoute(req.user,req.accessDeclaration))return res.status(403).json({code:403,message:'MANAGEMENT_ACCESS_REQUIRED'})
    if(req.user?.accessRole?.version===2){const denied=await enforceAccessV2(req,res,req.user);if(denied)return denied}
+   if(req.user)await assertDeclaredPublication(prisma,req.user,req.accessDeclaration,req.body,req.params)
    next()
   } catch(error){next(error)}
  });const guard=route.stack.pop();route.methods=methods;route.stack.unshift(guard)}

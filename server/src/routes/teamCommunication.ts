@@ -1,3 +1,4 @@
+import {STORE_OPERATIONS_GUIDES} from '../services/StoreOperationsGuides'
 import { operationsOwnerState, createOperationsDelegation, revokeOperationsDelegation } from '../services/StoreOperationsDelegationService'
 import { agentMemoryService } from '../services/AgentMemoryService'
 import { Router } from 'express'
@@ -43,6 +44,24 @@ const workflow = teamWorkflow()
 const managementDefaults = teamManagementDefaults(prisma)
 const agentSettings = agentSettingsService(prisma)
 const agentMemory = agentMemoryService(prisma)
+// The normal account audit API exposes receipt references, never provider
+// credentials, prompts, private Agent memory or an assertion of business acceptance.
+router.get('/agent-work-guides',run(async(_req,res)=>{res.json({code:200,data:STORE_OPERATIONS_GUIDES})}))
+router.get('/agent-jobs',run(async(req,res)=>{
+ if(!canTeam(actor(req),'team.audit'))throw new TeamError(403,'TEAM_AUDIT_REQUIRED')
+ const offset=z.coerce.number().int().min(0).max(10000).default(0).parse(req.query.offset)
+ const rows=await prisma.config.findMany({where:{storeId:actor(req).storeId,key:{startsWith:'team.communication.nativeAgent.job.'}},orderBy:{createdAt:'desc'},skip:offset,take:50})
+ res.json({code:200,data:rows.map(row=>{const j=JSON.parse(row.value);return {id:j.id,parentJobId:j.parentJobId||null,channelId:j.channelId,sourceMessageId:j.messageId,sourceSeq:j.sourceSeq,requesterStaffId:j.requesterStaffId,state:j.state,runId:j.runId||null,outputMessageId:j.outputMessageId||null,fault:j.fault||j.lastPollFault||null,createdAt:j.createdAt,updatedAt:j.updatedAt,businessCompleted:false}})})
+}))
+router.get('/agent-jobs/:id',run(async(req,res)=>{
+ if(!canTeam(actor(req),'team.audit'))throw new TeamError(403,'TEAM_AUDIT_REQUIRED')
+ const id=z.string().regex(/^[a-f0-9]{64}$/).parse(req.params.id),j=await readTeam<any>(prisma,actor(req).storeId,'nativeAgent.job.'+id)
+ if(!j)throw new TeamError(404,'NATIVE_JOB_NOT_FOUND')
+ const rows=await prisma.config.findMany({where:{storeId:actor(req).storeId,key:{startsWith:'team.communication.employeeRuntime.backendOperation.'},value:{contains:JSON.stringify(id)}}})
+ const operationReceipts=rows.map(row=>JSON.parse(row.value)).filter(r=>r.executionId===id).map(r=>({receiptId:r.id,operationId:r.operationId,state:r.state,createdAt:r.createdAt,completedAt:r.completedAt||null,fault:r.fault||null,resourceId:typeof r.result?.data?.data?.id==='string'?r.result.data.data.id:null}))
+ res.json({code:200,data:{id:j.id,parentJobId:j.parentJobId||null,channelId:j.channelId,sourceMessageId:j.messageId,sourceSeq:j.sourceSeq,requesterStaffId:j.requesterStaffId,state:j.state,runId:j.runId||null,outputMessageId:j.outputMessageId||null,fault:j.fault||j.lastPollFault||null,operationReceipts,createdAt:j.createdAt,updatedAt:j.updatedAt,businessCompleted:false,independentAcceptance:'not_reviewed'}})
+}))
+
 router.get('/workflow/defaults',run(async(req,res)=>ok(res,await managementDefaults.read(actor(req),req.query.requestId===undefined?undefined:z.string().uuid().parse(req.query.requestId)))))
 router.put('/workflow/defaults',run(async(req,res)=>ok(res,await managementDefaults.save(actor(req),req.body))))
 const workflowAfter = (req: AuthRequest) => z.coerce.number().int().nonnegative().max(999999999999).parse(req.query.after ?? 0)

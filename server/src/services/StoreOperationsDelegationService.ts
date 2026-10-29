@@ -1,3 +1,4 @@
+import {nativeJobId,nativeJobKey} from './NativeStoreQueue'
 import {applyInput,assertNarrowDailySpecial,applyDailyMembershipPolicy} from './DailyMembershipOperationsService'
 export {applyInput,assertNarrowDailySpecial} from './DailyMembershipOperationsService'
 import { configuredEmployeeDeployment } from './teamAgentBridge/employeeConfigured'
@@ -79,10 +80,7 @@ async function ownerAllowed(
     fail('OPERATIONS_OWNER_REVOKED')
   const settings = await readTeam(db, storeId, 'ai.agent.settings')
   if (
-    !settings?.enabled ||
-    !settings.permissions?.marketing?.write ||
-    !settings.permissions?.members?.write ||
-    (settings.expiresAt && Date.parse(settings.expiresAt) <= Date.now())
+    !settings?.enabled
   )
     fail('OPERATIONS_MODULE_AUTHORIZATION_REQUIRED')
   return { owner, settings }
@@ -97,16 +95,12 @@ export async function operationsOwnerState(storeId: string, ownerId: string, db:
   )
     fail('OPERATIONS_OWNER_REQUIRED')
   const settings = await readTeam(db, storeId, 'ai.agent.settings')
-  const canDelegate =
-    !!settings?.enabled &&
-    !!settings.permissions?.marketing?.write &&
-    !!settings.permissions?.members?.write &&
-    (!settings.expiresAt || Date.parse(settings.expiresAt) > Date.now())
+  const canDelegate=!!settings?.enabled
   const rows = await db.config.findMany({ where: { storeId, key: { startsWith: PREFIX } } })
   return {
     canDelegate,
     operationProfile: settings?.operationProfile || 'custom',
-    authorizationExpiresAt: settings?.expiresAt || null,
+    authorizationExpiresAt:null,
     policy: await membershipPolicy(storeId, db),
     activities: (await listActivities(storeId, db)).filter(
       (a) => a.type === 'special_price' && a.weekdays.length && a.status !== 'ended',
@@ -129,16 +123,13 @@ export async function createOperationsDelegation(
   const fullRole = v.confirm === 'full_store_operations_role'
   if (
     fullRole &&
-    (settings.operationProfile !== 'store_operations' ||
-      !settings.employeeBridgeEnabled ||
-      !owner.staff?.id)
+    !owner.staff?.id
   )
     fail('OPERATIONS_ROLE_PROFILE_REQUIRED')
   if (!fullRole && !v.activityIds.length) fail('OPERATIONS_DAILY_SPECIAL_REQUIRED')
   const expiry = v.expiresAt ? Date.parse(v.expiresAt) : null
   if (
-    (expiry !== null && expiry <= Date.now()) ||
-    (settings.expiresAt && (expiry === null || expiry > Date.parse(settings.expiresAt)))
+    expiry !== null && expiry <= Date.now()
   )
     fail('OPERATIONS_EXPIRY_OUT_OF_SCOPE')
   const activities = await listActivities(storeId, db)
@@ -213,17 +204,6 @@ export async function createOperationsDelegation(
         const agentId = process.env.EMPLOYEE_HERMES_AGENT_ID
         if (!agentId || process.env.EMPLOYEE_HERMES_STORE_ID !== storeId)
           fail('OPERATIONS_HERMES_RUNTIME_NOT_CONFIGURED')
-        const row = await target.config.findUnique({
-          where: { storeId_key: { storeId, key: employeeGrantKey(agentId) } },
-        })
-        const installed = grantSchema.parse(row && JSON.parse(row.value))
-        if (
-          installed.sponsorUserId !== ownerId ||
-          installed.storeId !== storeId ||
-          installed.revoked ||
-          Date.parse(installed.expiresAt) <= Date.now()
-        )
-          fail('OPERATIONS_OWNER_ROUTE_REQUIRED')
         const facade = { ...target, $transaction: async (fn: any) => fn(target) }
         const channel = await teamCommunication(facade).create(
           { id: ownerId, storeId, staffId: owner.staff.id, role: 'admin', employeeApp: false },
@@ -318,17 +298,17 @@ async function operationsGatewayState(db: any, ports: OperationsTaskPorts = task
     const raw: any = await ports.gatewayHealth(db)
     if (
       raw?.status !== 'ok' ||
-      raw.protocol !== 'employee_work_trace_v1' ||
-      raw.maxConcurrency !== 1 ||
+      raw.protocol !== 'hermes_native_api_v1' ||
+      !Number.isSafeInteger(raw.maxConcurrency) || raw.maxConcurrency < 1 ||
       !Number.isInteger(raw.queued) ||
       raw.queued < 0 ||
-      ![0, 1].includes(raw.running)
+      !Number.isSafeInteger(raw.running) || raw.running < 0 || raw.running > raw.maxConcurrency
     )
-      throw Error('EMPLOYEE_GATEWAY_SINGLE_SLOT_REQUIRED')
+      throw Error('EMPLOYEE_GATEWAY_CAPACITY_INVALID')
     return {
       verified: true,
       protocol: raw.protocol,
-      maxConcurrency: 1,
+      maxConcurrency: raw.maxConcurrency,
       queued: raw.queued,
       running: raw.running,
       ...(raw.scheduling==='admin_priority_fair'&&raw.adminBurstLimit===3&&raw.preemptRunning===false?{scheduling:raw.scheduling,adminBurstLimit:3,preemptRunning:false}:{}),
@@ -564,68 +544,14 @@ async function ownerTaskContext(db: any, credential: string, channelId: string, 
     delegation.storeId,
     delegation.ownerSecurityFingerprint,
   )
-  if (
-    settings.operationProfile !== 'store_operations' ||
-    !settings.employeeBridgeEnabled ||
-    !owner.staff?.id
-  )
-    fail('OPERATIONS_ROLE_PROFILE_REQUIRED')
-  const channel = await readTeam<any>(db, delegation.storeId, 'channel.' + channelId)
-  if (!channel || channel.archived) fail('OPERATIONS_OWNER_CHANNEL_REQUIRED')
-  const route = employeeRouteSchema.parse(
-    await db.config
-      .findUnique({
-        where: { storeId_key: { storeId: delegation.storeId, key: employeeRouteKey(channelId) } },
-      })
-      .then((r: any) => r && JSON.parse(r.value)),
-  )
-  const row = await db.config.findUnique({
-    where: { storeId_key: { storeId: delegation.storeId, key: employeeGrantKey(route.agentId) } },
-  })
-  const grant = grantSchema.parse(row && JSON.parse(row.value))
-  if (
-    process.env.EMPLOYEE_HERMES_AGENT_ID &&
-    grant.agentId !== process.env.EMPLOYEE_HERMES_AGENT_ID
-  )
-    fail('OPERATIONS_OWNER_ROUTE_REQUIRED')
-  if (
-    grant.sponsorUserId !== owner.id ||
-    route.sourceStaffId !== owner.staff.id ||
-    !route.enabled ||
-    route.paused ||
-    Date.parse(route.expiresAt) <= Date.now()
-  )
-    fail('OPERATIONS_OWNER_ROUTE_REQUIRED')
-  const humans = channel.members.filter((m: any) => !m.staffId.startsWith('agent:'))
-  if (
-    humans.length !== 1 ||
-    humans[0].staffId !== owner.staff.id ||
-    channel.members.some(
-      (m: any) => m.staffId.startsWith('agent:') && m.staffId !== 'agent:' + grant.agentId,
-    )
-  )
-    fail('OPERATIONS_OWNER_PRIVATE_AUDIENCE_REQUIRED')
-  if (
-    !grant.channelIds.includes(channelId) ||
-    !['messages.read', 'messages.send', 'tasks.read'].every((action) =>
-      grant.actions.includes(action as any),
-    )
-  )
-    fail('OPERATIONS_OWNER_ROUTE_REQUIRED')
-  const task = await readTeam<any>(
-    db,
-    delegation.storeId,
-    'task.' + channelId + '.' + route.task.taskId,
-  )
-  if (
-    !task ||
-    task.id !== route.task.taskId ||
-    task.version !== route.task.version ||
-    task.ownerId !== 'agent:' + grant.agentId ||
-    !['assigned', 'accepted', 'submitted', 'changes_requested'].includes(task.status)
-  )
-    fail('OPERATIONS_OWNER_TASK_CHANGED')
-  await readAuthorizedBridgeChannel(db, grant, route.task, channelId, channel)
+  if(!owner.staff?.id)fail('OPERATIONS_OWNER_REQUIRED')
+  const agentId=process.env.EMPLOYEE_HERMES_AGENT_ID
+  const channel=await readTeam<any>(db,delegation.storeId,'channel.'+channelId)
+  if(!channel||channel.archived||!agentId||!channel.members.some((m:any)=>m.staffId===owner.staff.id)||!channel.members.some((m:any)=>m.staffId==='agent:'+agentId))fail('OPERATIONS_OWNER_CHANNEL_REQUIRED')
+  if(channel.members.filter((m:any)=>!m.staffId.startsWith('agent:')).length!==1)fail('OPERATIONS_OWNER_PRIVATE_AUDIENCE_REQUIRED')
+  // Workbench credentials identify the real owner only. They no longer enroll
+  // trial tasks, operation profiles, route expiry or a second tool permission set.
+  const grant={agentId},route={task:{taskId:null}}
   return { delegation, owner, route, grant, channel }
 }
 /** Enqueue into the existing native Hermes worker. Never run a second model loop.
@@ -642,7 +568,7 @@ export async function submitOperationsTask(
   if (!initialGrant.capabilities?.includes('hermes.owner_tasks.submit'))
     fail('OPERATIONS_ROLE_DELEGATION_REQUIRED')
   const gateway = await operationsGatewayState(db, ports)
-  if (!gateway.verified) fail('OPERATIONS_SINGLE_SLOT_GATEWAY_REQUIRED')
+  if (!gateway.verified) fail('OPERATIONS_GATEWAY_UNAVAILABLE')
   return db.$transaction(async (tx: any) => {
     const context = await ownerTaskContext(tx, credential, input.channelId, true)
     if (
@@ -681,11 +607,11 @@ export async function submitOperationsTask(
       undefined,
       { id: delegation.id, requestId: input.requestId },
     )
-    const eventId = hash(JSON.stringify(['employee_work', input.channelId, message.id]))
+    const eventId = nativeJobId(delegation.storeId,input.channelId,message.id)
     const pending = await tx.config.findUnique({
-      where: { storeId_key: { storeId: delegation.storeId, key: employeeIntakeKey(eventId) } },
+      where: { storeId_key: { storeId: delegation.storeId, key: 'team.communication.'+nativeJobKey(eventId) } },
     })
-    if (!pending || JSON.parse(pending.value).state !== 'pending')
+    if (!pending || JSON.parse(pending.value).state !== 'queued')
       fail('OPERATIONS_HERMES_NOT_QUEUED')
     const receipt = {
       requestId: input.requestId,
@@ -739,68 +665,9 @@ export async function operationsTaskStatus(
   )
   if (!receipt) fail('OPERATIONS_TASK_NOT_FOUND')
   await ownerTaskContext(db, credential, receipt.channelId)
-  const row = await db.config.findUnique({
-    where: {
-      storeId_key: { storeId: delegation.storeId, key: employeeIntakeKey(receipt.eventId) },
-    },
-  })
-  const pending = row && JSON.parse(row.value)
-  const mappings = await db.config.findMany({
-    where: {
-      storeId: delegation.storeId,
-      key: { startsWith: 'team.communication.employeeOrchestration.mapping.' },
-    },
-  })
-  const mapping = mappings
-    .map((r: any) => JSON.parse(r.value))
-    .find((m: any) => m.sourceMessageId === receipt.messageId)
-  const execution = mapping?.executionId
-    ? await readTeam<any>(
-        db,
-        delegation.storeId,
-        'employeeRuntime.execution.' + mapping.executionId,
-      )
-    : null
-  if (
-    execution &&
-    (execution.scope?.channelId !== receipt.channelId ||
-      execution.scope?.task?.taskId !== receipt.taskId)
-  )
-    fail('OPERATIONS_TASK_EXECUTION_SCOPE_CHANGED')
-  const outbound: any[] = []
-  for (const t of execution?.tools || [])
-    if (t.name === 'employee_send_message' && t.value?.messageId && Number.isInteger(t.value.seq)) {
-      const message = await readTeam<any>(
-        db,
-        delegation.storeId,
-        'message.' + receipt.channelId + '.' + String(t.value.seq).padStart(12, '0'),
-      )
-      if (
-        message?.id === t.value.messageId &&
-        message.authorId === 'agent:' + execution.grant.agentId
-      )
-        outbound.push({
-          messageId: message.id,
-          seq: message.seq,
-          text: message.text,
-          expectsReply: t.value.expectsReply === true,
-          delivery: 'stored',
-        })
-    }
-  return {
-    ...receipt,
-    intake: pending
-      ? { state: pending.state, reason: pending.reason || null, updatedAt: pending.updatedAt }
-      : null,
-    execution: execution
-      ? { id: mapping.executionId, phase: execution.phase, fault: execution.fault || null }
-      : null,
-    outbound,
-    operationReceipts: (execution?.tools || [])
-      .filter((t: any) => t.mutating && t.name !== 'employee_send_message')
-      .map((t: any) => ({ toolCallId: t.toolCallId, tool: t.name, value: t.value })),
-    executionCompleted: execution?.phase === 'complete',
-    businessCompleted: false,
-    independentAcceptance: 'not_reviewed',
-  }
+  const job=await readTeam<any>(db,delegation.storeId,nativeJobKey(receipt.eventId))
+  if(!job||job.channelId!==receipt.channelId||job.messageId!==receipt.messageId)fail('OPERATIONS_TASK_EXECUTION_SCOPE_CHANGED')
+  const rows=await db.config.findMany({where:{storeId:delegation.storeId,key:{startsWith:'team.communication.employeeRuntime.backendOperation.'},value:{contains:JSON.stringify(job.id)}}})
+  const operationReceipts=rows.map((r:any)=>JSON.parse(r.value)).filter((r:any)=>r.executionId===job.id).map(({id,operationId,state,result,fault}:any)=>({id,operationId,state,result,fault}))
+  return {...receipt,intake:{state:job.state,updatedAt:job.updatedAt},execution:{id:job.runId||job.id,phase:job.state,fault:job.fault||job.lastPollFault||null},operationReceipts,executionCompleted:job.state==='completed',businessCompleted:false,independentAcceptance:'not_reviewed'}
 }

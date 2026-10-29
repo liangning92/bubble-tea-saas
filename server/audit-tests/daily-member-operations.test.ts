@@ -255,20 +255,22 @@ test('Unscoped activity, changed threshold, duplicate IDs, changed replay and re
   await revokeOperationsDelegation('store', 'owner', g.delegation.id, f.db)
   await assert.rejects(() => readOperationsState(g.credential, f.db), /CREDENTIAL_INVALID/)
 })
-test('Current module permission withdrawal and wrong owner/store deny the machine', async () => {
+test('legacy module flags do not restrict the account, while master disable and wrong owner/store deny', async () => {
   const f = fixture(),
     g = await createOperationsDelegation('store', 'owner', grantInput(), f.db)
   const setting = f.rows.find((r) => r.key.endsWith('ai.agent.settings'))
   const s = JSON.parse(setting.value)
   s.permissions.members.write = false
   setting.value = JSON.stringify(s)
+  await readOperationsState(g.credential,f.db)
+  s.enabled=false;setting.value=JSON.stringify(s)
   await assert.rejects(() => readOperationsState(g.credential, f.db), /AUTHORIZATION_REQUIRED/)
   await assert.rejects(
     () => createOperationsDelegation('other', 'owner', grantInput(), f.db),
     /OWNER_REVOKED/,
   )
 })
-test('Delegation follows existing business expiry, with no repeated 30-day limit or silent extension', async () => {
+test('transport credential expiry is explicit and independent of retired Agent trial expiry', async () => {
   const f = fixture(),
     setting = f.rows.find((r) => r.key.endsWith('ai.agent.settings')),
     s = JSON.parse(setting.value)
@@ -282,20 +284,10 @@ test('Delegation follows existing business expiry, with no repeated 30-day limit
     f.db,
   )
   assert.equal(g.delegation.expiresAt, existing)
-  await assert.rejects(
-    () =>
-      createOperationsDelegation(
-        'store',
-        'owner',
-        { ...grantInput(), expiresAt: new Date(Date.now() + 201 * 86400000).toISOString() },
-        f.db,
-      ),
-    /EXPIRY_OUT_OF_SCOPE/,
-  )
-  await assert.rejects(
-    () => createOperationsDelegation('store', 'owner', { ...grantInput(), expiresAt: null }, f.db),
-    /EXPIRY_OUT_OF_SCOPE/,
-  )
+  const later=await createOperationsDelegation('store','owner',{...grantInput(),expiresAt:new Date(Date.now()+201*86400000).toISOString()},f.db)
+  assert(later.delegation.expiresAt>existing)
+  const permanent=await createOperationsDelegation('store','owner',{...grantInput(),expiresAt:null},f.db)
+  assert.equal(permanent.delegation.expiresAt,null)
   s.expiresAt = null
   setting.value = JSON.stringify(s)
   const continuous = await createOperationsDelegation(
@@ -534,14 +526,14 @@ test('owner task handoff requires explicit full role and private live route; rep
  add('externalAgent.teamBridge.v1.grant.'+agentId,{agentId,displayName:'Hermes',storeId:'store',sponsorUserId:'owner',version:1,clientRevision:1,expiresAt:route.expiresAt,revoked:false,actions:['messages.read','messages.send','tasks.read'],staffIds:['owner-staff'],channelIds:[channelId]})
  const narrow=await createOperationsDelegation('store','owner',{activityIds:['special'],expiresAt:route.expiresAt,confirm:'daily_member_specials_and_single_paid_order_30000'},f.db)
  const input={requestId:'44444444-4444-4444-8444-444444444444',channelId,text:'Review today and assign authorized routine work.'}
- const ports={gatewayHealth:async()=>({status:'ok',protocol:'employee_work_trace_v1',maxConcurrency:1,queued:0,running:0})}
+ const ports={gatewayHealth:async()=>({status:'ok',protocol:'hermes_native_api_v1',maxConcurrency:2,queued:0,running:0})}
  await assert.rejects(()=>submitOperationsTask(narrow.credential,input,f.db,ports),/ROLE_DELEGATION_REQUIRED/)
  let full:any
  const send=jest.fn(async(actor:any,id:string,v:any,...rest:any[])=>{
   assert.equal(actor.staffId,'owner-staff');assert.equal(actor.role,'admin');assert.equal(id,channelId)
   assert.equal(rest.at(-1).id,full.delegation.id)
-  const message={id:'native-message',seq:1}; const eventId=require('crypto').createHash('sha256').update(JSON.stringify(['employee_work',id,message.id])).digest('hex')
-  add('externalAgent.teamBridge.v1.employeePending.'+eventId,{state:'pending',updatedAt:new Date().toISOString()})
+  const message={id:'native-message',seq:1}; const eventId=require('crypto').createHash('sha256').update(JSON.stringify(['store',id,message.id])).digest('hex')
+  add('team.communication.nativeAgent.job.'+eventId,{id:eventId,channelId:id,messageId:message.id,state:'queued',updatedAt:new Date().toISOString()})
   return message
  })
  const create=jest.fn(async(actor:any,input:any)=>{assert.equal(actor.staffId,'owner-staff');assert.equal(input.kind,'direct');assert.deepEqual(input.members,['agent:'+agentId]);add('team.communication.channel.'+channelId,channel);return channel})
@@ -551,7 +543,7 @@ test('owner task handoff requires explicit full role and private live route; rep
   full=await createOperationsDelegation('store','owner',{activityIds:[],expiresAt:route.expiresAt,confirm:'full_store_operations_role'},f.db)
   assert.equal(create.mock.calls.length,0)
   assert.equal((await readOperationsState(full.credential,f.db)).ownerTaskChannels[0].id,channelId)
-  await assert.rejects(()=>submitOperationsTask(full.credential,input,f.db,{gatewayHealth:async()=>({status:'ok',protocol:'employee_work_trace_v1',maxConcurrency:4,queued:0,running:0})}),/SINGLE_SLOT_GATEWAY_REQUIRED/)
+  await assert.rejects(()=>submitOperationsTask(full.credential,input,f.db,{gatewayHealth:async()=>({status:'ok',protocol:'employee_work_trace_v1',maxConcurrency:4,queued:0,running:0})}),/GATEWAY_UNAVAILABLE/)
   assert.equal(send.mock.calls.length,0)
   const submitted=await submitOperationsTask(full.credential,input,f.db,ports)
   assert.equal(submitted.origin,'owner_operations_delegation');assert.equal(submitted.businessCompleted,false)
@@ -559,7 +551,7 @@ test('owner task handoff requires explicit full role and private live route; rep
   await assert.rejects(()=>submitOperationsTask(full.credential,{...input,text:'Changed'},f.db,ports),/REQUEST_CONFLICT/)
   await assert.rejects(()=>submitOperationsTask(full.credential,{...input,requesterStaffId:'owner'},f.db,ports))
   const status=await operationsTaskStatus(full.credential,input.requestId,f.db)
-  assert.equal(status.execution,null);assert.deepEqual(status.outbound,[]);assert.equal(status.executionCompleted,false);assert.equal(status.independentAcceptance,'not_reviewed')
+  assert.equal(status.execution.phase,'queued');assert.deepEqual(status.operationReceipts,[]);assert.equal(status.executionCompleted,false);assert.equal(status.independentAcceptance,'not_reviewed')
   f.rows.splice(f.rows.findIndex(r=>r.key==='team.communication.channel.'+channelId),1)
   const bootstrapped=await createOperationsDelegation('store','owner',{activityIds:[],expiresAt:route.expiresAt,confirm:'full_store_operations_role'},f.db)
   assert.equal(create.mock.calls.length,1);assert.equal(bootstrapped.ownerTaskChannels[0].agentId,agentId)
