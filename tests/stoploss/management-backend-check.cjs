@@ -204,7 +204,7 @@ async function main(){
   const {nativeJobId,nativeJobKey}=built('services/NativeStoreQueue');
   const agentId=randomUUID(),previousFetch=global.fetch,oldEnv={...process.env};
   Object.assign(process.env,{EMPLOYEE_HERMES_ENABLED:'1',EMPLOYEE_HERMES_STORE_ID:storeId,EMPLOYEE_HERMES_AGENT_ID:agentId});
-  await writeTeam(db,storeId,'ai.agent.settings',{enabled:true,employeeBridgeEnabled:true,agentName:'Fixture Hermes'});
+  await writeTeam(db,storeId,'ai.agent.settings',{enabled:true,employeeBridgeEnabled:false,expiresAt:'2000-01-01T00:00:00Z',permissions:{},agentName:'Fixture Hermes'});
   await writeTeam(db,storeId,'ai.settings',{enabled:true,provider:'minimax',model:'MiniMax-M3.1-Flash',version:1});
   let submitted=0,configured=0,lost=false,activeChildren=0;const runs=new Map(),contexts=new Map();
   global.fetch=async(url,options={})=>{
@@ -218,9 +218,9 @@ async function main(){
    throw Error('UNEXPECTED_NATIVE_URL');
   };
   const engine=createNativeStoreAgent(db,{storeId,agentId,gatewayOrigin:'http://127.0.0.1:8642',gatewayKey:'synthetic-native-key',backendOrigin:'http://host.docker.internal:3000'});
-  const create=async(title)=>{const c=await teamCommunication(db).create(owner,{requestId:randomUUID(),title,kind:'group',members:[owner.staffId]});c.members.push({staffId:'agent:'+agentId,fromSeq:1});await writeTeam(db,storeId,'channel.'+c.id,c);return c};
+  const create=async(title)=>teamCommunication(db).create(owner,{requestId:randomUUID(),title,kind:'group',members:['agent:'+agentId]});
   try{
-   const c=await create('Native original admission');
+   const c=await create('Native original admission');assert.equal((await teamCommunication(db).directory(owner)).filter(person=>person.id.startsWith('agent:')).length,1);
    const m=await teamCommunication(db).send(owner,c.id,{requestId:randomUUID(),text:'Read only, no store mutation.'});
    const key=nativeJobKey(nativeJobId(storeId,c.id,m.id));assert.equal((await readTeam(db,storeId,key)).state,'queued');
    lost=true;await engine.runBatch(1);let j=await readTeam(db,storeId,key);assert.equal(j.state,'admitting');assert.equal(submitted,1);

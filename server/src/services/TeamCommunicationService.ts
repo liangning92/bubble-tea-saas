@@ -95,6 +95,11 @@ async function identity(db: DB, actor: TeamActor) {
   if (!employee) fail(403, 'TEAM_IDENTITY_REQUIRED')
   return employee
 }
+async function nativeMember(db:DB,storeId:string){
+ if(process.env.EMPLOYEE_HERMES_ENABLED!=='1'||process.env.EMPLOYEE_HERMES_STORE_ID!==storeId||!process.env.EMPLOYEE_HERMES_AGENT_ID)return null
+ const settings=await read(db,storeId,'ai.agent.settings')
+ return settings?.enabled?{id:'agent:'+process.env.EMPLOYEE_HERMES_AGENT_ID,name:settings.agentName||'Hermes AI'}:null
+}
 async function activeMembers(db: DB, storeId: string, ids: string[]) {
   const staffIds = ids.filter(id => !id.startsWith('agent:'))
   const agentIds = ids.filter(id => id.startsWith('agent:')).map(id => id.slice(6))
@@ -103,6 +108,7 @@ async function activeMembers(db: DB, storeId: string, ids: string[]) {
     : []
   if (members.length !== new Set(staffIds).size) fail(403, 'TEAM_MEMBER_UNAVAILABLE')
   for (const agentId of agentIds) {
+    if(process.env.EMPLOYEE_HERMES_ENABLED==='1'&&process.env.EMPLOYEE_HERMES_STORE_ID===storeId&&process.env.EMPLOYEE_HERMES_AGENT_ID===agentId){const member=await nativeMember(db,storeId);if(!member)fail(403,'TEAM_AGENT_DISABLED');members.push(member);continue}
     const grantRow = await db.config.findUnique({ where: { storeId_key: { storeId, key: 'externalAgent.teamBridge.v1.grant.' + agentId } } })
     if (!grantRow) fail(403, 'TEAM_MEMBER_UNAVAILABLE')
     try {
@@ -326,11 +332,13 @@ export function teamCommunication(db: DB = prisma) {
       const agents = grantRows.map((r: any) => {
         try {
           const g = JSON.parse(r.value)
+          if(process.env.EMPLOYEE_HERMES_ENABLED==='1'&&process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId)return null
           if (!g.revoked) return { id: 'agent:' + g.agentId, name: g.displayName || 'Hermes AI' }
         } catch {}
         return null
       }).filter(Boolean) as { id: string; name: string }[]
-      return [...staff, ...agents]
+      const native=await nativeMember(db,a.storeId)
+      return [...staff, ...agents,...(native?[native]:[])]
     },
     async channels(a: TeamActor, administration = false) {
       await identity(db, a)
