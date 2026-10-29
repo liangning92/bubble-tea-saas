@@ -14,7 +14,7 @@ port = subprocess.check_output(['docker','port',run+'-db','5432'],text=True).str
 env = dict(os.environ, DATABASE_URL=f'postgresql://inventory_test:{password}@127.0.0.1:{port}/inventory_test', NODE_ENV='test', JWT_SECRET=secrets.token_hex(32), CORS_ORIGIN='http://127.0.0.1')
 with tempfile.TemporaryDirectory(prefix='inventory-records-migration-') as directory:
     schema = Path('server/prisma/schema.prisma').read_text()
-    legacy = schema.replace('  occurredOn DateTime? @db.Date\n', '').replace('  purchasedOn DateTime? @db.Date\n', '')
+    legacy = schema.replace('  @@index([occurredOn, id])\n', '').replace('  @@index([storeId, purchasedOn, id])\n', '').replace('  occurredOn DateTime? @db.Date\n', '').replace('  purchasedOn DateTime? @db.Date\n', '')
     schema_file = Path(directory) / 'schema.prisma'
     schema_file.write_text(legacy)
     subprocess.run(['node','server/node_modules/prisma/build/index.js','db','push','--skip-generate','--schema',str(schema_file)],env=env,check=True)

@@ -751,6 +751,7 @@ model Inventory {
 }
 
 model StockInLog {
+  @@index([occurredOn, id])
   occurredOn DateTime? @db.Date
   id          String    @id @default(cuid())
   ledgerSequence BigInt?
@@ -772,6 +773,7 @@ model StockInLog {
 }
 
 model StockOutLog {
+  @@index([occurredOn, id])
   occurredOn DateTime? @db.Date
   id          String    @id @default(cuid())
   ledgerSequence BigInt?
@@ -814,6 +816,7 @@ model Supplier {
 // ============================================
 
 model PurchaseOrder {
+  @@index([storeId, purchasedOn, id])
   purchasedOn DateTime? @db.Date
   id           String              @id @default(cuid())
   storeId      String
