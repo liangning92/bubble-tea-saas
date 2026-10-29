@@ -2,13 +2,14 @@ import { isInternalConfig, isSecretConfig } from '../utils/configAccess'
 
 // Policy describes native operations, not another implementation of them. These
 // effects are included in the discovered contract and reviewed with route ACLs.
-export type BackendEffect = 'business' | 'security' | 'payment' | 'attachment' | 'configuration'
+export type BackendEffect = 'business' | 'security' | 'payment' | 'attachment' | 'configuration' | 'preview'
 const effectGroups: Array<[BackendEffect, string[]]> = [
   ['security', ['/api/auth','/api/ai','/api/staff-permissions','/api/sync','/api/team/ai','/api/team/admin','/api/staff-work/admin']],
   ['attachment', ['/api/upload','/api/import']],
   ['configuration', ['/api/config']],
 ]
 const sensitiveOperations = new Map<string,BackendEffect>([
+  ['POST /api/marketing/activities/quote','preview'], ['POST /api/marketing/activities/:id/poster-preview','preview'],
   ['POST /api/stores','security'], ['POST /api/staff','security'],
   ['PUT /api/staff/:id/role','security'], ['PUT /api/staff/:id/reset-password','security'],
   ['PUT /api/salaries/:id/mark-paid','payment'], ['PUT /api/reimbursement/mark-paid/:id','payment'],

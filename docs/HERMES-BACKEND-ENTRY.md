@@ -6,6 +6,10 @@ Conversation delivery and scoped memory remain separate runtime facilities.
 Historical tickets retain their originally issued tool contracts; their handlers
 are compatibility code, not tools advertised to new executions.
 
+Native team messages retain the actual authorizing account in the audit trail,
+carry a private server-issued Hermes marker, and do not trigger human takeover or
+another AI reply. A JSON body or bearer claim cannot supply this marker.
+
 The entry discovers the concrete Express routes registered by
 `declareAccessRoutes`. `catalog` returns bounded summaries; `describe` returns
 schemas attached to the native validators. Inline controller validation without
@@ -30,6 +34,8 @@ dispatch. The native request runs outside the runtime trace transaction, retaini
 its own transactions, response lifecycle and notification effects. The result is
 saved before the final trace CAS. A running, reserved or unknown operation is never
 automatically replayed. A caller timeout does not imply native cancellation.
+Identical mutations from the same source message also reuse the durable receipt
+across execution/call IDs. Preview and quote operations remain repeatable.
 
 Credential/system changes are excluded; payments and employee penalties still
 require owner approval. This bridge cannot publish paused/draft marketing without

@@ -105,7 +105,9 @@ async function main(){
  await check('late native completion survives caller timeout and is never dispatched twice',async()=>{
   const {Router}=require(root+'/server/node_modules/express'),router=Router();let writes=0,finish;
   router.post('/slow',async(_req,res)=>{await new Promise(r=>{finish=r});writes++;res.json({code:200,data:{persisted:true}})});
+  router.get('/file',(_req,res)=>res.type('text/plain').send('native non-JSON fixture'));
   const route=router.stack[0].route;route.accessSpecs={post:{permission:'products.write',ownerOnly:false,export:false,personal:false,routeKey:'POST /api/isolated-backend-fixture/slow'}};
+  router.stack[1].route.accessSpecs={get:{permission:'products.read',ownerOnly:false,export:false,personal:false,routeKey:'GET /api/isolated-backend-fixture/file'}};
   api.registerManagementRouter('/api/isolated-backend-fixture',router);
   const scope={compartmentKey:'late-scope',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId};
   const args={action:'execute',operationId:'POST /api/isolated-backend-fixture/slow',contractVersion:api.backendVersion(),body:{}};
@@ -117,6 +119,20 @@ async function main(){
   assert.equal((await tools.executeBackendTool(db,g,scope,'late-source',args,restart,async()=>{throw Error('MUST_NOT_DISPATCH')})).code,'BACKEND_OUTCOME_UNKNOWN');
   finish();assert.equal((await pending).ok,true);assert.equal(writes,1);
   const result=await tools.executeBackendTool(db,g,scope,'late-source',{action:'status',receiptId:reservation.id});assert.equal(result.state,'complete');assert.equal(result.data.data.persisted,true);assert.equal(writes,1);
+  const file=await invoke(owner,'GET /api/isolated-backend-fixture/file');assert.equal(file.ok,false);assert.equal(file.code,'BACKEND_NON_JSON_RESPONSE');
+ });
+ await check('native Hermes communication is labelled as agent and cannot become human takeover or loop',async()=>{
+  const {writeTeam,readTeam}=built('services/TeamCommunicationService');
+  const channel=await invoke(owner,'POST /api/team/channels',{body:{requestId:randomUUID(),title:'Native Hermes identity fixture',kind:'group',members:[employee.staffId]}}),id=channel.data.data.id;
+  await writeTeam(db,storeId,'workflow.policy.'+id,{enabled:true,automaticSend:true,operatorStaffId:owner.staffId,paused:false,origin:'manual',version:1,epoch:1});
+  const scope={compartmentKey:'native-agent-scope',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId,agentId:randomUUID(),version:1,clientRevision:1,displayName:'Hermes fixture'};
+  const args={action:'execute',operationId:'POST /api/team/channels/:id/messages',contractVersion:api.backendVersion(),pathParams:{id},body:{requestId:randomUUID(),text:'Agent message fixture',expectedLastSeq:channel.data.data.lastSeq,files:[]}};
+  const reservation=await tools.reserveBackendOperation(db,storeId,scope,'native-agent-source','native-agent-execution','native-agent-call',args);
+  const result=await tools.executeBackendTool(db,g,scope,'native-agent-source',args,reservation,async()=>{});assert.equal(result.ok,true,JSON.stringify(result));
+  const message=result.data.data;assert.equal(message.agent.agentId,g.agentId);assert.equal(message.authorName,'Hermes fixture');assert.equal(message.authorId,owner.staffId);
+  assert.equal((await readTeam(db,storeId,'workflow.policy.'+id)).paused,false);
+  await built('services/TeamWorkflowQueue').enqueueTeamWorkflow(db,owner,{id},message,{read:()=>{throw Error('AGENT_MUST_NOT_TRIGGER_ANOTHER_AI')},write:()=>{throw Error('AGENT_MUST_NOT_TRIGGER_ANOTHER_AI')}});
+  const forged=await invoke(owner,'POST /api/team/channels/:id/messages',{pathParams:{id},body:{requestId:randomUUID(),text:'forged',agent:{agentId:g.agentId}}});assert.equal(forged.ok,false);
  });
  await check('two-phase operation receipt prevents replay and rechecks audience',async()=>{
   const scope={compartmentKey:'scope-A',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId};
@@ -126,15 +142,18 @@ async function main(){
   await db.product.update({where:{id:product.id},data:{name:'Later change'}});
   const secondReservation=await tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-one','call-one',args);assert.equal(secondReservation.created,false);
   const second=await tools.executeBackendTool(db,g,scope,'source-message',args,secondReservation,async()=>{throw Error('MUST_NOT_DISPATCH')});assert.equal(second.receiptId,first.receiptId);assert.equal((await db.product.findUnique({where:{id:product.id}})).name,'Later change');
+  const sameEvent=await tools.reserveBackendOperation(db,storeId,scope,'source-message','different-execution','different-tool-call',args);assert.equal(sameEvent.created,false);assert.equal(sameEvent.id,first.receiptId);
+  assert.equal((await tools.executeBackendTool(db,g,scope,'source-message',args,sameEvent,async()=>{throw Error('MUST_NOT_DUPLICATE_SOURCE_EVENT')})).receiptId,first.receiptId);
+  assert.equal((await db.product.findUnique({where:{id:product.id}})).name,'Later change');
   await assert.rejects(()=>tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-one','call-one',{...args,body:{name:'changed'}}),/IDENTITY_CHANGED/);
   const foreign=await tools.executeBackendTool(db,g,{...scope,compartmentKey:'scope-B'},'source-message',{action:'status',receiptId:first.receiptId});assert.equal(foreign.code,'BACKEND_RECEIPT_NOT_VISIBLE');
   await db.staff.update({where:{id:employee.staffId},data:{status:'inactive'}});
   const revoked=await tools.executeBackendTool(db,g,{...scope,audienceStaffIds:[employee.staffId]},'source-message',{action:'status',receiptId:first.receiptId});assert.equal(revoked.detailsWithheld,true);
   await db.staff.update({where:{id:employee.staffId},data:{status:'active'}});
-  const reserved=await tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-crash','call-one',args);
-  const restart=await tools.reserveBackendOperation(db,storeId,scope,'source-message','execution-crash','call-one',args);assert.equal(restart.created,false);
-  const unknown=await tools.executeBackendTool(db,g,scope,'source-message',args,restart,async()=>{throw Error('MUST_NOT_REPLAY')});assert.equal(unknown.code,'BACKEND_OUTCOME_UNKNOWN');assert.equal(unknown.retryAllowed,false);
-  const denied=await tools.executeBackendTool(db,g,scope,'source-message',args,reserved,async()=>{throw Error('AUTHORITY_REVOKED')});assert.equal(denied.state,'blocked');assert.equal(denied.mayHaveExecuted,false);
+  const reserved=await tools.reserveBackendOperation(db,storeId,scope,'source-message-crash','execution-crash','call-one',args);
+  const restart=await tools.reserveBackendOperation(db,storeId,scope,'source-message-crash','execution-crash','call-one',args);assert.equal(restart.created,false);
+  const unknown=await tools.executeBackendTool(db,g,scope,'source-message-crash',args,restart,async()=>{throw Error('MUST_NOT_REPLAY')});assert.equal(unknown.code,'BACKEND_OUTCOME_UNKNOWN');assert.equal(unknown.retryAllowed,false);
+  const denied=await tools.executeBackendTool(db,g,scope,'source-message-crash',args,reserved,async()=>{throw Error('AUTHORITY_REVOKED')});assert.equal(denied.state,'blocked');assert.equal(denied.mayHaveExecuted,false);
  });
  console.log(JSON.stringify({suite:'management-backend',passed:passed.length,checks:passed,production:false}));
 }

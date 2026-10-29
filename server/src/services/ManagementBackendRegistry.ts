@@ -122,8 +122,8 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
     res.write=((chunk:any,...args:any[])=>{capture(chunk);return (write as any)(chunk,...args)}) as any
     res.end=((chunk?:any,...args:any[])=>{if(typeof chunk!=='function')capture(chunk);return (end as any)(chunk,...args)}) as any
     res.once('error',reject)
-    res.once('finish',()=>{let body:any;try{body=JSON.parse(Buffer.concat(chunks).toString())}catch{body={message:'Non-JSON response',bytes:size}}
-      const result=size>1_000_000?{ok:false,code:'BACKEND_RESULT_TOO_LARGE',statusCode:res.statusCode,executed:true,outcome:'native_response_exceeded_capture_limit',retryAllowed:false}:{ok:res.statusCode<400&&body?.success!==false&&body?.ok!==false&&(!body?.code||typeof body.code==='number'&&body.code>=200&&body.code<300),statusCode:res.statusCode,data:redactBackendSecrets(body),operationId:op.id,contractVersion:input.contractVersion,executed:true,acceptance:'native_response_only'}
+    res.once('finish',()=>{let body:any,nonJson=false;try{body=JSON.parse(Buffer.concat(chunks).toString())}catch{nonJson=true}
+      const result=size>1_000_000?{ok:false,code:'BACKEND_RESULT_TOO_LARGE',statusCode:res.statusCode,executed:true,outcome:'native_response_exceeded_capture_limit',retryAllowed:false}:nonJson?{ok:false,code:'BACKEND_NON_JSON_RESPONSE',statusCode:res.statusCode,bytes:size,executed:true,retryAllowed:false}:{ok:res.statusCode<400&&body?.success!==false&&body?.ok!==false&&(!body?.code||typeof body.code==='number'&&body.code>=200&&body.code<300),statusCode:res.statusCode,data:redactBackendSecrets(body),operationId:op.id,contractVersion:input.contractVersion,executed:true,acceptance:'native_response_only'}
       finish(result)
       // Real ServerResponse end/finish semantics also run native delivery hooks.
       process.nextTick(()=>socket.destroy())

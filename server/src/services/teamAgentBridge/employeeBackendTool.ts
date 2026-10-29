@@ -7,7 +7,7 @@ import { hasManagementAccess } from '../../utils/managementAccess'
 import { audienceAllows, visibleBusinessData, assertToolSettings } from './employeeAccess'
 import type { BridgeGrant, CommunicationScope } from './contract'
 import { redactBackendSecrets } from '../ManagementBackendPolicy'
-import { readTeam } from '../TeamCommunicationService'
+import { readTeam,lockTeam } from '../TeamCommunicationService'
 
 export const backendToolProperties = {
   action:{type:'string',enum:['catalog','describe','execute','status']},
@@ -30,7 +30,16 @@ export async function reserveBackendOperation(db:any,storeId:string,scope:Commun
   const id=hash({storeId,executionId,toolCallId}),argsHash=hash(args)
   const prior=await db.config.findUnique({where:{storeId_key:{storeId,key:key(id)}}})
   if(prior){const saved=JSON.parse(prior.value);if(saved.argsHash!==argsHash||saved.compartmentKey!==scope.compartmentKey||saved.requesterStaffId!==scope.requesterStaffId||saved.sourceId!==sourceId)throw Error('BACKEND_RECEIPT_IDENTITY_CHANGED');return {id,created:false,argsHash}}
+  const v=args as any,operation=backendOperation(v?.operationId)
+  const intent=sourceId&&v?.action==='execute'&&operation&&!operation.httpReadMethod&&operation.effect!=='preview'?hash({storeId,sourceId,requesterStaffId:scope.requesterStaffId,operationId:v.operationId,pathParams:v.pathParams,query:v.query,body:v.body}):undefined
+  const intentKey=intent?'team.communication.employeeRuntime.backendIntent.'+intent:undefined
+  if(intentKey){
+    await lockTeam(db,storeId,'backend-intent.'+intent)
+    const existing=await db.config.findUnique({where:{storeId_key:{storeId,key:intentKey}}})
+    if(existing){const alias=JSON.parse(existing.value);return {id:alias.id,created:false,argsHash:alias.argsHash}}
+  }
   await db.config.create({data:{storeId,key:key(id),category:'hermes_backend_operation',value:JSON.stringify({id,state:'reserved',executionId,toolCallId,argsHash,compartmentKey:scope.compartmentKey,requesterStaffId:scope.requesterStaffId,sourceId,operationId:(args as any)?.operationId,createdAt:new Date().toISOString()})}})
+  if(intentKey)await db.config.create({data:{storeId,key:intentKey,category:'hermes_backend_operation',value:JSON.stringify({id,argsHash})}})
   return {id,created:true,argsHash}
 }
 
@@ -81,6 +90,7 @@ export async function executeBackendTool(db:any,g:BridgeGrant,scope:Communicatio
     const person=await db.staff.findFirst({where:{id:scope.requesterStaffId,storeId:g.storeId,status:'active'},include:{user:true}}),user=person?.user
     if(!user||(person.storeId||user.storeId)!==g.storeId||user.id!==person.userId||!['admin','manager','cashier','staff'].includes(user.role))throw Error('BACKEND_REQUESTING_ACCOUNT_UNAVAILABLE')
     const actor:any={id:user.id,phone:user.phone||'',role:user.role,storeId:g.storeId,staffId:person.id,issuedAtMs:Date.now()}
+    actor.nativeAgent={agentId:g.agentId,grantVersion:g.version,clientRevision:g.clientRevision,executionId:journal.executionId,name:g.displayName||'Hermes'}
     actor.accessRole=await userAccessV2(actor,db)||await assignedStaffAccess(actor,db)
     actor.employeeApp=!hasManagementAccess(actor.role,actor.accessRole)
     const op=backendOperation(v.operationId)
