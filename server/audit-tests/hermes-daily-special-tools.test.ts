@@ -4,7 +4,7 @@ import {executeDailySpecial} from '../src/services/teamAgentBridge/employeeDaily
 import {posterVisionMessages,publicProductPosterUrls} from '../src/services/teamAgentBridge/employeePosterPreview'
 import {assertPublicationContext} from '../src/services/teamAgentBridge/employeeOperationAuthority'
 function fixture(){
- const rows:any[]=[],p={id:'p',storeId:'store',status:'active',name:'Brown Sugar Pearl Sundae',costPrice:4891,image:'/uploads/p.webp',specs:[{id:'spec',name:'Regular',price:16000,isDefault:true}],images:[]}
+ const rows:any[]=[],p={id:'p',storeId:'store',status:'active',name:'Brown Sugar Pearl Sundae',image:'/uploads/p.webp',specs:[{id:'spec',name:'Regular',price:16000,isDefault:true}],images:[]}
  const match=(r:any,w:any)=>Object.entries(w||{}).every(([k,v]:any)=>v&&typeof v==='object'?v.startsWith?r[k]?.startsWith(v.startsWith):true:r[k]===v)
  const db:any={config:{findMany:async({where}:any)=>rows.filter(r=>match(r,where)),findUnique:async({where}:any)=>rows.find(r=>match(r,where.storeId_key)),create:async({data}:any)=>{if(rows.some(r=>r.key===data.key))throw Error('DUPLICATE');rows.push({id:String(rows.length),...data});return data},upsert:async({where,create,update}:any)=>{const r=rows.find(r=>match(r,where.storeId_key));if(r){Object.assign(r,update);return r}const n={id:String(rows.length),...create};rows.push(n);return n},updateMany:async({where,data}:any)=>{const r=rows.filter(r=>match(r,where));r.forEach(r=>Object.assign(r,data));return {count:r.length}}},
  store:{update:async()=>({id:'store'})},product:{findFirst:async({where}:any)=>where.id==='p'&&where.storeId==='store'?p:null,count:async()=>1},
