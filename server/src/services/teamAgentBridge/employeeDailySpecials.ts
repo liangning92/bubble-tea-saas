@@ -9,13 +9,13 @@ const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('h
 export const dailyActions=['list_all','get_activity','upsert_daily_special','pause_activity','quote_daily_special','inspect_membership','render_daily_poster'] as const
 export const dailyAgentActions=dailyActions.filter(action=>action!=='quote_daily_special')
 export const dailyProperties={
-  activityId:{type:'string'}, expectedVersion:{type:'integer',minimum:1},
+  activityId:{type:'string'}, expectedLegacyFingerprint:{type:'string',description:'Exact fingerprint from get_activity for a legacy campaign/discount record; never use fuzzy names'}, expectedVersion:{type:'integer',minimum:1},
   specId:{type:'string'}, weekday:{type:'integer',minimum:1,maximum:5},
   memberOnly:{type:'boolean'}, status:{type:'string',enum:['draft','published','paused']},
   format:{type:'string',enum:['portrait','tv'],description:'Formal admin/TV renderer preview format'},
 }
 export const dailyInput=z.object({
-  action:z.enum(dailyActions),activityId:z.string().min(1).optional(),expectedVersion:z.number().int().positive().optional(),
+  action:z.enum(dailyActions),activityId:z.string().min(1).optional(),expectedLegacyFingerprint:z.string().regex(/^[a-f0-9]{64}$/).optional(),expectedVersion:z.number().int().positive().optional(),
   productIds:z.array(z.string().min(1)).max(1).optional(),specId:z.string().min(1).optional(),
   weekday:z.number().int().min(1).max(5).optional(),discountValue:z.literal(4000).optional(),memberOnly:z.literal(true).optional(),
   format:z.enum(['portrait','tv']).optional(),asOf:z.string().datetime({offset:true}).optional(),status:z.enum(['draft','published','paused']).optional(),memberId:z.string().optional(),quantity:z.number().int().min(1).max(20).optional(),
@@ -32,14 +32,32 @@ export async function executeDailySpecial(db:any,storeId:string,raw:unknown){
   const all=await listActivities(storeId,db)
   if(v.action==='inspect_membership')return {ok:true,policy:await membershipPolicy(storeId,db),qualificationChanged:false}
   if(v.action==='list_all'){
-    const campaigns=db.campaign?.findMany?await db.campaign.findMany({where:{storeId},select:{id:true,name:true,status:true,actions:true}}):[]
-    const rules=db.discountRule?.findMany?await db.discountRule.findMany({where:{storeId},select:{id:true,name:true,status:true}}):[]
-    return {ok:true,activities:all,legacyRecords:[...campaigns.map((c:any)=>({...c,kind:'campaign'})),...rules.map((r:any)=>({...r,kind:'discount'}))],complete:true,scope:'all_statuses_in_this_store',fingerprint:hash(all),warning:'Legacy IDs without an explicit source link are not resolved automatically. Select the exact unified ID/version from this list; compare product, rule and dates before pausing.'}
+    const campaigns=db.campaign?.findMany?await db.campaign.findMany({where:{storeId},select:{id:true,name:true,status:true,actions:true,updatedAt:true}}):[]
+    const rules=db.discountRule?.findMany?await db.discountRule.findMany({where:{storeId},select:{id:true,name:true,status:true,updatedAt:true}}):[]
+    return {ok:true,activities:all,legacyRecords:[...campaigns.map((c:any)=>({...c,kind:'campaign',legacyFingerprint:hash(c)})),...rules.map((r:any)=>({...r,kind:'discount',legacyFingerprint:hash(r)}))],complete:true,scope:'all_statuses_in_this_store',fingerprint:hash(all),warning:'Legacy IDs without an explicit source link are not resolved automatically. Select the exact unified ID/version from this list; compare product, rule and dates before pausing.'}
   }
   const byId=(id:string)=>all.find(a=>a.id===id||a.source==='campaign:'+id||a.source==='discount:'+id||a.source==='special:'+id)
   if(v.action==='get_activity'||v.action==='pause_activity'){
     const a=v.activityId?byId(v.activityId):undefined
-    if(!a)return {ok:false,code:'ACTIVITY_NOT_FOUND',affectedActivities:0}
+    if(!a){
+      for(const [kind,model] of [['campaign',db.campaign],['discount',db.discountRule]] as const){
+        if(!v.activityId||!model?.findFirst)continue
+        const select=kind==='campaign'?{id:true,name:true,status:true,actions:true,updatedAt:true}:{id:true,name:true,status:true,updatedAt:true}
+        const record=await model.findFirst({where:{id:v.activityId,storeId},select})
+        if(!record)continue
+        const fingerprint=hash(record)
+        if(v.action==='get_activity')return {ok:true,legacy:{...record,kind,legacyFingerprint:fingerprint},message:'Legacy record. Pause using this exact ID and expectedLegacyFingerprint; it is not a unified activity version.'}
+        if(v.expectedLegacyFingerprint!==fingerprint)return {ok:false,code:'ACTIVITY_LEGACY_VERSION_CHANGED',legacyFingerprint:fingerprint,affectedActivities:0}
+        if(record.status!=='active')return {ok:true,alreadyPaused:true,legacy:{...record,kind},affectedActivities:0}
+        const status=kind==='campaign'?'paused':'inactive'
+        const changed=await model.updateMany({where:{id:record.id,storeId,status:record.status,updatedAt:record.updatedAt},data:{status}})
+        if(changed.count!==1)return {ok:false,code:'ACTIVITY_LEGACY_VERSION_CHANGED',affectedActivities:0}
+        const after=await model.findFirst({where:{id:record.id,storeId},select})
+        if(after?.status!==status)throw Error('ACTIVITY_LEGACY_READBACK_MISMATCH')
+        return {ok:true,legacy:{...after,kind,legacyFingerprint:hash(after)},affectedActivities:1,readbackVerified:true}
+      }
+      return {ok:false,code:'ACTIVITY_NOT_FOUND',affectedActivities:0}
+    }
     if(v.action==='get_activity')return {ok:true,activity:a,fingerprint:hash(a)}
     if(v.expectedVersion!==a.version)return {ok:false,code:'ACTIVITY_VERSION_CHANGED',currentVersion:a.version,affectedActivities:0}
     if(a.status==='paused'||a.status==='ended')return {ok:true,alreadyPaused:true,activity:a,affectedActivities:0}

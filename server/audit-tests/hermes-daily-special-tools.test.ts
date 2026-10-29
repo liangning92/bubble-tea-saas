@@ -73,3 +73,11 @@ test('poster preview cannot read private attachments or an unlinked activity ima
  for(const image of ['/uploads/.employee-private/id','/uploads/.training-private/id','/uploads/%2eemployee-private/id','/uploads/media/../.employee-private/id'])expect(publicProductPosterUrls({imageUrl:image},{image})).toEqual([])
  expect(publicProductPosterUrls({imageUrl:'/uploads/media/actual.webp'},{image:'/uploads/media/actual.webp'})).toEqual(['/uploads/media/actual.webp'])
 })
+
+test('legacy creation receipt IDs can be inspected and paused with exact store/fingerprint CAS',async()=>{
+ const f=fixture(),record:any={id:'legacy-campaign',storeId:'store',name:'Old duplicate',status:'active',actions:'{}',updatedAt:new Date('2026-10-28T00:00:00Z')}
+ f.db.campaign={findFirst:async({where}:any)=>where.id===record.id&&where.storeId===record.storeId?{id:record.id,name:record.name,status:record.status,actions:record.actions,updatedAt:record.updatedAt}:null,updateMany:async({where,data}:any)=>{expect(where.storeId).toBe('store');if(where.id!==record.id||where.status!==record.status||where.updatedAt!==record.updatedAt)return {count:0};Object.assign(record,data);return {count:1}}}
+ const read:any=await executeDailySpecial(f.db,'store',{action:'get_activity',activityId:record.id});expect(read.legacy.kind).toBe('campaign')
+ const stale:any=await executeDailySpecial(f.db,'store',{action:'pause_activity',activityId:record.id,expectedLegacyFingerprint:'0'.repeat(64)});expect(stale.ok).toBe(false);expect(record.status).toBe('active')
+ const paused:any=await executeDailySpecial(f.db,'store',{action:'pause_activity',activityId:record.id,expectedLegacyFingerprint:read.legacy.legacyFingerprint});expect(paused.affectedActivities).toBe(1);expect(paused.readbackVerified).toBe(true);expect(record.status).toBe('paused')
+})
