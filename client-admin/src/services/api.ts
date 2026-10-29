@@ -143,6 +143,7 @@ async function inventoryIntent(kind:'in'|'out',data:any){
 export const inventoryApi = {
   correction: (type:string,id:string) => api.get(`/inventory/manual-logs/${type}/${id}/corrections`),
   correctManual: (type:string,id:string,data:any) => api.post(`/inventory/manual-logs/${type}/${id}/corrections`,data),
+  recipeUsage: (params:{inventoryId:string;startDate:string;endDate:string}) => api.get('/inventory/recipe-usage',{params}),
   employeeConsumption: (params:any) => api.get('/inventory/employee-consumption',{params}),
   consumptionAlerts: () => api.get('/inventory/consumption-alerts'),
   list: (params?: any) => api.get('/inventory', { params }),
