@@ -1,3 +1,4 @@
+import { InventoryCountReviewHistory, CountReviewEntry } from '../../../../shared/components/InventoryCountReviewHistory';
 import { InventoryCountProgress } from '../../../../shared/components/InventoryCountProgress'
 import { countProgress, isCounted, hasCountVariance, matchesCountFilter, CountItemFilter } from '../../../../shared/inventoryCountProgress'
 import {consumptionQuantity} from '../../utils/consumptionQuantity'
@@ -45,6 +46,7 @@ interface InventoryCount {
   startDate: string;
   endDate: string;
   notes?: string;
+  reviewHistory?: CountReviewEntry[];
   items: InventoryCountItem[];
   createdAt: string;
   updatedAt?: string;
@@ -114,8 +116,10 @@ export function InventoryCountPage() {
   const [draftDirty,setDraftDirty] = useState(false);
   const [itemFilter,setItemFilter] = useState<CountItemFilter>('all');
   const [itemSearch,setItemSearch] = useState('');
+  const [returnOpen,setReturnOpen]=useState(false);
+  const [returnReason,setReturnReason]=useState('');
   const [reviewSubmit,setReviewSubmit] = useState(false);
-  useEffect(()=>{setItemFilter('all');setItemSearch('');setReviewSubmit(false)},[countId]);
+  useEffect(()=>{setItemFilter('all');setItemSearch('');setReviewSubmit(false);setReturnOpen(false);setReturnReason('')},[countId]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newCountForm, setNewCountForm] = useState({
     period: "ad_hoc" as "ad_hoc" | "monthly" | "quarterly" | "annual",
@@ -190,6 +194,11 @@ export function InventoryCountPage() {
     mutationFn: (id: string) => inventoryApi.submitInventoryCount(id),
     onError: showError,
     onSuccess: refreshCounts,
+  });
+
+  const returnMutation = useMutation({
+    mutationFn: ({id,reason}:{id:string;reason:string}) => inventoryApi.returnInventoryCount(id,reason),
+    onSuccess: () => {setReturnOpen(false);setReturnReason('');refreshCounts()},
   });
 
   // Complete count mutation
@@ -451,7 +460,7 @@ export function InventoryCountPage() {
     const busy =
       submitMutation.isPending ||
       completeMutation.isPending ||
-      cancelMutation.isPending;
+      cancelMutation.isPending || returnMutation.isPending;
     const hasCountedItems =
       countedItems.length > 0;
 
@@ -503,6 +512,10 @@ export function InventoryCountPage() {
                       {t("inventoryCountWorkspace.submitReview")}
                     </button>
                   )}
+                  {canApprove && selectedCount.status === "pending_review" && <button
+                    className="btn btn-outline" disabled={busy || draftDirty}
+                    onClick={()=>{returnMutation.reset();setReturnReason('');setReturnOpen(true)}}
+                  >{labels.returnCount}</button>}
                   {canApprove && selectedCount.status === "pending_review" && (
                     <button
                       onClick={handleComplete}
@@ -522,6 +535,13 @@ export function InventoryCountPage() {
           </div>
         </div>
 
+        <InventoryCountReviewHistory history={selectedCount.reviewHistory} status={selectedCount.status} language={i18n.language}/>
+        {returnOpen && <AdminDialog title={labels.returnCount} chrome busy={returnMutation.isPending} onClose={()=>{if(!returnMutation.isPending)setReturnOpen(false)}} className="max-w-lg">
+          <p className="text-sm text-gray-600">{labels.returnHint}</p>
+          <label className="block mt-4 space-y-2"><span>{labels.returnReason}</span><textarea autoFocus className="input w-full min-h-28" maxLength={1000} required value={returnReason} disabled={returnMutation.isPending} onChange={e=>setReturnReason(e.target.value)}/></label>
+          {returnMutation.isError&&<p role="alert" className="text-red-700 mt-2">{labels.returnFailed}</p>}
+          <div className="admin-dialog-footer flex flex-wrap justify-end gap-3 mt-4"><button className="btn btn-outline" disabled={returnMutation.isPending} onClick={()=>setReturnOpen(false)}>{labels.closeReturn}</button><button className="btn btn-primary" disabled={returnMutation.isPending||!returnReason.trim()} onClick={()=>returnMutation.mutate({id:selectedCount.id,reason:returnReason.trim()})}>{returnMutation.isPending?<Loader2 className="animate-spin" size={16}/>:labels.returnCount}</button></div>
+        </AdminDialog>}
         <InventoryCountProgress items={selectedCount.items} language={i18n.language}/>
 
         {selectedCount.status === "completed" && (

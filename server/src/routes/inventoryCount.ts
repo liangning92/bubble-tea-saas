@@ -99,6 +99,14 @@ router.post('/:id/submit',authenticate,authorize('admin','manager','staff'),vali
  catch(error:any){res.status(409).json({code:409,message:error.message})}
 })
 
+// Only reviewers may return pending submissions; no stock is adjusted here.
+router.post('/:id/return',authenticate,authorize('admin','manager'),validateBody(z.object({reason:z.string().trim().min(1).max(1000)})),async(req:AuthRequest,res)=>{
+ try {
+  const count=await InventoryCountService.returnInventoryCount(req.params.id,req.user!.storeId,req.user!.staffId||req.user!.id,req.body.reason)
+  res.json({code:200,data:visibleCount(count,req.user!),timestamp:new Date().toISOString()})
+ }catch(error:any){res.status(409).json({code:409,message:error.message||'Failed to return inventory count'})}
+})
+
 // POST /api/inventory-counts/:id/complete
 router.post('/:id/complete', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {

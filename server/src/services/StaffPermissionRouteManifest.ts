@@ -5203,6 +5203,18 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     "export": false,
     "personal": false
   },
+  "POST /api/inventory-counts/:id/return": {
+    "legacyRoles": [
+      "admin",
+      "manager"
+    ],
+    "legacyPermission": "inventory.count",
+    "resource": {"model":"inventoryCount","param":"id"},
+    "permission": "inventory.count",
+    "ownerOnly": false,
+    "export": false,
+    "personal": false
+  },
   "GET /api/process-recipes": {
     "legacyRoles": [
       "admin",
