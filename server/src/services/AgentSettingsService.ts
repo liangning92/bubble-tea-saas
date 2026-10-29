@@ -45,8 +45,13 @@ export function defaultAgentPermissions(): AgentPermissions {
   }
 }
 
+export function fullStoreOperationsPermissions(): AgentPermissions {
+  return Object.fromEntries(Object.keys(defaultAgentPermissions()).map(key => [key, { read: true, write: true }])) as AgentPermissions
+}
+
 export const agentSettingsSchema = z.object({
   version: z.number().int().nonnegative(),
+  operationProfile: z.enum(['custom', 'store_operations']).default('custom'),
   enabled: z.boolean(),
   agentName: z.string().trim().min(1).max(64),
   agentOrigin: z.string().trim().url(),
@@ -67,6 +72,7 @@ export type AgentSettings = z.infer<typeof agentSettingsSchema>
 export function defaultAgentSettings(): AgentSettings {
   return {
     version: 1,
+    operationProfile: 'custom',
     enabled: false,
     agentName: 'Hermes AI',
     agentOrigin: process.env.EMPLOYEE_HERMES_GATEWAY_ORIGIN || 'http://127.0.0.1:8642',
@@ -100,6 +106,7 @@ export function agentSettingsService(db: any = prisma) {
       } : defaultAgentSettings()
 
       if(saved?.permissions&&!saved.permissions.marketing)merged.permissions.marketing={...saved.permissions.members}
+      if (merged.operationProfile === 'store_operations') merged.permissions = fullStoreOperationsPermissions()
       if(saved&&!Object.prototype.hasOwnProperty.call(saved,'expiresAt')){
         const grants=await db.config.findMany({where:{storeId:a.storeId,key:{startsWith:'externalAgent.teamBridge.v1.grant.'}}})
         const expiries=grants.map((r:any)=>JSON.parse(r.value).expiresAt).filter(Boolean).sort()
@@ -162,6 +169,7 @@ export function agentSettingsService(db: any = prisma) {
         const nextVersion = currentVersion + 1
         const toSave: AgentSettings = {
           ...validated,
+          permissions: validated.operationProfile === 'store_operations' ? fullStoreOperationsPermissions() : validated.permissions,
           version: nextVersion
         }
 
@@ -177,6 +185,7 @@ export function agentSettingsService(db: any = prisma) {
           allChannelsAllowed: toSave.allChannelsAllowed,
           taskTimeoutMinutes: toSave.taskTimeoutMinutes,
           expiresAt:toSave.expiresAt,memoryEnabled:toSave.memoryEnabled,learningEnabled:toSave.learningEnabled,photoRecognitionEnabled:toSave.photoRecognitionEnabled,
+          operationProfile: toSave.operationProfile,
           permissions: toSave.permissions
         })
 
@@ -253,6 +262,7 @@ export async function synchronizeEmployeeGrants(tx:any,a:TeamActor,s:AgentSettin
     products:{read:['products.read'],write:['products.write']},
     inventory:{read:['inventory.read'],write:['inventory.write','procurement.write']},
     marketing:{read:['marketing.read'],write:['marketing.write']},
+    members:{read:['members.read'],write:['members.write']},
     finance:{read:['finance.read'],write:['finance.write']},
     staff:{read:['staff.read','schedule.read','training.read'],write:['staff.write','operations.write','employee.request.write','training.write']},
     hygiene:{read:['hygiene.read'],write:['hygiene.write']},

@@ -1,3 +1,4 @@
+import { createEnrollmentMember } from './MembershipQualificationService'
 import { containsText } from '../utils/textSearch'
 import prisma from '../config/database'
 import { getTierBenefitByLevel } from './TierBenefitService'
@@ -80,8 +81,7 @@ export async function createMember(data: {
     throw new Error('Phone number already registered')
   }
 
-  return prisma.member.create({
-    data: {
+  return createEnrollmentMember(data.storeId, {
       storeId: data.storeId,
       name: data.name,
       phone: data.phone,
@@ -89,9 +89,7 @@ export async function createMember(data: {
       birthday: data.birthday,
       level: data.level || 'bronze',
       points: 0,
-      totalSpent: 0,
-      status: 'active'
-    }
+      totalSpent: 0
   })
 }
 
@@ -133,7 +131,7 @@ export async function redeemPoints(memberId: string, points: number, note: strin
   if (!Number.isSafeInteger(points) || points <= 0) throw new Error('Invalid points amount')
   return prisma.$transaction(async (tx) => {
     const redeemed = await tx.member.updateMany({
-      where: { id: memberId, points: { gte: points } },
+      where: { id: memberId, status: 'active', points: { gte: points } },
       data: { points: { decrement: points } }
     })
     if (redeemed.count !== 1) throw new Error('Insufficient points')

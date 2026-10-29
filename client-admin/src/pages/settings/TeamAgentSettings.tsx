@@ -36,6 +36,7 @@ export interface AgentSettingsData {
   expiresAt: string | null
   taskTimeoutMinutes: number
   requireHumanReview: boolean
+  operationProfile?: 'custom' | 'store_operations'
   permissions: AgentPermissions
 }
 
@@ -312,7 +313,7 @@ export function TeamAgentSettings({
               type="checkbox"
               className="mt-1 h-4 w-4 rounded border-primary text-primary focus:ring-primary"
               checked={draft.allChannelsAllowed}
-              disabled={busy || checking || !draft.enabled}
+              disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
               onChange={e => updateDraft({ allChannelsAllowed: e.target.checked })}
             />
             <div>
@@ -381,9 +382,18 @@ export function TeamAgentSettings({
             <h4 id="agent-permissions-title" className="font-semibold text-gray-900">{c.permissionsSection}</h4>
             <p className="mt-0.5 text-xs text-gray-500">{c.permissionsSubtitle}</p>
           </div>
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{c.customPermissions}</span>
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{draft.operationProfile === 'store_operations' ? c.fullOperations : c.customPermissions}</span>
         </div>
 
+        <label className="mt-4 block text-sm">
+          {c.operationProfile}
+          <select className="input mt-2" value={draft.operationProfile || 'custom'} disabled={busy || checking}
+            onChange={e => updateDraft({operationProfile: e.target.value as 'custom' | 'store_operations', ...(e.target.value === 'store_operations' ? {permissions: Object.fromEntries(moduleKeys.map(key => [key, {read:true,write:true}])) as unknown as AgentPermissions} : {})})}>
+            <option value="custom">{c.customPermissions}</option>
+            <option value="store_operations">{c.fullOperations}</option>
+          </select>
+          <span className="mt-2 block text-xs text-gray-600">{c.operationsHelp}</span>
+        </label>
         <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
           <table className="w-full text-left text-sm">
             <thead className="border-b bg-gray-50/80 text-xs font-medium text-gray-600">
@@ -418,7 +428,7 @@ export function TeamAgentSettings({
                           type="checkbox"
                           className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                           checked={perm.read}
-                          disabled={busy || checking || !draft.enabled}
+                          disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
                           onChange={e => updatePermission(key, 'read', e.target.checked)}
                         />
                         <span className="text-xs text-gray-700">{c.readPermission}</span>
@@ -430,7 +440,7 @@ export function TeamAgentSettings({
                           type="checkbox"
                           className={`h-4 w-4 rounded border-gray-300 focus:ring-primary ${isHighRisk ? 'text-amber-600' : 'text-primary'}`}
                           checked={perm.write}
-                          disabled={busy || checking || !draft.enabled}
+                          disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
                           onChange={e => updatePermission(key, 'write', e.target.checked)}
                         />
                         <span className="text-xs text-gray-700">{c.writePermission}</span>
@@ -453,7 +463,7 @@ export function TeamAgentSettings({
               type="checkbox"
               className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
               checked={draft.pdcaPilotEnabled}
-              disabled={busy || checking || !draft.enabled}
+              disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
               onChange={e => updateDraft({ pdcaPilotEnabled: e.target.checked })}
             />
             <div className="min-w-0">
@@ -472,7 +482,7 @@ export function TeamAgentSettings({
               type="checkbox"
               className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
               checked={draft.employeeBridgeEnabled}
-              disabled={busy || checking || !draft.enabled}
+              disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
               onChange={e => updateDraft({ employeeBridgeEnabled: e.target.checked })}
             />
             <div className="min-w-0">

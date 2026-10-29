@@ -15,7 +15,10 @@ test('private gateway TS client: private origin, actual HTTP admission and no au
     count++;auth=req.headers.authorization
     if(mode==='lost'){req.socket.destroy();return}
     if(mode==='redirect'){res.writeHead(302,{location:'/unexpected'});res.end();return}
-    res.setHeader('content-type','application/json');res.end(JSON.stringify({executionId:mode==='wrong-id'?'bf557155-ae58-4633-b844-3199c47be02e':id,state:'running'}))
+    if(req.url==='/health'){
+      res.setHeader('content-type','application/json');res.end(JSON.stringify({status:'ok',protocol:'employee_work_trace_v1',maxConcurrency:mode==='old-capacity'?4:1,queued:2,running:1}));return
+    }
+    res.setHeader('content-type','application/json');res.end(JSON.stringify({executionId:mode==='wrong-id'?'bf557155-ae58-4633-b844-3199c47be02e':id,state:mode==='queued'?'queued':'running'}))
   })
   await new Promise(r=>server.listen(0,'127.0.0.1',r))
   try{
@@ -23,6 +26,11 @@ test('private gateway TS client: private origin, actual HTTP admission and no au
     const envelope={ticket:{executionId:id},deadlineAt:'synthetic',callbackCredential:'synthetic-callback',providerCredential:'synthetic-provider'}
     assert.equal((await client.start(envelope)).state,'running');assert.equal(auth,'Bearer synthetic-secret')
     assert.equal((await client.get(id)).executionId,id)
+    mode='queued';const beforeQueued=count
+    assert.equal((await client.start(envelope)).state,'queued');assert.equal(count,beforeQueued+1)
+    assert.equal((await client.get(id)).state,'queued')
+    assert.equal((await client.health()).maxConcurrency,1)
+    mode='old-capacity';await assert.rejects(()=>client.health(),/SINGLE_SLOT_REQUIRED/)
     for(const failure of ['lost','redirect','wrong-id']){
       mode=failure;const before=count
       assert.equal((await client.start(envelope)).state,'admission_unknown');assert.equal(count,before+1)

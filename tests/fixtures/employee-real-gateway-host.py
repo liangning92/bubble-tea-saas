@@ -24,7 +24,7 @@ finally:
     deadline = time.monotonic() + 125
     while time.monotonic() < deadline:
         with gateway.lock:
-            active = gateway.db.execute("SELECT 1 FROM admission WHERE state='running' LIMIT 1").fetchone()
+            active = gateway.db.execute("SELECT 1 FROM admission WHERE state IN ('queued','running') LIMIT 1").fetchone()
         if not active:
             break
         time.sleep(.05)

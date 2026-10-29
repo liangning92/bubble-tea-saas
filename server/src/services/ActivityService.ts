@@ -1,3 +1,4 @@
+import { membershipActive, processMembershipQualificationBenefits } from './MembershipQualificationService'
 import { posterImageVariants } from '../utils/posterImageVariants'
 import { activityPosterSchema } from '../utils/activityPosterSchema'
 import { resolveProductImageByRatio, deriveTargetAspectRatio } from '../utils/mediaResolver'
@@ -77,10 +78,25 @@ async function validateReferences(storeId:string,a:any,db:any=prisma){
  const coupons=[...new Set([a.rule.couponId,...(a.rule.prizes||[]).map((p:any)=>p.couponId)].filter(Boolean))]
  if(coupons.length&&(await db.coupon.count({where:{storeId,id:{in:coupons},status:'active'}}))!==coupons.length)throw Error('ACTIVITY_COUPON_STORE_MISMATCH')
 }
-export async function saveActivity(storeId:string,input:unknown,id?:string,expectedVersion?:number){
- const data=activitySchema.parse(input);await validateReferences(storeId,data)
- const activity=await prisma.$transaction(async tx=>{
- if(data.categoryId&&!await tx.campaignCategory.findFirst({where:{id:data.categoryId,storeId}}))throw Error('ACTIVITY_CATEGORY_STORE_MISMATCH')
+export async function saveActivityInTransaction(tx:any,storeId:string,input:unknown,id?:string,expectedVersion?:number){
+ const data=activitySchema.parse(input);await validateReferences(storeId,data,tx)
+ // Serialize the official editor and agent writes on the same store, including
+ // create/create races. The model does not test or enforce pricing integrity.
+ await tx.store.update({where:{id:storeId},data:{updatedAt:new Date()}})
+ if(data.status==='published'){
+  const protectedDaily=(a:any)=>a.type==='special_price'&&a.memberOnly&&a.posterConfig?.template==='daily_specials'
+  const intersection=(x:any[],y:any[])=>!x?.length||!y?.length||x.some(v=>y.includes(v))
+  const timeRanges=(a:any)=>{if(!a.dailyStart||!a.dailyEnd)return [[0,1440]];const minutes=(s:string)=>Number(s.slice(0,2))*60+Number(s.slice(3));const x=minutes(a.dailyStart),y=minutes(a.dailyEnd);return x<y?[[x,y]]:[[x,1440],[0,y]]}
+  const others=await listActivities(storeId,tx)
+  const overlap=others.find(a=>a.id!==id&&a.status==='published'&&(protectedDaily(data)||protectedDaily(a))&&
+    ['special_price','member_price','fixed','percent','nth_cup','buy_get'].includes(a.type)&&
+    intersection(a.productIds,data.productIds)&&intersection(a.specIds,data.specIds)&&intersection(a.channels,data.channels)&&intersection(a.paymentMethods,data.paymentMethods)&&intersection(a.weekdays,data.weekdays)&&
+    (data.productIds.length?data.productIds.some(p=>!a.excludedProductIds?.includes(p)):a.productIds.length?a.productIds.some(p=>!data.excludedProductIds?.includes(p)):true)&&
+    timeRanges(a).some(([x,y])=>timeRanges(data).some(([u,v])=>Math.max(x,u)<Math.min(y,v)))&&
+    Math.max(a.startsAt?Date.parse(a.startsAt):-Infinity,data.startsAt?Date.parse(data.startsAt):-Infinity)<Math.min(a.endsAt?Date.parse(a.endsAt):Infinity,data.endsAt?Date.parse(data.endsAt):Infinity))
+  if(overlap)throw Error('ACTIVITY_DAILY_SPECIAL_CONFLICT:'+overlap.id)
+ }
+
  const row=id?await tx.config.findUnique({where:{storeId_key:{storeId,key:activityKey(id)}}}):null
  if(id&&!row)throw Error('ACTIVITY_NOT_FOUND')
  const old=row?decode<Activity>(row.value):undefined
@@ -89,8 +105,14 @@ export async function saveActivity(storeId:string,input:unknown,id?:string,expec
  if(row)await casRecord(tx,row,value);else await putRecord(tx,storeId,activityKey(value.id),value)
  if(value.type==='lottery')await putRecord(tx,storeId,ACTIVITY_PREFIX+`prizes.${value.id}.${value.version}`,{prizes:value.rule.prizes})
  return value
- },data.categoryId?{isolationLevel:'Serializable'}:undefined);notifyActivities(storeId);return {...activity,state:activityState(activity)}
+
 }
+export async function saveActivity(storeId:string,input:unknown,id?:string,expectedVersion?:number){
+ const data=activitySchema.parse(input)
+ const activity=await prisma.$transaction(tx=>saveActivityInTransaction(tx,storeId,data,id,expectedVersion),data.categoryId?{isolationLevel:'Serializable'}:undefined)
+ notifyActivities(storeId);return {...activity,state:activityState(activity)}
+}
+
 const arr=(value:any):any[]=>{if(Array.isArray(value))return value;try{const x=JSON.parse(value||'[]');return Array.isArray(x)?x:[]}catch{return []}}
 export async function migrateActivities(storeId:string,dryRun=true){
  return prisma.$transaction(async tx=>{
@@ -127,8 +149,9 @@ export interface QuoteInput {items:QuoteItem[];channel?:string;channelId?:string
 export interface EntitlementPlan {activity:Activity;rewardId?:string;couponId?:string;points?:number;stamps?:number;inviterId?:string;inviterPoints?:number;prize?:Activity['rule']['prizes'][number];prizeIndex?:number}
 export async function quoteActivities(storeId:string,input:QuoteInput,db:any=prisma,now=new Date(),paidAmountOverride?:number){
  const activities=await listActivities(storeId,db)
- const member=input.memberId?await db.member.findFirst({where:{id:input.memberId,storeId}}):null
- if(input.memberId&&!member)throw Error('ACTIVITY_MEMBER_STORE_MISMATCH')
+ const memberRecord=input.memberId?await db.member.findFirst({where:{id:input.memberId,storeId}}):null
+ if(input.memberId&&!memberRecord)throw Error('ACTIVITY_MEMBER_STORE_MISMATCH')
+ const member=membershipActive(memberRecord)?memberRecord:null
  const channel=input.channelId?await db.channel.findFirst({where:{id:input.channelId,storeId}}):await db.channel.findFirst({where:{storeId,code:input.channel||'DINE_IN'}})
  if(input.channelId&&!channel)throw Error('ACTIVITY_CHANNEL_STORE_MISMATCH')
  const items:QuoteItem[]=[]
@@ -151,6 +174,7 @@ export async function quoteActivities(storeId:string,input:QuoteInput,db:any=pri
  const extras:PriceCandidate[]=[];let coupon:any=null
  const subtotal=items.reduce((s,i)=>s+i.quantity*(i.unitPrice+(i.addons||[]).reduce((x,a)=>x+a.price*(a.qty||1),0)),0)
  if(input.couponId){
+ if(memberRecord&&!member)throw Error('MEMBERSHIP_NOT_QUALIFIED')
  if(input.couponId.startsWith('virtual-')){const c=await db.coupon.findFirst({where:{id:input.couponId.slice(8),storeId}});coupon=c?{id:input.couponId,coupon:c}:null}
  else coupon=await db.memberCoupon.findFirst({where:{id:input.couponId,memberId:member?.id||'__none__',status:'unused'},include:{coupon:true}})
  const c=coupon?.coupon
@@ -436,6 +460,7 @@ export function runActivityJobs():Promise<void>{
  return workerPromise
 }
 async function runActivityJobBatch(){
+ await processMembershipQualificationBenefits()
  const rows=await prisma.config.findMany({where:{key:{startsWith:ACTIVITY_PREFIX+'grant.'},category:'activity_grant_pending'},orderBy:{createdAt:'asc'},take:200})
  for(const row of rows){const g=decode<any>(row.value);if(g.status!=='pending'||g.nextAttemptAt&&Date.parse(g.nextAttemptAt)>Date.now())continue
  try{await processActivityGrant(row.storeId,g.id)}catch(error:any){

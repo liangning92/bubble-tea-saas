@@ -38,6 +38,30 @@ def private_url(value):
     return value
 
 
+class FairOperationQueue:
+    """One executor, separate waiting priorities; at most three admin starts
+    while employee work is waiting. Never interrupt an in-flight operation."""
+    def __init__(self):
+        from collections import deque
+        self.admin,self.staff=deque(),deque()
+        self.condition=threading.Condition()
+        self.admin_streak=0
+    def put(self,item):
+        with self.condition:
+            target=self.admin if item[0].get('ticket',{}).get('isAdmin') is True else self.staff
+            target.append(item);self.condition.notify()
+    def get(self,timeout=None):
+        with self.condition:
+            if not self.condition.wait_for(lambda:self.admin or self.staff,timeout):raise queue.Empty()
+            if self.admin and (not self.staff or self.admin_streak<3):
+                self.admin_streak+=1
+                return self.admin.popleft()
+            self.admin_streak=0
+            return self.staff.popleft()
+    def task_done(self):
+        pass
+
+
 class Gateway:
     def __init__(self, *, journal, bearer, backend_rpc_url, python=None, repository=None,
                  hermes_source=None, hermes_sha=None, isolated_root=None, provider_base_url=None,
@@ -47,8 +71,9 @@ class Gateway:
         self.bearer, self.rpc_url = bearer, private_url(backend_rpc_url)
         self.root, self.provider = isolated_root, provider_base_url
         self.max_seconds = min(max_seconds, 86400)
-        self.lock, self.capacity = threading.Lock(), threading.BoundedSemaphore(4)
+        self.lock, self.capacity = threading.Lock(), threading.BoundedSemaphore(1)
         self.stopping = threading.Event()
+        self.pending = FairOperationQueue()
         self.children = {}
         # One live gateway owns a journal. A second process cannot relabel a
         # still-running child's admission as interrupted and start competing work.
@@ -60,6 +85,9 @@ class Gateway:
         self.db = sqlite3.connect(journal, check_same_thread=False, isolation_level=None)
         self.db.execute("CREATE TABLE IF NOT EXISTS admission (id TEXT PRIMARY KEY, digest TEXT NOT NULL, state TEXT NOT NULL, code TEXT)")
         self.db.execute("UPDATE admission SET state='unknown',code='GATEWAY_RESTARTED' WHERE state='running'")
+        # Queued admissions have not started a model or business tool. Retain the
+        # known admission on restart, but never replay scoped credentials or work.
+        self.db.execute("UPDATE admission SET state='unknown',code='GATEWAY_RESTARTED_BEFORE_START' WHERE state='queued'")
         os.chmod(journal, 0o600)
         if command_factory is not None:
             self.command_factory = command_factory  # isolated harness only, never an HTTP field
@@ -75,12 +103,17 @@ class Gateway:
             command = [python, "-I", "-B", "-c", bootstrap, str(Path(repository)/"hermes"), hermes_source, hermes_sha, str(Path(repository)/"scripts/hermes_employee/host_stdio.py")]
             self.command_factory = lambda _: command
         self.hermes_source, self.hermes_sha = hermes_source, hermes_sha
+        self.dispatcher = threading.Thread(target=self._dispatch, daemon=True)
+        self.dispatcher.start()
 
     def close(self):
         """Call after stopping the listener and all owned executions."""
         with self.lock:
-            if self.db.execute("SELECT 1 FROM admission WHERE state='running' LIMIT 1").fetchone():
+            if self.db.execute("SELECT 1 FROM admission WHERE state IN ('queued','running') LIMIT 1").fetchone():
                 raise ValueError('GATEWAY_EXECUTIONS_STILL_RUNNING')
+            self.stopping.set()
+        self.dispatcher.join(timeout=2)
+        with self.lock:
             self.db.close()
             fcntl.flock(self.journal_lock, fcntl.LOCK_UN)
             os.close(self.journal_lock)
@@ -108,19 +141,47 @@ class Gateway:
             raise ValueError("EXECUTION_DEADLINE_REQUIRED")
         digest = hashlib.sha256(json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         with self.lock:
+            if self.stopping.is_set(): raise ValueError("GATEWAY_STOPPING")
             row = self.db.execute("SELECT digest FROM admission WHERE id=?", (execution,)).fetchone()
             if row and not hmac.compare_digest(row[0], digest):
                 raise ValueError("ADMISSION_BINDING_CONFLICT")
             if not row:
-                if not self.capacity.acquire(blocking=False):
-                    raise ValueError("GATEWAY_BUSY")
-                try:
-                    self.db.execute("INSERT INTO admission VALUES (?,?, 'running',NULL)", (execution, digest))
-                except BaseException:
-                    self.capacity.release()
-                    raise
-                threading.Thread(target=self._run, args=(envelope, until), daemon=True).start()
+                self.db.execute("INSERT INTO admission VALUES (?,?, 'queued',NULL)", (execution, digest))
+                # The journal persists admission and outcome, not the callback or
+                # provider secrets. Waiting envelopes live only in private memory.
+                self.pending.put((json.loads(json.dumps(envelope)), until))
         return self.receipt(execution)
+
+    def _dispatch(self):
+        """One real child at a time; fair admin priority only affects waiting work."""
+        while not self.stopping.is_set():
+            try:
+                envelope, until = self.pending.get(timeout=.1)
+            except queue.Empty:
+                continue
+            execution = envelope['ticket']['executionId']
+            acquired = False
+            try:
+                while not self.stopping.is_set() and time.time() < until:
+                    if self.capacity.acquire(timeout=min(.1, max(.001, until-time.time()))):
+                        acquired = True
+                        break
+                with self.lock:
+                    row = self.db.execute('SELECT state FROM admission WHERE id=?', (execution,)).fetchone()
+                    if not row or row[0] != 'queued':
+                        continue
+                    if self.stopping.is_set() or not acquired or time.time() >= until:
+                        self.db.execute("UPDATE admission SET state='unknown',code=? WHERE id=? AND state='queued'", ('GATEWAY_STOPPED_BEFORE_START' if self.stopping.is_set() else 'GATEWAY_QUEUE_DEADLINE', execution))
+                        continue
+                    self.db.execute("UPDATE admission SET state='running' WHERE id=? AND state='queued'", (execution,))
+                # _run owns releasing the slot and rechecks backend authority on
+                # its first callback. Waiting never grants fresh authority.
+                acquired = False
+                self._run(envelope, until)
+            finally:
+                if acquired:
+                    self.capacity.release()
+                self.pending.task_done()
 
     def _rpc(self, envelope, method, params, until):
         payload = {"executionId": envelope["ticket"]["executionId"], "method": method, "params": params}
@@ -247,7 +308,7 @@ class Gateway:
             finally:
                 # Buffered stdin.close() may flush a reply to a pipe already closed
                 # by the failed child. Cleanup must still persist uncertainty and
-                # return the slot; otherwise four failures stop all later work.
+                # return the slot; otherwise a failure stops all later work.
                 if child:
                     for pipe in (child.stdin, child.stdout):
                         with suppress(OSError, ValueError):
@@ -265,6 +326,7 @@ class Gateway:
     def interrupt(self):
         self.stopping.set()
         with self.lock:
+            self.db.execute("UPDATE admission SET state='unknown',code='GATEWAY_STOPPED_BEFORE_START' WHERE state='queued'")
             children = list(self.children.values())
         for child in children:
             with suppress(ProcessLookupError):
@@ -292,7 +354,10 @@ class Gateway:
                 except BaseException:
                     return self.respond(409, {"error": "ADMISSION_REJECTED"})
             def do_GET(self):
-                if self.path == "/health": return self.respond(200, {"status": "ok", "protocol": "employee_work_trace_v1"})
+                if self.path == "/health":
+                    with gateway.lock:
+                        counts = dict(gateway.db.execute("SELECT state,count(*) FROM admission WHERE state IN ('queued','running') GROUP BY state").fetchall())
+                    return self.respond(200, {"status": "ok", "protocol": "employee_work_trace_v1", "maxConcurrency": 1, "scheduling":"admin_priority_fair", "adminBurstLimit":3, "preemptRunning":False, "queued": counts.get('queued',0), "running": counts.get('running',0)})
                 if not self.allowed(): return self.respond(401, {"error": "UNAUTHORIZED"})
                 try:
                     if not self.path.startswith("/employee-runs/"): raise KeyError()

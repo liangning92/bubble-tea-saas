@@ -377,7 +377,8 @@ export function teamCommunication(db: DB = prisma) {
           if (grantRow) {
             const grant = JSON.parse(grantRow.value)
             const settings=await read(tx,a.storeId,'ai.agent.settings')
-            if(settings&&(!settings.enabled||!settings.employeeBridgeEnabled||!settings.allChannelsAllowed))fail(403,'EMPLOYEE_CHANNEL_DISABLED_BY_SETTINGS')
+            const ownerPrivateOperations=settings?.operationProfile==='store_operations'&&a.role==='admin'&&!a.employeeApp&&grant.sponsorUserId===a.id&&ids.length===2&&ids.includes(a.staffId)
+            if(settings&&(!settings.enabled||!settings.employeeBridgeEnabled||!settings.allChannelsAllowed&&!ownerPrivateOperations))fail(403,'EMPLOYEE_CHANNEL_DISABLED_BY_SETTINGS')
             if(grant.revoked||Date.parse(grant.expiresAt)<=Date.now())fail(403,'EMPLOYEE_CHANNEL_GRANT_UNAVAILABLE')
             // The saved all-channel choice permits new agent conversations, not access to pre-membership history.
             grant.staffIds=[...new Set([...grant.staffIds,...ids.filter(id=>!id.startsWith('agent:'))])]
@@ -468,7 +469,7 @@ export function teamCommunication(db: DB = prisma) {
       return { channel: c, messages, aiHandlingUpdates, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
         canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), audit: auditReason !== undefined }
     },
-    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization, managementAuthorization?: ManagementAuthorization) {
+    async send(a: TeamActor, id: string, input: unknown, aiDraftId?: string, routineAuthorization?: RoutineAuthorization, managementAuthorization?: ManagementAuthorization, ownerOperationsDelegation?: { id: string; requestId: string }) {
       const v = messageSchema.parse(input)
       return db.$transaction(async (tx: DB) => {
         // Agent receipts are scoped by store/author/request, not by channel.
@@ -534,7 +535,7 @@ export function teamCommunication(db: DB = prisma) {
         if (!c.round.participants.includes(a.staffId)) c.round.participants.push(a.staffId)
         const employee = await identity(tx, a)
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
-          authorId: a.staffId, authorName: employee.name, text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) }
+          authorId: a.staffId, authorName: ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
         const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
