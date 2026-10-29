@@ -51,7 +51,14 @@ async function main(){
   const current=(await mod('services/ActivityService').listActivities(storeId,db)).find(a=>a.id===activity.id);assert.equal(JSON.stringify(current),before);assert.equal(current.status,'paused');
   const receipt=await mod('services/teamAgentBridge/employeeBackendTool').executeBackendTool(db,grant,scope,source.id,{action:'status',receiptId:result.value.receiptId});assert.equal(receipt.state,'complete');assert.equal(renders,1);
   assert.equal(await db.order.count({where:{storeId}}),0);
-  console.log(JSON.stringify({passed:true,realNativeRoute:true,historicalTicket:true,traceLockAvailableDuringRender:true,rendererDelayMs:6500,traceTransactionTimeoutMs:5000,readOnlyMarketingSettings:true,activityUnchanged:true,ordersCreated:0,renderer:'synthetic gated fixture',modelCalls:0,productionWrites:0}));
+  const express=require(root+'/server/node_modules/express'),{createEmployeeRuntimeHttp}=mod('services/teamAgentBridge/employeeRuntimeHttp');
+  const app=express();app.use(createEmployeeRuntimeHttp({enabled:true,resolve:async()=>({executionId:ticket.executionId,expiresAt:grant.expiresAt,runtime:{host:{executeTool:async()=>{throw Object.assign(Error('Expired transaction PRIVATE_SENTINEL'),{code:'P2028'})}}}}),transport:async()=>{throw Error('NO_MODEL')}}));
+  const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+  try{
+   const response=await fetch('http://127.0.0.1:'+server.address().port+'/rpc',{method:'POST',headers:{authorization:'Bearer synthetic-fixture-credential','content-type':'application/json'},body:JSON.stringify({executionId:ticket.executionId,method:'executeTool',params:{executionId:ticket.executionId}})}),error=await response.json();
+   assert.equal(response.status,403);assert.equal(error.code,'EMPLOYEE_RUNTIME_TRANSACTION_EXPIRED');assert(!JSON.stringify(error).includes('PRIVATE_SENTINEL'));
+  }finally{await new Promise(resolve=>server.close(resolve))}
+  console.log(JSON.stringify({passed:true,realNativeRoute:true,historicalTicket:true,traceLockAvailableDuringRender:true,rendererDelayMs:6500,traceTransactionTimeoutMs:5000,readOnlyMarketingSettings:true,transactionErrorClassifiedWithoutPrivateDetails:true,activityUnchanged:true,ordersCreated:0,renderer:'synthetic gated fixture',modelCalls:0,productionWrites:0}));
  }finally{release.resolve();renderer.renderDailyPoster=oldRender;await pending.catch(()=>{})}
 }
 main().catch(e=>{console.error(e);process.exitCode=1}).finally(async()=>{await db.$disconnect();await mod('config/database').default.$disconnect()});
