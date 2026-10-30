@@ -1,3 +1,4 @@
+import {canReadStoreRevenue,ownFinancialRecords} from '../services/StoreRevenueAccess'
 import { verifyOfflineSale } from '../services/POSOfflineOperationService'
 import {blocksSelfApproval} from '../utils/refundApprovalAccess'
 import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure, postReceivedReceipt, discardReceivedReceipt } from '../services/ReceivedReceiptService'
@@ -17,7 +18,7 @@ import prisma from '../config/database'
 
 const router = Router()
 
-function checkOrderAccess(req: AuthRequest, res: Response, order: { storeId: string } | null) {
+function checkOrderAccess(req: AuthRequest, res: Response, order: { storeId: string; staffId?:string } | null) {
   if (!order) {
     res.status(404).json({ code: 404, message: 'Order not found' })
     return false
@@ -26,6 +27,7 @@ function checkOrderAccess(req: AuthRequest, res: Response, order: { storeId: str
     res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
     return false
   }
+  if(!canReadStoreRevenue(req.user!)&&order.staffId!==req.user!.staffId){res.status(403).json({code:403,message:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'});return false}
   return true
 }
 
@@ -104,6 +106,7 @@ const listOrders = async (req: AuthRequest, res: Response) => {
       storeId: (storeId || req.user!.storeId) as string,
       userId: req.user!.id,
       userRole: req.user!.role,
+      financialScope:ownFinancialRecords(req.user!),
       status: status as string,
       paymentMethod: paymentMethod as string,
       channelId: channelId as string,
@@ -140,7 +143,7 @@ router.get('/refund-requests', authenticate, authorize('admin', 'manager'), asyn
     const { status } = req.query
     const storeId = getStoreId(req)
 
-    const where: any = { order: { storeId } }
+    const where: any = { order: { storeId,...ownFinancialRecords(req.user!) } }
     if (status && status !== 'all') where.status = status
 
     const requests = await prisma.refundRequest.findMany({

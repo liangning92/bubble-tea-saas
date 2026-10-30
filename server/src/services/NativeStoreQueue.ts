@@ -1,3 +1,4 @@
+import {storeBusinessTopic} from './StoreBusinessTopic'
 import {createHash} from 'node:crypto'
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
 export const nativeJobId=(storeId:string,channelId:string,messageId:string)=>hash([storeId,channelId,messageId])
@@ -40,7 +41,8 @@ export async function enqueueNativeStoreRequest(db:any,storeId:string,channel:an
  const legacyId=hash(['employee_work',channel.id,message.id])
  const legacy=await read(db,storeId,'externalAgent.teamBridge.v1.employeePending.'+legacyId)
  const uncertainLegacy=legacy&&!['pending','blocked'].includes(legacy.state)
- const value={id,storeId,channelId:channel.id,sourceSeq:message.seq,messageId:message.id,requesterStaffId:message.authorId,sourceHash:hash({id:message.id,seq:message.seq,authorId:message.authorId,text:message.text,files:message.files||[]}),audienceHash:hash(channel.members),state:uncertainLegacy?'blocked':'queued',...(uncertainLegacy?{fault:'NATIVE_LEGACY_RESULT_RECONCILIATION_REQUIRED'}:{}),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}
+ const topic=message.files?.length?undefined:storeBusinessTopic(message.text)
+ const value={budgetMs:/(?:深入|全面|详细|审计|多步|analisis mendalam|audit lengkap)/i.test(message.text)?600000:30000,...(topic?{businessTopic:topic,executor:'business_topic'}:{}),id,storeId,channelId:channel.id,sourceSeq:message.seq,messageId:message.id,requesterStaffId:message.authorId,sourceHash:hash({id:message.id,seq:message.seq,authorId:message.authorId,text:message.text,files:message.files||[]}),audienceHash:hash(channel.members),state:uncertainLegacy?'blocked':'queued',...(uncertainLegacy?{fault:'NATIVE_LEGACY_RESULT_RECONCILIATION_REQUIRED'}:{}),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}
  await db.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,category:'native_agent',value:JSON.stringify(value)},update:{}})
  return true
 }

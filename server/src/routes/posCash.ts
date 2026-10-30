@@ -1,3 +1,4 @@
+import {canReadStoreRevenue,ownFinancialRecords} from '../services/StoreRevenueAccess'
 import { readShiftHandover } from '../services/ShiftHandoverReadService'
 import {offlineWorkSnapshot} from '../services/POSOfflineWorkService'
 import { POS_MANUAL_PAYMENT_METHODS } from '../utils/offlinePolicy'
@@ -27,7 +28,7 @@ router.get('/events', authenticate, authorize('admin', 'manager', 'cashier'), as
     const storeId = req.user!.storeId
     const { startDate, endDate, type, shift } = req.query
 
-    const where: any = { storeId }
+    const where: any = { storeId,...ownFinancialRecords(req.user!) }
     if (startDate || endDate) {
       where.createdAt = {}
       if (startDate) where.createdAt.gte = parseDateBoundary(startDate as string)
@@ -122,7 +123,7 @@ router.get('/shifts', authenticate, authorize('admin', 'manager', 'cashier'), as
     const storeId = req.user!.storeId
     const { startDate, endDate } = req.query
 
-    const where: any = { storeId }
+    const where: any = { storeId,...ownFinancialRecords(req.user!) }
     if (startDate || endDate) {
       where.openedAt = {}
       if (startDate) where.openedAt.gte = parseDateBoundary(startDate as string)
@@ -145,6 +146,7 @@ router.get('/shifts', authenticate, authorize('admin', 'manager', 'cashier'), as
 // Reprints read the immutable closed-session purchase snapshot, never re-record cash or costs.
 router.get('/shifts/:id/handover', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res, next) => {
   try {
+    if(!canReadStoreRevenue(req.user!)&&!await prisma.shiftSession.findFirst({where:{id:req.params.id,storeId:req.user!.storeId,...ownFinancialRecords(req.user!)},select:{id:true}}))return res.status(403).json({code:403,message:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'})
     const result = await readShiftHandover(req.user!.storeId, req.params.id)
     if (!result) return res.status(404).json({ code: 404, message: 'SHIFT_HANDOVER_NOT_FOUND' })
     res.json({ code: 200, data: result })
@@ -272,6 +274,7 @@ router.post('/shifts/close', authenticate, authorize('admin', 'manager', 'cashie
 // GET /api/pos-cash/summary - 获取现金汇总
 router.get('/summary', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
+    if(!canReadStoreRevenue(req.user!))return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission:'dashboard.read'})
     const storeId = req.user!.storeId
     const { date, shift } = req.query
 
@@ -295,6 +298,7 @@ router.get('/summary', authenticate, authorize('admin', 'manager', 'cashier'), a
 // POST /api/pos-cash/summary - 生成每日现金汇总
 router.post('/summary', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
   try {
+    if(!canReadStoreRevenue(req.user!))return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission:'dashboard.read'})
     const storeId = req.user!.storeId
     const { date, shift, staffId } = req.body
 
@@ -362,6 +366,7 @@ router.post('/summary', authenticate, authorize('admin', 'manager'), async (req:
 // GET /api/pos-cash/today - 获取今日现金情况
 router.get('/today', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
+    if(!canReadStoreRevenue(req.user!))return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission:'dashboard.read'})
     const storeId = req.user!.storeId
     const today = new Date().toISOString().split('T')[0]
 
@@ -426,6 +431,7 @@ router.get('/today', authenticate, authorize('admin', 'manager', 'cashier'), asy
 // GET /api/pos-cash/summary - 获取交接班汇总数据
 router.get('/summary', authenticate, authorize('admin', 'manager', 'cashier'), async (req: AuthRequest, res) => {
   try {
+    if(!canReadStoreRevenue(req.user!))return res.status(403).json({code:403,message:'STAFF_ACCESS_PERMISSION_DENIED',permission:'dashboard.read'})
     const storeId = req.user!.storeId
     const today = startOfTodayJakarta()
 

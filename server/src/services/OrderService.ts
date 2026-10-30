@@ -211,6 +211,7 @@ export async function getOrders(params: {
   storeId?: string
   userId?: string
   userRole?: string
+  financialScope?: {staffId?:string}
   status?: string
   paymentMethod?: string
   channelId?: string
@@ -250,6 +251,7 @@ export async function getOrders(params: {
     where.storeId = userId // In this case, userId is actually storeId for staff/cashier
   }
 
+  if(params.financialScope?.staffId)where.staffId=params.financialScope.staffId
   where.status = status || { notIn: ['refunded', 'cancelled'] }
   if (paymentMethod) where.paymentMethod = paymentMethod
   if (channelId) where.channelId = channelId

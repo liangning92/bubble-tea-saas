@@ -27,6 +27,7 @@ try:
                JWT_SECRET='synthetic-team-work-item-fixture-only', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
     command(['node', 'tests/stoploss/management-backend-check.cjs'], env=env)
+    command(['node', 'tests/stoploss/hermes-controlled-access-check.cjs'], env=env)
 finally:
     try:
         if started:

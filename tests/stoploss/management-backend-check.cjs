@@ -20,6 +20,10 @@ async function main(){
  declareAccessRoutes('/api/upload',built('routes/upload').uploadRouter);
  declareAccessRoutes('/api/announcement',built('routes/announcement').default);
  declareAccessRoutes('/api/training/library',built('routes/trainingLibrary').trainingLibraryRouter);
+ // This suite tests native handler/receipt transport independently of the
+ // production tool review policy, which has its own default-closed tests.
+ const reviewed=built('services/ManagementAgentPolicy').agentOperations;
+ for(let offset=0;;offset+=40){const page=api.backendCatalog('',offset,40);for(const op of page.operations)reviewed.set(op.operationId,op.permission);if(page.nextOffset===null)break}
  const tenant=await db.tenant.create({data:{name:'Whole backend isolated test'}});
  for(const id of [storeId,other])await db.store.create({data:{id,tenantId:tenant.id,name:id}});
  for(const [role,phone]of[['admin','08919101001'],['staff','08919101002']]){
@@ -125,6 +129,7 @@ async function main(){
   router.stack[1].route.accessSpecs={get:{permission:'products.read',ownerOnly:false,export:false,personal:false,routeKey:'GET /api/isolated-backend-fixture/file'}};
   for(const layer of router.stack.slice(2)){const method=layer.route.methods.get?'get':'post';layer.route.accessSpecs={[method]:{permission:'products.'+(method==='get'?'read':'write'),ownerOnly:false,export:false,personal:false,routeKey:method.toUpperCase()+' /api/isolated-backend-fixture'+layer.route.path}}}
   api.registerManagementRouter('/api/isolated-backend-fixture',router);
+  for(const op of ['POST /api/isolated-backend-fixture/slow','GET /api/isolated-backend-fixture/file','GET /api/isolated-backend-fixture/query','POST /api/isolated-backend-fixture/upload'])reviewed.set(op,'products.read');
   const scope={compartmentKey:'late-scope',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId};
   const args={action:'execute',operationId:'POST /api/isolated-backend-fixture/slow',contractVersion:api.backendVersion(),body:{}};
   const reservation=await tools.reserveBackendOperation(db,storeId,scope,'late-source','late-execution','late-call',args);
@@ -301,7 +306,7 @@ async function main(){
    let transientJob=await readTeam(db,storeId,transientKey);transientJob.createdAt=new Date(Date.now()-90000).toISOString();await writeTeam(db,storeId,transientKey,transientJob);
    const beforeTransient=submitted;statusUnavailable=true;await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
    assert.equal(transientJob.state,'running');assert.equal(transientJob.pollFaultCount,1);assert(!transientJob.statusMessageId);assert(transientJob.firstPollFaultAt);
-   let projected=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+transient.id),[transientSource]);assert.equal(projected.get(transientSource.id).state,'processing');assert.equal(projected.get(transientSource.id).failureReason,undefined);
+   let projected=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+transient.id),[transientSource]);assert.equal(projected.get(transientSource.id).state,'processing');assert.equal(projected.get(transientSource.id).failureReason,'delayed');
    // A successful status clears the fault window even while the model is running.
    statusUnavailable=false;runStatus='running';delete transientJob.nextAttemptAt;await writeTeam(db,storeId,transientKey,transientJob);await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
    assert(!transientJob.firstPollFaultAt);assert(!transientJob.pollFaultCount);assert(!transientJob.lastPollFault);

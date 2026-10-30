@@ -114,7 +114,6 @@ def main():
     from gateway.platforms.api_server import APIServerAdapter
     from tools.registry import registry
     from tools import approval_context
-    from toolsets import get_all_toolsets
     from run_agent import AIAgent
 
     context={};context_lock=threading.RLock()
@@ -154,9 +153,9 @@ def main():
             with context_lock:c=dict(context)
             if not c:raise RuntimeError('NATIVE_CONTEXT_NOT_CONFIGURED')
             if kwargs.get('gateway_session_key')!=c['sessionKey']:raise RuntimeError('NATIVE_SESSION_CONTEXT_MISMATCH')
-            # The upstream catalog owns the native tools. Installed prerequisites determine
-            # availability; this adapter adds only the one native store transport tool.
-            toolsets=sorted(set(get_all_toolsets())|{'store_backend'})
+            # Business production has one mediated capability; terminal, generic
+            # HTTP, SQL, delegation and file browsing are not business authority.
+            toolsets=['store_backend']
             callbacks={k:kwargs.get(k) for k in ('stream_delta_callback','tool_progress_callback','tool_start_callback','tool_complete_callback')}
             options=native_provider_options(c['model'],kwargs.get('reasoning_config'),kwargs.get('request_overrides'))
             agent=AIAgent(model=c['model'],provider='custom',api_mode='chat_completions',base_url=private_url(c['providerBaseUrl']),api_key=c['providerCredential'],fallback_model=None,enabled_toolsets=toolsets,session_id=kwargs.get('session_id'),gateway_session_key=c['sessionKey'],session_db=self._ensure_session_db(),platform='api_server',quiet_mode=True,ephemeral_system_prompt=kwargs.get('ephemeral_system_prompt'),**options,**callbacks)
