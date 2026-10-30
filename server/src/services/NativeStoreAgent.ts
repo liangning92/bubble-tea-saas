@@ -17,12 +17,13 @@ import {openNativeSubscribedResponse} from './TeamAiService'
 import {accountFile,storeNativeDownload} from './NativeBackendFiles'
 import fs from 'node:fs/promises'
 import {nativeReplyFault} from './NativeReplyQuality'
+import {nativePollDelayed} from './NativePollHealth'
 import type {CommunicationScope} from './teamAgentBridge/contract'
 
 const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const prefix='nativeAgent.job.'
 export interface NativeStoreConfig {storeId:string;agentId:string;gatewayOrigin:string;gatewayKey:string;backendOrigin:string}
-type NativeJob={id:string;storeId:string;channelId:string;sourceSeq:number;messageId:string;requesterStaffId:string;sourceHash:string;publicObjective?:any;authorizationChannelId?:string;sourceAudienceHash?:string;parentJobId?:string;audienceHash?:string;profileKey?:string;scope?:CommunicationScope;principal?:NativeBackendPrincipal;state:string;startedAt?:string;createdAt:string;updatedAt:string;sessionId?:string;runId?:string;input?:any;callbackCredentialHash?:string;providerCredentialHash?:string;credentials?:never;fault?:string;outputMessageId?:string;outputFileId?:string;model?:string;pollLeaseUntil?:number;pollToken?:string;nextAttemptAt?:number;failureMessageId?:string;statusMessageId?:string;lastPollFault?:string}
+type NativeJob={id:string;storeId:string;channelId:string;sourceSeq:number;messageId:string;requesterStaffId:string;sourceHash:string;publicObjective?:any;authorizationChannelId?:string;sourceAudienceHash?:string;parentJobId?:string;audienceHash?:string;profileKey?:string;scope?:CommunicationScope;principal?:NativeBackendPrincipal;state:string;startedAt?:string;createdAt:string;updatedAt:string;sessionId?:string;runId?:string;input?:any;callbackCredentialHash?:string;providerCredentialHash?:string;credentials?:never;fault?:string;outputMessageId?:string;outputFileId?:string;model?:string;pollLeaseUntil?:number;pollToken?:string;nextAttemptAt?:number;failureMessageId?:string;statusMessageId?:string;lastPollFault?:string;firstPollFaultAt?:string;pollFaultCount?:number}
 const atomic=(tx:any)=>new Proxy(tx,{get(target,key){return key==='$transaction'?async(fn:any)=>fn(atomic(target)):typeof target[key]==='function'?target[key].bind(target):target[key]}})
 const channelLease=(id:string)=>'nativeAgent.channel.'+id
 const stamp=()=>new Date().toISOString()
@@ -221,7 +222,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
       await deliver(job,'Waktu pemrosesan habis. Permintaan ini belum selesai. Catatan yang sudah tersimpan tetap disimpan dan tidak diulang otomatis. Minta pengelola memeriksa hasilnya sebelum mengulangi perubahan data.')
       job.state='unknown';job.fault='NATIVE_RUN_DEADLINE';delete job.lastPollFault;delete job.nextAttemptAt;await finish(job);continue
      }
-     delete job.lastPollFault;delete job.nextAttemptAt
+     delete job.lastPollFault;delete job.firstPollFaultAt;delete job.pollFaultCount;delete job.nextAttemptAt
      if(result.status==='completed'){
       if(job.fault==='NATIVE_RUN_DEADLINE')delete job.fault
       const ready=await gateway(job.profileKey).readiness()
@@ -245,6 +246,8 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
     }
    }catch(error:any){
     const code=/^[A-Z0-9_]{1,100}$/.test(error?.message||'')?error.message:'NATIVE_EXECUTION_UNCONFIRMED'
+    if(!job.lastPollFault||!job.firstPollFaultAt)job.firstPollFaultAt=stamp()
+    job.pollFaultCount=(job.pollFaultCount||0)+1
     job.lastPollFault=code;job.nextAttemptAt=Date.now()+15000
     // Transport failures are read/reconciled, never a reason to replay a business call.
     // Invalid source/account context is terminal and cannot publish private output.
@@ -252,7 +255,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
      job.state='blocked';job.fault=code;await finish(job)
     }else{
      if(!job.runId&&[400,401,403].includes(error?.status)){job.state='failed';job.fault=code;await deliver(job,'Maaf, layanan Hermes belum dapat menerima pekerjaan ini. Pengelola perlu memeriksa sambungannya.');await finish(job)}
-     else {await save(job);if(!job.statusMessageId&&Date.now()-Date.parse(job.createdAt)>60000)await deliver(job,'Pesan Anda sudah tersimpan. Sambungan Hermes sedang bermasalah; pekerjaan belum dinyatakan selesai. Hasil yang sudah tersimpan tidak akan diulang otomatis.','status').catch(()=>{})}
+     else {await save(job);if(!job.statusMessageId&&nativePollDelayed(job))await deliver(job,'Pesan Anda sudah tersimpan. Sambungan Hermes sedang bermasalah; pekerjaan belum dinyatakan selesai. Hasil yang sudah tersimpan tidak akan diulang otomatis.','status').catch(()=>{})}
     }
    }finally{
     await db.$transaction(async(tx:any)=>{await lockTeam(tx,cfg.storeId,'native-admission.'+job.channelId);const saved=await read(job.id,tx);if(saved?.pollToken===job.pollToken){saved.pollLeaseUntil=0;delete saved.pollToken;await save(saved,tx)}})

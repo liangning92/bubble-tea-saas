@@ -296,6 +296,21 @@ async function main(){
    stalled.lastPollFault='HERMES_NATIVE_TIMEOUT';await writeTeam(db,storeId,slowKey,stalled);
    const status=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+slow.id),[slowSource]);assert.equal(status.get(slowSource.id).state,'failed');assert.equal(status.get(slowSource.id).failureReason,'timeout');
    runStatus='completed';statusUnavailable=false;
+   const transient=await create('Transient poll fault'),transientSource=await teamCommunication(db).send(owner,transient.id,{requestId:randomUUID(),text:'Read only transient transport test'});
+   const transientKey=nativeJobKey(nativeJobId(storeId,transient.id,transientSource.id));await engine.runBatch(10);
+   let transientJob=await readTeam(db,storeId,transientKey);transientJob.createdAt=new Date(Date.now()-90000).toISOString();await writeTeam(db,storeId,transientKey,transientJob);
+   const beforeTransient=submitted;statusUnavailable=true;await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
+   assert.equal(transientJob.state,'running');assert.equal(transientJob.pollFaultCount,1);assert(!transientJob.statusMessageId);assert(transientJob.firstPollFaultAt);
+   let projected=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+transient.id),[transientSource]);assert.equal(projected.get(transientSource.id).state,'processing');assert.equal(projected.get(transientSource.id).failureReason,undefined);
+   // A successful status clears the fault window even while the model is running.
+   statusUnavailable=false;runStatus='running';delete transientJob.nextAttemptAt;await writeTeam(db,storeId,transientKey,transientJob);await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
+   assert(!transientJob.firstPollFaultAt);assert(!transientJob.pollFaultCount);assert(!transientJob.lastPollFault);
+   statusUnavailable=true;await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);assert.equal(transientJob.pollFaultCount,1);assert(!transientJob.statusMessageId);
+   transientJob.firstPollFaultAt=new Date(Date.now()-65000).toISOString();delete transientJob.nextAttemptAt;await writeTeam(db,storeId,transientKey,transientJob);await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
+   assert(transientJob.statusMessageId);assert.equal(transientJob.pollFaultCount,2);
+   projected=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+transient.id),[transientSource]);assert.equal(projected.get(transientSource.id).failureReason,'delayed');
+   statusUnavailable=false;runStatus='completed';delete transientJob.nextAttemptAt;await writeTeam(db,storeId,transientKey,transientJob);await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
+   assert.equal(transientJob.state,'completed');assert(!transientJob.firstPollFaultAt);assert(!transientJob.pollFaultCount);assert.equal(submitted,beforeTransient);
    const bad=await create('Malformed native response'),badSource=await teamCommunication(db).send(owner,bad.id,{requestId:randomUUID(),text:'Read existing records only.'});
    const badKey=nativeJobKey(nativeJobId(storeId,bad.id,badSource.id));await engine.runBatch(10);
    nativeOutput='Today there is one record.\nAnalisis '+'消耗'.repeat(9382);
