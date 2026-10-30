@@ -13,15 +13,16 @@ export class HermesNativeClient {
   this.origin=new URL(origin)
   if(this.origin.protocol!=='http:'||!['127.0.0.1','[::1]','host.docker.internal'].includes(this.origin.hostname)||this.origin.username||this.origin.password||this.origin.pathname!=='/'||this.origin.search||this.origin.hash||!key)throw Error('HERMES_NATIVE_PRIVATE_ORIGIN_REQUIRED')
  }
- private async request(path:string,body?:unknown,headers:Record<string,string>={}){
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),30000)
+ private async request(path:string,body?:unknown,headers:Record<string,string>={},deadline?:number){
+  if(deadline!==undefined&&deadline<=Date.now())throw Error('HERMES_NATIVE_DEADLINE')
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),Math.min(30000,deadline===undefined?30000:deadline-Date.now()))
   try{
    const response=await fetch(new URL((this.profileKey?'/profiles/'+this.profileKey:'')+path,this.origin),{method:body===undefined?'GET':'POST',redirect:'error',headers:{authorization:'Bearer '+this.key,...(body===undefined?{}:{'content-type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:controller.signal})
    if(!response.ok){const error:any=Error('HERMES_NATIVE_HTTP_'+response.status);error.status=response.status;throw error}
    return await response.json()
   }catch(error:any){if(controller.signal.aborted)throw Error('HERMES_NATIVE_TIMEOUT');throw error}finally{clearTimeout(timer)}
  }
- async configure(context:Record<string,unknown>){return this.request('/native/context',context)}
+ async configure(context:Record<string,unknown>,deadline?:number){return this.request('/native/context',context,{},deadline)}
  async admission(request:NativeHermesRequest,key:string){return this.request('/native/admission',{request,key})}
  async readiness(){return this.request('/native/readiness')}
  async gatewayHealth(){return this.request('/health')}
@@ -30,9 +31,9 @@ export class HermesNativeClient {
   if(!value||typeof value!=='object')throw Error('HERMES_NATIVE_CAPABILITIES_INVALID')
   return value
  }
- async submit(request:NativeHermesRequest,idempotencyKey:string){
+ async submit(request:NativeHermesRequest,idempotencyKey:string,deadline?:number){
   if(!idempotencyKey||!/^[!-~]{1,255}$/.test(idempotencyKey)||!request.session_id)throw Error('HERMES_NATIVE_ADMISSION_INVALID')
-  return this.request('/v1/runs',request,{'Idempotency-Key':idempotencyKey,'X-Hermes-Session-Key':request.session_id})
+  return this.request('/v1/runs',request,{'Idempotency-Key':idempotencyKey,'X-Hermes-Session-Key':request.session_id},deadline)
  }
  async status(runId:string){return this.request('/v1/runs/'+encodeURIComponent(runId))}
  async cancel(runId:string){return this.request('/v1/runs/'+encodeURIComponent(runId)+'/stop',{})}

@@ -11,6 +11,7 @@ import { getHandoverReceipts } from './ShiftManualReceipts'
 type DB = Pick<PrismaClient, 'order' | 'refundRequest' | 'expense' | 'config' | 'channel' | 'shift' | 'shiftSession' | 'staff' | 'user'>
 type Label = { name: string; nameZh?: string | null; nameId?: string | null }
 export type QueryOption = Label & { value: string; group: string; paymentFilter: boolean; channelFilter: boolean; labelKey?: string }
+export const canReadRevenueRefunds=(actor:any)=>actor.role==='admin'||!actor.accessRole||actor.accessRole.permissions.some((permission:string)=>['orders.refund','orders.refund.approve'].includes(permission))
 export class RevenueQueryError extends Error { constructor(message: string, public status = 400) { super(message) } }
 const filterSchema = z.object({ period: z.enum(['today','yesterday','week','month','custom']).default('today'), startDate:z.string().optional(), endDate:z.string().optional(), dataset:z.string().max(200).default('net'), paymentMethod:z.string().max(100).optional(), channelId:z.string().max(100).optional(), page:z.coerce.number().int().min(1).max(100000).default(1) })
 export type RevenueQueryFilter = z.infer<typeof filterSchema>

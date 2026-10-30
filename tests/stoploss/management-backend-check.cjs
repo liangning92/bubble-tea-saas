@@ -20,6 +20,10 @@ async function main(){
  declareAccessRoutes('/api/upload',built('routes/upload').uploadRouter);
  declareAccessRoutes('/api/announcement',built('routes/announcement').default);
  declareAccessRoutes('/api/training/library',built('routes/trainingLibrary').trainingLibraryRouter);
+ // This suite tests native handler/receipt transport independently of the
+ // production tool review policy, which has its own default-closed tests.
+ const reviewed=built('services/ManagementAgentPolicy').agentOperations,inputContracts=built('services/ManagementAgentPolicy').agentInputContracts;
+ for(let offset=0;;offset+=40){const page=api.backendCatalog('',offset,40);for(const op of page.operations){reviewed.set(op.operationId,op.permission);inputContracts.set(op.operationId,()=>null)}if(page.nextOffset===null)break}
  const tenant=await db.tenant.create({data:{name:'Whole backend isolated test'}});
  for(const id of [storeId,other])await db.store.create({data:{id,tenantId:tenant.id,name:id}});
  for(const [role,phone]of[['admin','08919101001'],['staff','08919101002']]){
@@ -125,6 +129,7 @@ async function main(){
   router.stack[1].route.accessSpecs={get:{permission:'products.read',ownerOnly:false,export:false,personal:false,routeKey:'GET /api/isolated-backend-fixture/file'}};
   for(const layer of router.stack.slice(2)){const method=layer.route.methods.get?'get':'post';layer.route.accessSpecs={[method]:{permission:'products.'+(method==='get'?'read':'write'),ownerOnly:false,export:false,personal:false,routeKey:method.toUpperCase()+' /api/isolated-backend-fixture'+layer.route.path}}}
   api.registerManagementRouter('/api/isolated-backend-fixture',router);
+  for(const op of ['POST /api/isolated-backend-fixture/slow','GET /api/isolated-backend-fixture/file','GET /api/isolated-backend-fixture/query','POST /api/isolated-backend-fixture/upload']){reviewed.set(op,'products.read');inputContracts.set(op,()=>null)}
   const scope={compartmentKey:'late-scope',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId};
   const args={action:'execute',operationId:'POST /api/isolated-backend-fixture/slow',contractVersion:api.backendVersion(),body:{}};
   const reservation=await tools.reserveBackendOperation(db,storeId,scope,'late-source','late-execution','late-call',args);
@@ -288,7 +293,7 @@ async function main(){
    assert.equal(finalMessage.agent.executionId,child.id);assert.equal(finalMessage.agent.replyToSeq,undefined);assert(!finalMessage.text.includes('PARENT_PRIVATE_FINANCE_SENTINEL'));
    const slow=await create('Bounded request'),slowSource=await teamCommunication(db).send(owner,slow.id,{requestId:randomUUID(),text:'Read only request that stalls'});
    const slowKey=nativeJobKey(nativeJobId(storeId,slow.id,slowSource.id));await engine.runBatch(10);let stalled=await readTeam(db,storeId,slowKey);assert.equal(stalled.state,'running');
-   stalled.startedAt=new Date(Date.now()-11*60000).toISOString();await writeTeam(db,storeId,slowKey,stalled);
+   stalled.createdAt=stalled.startedAt=new Date(Date.now()-11*60000).toISOString();await writeTeam(db,storeId,slowKey,stalled);
    runStatus='running';statusUnavailable=true;draining=true;await engine.runBatch(10);assert.equal((await readTeam(db,storeId,slowKey)).state,'running');assert(cancelled>0);
    statusUnavailable=false;runStatus='cancelled';await engine.runBatch(10);assert.equal((await readTeam(db,storeId,slowKey)).state,'running');
    draining=false;await engine.runBatch(10);stalled=await readTeam(db,storeId,slowKey);assert.equal(stalled.state,'unknown');assert.equal(stalled.fault,'NATIVE_RUN_DEADLINE');assert(stalled.outputMessageId);
@@ -298,10 +303,10 @@ async function main(){
    runStatus='completed';statusUnavailable=false;
    const transient=await create('Transient poll fault'),transientSource=await teamCommunication(db).send(owner,transient.id,{requestId:randomUUID(),text:'Read only transient transport test'});
    const transientKey=nativeJobKey(nativeJobId(storeId,transient.id,transientSource.id));await engine.runBatch(10);
-   let transientJob=await readTeam(db,storeId,transientKey);transientJob.createdAt=new Date(Date.now()-90000).toISOString();await writeTeam(db,storeId,transientKey,transientJob);
+   let transientJob=await readTeam(db,storeId,transientKey);transientJob.budgetMs=600000;transientJob.createdAt=new Date(Date.now()-90000).toISOString();await writeTeam(db,storeId,transientKey,transientJob);
    const beforeTransient=submitted;statusUnavailable=true;await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
    assert.equal(transientJob.state,'running');assert.equal(transientJob.pollFaultCount,1);assert(!transientJob.statusMessageId);assert(transientJob.firstPollFaultAt);
-   let projected=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+transient.id),[transientSource]);assert.equal(projected.get(transientSource.id).state,'processing');assert.equal(projected.get(transientSource.id).failureReason,undefined);
+   let projected=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+transient.id),[transientSource]);assert.equal(projected.get(transientSource.id).state,'processing');assert.equal(projected.get(transientSource.id).failureReason,'delayed');
    // A successful status clears the fault window even while the model is running.
    statusUnavailable=false;runStatus='running';delete transientJob.nextAttemptAt;await writeTeam(db,storeId,transientKey,transientJob);await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
    assert(!transientJob.firstPollFaultAt);assert(!transientJob.pollFaultCount);assert(!transientJob.lastPollFault);
@@ -313,7 +318,7 @@ async function main(){
    assert.equal(transientJob.state,'completed');assert(!transientJob.firstPollFaultAt);assert(!transientJob.pollFaultCount);assert.equal(submitted,beforeTransient);
    const long=await create('Healthy transport long request'),longSource=await teamCommunication(db).send(owner,long.id,{requestId:randomUUID(),text:'Read one existing daily total only.'});
    const longKey=nativeJobKey(nativeJobId(storeId,long.id,longSource.id));let longJob=await readTeam(db,storeId,longKey);
-   longJob.createdAt=new Date(Date.now()-130000).toISOString();await writeTeam(db,storeId,longKey,longJob);
+   longJob.budgetMs=600000;longJob.createdAt=new Date(Date.now()-130000).toISOString();await writeTeam(db,storeId,longKey,longJob);
    const handling=async()=>built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+long.id),[longSource]);
    let longHandling=await handling();assert.equal(longHandling.get(longSource.id).state,'queued');assert.equal(longHandling.get(longSource.id).failureReason,'delayed');
    await engine.runBatch(10);longJob=await readTeam(db,storeId,longKey);assert.equal(longJob.state,'running');assert(!longJob.lastPollFault);assert(!longJob.statusMessageId);

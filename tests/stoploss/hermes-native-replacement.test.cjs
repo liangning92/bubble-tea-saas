@@ -17,7 +17,8 @@ test('the old Agent loop and capture gateway are removed, with one native produc
  for(const name of ['host_stdio','private_gateway','runtime_capture','serve_gateway'])assert(!fs.existsSync(path.join(root,'scripts/hermes_employee',name+'.py')),name);
  const configured=fs.readFileSync(path.join(bridge,'employeeConfigured.ts'),'utf8');assert(configured.includes('createNativeStoreAgent'));assert(!configured.includes('createEmployeeDeployment'));
  const native=fs.readFileSync(path.join(root,'scripts/hermes_employee/native_api_service.py'),'utf8');
- for(const marker of ['APIServerAdapter','get_all_toolsets()','fallback_model=None',"registry.register(name='store_backend'"])assert(native.includes(marker),marker);
+ for(const marker of ['APIServerAdapter','fallback_model=None',"registry.register(name='store_backend'"])assert(native.includes(marker),marker);
+ assert(native.includes("toolsets=['store_backend']"));assert(!native.includes('get_all_toolsets'));
  for(const marker of ['capture_send','memory_enabled=False','max_iterations=20','employee_manage_'])assert(!native.includes(marker),marker);
 });
 test('extra per-module permissions are not evaluated by the native backend bridge',()=>{

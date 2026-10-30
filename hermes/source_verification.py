@@ -85,7 +85,10 @@ def verify_source_tree(source, *, expected_commit=None):
     expected_commit = expected_commit or PINNED_HERMES
     git_env = {"PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": os.devnull,
                "GIT_TERMINAL_PROMPT": "0", "GIT_OPTIONAL_LOCKS": "0", "GIT_NO_REPLACE_OBJECTS": "1"}
-    git_argv = ["/usr/bin/git", "--no-replace-objects", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "-c", "core.attributesFile=" + os.devnull, "-C", str(source)]
+    # Installed sources can be root-owned while the runtime is unprivileged.
+    # Trust this exact validated path for this process only; byte/object checks
+    # below remain mandatory, and hooks/filters never execute.
+    git_argv = ["/usr/bin/git", "--no-replace-objects", "-c", "safe.directory=" + str(source), "-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.devnull, "-c", "core.attributesFile=" + os.devnull, "-C", str(source)]
     def git(*args):
         try:
             return subprocess.check_output([*git_argv, *args], stderr=subprocess.DEVNULL, env=git_env)

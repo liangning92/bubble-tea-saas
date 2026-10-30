@@ -1,3 +1,4 @@
+import {canReadStoreRevenue,ownFinancialRecords} from '../services/StoreRevenueAccess'
 import { Router, Request, Response } from 'express'
 // @ts-ignore - existing multer dependency has no type package
 import multer from 'multer'
@@ -33,7 +34,7 @@ router.post('/evidence', (req: AuthRequest, res: Response) => {
 })
 router.get('/evidence/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const record = await getPaymentEvidence(req.params.id, req.user!.storeId)
+    const record = await getPaymentEvidence(req.params.id, req.user!.storeId,canReadStoreRevenue(req.user!)?undefined:{OR:[{uploadedBy:req.user!.id},{order:{storeId:req.user!.storeId,...ownFinancialRecords(req.user!)}}]})
     if (!record) return res.status(404).json({ code: 404, message: 'Not found' })
     res.setHeader('Content-Type', record.mimeType)
     res.setHeader('X-Content-Type-Options', 'nosniff')
@@ -45,7 +46,7 @@ router.get('/evidence/:id', async (req: AuthRequest, res: Response) => {
 router.get('/order/:orderId/evidence', async (req: AuthRequest, res: Response) => {
   try {
     const data = await prisma.paymentEvidence.findFirst({
-      where: { orderId: req.params.orderId, storeId: req.user!.storeId }, select: evidenceMetadata
+      where: { orderId: req.params.orderId, storeId: req.user!.storeId,...(canReadStoreRevenue(req.user!)?{}:{order:{storeId:req.user!.storeId,...ownFinancialRecords(req.user!)}}) }, select: evidenceMetadata
     })
     if (!data) return res.status(404).json({ code: 404, message: 'Not found' })
     res.setHeader('Cache-Control', 'private, no-store')
@@ -65,6 +66,7 @@ router.post('/qris/create', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Access denied: Store mismatch' })
     }
 
+    if(!canReadStoreRevenue(authReq.user)&&!await prisma.order.findFirst({where:{id:orderId,storeId,...ownFinancialRecords(authReq.user)},select:{id:true}}))return res.status(403).json({error:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'})
     const result = await createQrisPayment(storeId, orderId, amount)
 
     if (!result.success) {
@@ -122,6 +124,10 @@ router.post('/qris/webhook', async (req: Request, res: Response) => {
 router.get('/qris/status/:externalId', async (req: AuthRequest, res: Response) => {
   try {
     const { externalId } = req.params
+    if(!canReadStoreRevenue(req.user!)){
+      const payment=await prisma.qrisPayment.findFirst({where:{externalId,storeId:req.user!.storeId},select:{orderId:true}})
+      if(!payment?.orderId||!await prisma.order.findFirst({where:{id:payment.orderId,storeId:req.user!.storeId,...ownFinancialRecords(req.user!)},select:{id:true}}))return res.status(403).json({error:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'})
+    }
     const status = await getQrisPaymentStatus(externalId)
     if (status.storeId && (!req.user || !canAccessStore(req.user, status.storeId))) {
       return res.status(403).json({ error: 'Access denied: Store mismatch' })

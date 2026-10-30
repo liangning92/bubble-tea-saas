@@ -1,3 +1,5 @@
+import {ACCESS_ROUTE_MANIFEST} from './StaffPermissionRouteManifest'
+import {agentOperationAccess,agentOperationInput} from './ManagementAgentPolicy'
 import { nativeMultipart, nativeFileInput, storeNativeDownload } from './NativeBackendFiles'
 import type { z } from 'zod'
 import express from 'express'
@@ -48,7 +50,13 @@ const view = (op: Operation, detailed=false) => ({ operationId:op.id,method:op.m
 /** Account-level preflight uses the same native route declarations and access
  * helpers as HTTP. Resource/body/publication checks still run in native handlers. */
 export function backendAccountAccess(actor:any,id:string){
- const op=operations.get(id);if(!op)return {allowed:false,code:'BACKEND_OPERATION_NOT_FOUND'}
+ const registered=operations.get(id),declaration=registered?.declaration||ACCESS_ROUTE_MANIFEST[id]
+ if(!declaration)return {allowed:false,code:'BACKEND_OPERATION_NOT_FOUND'}
+ // The independent worker uses the same server-owned permission declarations
+ // without mounting an HTTP app or opening a second listener.
+ const op=registered||{id,method:id.split(' ')[0],declaration}
+ const agentBlocked=agentOperationAccess(id)
+ if(actor.nativeAgent&&agentBlocked)return {allowed:false,code:agentBlocked,requiredPermission:op.declaration.permission}
  const spec=op.declaration as any
  const access=actor.employeeApp?employeeAppAccess(actor.role):actor.accessRole
  const user={...actor,role:actor.employeeApp?'staff':actor.role,accessRole:access}
@@ -73,7 +81,7 @@ export function backendAccountSummary(actor:any){
 }
 export function backendCatalog(query = '', offset = 0, limit = 25, actor?:any) {
   const terms=query.toLowerCase().split(/[\s/]+/).filter(Boolean)
-  const list = [...operations.values()].filter(op=>terms.every(term=>(op.id+' '+(op.declaration.permission||'')+' '+(op.requestContract.query?.description||'')).toLowerCase().includes(term))).sort((a,b)=>a.id.localeCompare(b.id))
+  const list = [...operations.values()].filter(op=>!actor?.nativeAgent||!agentOperationAccess(op.id)).filter(op=>terms.every(term=>(op.id+' '+(op.declaration.permission||'')+' '+(op.requestContract.query?.description||'')).toLowerCase().includes(term))).sort((a,b)=>a.id.localeCompare(b.id))
   return {contractVersion:backendVersion(),total:list.length,offset,operations:list.slice(offset,offset+limit).map(op=>({...view(op),...(actor?{accountAccess:backendAccountAccess(actor,op.id)}:{})})),nextOffset:offset+limit<list.length?offset+limit:null}
 }
 export function backendDescription(id: string, actor?:any) {
@@ -110,6 +118,10 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
   const op = operations.get(input.operationId)
   if (!op) return {ok:false,code:'BACKEND_OPERATION_NOT_FOUND',contractVersion:backendVersion()}
   if (input.contractVersion !== backendVersion()) return {ok:false,code:'BACKEND_CONTRACT_CHANGED',contractVersion:backendVersion(),executed:false}
+  const access=backendAccountAccess(actor,op.id)
+  if(!access.allowed)return {ok:false,...access,executed:false}
+  const scopeBlocked=(actor as any).nativeAgent?agentOperationInput(op.id,input):null
+  if(scopeBlocked)return {ok:false,code:scopeBlocked,executed:false}
   const blocked=boundary(op)
   if (blocked) return {ok:false,code:blocked,executed:false}
   const inputBlocked=backendInputBoundary({...op,permission:op.declaration.permission},input)

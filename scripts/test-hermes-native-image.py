@@ -27,8 +27,11 @@ try:
         extra=['--build-context','nativebase=oci-layout://'+str(layout)]
     else:
         env={**os.environ,'GIT_CONFIG_NOSYSTEM':'1','GIT_CONFIG_GLOBAL':os.devnull,'GIT_TERMINAL_PROMPT':'0'}
-        command('git','clone','--no-local','--no-checkout',args.source,str(context/'hermes-source'),env=env,stdout=subprocess.DEVNULL)
-        command('git','-C',str(context/'hermes-source'),'remote','remove','origin',env=env)
+        # The verifier needs the pinned commit and its complete tree, not all
+        # upstream history. Keep exact bytes while avoiding gigabytes of unused
+        # Git objects in both Docker source layers.
+        command('git','init','--quiet',str(context/'hermes-source'),env=env)
+        command('git','-C',str(context/'hermes-source'),'fetch','--depth=1',args.source,PIN,env=env,stdout=subprocess.DEVNULL)
         command('git','-C',str(context/'hermes-source'),'checkout','--detach',PIN,env=env,stdout=subprocess.DEVNULL)
     for relative in ('hermes/source_verification.py','scripts/hermes_employee/native_api_service.py','hermes/store-operations/SKILL.md'):
         dest=context/'adapter'/relative;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/relative,dest)

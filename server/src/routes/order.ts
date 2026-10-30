@@ -1,3 +1,4 @@
+import {canReadStoreRevenue,ownFinancialRecords,productionOrder} from '../services/StoreRevenueAccess'
 import { verifyOfflineSale } from '../services/POSOfflineOperationService'
 import {blocksSelfApproval} from '../utils/refundApprovalAccess'
 import { retainReceivedReceipt, listUnpostedReceipts, markReceivedReceiptFailure, postReceivedReceipt, discardReceivedReceipt } from '../services/ReceivedReceiptService'
@@ -17,7 +18,7 @@ import prisma from '../config/database'
 
 const router = Router()
 
-function checkOrderAccess(req: AuthRequest, res: Response, order: { storeId: string } | null) {
+function checkOrderAccess(req: AuthRequest, res: Response, order: { storeId: string; staffId?:string } | null,financial=true) {
   if (!order) {
     res.status(404).json({ code: 404, message: 'Order not found' })
     return false
@@ -26,6 +27,7 @@ function checkOrderAccess(req: AuthRequest, res: Response, order: { storeId: str
     res.status(403).json({ code: 403, message: 'Access denied: Store mismatch' })
     return false
   }
+  if(financial&&!canReadStoreRevenue(req.user!)&&order.staffId!==req.user!.staffId){res.status(403).json({code:403,message:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'});return false}
   return true
 }
 
@@ -104,6 +106,7 @@ const listOrders = async (req: AuthRequest, res: Response) => {
       storeId: (storeId || req.user!.storeId) as string,
       userId: req.user!.id,
       userRole: req.user!.role,
+      financialScope:ownFinancialRecords(req.user!),
       status: status as string,
       paymentMethod: paymentMethod as string,
       channelId: channelId as string,
@@ -140,7 +143,7 @@ router.get('/refund-requests', authenticate, authorize('admin', 'manager'), asyn
     const { status } = req.query
     const storeId = getStoreId(req)
 
-    const where: any = { order: { storeId } }
+    const where: any = { order: { storeId,...ownFinancialRecords(req.user!) } }
     if (status && status !== 'all') where.status = status
 
     const requests = await prisma.refundRequest.findMany({
@@ -371,7 +374,7 @@ router.post('/refund-request', authenticate, async (req: AuthRequest, res) => {
 
 // Preparation-only endpoint for production staff; financial state changes remain forbidden.
 router.put('/kds/:id/status', authenticate, authorize('admin','manager','staff'), async(req:AuthRequest,res)=>{
- try{const order=await prisma.order.findUnique({where:{id:req.params.id}});if(!checkOrderAccess(req,res,order))return;allowedPreviousOrderStatuses(req.body.status);const updated=await OrderService.updateOrderStatus(req.params.id,req.body.status);res.json({code:200,data:publicOrder(updated)})}catch(e:any){res.status(409).json({code:409,message:e.message})}
+ try{const order=await prisma.order.findUnique({where:{id:req.params.id}});if(!checkOrderAccess(req,res,order,false))return;allowedPreviousOrderStatuses(req.body.status);const updated=await OrderService.updateOrderStatus(req.params.id,req.body.status);res.json({code:200,data:canReadStoreRevenue(req.user!)?publicOrder(updated):productionOrder(updated)})}catch(e:any){res.status(409).json({code:409,message:e.message})}
 })
 
 // PUT /api/orders/:id/status
@@ -569,6 +572,7 @@ router.post('/refund-requests/:id/reject', authenticate, authorize('admin', 'man
 router.get('/kds/list', authenticate, authorize('admin', 'manager', 'staff'), async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
+    if(!canReadStoreRevenue(req.user!)&&req.query.status&&!['pending','preparing','ready'].includes(String(req.query.status)))return res.status(403).json({code:403,message:'STAFF_ACCESS_PERSONAL_SCOPE_DENIED'})
     const orders = await OrderService.getKDSOrders(storeId, {
       status: req.query.status as string,
       limit: parseInt(req.query.limit as string) || 50
@@ -576,7 +580,7 @@ router.get('/kds/list', authenticate, authorize('admin', 'manager', 'staff'), as
 
     res.json({
       code: 200,
-      data: { list: orders.map(publicOrder) },
+      data: { list: orders.map(order=>canReadStoreRevenue(req.user!)?publicOrder(order):productionOrder(order)) },
       timestamp: new Date().toISOString()
     })
   } catch (error) {

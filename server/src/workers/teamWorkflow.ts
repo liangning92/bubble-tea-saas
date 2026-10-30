@@ -12,6 +12,13 @@ export async function runTeamWorkflowWorker(workflow = teamWorkflow(), db: any =
   if(employeeHermes&&process.env.EMPLOYEE_HERMES_STORE_ID!==storeId)throw Error('EMPLOYEE_WORKER_STORE_MISMATCH')
   const stop = () => controller.abort()
   process.once('SIGTERM', stop); process.once('SIGINT', stop)
+  // Fast reports have an independent loop; a slow native model or workflow
+  // cannot occupy their sole worker. Both lanes retain durable per-job leases.
+  const fastReports=async()=>{while(!controller.signal.aborted){
+    if(employeeHermes)try{await employeeHermes.runBatch(10,'business')}catch{console.error('BUSINESS_TOPIC_BATCH_FAILED')}
+    if(!controller.signal.aborted)await new Promise<void>(resolve=>{const done=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',done);resolve()},timer=setTimeout(done,intervalMs);controller.signal.addEventListener('abort',done,{once:true})})
+  }}
+  const fastLoop=employeeHermes?fastReports():Promise.resolve()
   try {
     while (!controller.signal.aborted) {
       try { await workflow.runBatch(storeId) }
@@ -19,7 +26,7 @@ export async function runTeamWorkflowWorker(workflow = teamWorkflow(), db: any =
         console.error('TEAM_WORKFLOW_BATCH_FAILED')
         await writeTeam(db, storeId, 'workflow.worker', { checkedAt: new Date().toISOString(), error: 'TEAM_WORKFLOW_BATCH_FAILED' }).catch(() => {})
       } // No employee text, credentials or provider responses.
-      if(employeeHermes)try{await employeeHermes.runBatch(10)}catch{
+      if(employeeHermes)try{await employeeHermes.runBatch(10,'native')}catch{
         await writeTeam(db,storeId,'employeeRuntime.worker',{checkedAt:new Date().toISOString(),error:'EMPLOYEE_RUNTIME_BATCH_FAILED'}).catch(()=>{})
       }
       if (!controller.signal.aborted) await new Promise<void>(resolve => {
@@ -28,6 +35,7 @@ export async function runTeamWorkflowWorker(workflow = teamWorkflow(), db: any =
       })
     }
   } finally {
+    controller.abort();await fastLoop
     process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop)
     const last = await readTeam(db, storeId, 'workflow.worker').catch(() => null)
     await writeTeam(db, storeId, 'workflow.worker', { ...last, running: false, stoppedAt: new Date().toISOString() }).catch(() => {})

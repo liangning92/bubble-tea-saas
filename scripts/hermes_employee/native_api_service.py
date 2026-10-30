@@ -27,7 +27,14 @@ def native_provider_config(value, model):
     """
     if not isinstance(value, dict) or not isinstance(value.get('model', {}), dict):
         raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
-    return {**value, 'model': {**value.get('model', {}), 'reasoning_echo': model in ('MiniMax-M3.1-Flash', 'MiniMax-M3')}}
+    tools=value.get('tools', {})
+    if not isinstance(tools,dict):raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
+    search=tools.get('tool_search', {})
+    search=search if isinstance(search,dict) else {}
+    # The pinned SDK supports eager loading. One mediated business tool must not
+    # be deferred behind search/describe/call wrappers (extra provider rounds).
+    return {**value, 'model': {**value.get('model', {}), 'reasoning_echo': model in ('MiniMax-M3.1-Flash', 'MiniMax-M3')},
+            'tools':{**tools,'tool_search':{**search,'enabled':'off'}}}
 
 
 def native_provider_options(model, reasoning_config=None, request_overrides=None):
@@ -97,7 +104,7 @@ def main():
     workspace=home/'workspace';workspace.mkdir(mode=0o700,exist_ok=True)
     # No owner/default Hermes configuration or credential discovery enters this service.
     os.environ.clear()
-    os.environ.update(HOME=str(home),HERMES_HOME=str(home),PATH=config['path'],PYTHONDONTWRITEBYTECODE='1',NO_PROXY='127.0.0.1,localhost,host.docker.internal',TERMINAL_ENV='local',TERMINAL_CWD=str(workspace),XDG_CACHE_HOME=str(home/'.cache'),AGENT_BROWSER_EXECUTABLE_PATH='/usr/bin/chromium')
+    os.environ.update(HOME=str(home),USER='hermes',LOGNAME='hermes',HERMES_HOME=str(home),PATH=config['path'],PYTHONDONTWRITEBYTECODE='1',NO_PROXY='127.0.0.1,localhost,host.docker.internal',TERMINAL_ENV='local',TERMINAL_CWD=str(workspace),XDG_CACHE_HOME=str(home/'.cache'),AGENT_BROWSER_EXECUTABLE_PATH='/usr/bin/chromium')
     (home/'tmp').mkdir(exist_ok=True);os.environ['TMPDIR']=str(home/'tmp')
     if not (home/'config.yaml').exists():(home/'config.yaml').write_text('model:\n  supports_vision: true\n')
     skill=Path(config['repository'])/'hermes'/'store-operations'/'SKILL.md'
@@ -114,7 +121,6 @@ def main():
     from gateway.platforms.api_server import APIServerAdapter
     from tools.registry import registry
     from tools import approval_context
-    from toolsets import get_all_toolsets
     from run_agent import AIAgent
 
     context={};context_lock=threading.RLock()
@@ -146,17 +152,17 @@ def main():
         return json.dumps(materialize_images(result,workspace),ensure_ascii=False)
 
     registry.register(name='store_backend',toolset='store_backend',schema={
-        'name':'store_backend','description':'Use the actual store backend: catalog, describe, execute or status. file_read downloads an authorized backend file into your isolated workspace; file_write uploads a generated workspace file as a private team attachment, not a public post. Native account permissions and validators apply. For work in another employee conversation, use handoff(targetChannelId, operationId, guideId or targetSourceSeq), then handoff_status(jobId). This starts an isolated native worker using only approved public guidance from GET /api/team/agent-work-guides or an already target-visible message, plus the registered operation ID. It does NOT transfer the private human instruction; it never transfers parent history, private memory or attachments. Do not send parent-generated private prose into another audience. Read the live operation contract before executing; use stored receipts after uncertain results. Never invent operation IDs, business results or completion.',
-        'parameters':{'type':'object','properties':{'action':{'type':'string','enum':['catalog','describe','execute','status','file_read','file_write','handoff','handoff_status']},'targetChannelId':{'type':'string'},'guideId':{'type':'string'},'targetSourceSeq':{'type':'integer'},'jobId':{'type':'string'},'fileId':{'type':'string'},'localPath':{'type':'string'},'mimeType':{'type':'string'},'search':{'type':'string'},'offset':{'type':'integer'},'limit':{'type':'integer'},'operationId':{'type':'string'},'contractVersion':{'type':'string'},'pathParams':{'type':'object'},'query':{'type':'object'},'body':{'anyOf':[{'type':'object'},{'type':'array','items':{}}]},'files':{'type':'array','items':{'type':'object'}},'receiptId':{'type':'string'}},'required':['action'],'additionalProperties':False}},handler=backend)
+        'name':'store_backend','description':'Discover, describe and execute reviewed store operations under the current requesting account. The server constrains operations, input scope and recipients. Unavailable operations do not grant access through alternative endpoints. File read/write, arbitrary HTTP, SQL and terminal execution are unavailable. Use stored receipts to reconcile uncertain outcomes; never repeat an uncertain mutation. Reviewed handoffs use approved public guidance and do not transfer private history, memory or attachments. Never invent business results or completion.',
+        'parameters':{'type':'object','properties':{'action':{'type':'string','enum':['catalog','describe','execute','status','handoff','handoff_status']},'targetChannelId':{'type':'string'},'guideId':{'type':'string'},'targetSourceSeq':{'type':'integer'},'jobId':{'type':'string'},'fileId':{'type':'string'},'localPath':{'type':'string'},'mimeType':{'type':'string'},'search':{'type':'string'},'offset':{'type':'integer'},'limit':{'type':'integer'},'operationId':{'type':'string'},'contractVersion':{'type':'string'},'pathParams':{'type':'object'},'query':{'type':'object'},'body':{'anyOf':[{'type':'object'},{'type':'array','items':{}}]},'files':{'type':'array','items':{'type':'object'}},'receiptId':{'type':'string'}},'required':['action'],'additionalProperties':False}},handler=backend)
 
     class StoreAPI(APIServerAdapter):
         def _create_agent(self,**kwargs):
             with context_lock:c=dict(context)
             if not c:raise RuntimeError('NATIVE_CONTEXT_NOT_CONFIGURED')
             if kwargs.get('gateway_session_key')!=c['sessionKey']:raise RuntimeError('NATIVE_SESSION_CONTEXT_MISMATCH')
-            # The upstream catalog owns the native tools. Installed prerequisites determine
-            # availability; this adapter adds only the one native store transport tool.
-            toolsets=sorted(set(get_all_toolsets())|{'store_backend'})
+            # Business production has one mediated capability; terminal, generic
+            # HTTP, SQL, delegation and file browsing are not business authority.
+            toolsets=['store_backend']
             callbacks={k:kwargs.get(k) for k in ('stream_delta_callback','tool_progress_callback','tool_start_callback','tool_complete_callback')}
             options=native_provider_options(c['model'],kwargs.get('reasoning_config'),kwargs.get('request_overrides'))
             agent=AIAgent(model=c['model'],provider='custom',api_mode='chat_completions',base_url=private_url(c['providerBaseUrl']),api_key=c['providerCredential'],fallback_model=None,enabled_toolsets=toolsets,session_id=kwargs.get('session_id'),gateway_session_key=c['sessionKey'],session_db=self._ensure_session_db(),platform='api_server',quiet_mode=True,ephemeral_system_prompt=kwargs.get('ephemeral_system_prompt'),**options,**callbacks)

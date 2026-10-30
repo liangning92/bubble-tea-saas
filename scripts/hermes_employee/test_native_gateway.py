@@ -8,12 +8,16 @@ from native_api_service import native_provider_config,native_provider_options
 
 class NativeProviderTests(unittest.TestCase):
     def test_reasoning_echo_preserves_native_configuration(self):
-        previous={'model':{'supports_vision':True},'memory':{'memory_enabled':True}}
+        previous={'model':{'supports_vision':True},'memory':{'memory_enabled':True},'tools':{'unrelated':{'setting':True},'tool_search':{'enabled':'auto','listing_max_tokens':4000}}}
         updated=native_provider_config(previous,'MiniMax-M3.1-Flash')
         self.assertTrue(updated['model']['reasoning_echo'])
         self.assertTrue(updated['model']['supports_vision'])
         self.assertEqual(updated['memory'],previous['memory'])
         self.assertNotIn('reasoning_echo',previous['model'])
+        self.assertEqual(updated['tools']['tool_search']['enabled'],'off')
+        self.assertEqual(updated['tools']['tool_search']['listing_max_tokens'],4000)
+        self.assertEqual(updated['tools']['unrelated'],previous['tools']['unrelated'])
+        self.assertEqual(previous['tools']['tool_search']['enabled'],'auto')
         self.assertFalse(native_provider_config(updated,'strict-other-model')['model']['reasoning_echo'])
     def test_flash_uses_documented_effort_and_preserves_explicit_native_choices(self):
         value=native_provider_options('MiniMax-M3.1-Flash')
