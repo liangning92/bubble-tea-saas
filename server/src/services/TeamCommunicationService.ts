@@ -481,7 +481,7 @@ export function teamCommunication(db: DB = prisma) {
       const refreshRows = member && !c.archived && after >= fromSeq ? await db.config.findMany({ where: { storeId: a.storeId,
         key: { startsWith: messagePrefix, gte: messagePrefix + pad(fromSeq), lte: messagePrefix + pad(after) },
         value: { contains: '"authorId":' + JSON.stringify(a.staffId) } }, orderBy: { key: 'desc' }, take: 100, select: { value: true } }) : []
-      const refreshSources = refreshRows.map((row: any) => JSON.parse(row.value)).filter((m: any) => m.channelId === id && m.authorId === a.staffId && !m.ai && m.seq >= fromSeq && m.seq <= after)
+      const refreshSources = refreshRows.map((row: any) => JSON.parse(row.value)).filter((m: any) => m.channelId === id && m.authorId === a.staffId && !m.ai && !m.agent && m.seq >= fromSeq && m.seq <= after)
       const handling = await projectOwnAiHandling(db, a, c, [...sourceMessages, ...refreshSources])
       const messages = sourceMessages.map(({ aiHandling: _untrusted, ...m }: any) => ({ ...m, ...(handling.has(m.id) ? { aiHandling: handling.get(m.id) } : {}) }))
       const aiHandlingUpdates = refreshSources.map((m: any) => ({ messageId: m.id, seq: m.seq, aiHandling: handling.get(m.id) || null }))
@@ -819,7 +819,7 @@ export function teamCommunication(db: DB = prisma) {
           if (v.action === 'submit' && (!v.note || !v.sourceSeq.length)) fail(400, 'TEAM_TASK_EVIDENCE_REQUIRED')
           for (const n of v.sourceSeq) {
             const message = await read(tx, a.storeId, `message.${id}.${pad(n)}`)
-            if (!message || n < fromSeq || n < task.fromSeq || message.authorId !== a.staffId) fail(400, 'TEAM_TASK_EVIDENCE_REQUIRED')
+            if (!message || n < fromSeq || n < task.fromSeq || message.authorId !== a.staffId || message.ai || message.agent) fail(400, 'TEAM_TASK_EVIDENCE_REQUIRED')
           }
         } else {
           if (task.planId && v.action === 'complete' && (!v.criteriaConfirmed || !v.note)) fail(400, 'TEAM_PLAN_CRITERIA_REQUIRED')

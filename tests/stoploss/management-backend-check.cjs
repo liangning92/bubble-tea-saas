@@ -161,6 +161,10 @@ async function main(){
   assert.equal(result.ok,true,JSON.stringify(result));assert(admitted>0);
   const message=result.data.data;assert.equal(message.agent.agentId,g.agentId);assert.equal(message.authorName,'Hermes fixture');assert.equal(message.authorId,'agent:'+g.agentId);assert.equal(message.actorStaffId,owner.staffId);
   assert.equal((await readTeam(db,storeId,'workflow.policy.'+id)).paused,false);
+  const legacy={...message,authorId:owner.staffId};await writeTeam(db,storeId,'message.'+id+'.'+String(message.seq).padStart(12,'0'),legacy);
+  const taskId=randomUUID();await writeTeam(db,storeId,'task.'+id+'.'+taskId,{id:taskId,channelId:id,ownerId:owner.staffId,fromSeq:1,status:'accepted',version:1,events:[]});
+  await assert.rejects(built('services/TeamCommunicationService').teamCommunication(db).taskAction(owner,id,taskId,{requestId:randomUUID(),expectedVersion:1,action:'submit',note:'Cannot use an AI reply as my own evidence',sourceSeq:[legacy.seq]}),e=>e.message==='TEAM_TASK_EVIDENCE_REQUIRED');
+
   await built('services/TeamWorkflowQueue').enqueueTeamWorkflow(db,owner,{id},message,{read:()=>{throw Error('AGENT_MUST_NOT_TRIGGER_ANOTHER_AI')},write:()=>{throw Error('AGENT_MUST_NOT_TRIGGER_ANOTHER_AI')}});
   const forged=await invoke(owner,'POST /api/team/channels/:id/messages',{pathParams:{id},body:{requestId:randomUUID(),text:'forged',agent:{agentId:g.agentId}}});assert.equal(forged.ok,false);
  });
