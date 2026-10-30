@@ -86,6 +86,37 @@ jobs:
           path: ci-scope.json
           retention-days: 14
 
+  verify_hermes_native:
+    if: inputs.confirmed == true && inputs.reviewed_sha == github.sha
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select native adapter changes from exact baseline
+        id: native
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          test -n "$BASE_SHA"
+          if git diff --name-only "$BASE_SHA" "$GITHUB_SHA" | grep -Eq '^(scripts/hermes_employee/native_api_service.py|scripts/test-hermes-native-(api|image).py|ops/hermes-native/|hermes/source_verification.py)'; then
+            echo 'needed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build immutable native SDK artifact in isolated CI
+        if: steps.native.outputs.needed == 'true'
+        run: python3 scripts/with-docker-test.py -- python3 scripts/test-hermes-native-image.py --source https://github.com/NousResearch/hermes-agent.git --artifact output/hermes-native
+      - name: Verify original SDK protocol and controlled tools without paid IO
+        if: steps.native.outputs.needed == 'true'
+        run: python3 scripts/with-docker-test.py -- python3 scripts/test-hermes-native-api.py --artifact output/hermes-native
+      - name: Preserve exact native artifact and diagnostics
+        if: always() && steps.native.outputs.needed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-native-${{ github.sha }}
+          path: output/hermes-native/
+          retention-days: 3
+
   verify_full:
     needs: verify
     if: inputs.confirmed == true && inputs.reviewed_sha == github.sha && inputs.full_regression == true

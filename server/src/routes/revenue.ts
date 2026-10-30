@@ -1,4 +1,4 @@
-import { revenueQueryOptions, revenueQuery, RevenueQueryError } from '../services/RevenueQueryService'
+import { revenueQueryOptions, revenueQuery, RevenueQueryError,canReadRevenueRefunds } from '../services/RevenueQueryService'
 import { loadStoreDateSettings } from '../utils/storeDateSettings'
 import prisma from '../config/database'
 import { getHandoverReceipts } from '../services/ShiftManualReceipts'
@@ -8,7 +8,7 @@ import * as RevenueService from '../services/RevenueService'
 import { RevenueDateError, revenuePeriodRange, revenueDailyRange, revenueComparisonRange } from '../utils/revenueDateRange'
 
 const router = Router()
-const canQueryRefunds = (req: AuthRequest) => req.user!.role === 'admin' || !req.user!.accessRole || req.user!.accessRole.permissions.some(p => ['orders.refund','orders.refund.approve'].includes(p))
+const canQueryRefunds = (req: AuthRequest) => canReadRevenueRefunds(req.user!)
 const queryHandler = (endpoint:'query-options'|'query') => async (req:AuthRequest,res:import('express').Response,next:import('express').NextFunction) => {
  try {
   if (!req.user!.storeId) return res.status(400).json({code:400,message:'STORE_REQUIRED'})

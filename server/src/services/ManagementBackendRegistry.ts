@@ -1,3 +1,4 @@
+import {ACCESS_ROUTE_MANIFEST} from './StaffPermissionRouteManifest'
 import {agentOperationAccess} from './ManagementAgentPolicy'
 import { nativeMultipart, nativeFileInput, storeNativeDownload } from './NativeBackendFiles'
 import type { z } from 'zod'
@@ -49,7 +50,11 @@ const view = (op: Operation, detailed=false) => ({ operationId:op.id,method:op.m
 /** Account-level preflight uses the same native route declarations and access
  * helpers as HTTP. Resource/body/publication checks still run in native handlers. */
 export function backendAccountAccess(actor:any,id:string){
- const op=operations.get(id);if(!op)return {allowed:false,code:'BACKEND_OPERATION_NOT_FOUND'}
+ const registered=operations.get(id),declaration=registered?.declaration||ACCESS_ROUTE_MANIFEST[id]
+ if(!declaration)return {allowed:false,code:'BACKEND_OPERATION_NOT_FOUND'}
+ // The independent worker uses the same server-owned permission declarations
+ // without mounting an HTTP app or opening a second listener.
+ const op=registered||{id,method:id.split(' ')[0],declaration}
  const agentBlocked=agentOperationAccess(id)
  if(actor.nativeAgent&&agentBlocked)return {allowed:false,code:agentBlocked,requiredPermission:op.declaration.permission}
  const spec=op.declaration as any

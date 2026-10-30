@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Native upstream API/SDK acceptance against a synthetic provider, no paid IO."""
-import argparse,base64,hashlib,importlib.util,json,os,pathlib,shutil,socket,subprocess,tempfile,threading,time
+import argparse,base64,hashlib,importlib.util,json,os,pathlib,shutil,socket,subprocess,tempfile,threading,time,sys
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib import request,error
 ROOT=pathlib.Path(__file__).resolve().parents[1]
@@ -49,7 +49,7 @@ def call(path,body=None):
  with request.urlopen(req,timeout=120) as response:return json.load(response)
 try:
  log=open(artifact/'native-api-test.log','wb')
- child=subprocess.Popen(['docker','run','--rm','--name',name,'--label',os.environ['BT_TEST_LABEL'],'--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--shm-size=256m','-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes','-i',image],stdin=subprocess.PIPE,stdout=log,stderr=log)
+ child=subprocess.Popen(['docker','run','--rm','--name',name,'--label',os.environ['BT_TEST_LABEL'],'--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--shm-size=256m',*(['--add-host','host.docker.internal:host-gateway'] if sys.platform=='linux' else []),'-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes','-i',image],stdin=subprocess.PIPE,stdout=log,stderr=log)
  config={'profileRoot':'/home/hermes','profileKey':profile,'port':8643,'listenHost':'0.0.0.0','apiKey':key,'repository':'/opt/store-adapter','hermesSource':'/opt/hermes','hermesExpectedSha':metadata['hermesSha'],'path':'/opt/venv/bin:/usr/local/bin:/usr/bin:/bin'}
  child.stdin.write(json.dumps(config).encode()+b'\n');child.stdin.close();log.close()
  for _ in range(180):
@@ -75,6 +75,7 @@ try:
  replayed=[m for c in main_requests for m in c.get('messages',[]) if m.get('role')=='assistant' and m.get('tool_calls')]
  wire={'mainRequests':len(main_requests),'efforts':sorted({str(c.get('reasoning_effort')) for c in main_requests}),'replayedToolTurns':len(replayed),'missingOrChangedReasoning':sum(m.get('reasoning_content')!='SYNTHETIC_REASONING_'+m['tool_calls'][0]['id'] for m in replayed)}
  (artifact/'native-wire-verification.json').write_text(json.dumps(wire,indent=2))
+ assert all(t.get('function',{}).get('name')=='store_backend' for c in main_requests for t in c.get('tools',[])), 'NATIVE_UNREVIEWED_TOOL_EXPOSED'
  assert main_requests and all(c.get('reasoning_effort')=='low' for c in main_requests),'MINIMAX_EFFORT_NOT_SENT'
  assert replayed,'NO_NATIVE_TOOL_REPLAY'
  assert all(m.get('reasoning_content')=='SYNTHETIC_REASONING_'+m['tool_calls'][0]['id'] for m in replayed),'MINIMAX_REASONING_CHAIN_STRIPPED'

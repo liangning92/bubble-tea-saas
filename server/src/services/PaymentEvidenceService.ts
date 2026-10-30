@@ -28,8 +28,8 @@ export async function savePaymentEvidence(storeId: string, actorId: string, amou
   return record
 }
 
-export async function getPaymentEvidence(id: string, storeId: string) {
+export async function getPaymentEvidence(id: string, storeId: string,scope:Record<string,unknown>={}) {
   // Deliberately no global-admin bypass for customer financial photographs.
   if (!storeId) return null
-  return prisma.paymentEvidence.findFirst({ where: { id, storeId } })
+  return prisma.paymentEvidence.findFirst({ where: { ...scope,id, storeId } })
 }

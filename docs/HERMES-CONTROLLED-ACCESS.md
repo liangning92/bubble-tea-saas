@@ -4,7 +4,7 @@
 
 ## 后台身份与业务权限
 
-- 使用数据库当前有效账号和现行权限，不信任角色显示名、用户文本和模型参数。Lawrence 实际系统角色 cashier，绑定 manager；正式权限版本 17：dashboard.read / finance.read / marketing.write 均 deny，orders.read / pos.cash / pos.shift / inventory.read 均 allow（只读核验）。
+- 使用数据库当前有效账号和现行权限，不信任角色显示名、用户文本和模型参数。用户已明确：Lawrence 只处理本人订单，跨人退款和补打交给有权管理员。Lawrence 实际系统角色 cashier，绑定 manager；正式权限版本 17：dashboard.read / finance.read / marketing.write 均 deny，orders.read / pos.cash / pos.shift / inventory.read 均 allow（只读核验）。
 - 全店营收沿用真实营收页面的 dashboard.read；订单和现金权限不授予全店营收。
 - 订单归属采用数据库 Order.staffId；现金事件采用 CashEvent.staffId；历史班次归属为开班员工 ShiftSession.staffId。不得把 nextStaffId 猜作开班人。
 - 当前开班、正常交易、收款证据、交班及打印仍属于收银业务；当前班次的必要金额不是全店历史查询授权。实际 Windows 安装版交接、历史订单补打及真实打印需单独验收，不能用管理员网页代替。
@@ -30,3 +30,5 @@
 发布需精确源码 CI 和产物验证。原生适配层变更还需原始 SDK 配合合成供应商的不可变镜像验证。实际账号、真实页面与 Windows 验收未完成前不宣称可用。
 
 后续清单：其他业务主题、受限一次语义路由、营销等写入工作流、历史敏感内容按权限展示、完整等价数据路径审计、真实多角色/多端验收。不能把第一批完成表述为全部方案完成。
+
+原生镜像构建和 SDK 验证在独立 GitHub CI 运行，不再在正式 Docker 主机执行大型镜像导入。活动设置请求先按 marketing.write 快速鉴权；授权账号在写入工作流开放前收到明确未开放说明，不假报业务完成。

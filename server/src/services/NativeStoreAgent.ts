@@ -31,7 +31,7 @@ const atomic=(tx:any)=>new Proxy(tx,{get(target,key){return key==='$transaction'
 const channelLease=(id:string)=>'nativeAgent.channel.'+id
 const stamp=()=>new Date().toISOString()
 const jobKey=(id:string)=>prefix+id
-const jobDeadline=(job:NativeJob)=>Date.parse(job.startedAt||job.createdAt)+(job.budgetMs||30000)
+const jobDeadline=(job:NativeJob)=>Date.parse(job.createdAt)+(job.budgetMs||30000)
 const taskId=(s:string)=>{const h=digest(s);return h.slice(0,8)+'-'+h.slice(8,12)+'-4'+h.slice(13,16)+'-8'+h.slice(17,20)+'-'+h.slice(20,32)}
 
 export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
@@ -71,10 +71,11 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
  async function admission(job:NativeJob){
   job.startedAt=job.startedAt||stamp()
   const c=await current(job)
+  if(Date.now()>=jobDeadline(job)){job.fault='NATIVE_RUN_DEADLINE';await deliver(job,'等待已超时，本次请求未开始执行，请重试。 / Waktu tunggu habis. Permintaan belum dijalankan; silakan coba lagi.');job.state='failed';await finish(job);return}
   const topic=job.businessTopic||(!job.publicObjective&&!c.source.files?.length?storeBusinessTopic(c.source.text):undefined)
   if(topic){
    job.businessTopic=topic;job.executor='business_topic';job.startedAt=job.startedAt||stamp();await save(job)
-   const result=await executeBusinessTopic(db,topic,c,()=>current(job))
+   const result=await executeBusinessTopic(db,topic,c,()=>current(job),jobDeadline(job))
    job.topicPermission=result.permission;job.topicReceipt=result.receipt
    await deliver(job,result.text);job.state=result.state;await finish(job);return
   }
