@@ -289,6 +289,7 @@ async function main(){
    statusUnavailable=false;runStatus='cancelled';await engine.runBatch(10);assert.equal((await readTeam(db,storeId,slowKey)).state,'running');
    draining=false;await engine.runBatch(10);stalled=await readTeam(db,storeId,slowKey);assert.equal(stalled.state,'unknown');assert.equal(stalled.fault,'NATIVE_RUN_DEADLINE');assert(stalled.outputMessageId);
    assert.equal((await readTeam(db,storeId,'nativeAgent.channel.'+slow.id)).jobId,null);
+   stalled.lastPollFault='HERMES_NATIVE_TIMEOUT';await writeTeam(db,storeId,slowKey,stalled);
    const status=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+slow.id),[slowSource]);assert.equal(status.get(slowSource.id).state,'failed');assert.equal(status.get(slowSource.id).failureReason,'timeout');
    runStatus='completed';statusUnavailable=false;
 
