@@ -8,10 +8,13 @@ export type BusinessTopic='today_stock_out'|'today_revenue'|'marketing_setup'|'r
 // requests do not become privileged parameters. Unknown wording stays native.
 export function storeBusinessTopic(text:string):BusinessTopic|undefined {
  const value=text.trim().replace(/[？?。！!]+$/u,'').replace(/\s+/g,' ').toLowerCase()
+ // Read-only and concise-output modifiers do not require an agent plan. Only
+ // remove these known modifiers; other instructions still hit the guards below.
+ const query=value.replace(/^只读取?/u,'').replace(/[,，]\s*不修改任何数据$/u,'').replace(/[,，]\s*简短列出原料、数量和时间$/u,'')
  // A few business topics accept ordinary phrasing; these are not separate
  // workflows per sentence. Dates/compound requests outside the reviewed scope
  // never silently become today's report.
- const quotedOrCompound=/附件|引用|文档|示例|例如|假设|然后|同时|以及|删除|取消|修改|调整|退款|成本|毛利|利润|支出|费用|不要|不是|[;；\n"“”「」]|\b(?:profit|margin|cost|expense|delete|refund)\b/i.test(value)
+ const quotedOrCompound=/附件|引用|文档|示例|例如|假设|然后|同时|以及|删除|取消|修改|调整|退款|成本|毛利|利润|支出|费用|不要|不是|[;；\n"“”「」]|\b(?:profit|margin|cost|expense|delete|refund)\b/i.test(query)
  if(!quotedOrCompound&&value.length<=160){
   const stock=/出库|领料|领用|pengambilan bahan|bahan keluar|stok keluar|stock[ -]?out/i.test(value)
   const revenue=/营收|营业额|revenue|omzet|pendapatan|订单.*(?:合计|总额|加起来)/i.test(value)
