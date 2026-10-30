@@ -1,7 +1,8 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const root=path.resolve(__dirname,'../..'),ts=require(root+'/node_modules/typescript'),exportsObject={};
 const compiled=ts.transpileModule(fs.readFileSync(root+'/server/src/services/TeamCommunicationService.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-new Function('require','exports',compiled)(name=>name==='crypto'?crypto:name==='zod'?require(root+'/server/node_modules/zod'):name.includes('config/database')?{default:{}}:{},exportsObject);
+const queue={};new Function('require','exports',ts.transpileModule(fs.readFileSync(root+'/server/src/services/NativeStoreQueue.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(name=>name==='node:crypto'?crypto:{},queue);
+new Function('require','exports',compiled)(name=>name==='crypto'?crypto:name==='./NativeStoreQueue'?queue:name==='zod'?require(root+'/server/node_modules/zod'):name.includes('config/database')?{default:{}}:{},exportsObject);
 const channel='00000000-0000-4000-8000-000000000001',a={id:'user-a',storeId:'store-a',staffId:'staff-a',role:'staff',employeeApp:true};
 function fixture(){const c={id:channel,archived:false,members:[{staffId:a.staffId,fromSeq:2},{staffId:'other',fromSeq:1}]},messages=Array.from({length:3},(_,i)=>({id:'m'+i,seq:i+2,authorId:a.staffId,channelId:channel})),records=new Map(),queries=[];
  const put=(key,value)=>records.set('team.communication.'+key,value),job=(i,patch={})=>{const m=messages[i];put(`workflow.job.${channel}.${String(m.seq).padStart(12,'0')}`,{id:m.id,channelId:channel,sourceSeq:m.seq,sourceAuthorId:a.staffId,status:'queued',updatedAt:'2026-10-20T00:00:00Z',...patch})};

@@ -45,9 +45,7 @@ const publicationRoutes = new Set([
 // from this bridge until an auditable approval is available.
 export function backendInputBoundary(op:{id:string;path:string;method:string;effect:BackendEffect;permission:string|null}, input:any):string|null {
   const write=!['GET','HEAD'].includes(op.method),body=input.body||{}
-  if(op.effect==='security')return 'ACCOUNT_OR_SYSTEM_CONFIGURATION'
   if(op.effect==='payment')return 'OWNER_APPROVAL_REQUIRED'
-  if(op.effect==='attachment')return 'AUTHORIZED_ATTACHMENT_REQUIRED'
   if(op.effect==='configuration'){
     const keys=[input.pathParams?.key,body.key,...(Array.isArray(body.configs)?body.configs.map((c:any)=>c?.key):[])].filter(k=>k!==undefined)
     if(keys.some(key=>typeof key!=='string'||isSecretConfig(key)||isInternalConfig(key)))return 'ACCOUNT_OR_SYSTEM_CONFIGURATION'
@@ -56,7 +54,6 @@ export function backendInputBoundary(op:{id:string;path:string;method:string;eff
   }
   if(!write)return null
   if(op.id==='POST /api/expenses'&&body.paymentSource&&body.paymentSource!=='unknown')return 'OWNER_APPROVAL_REQUIRED'
-  if(op.permission==='staff.write'&&['role','password','userId','permissions','accessRole','accessRoleId'].some(k=>Object.hasOwn(body,k)))return 'ACCOUNT_OR_SYSTEM_CONFIGURATION'
   if(op.id==='POST /api/staff-points/adjust'&&Number(body.points)<0)return 'OWNER_APPROVAL_REQUIRED'
   if(op.id==='POST /api/salaries/adjustments'&&body.type==='penalty')return 'OWNER_APPROVAL_REQUIRED'
   if(op.permission==='salary.write'&&(Number(body.deduction)>0||Number(body.includedAttendanceDeduction)>0||Number(body.includedLeaveDeduction)>0))return 'OWNER_APPROVAL_REQUIRED'

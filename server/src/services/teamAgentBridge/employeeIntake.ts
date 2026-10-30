@@ -1,3 +1,4 @@
+import {nativeChannelAdmission} from '../NativeStoreQueue'
 import { createHash } from 'crypto'
 import { z } from 'zod'
 import { TeamChannel, TeamError, TeamTask, readTeam } from '../TeamCommunicationService'
@@ -19,6 +20,10 @@ const readRoute = (db:any,storeId:string,channelId:string) => db.config.findUniq
  * Even an expired/disabled/malformed route cannot silently restart the old AI.
  * Call before legacy claim/model and again in its native send transaction. */
 export async function assertLegacyConsumer(db:any,storeId:string,channelId:string,_sourceSeq?:number):Promise<void> {
+  if(process.env.EMPLOYEE_HERMES_ENABLED==='1'&&process.env.EMPLOYEE_HERMES_STORE_ID===storeId){
+    const channel=await readTeam<any>(db,storeId,'channel.'+channelId)
+    if(channel&&await nativeChannelAdmission(db,storeId,channel,process.env.EMPLOYEE_HERMES_AGENT_ID||''))throw new TeamError(409,'TEAM_LEGACY_CONSUMER_REPLACED')
+  }
   if(await readRoute(db,storeId,channelId)) throw new TeamError(409,'TEAM_LEGACY_CONSUMER_REPLACED')
 }
 

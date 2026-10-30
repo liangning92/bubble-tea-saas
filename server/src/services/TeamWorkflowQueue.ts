@@ -1,3 +1,4 @@
+import {enqueueNativeStoreRequest} from './NativeStoreQueue'
 import { createHash } from 'crypto'
 import type { RoutineConsent, RoutineReplyCode } from './TeamRoutinePolicy'
 import type { ManagementConsent } from './TeamManagementContext'
@@ -49,6 +50,7 @@ export const workflowJobKey = (c: string, seq: number) => `workflow.job.${c}.${w
 /** Called under the message's channel transaction lock. No provider, timer or credentials. */
 export async function enqueueTeamWorkflow(db: any, a: TeamActor, c: TeamChannel, message: any, ports: Ports) {
   if (message.ai || message.agent) return
+  if (await enqueueNativeStoreRequest(db,a.storeId,c,message)) return
   if (await enqueueEmployeeIntake(db,a.storeId,c,message)) return
   const inherited = await inheritManagementPolicy(db, a.storeId, c)
   if (inherited.active && 'paused' in inherited && inherited.paused) {

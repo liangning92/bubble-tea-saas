@@ -1,3 +1,4 @@
+import { nativeFileInput } from '../NativeBackendFiles'
 import { bindNativeBackendPublication, NativeBackendPublication } from '../ManagementBackendIdentity'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
@@ -5,24 +6,26 @@ import { backendCatalog, backendDescription, backendOperation, invokeManagementB
 import { userAccessV2 } from '../StaffPermissionV2Service'
 import { assignedStaffAccess } from '../StaffPermissionService'
 import { hasManagementAccess } from '../../utils/managementAccess'
-import { audienceAllows, visibleBusinessData, assertToolSettings } from './employeeAccess'
+import { audienceAllows, visibleBusinessData, assertEmployeeSettings } from './employeeAccess'
 import type { BridgeGrant, CommunicationScope } from './contract'
 import { redactBackendSecrets } from '../ManagementBackendPolicy'
 import { readTeam,lockTeam } from '../TeamCommunicationService'
 
 export const backendToolProperties = {
   action:{type:'string',enum:['catalog','describe','execute','status']},
-  query:{type:'object',additionalProperties:{type:['string','number','boolean','null']}},
+  query:{type:'object',additionalProperties:true},
   search:{type:'string',maxLength:100},offset:{type:'integer',minimum:0},limit:{type:'integer',minimum:1,maximum:40},
   operationId:{type:'string',description:'Exact operationId returned by the running backend catalog. Never invent endpoints.'},
   receiptId:{type:'string',description:'Receipt issued by execute. Query status after a lost response; never resubmit an uncertain mutation.'},
   contractVersion:{type:'string',description:'Current version from catalog/describe. Re-discover after a backend upgrade before executing.'},
-  pathParams:{type:'object',additionalProperties:{type:'string'}},body:{type:'object',additionalProperties:true},
+  files:{type:'array',description:'Existing authorized account files passed through the native multipart upload; never filesystem paths or credentials',items:{type:'object',required:['field','fileId'],additionalProperties:false,properties:{field:{type:'string'},fileId:{type:'string'},channelId:{type:'string'},auditReason:{type:'string'}}}},
+  pathParams:{type:'object',additionalProperties:{type:'string'}},body:{description:'Native JSON request body; follow the live operation contract',anyOf:[{type:'object',additionalProperties:true},{type:'array',items:{}}]},
 }
-const schema=z.object({action:z.enum(['catalog','describe','execute','status']),search:z.string().max(100).optional(),offset:z.number().int().min(0).default(0),limit:z.number().int().min(1).max(40).default(25),operationId:z.string().max(250).optional(),receiptId:z.string().regex(/^[a-f0-9]{64}$/).optional(),contractVersion:z.string().regex(/^[a-f0-9]{64}$/).optional(),pathParams:z.record(z.string()).optional(),query:z.record(z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),body:z.record(z.unknown()).optional()}).strict()
+const schema=z.object({action:z.enum(['catalog','describe','execute','status']),search:z.string().max(100).optional(),offset:z.number().int().min(0).default(0),limit:z.number().int().min(1).max(40).default(25),operationId:z.string().max(250).optional(),receiptId:z.string().regex(/^[a-f0-9]{64}$/).optional(),contractVersion:z.string().regex(/^[a-f0-9]{64}$/).optional(),pathParams:z.record(z.string()).optional(),query:z.record(z.unknown()).optional(),body:z.unknown().optional(),files:z.array(nativeFileInput).optional()}).strict()
 const canonical=(v:any):any=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])):v
 const hash=(v:any)=>createHash('sha256').update(JSON.stringify(canonical(v))).digest('hex')
 const key=(id:string)=>'team.communication.employeeRuntime.backendOperation.'+id
+export type NativeBackendPrincipal=Pick<BridgeGrant,'storeId'|'agentId'|'version'|'clientRevision'|'displayName'>
 export type BackendReservation={id:string;created:boolean;argsHash:string}
 
 /** Must be called under the trace lock *before* dispatch. The unique config key
@@ -32,7 +35,7 @@ export async function reserveBackendOperation(db:any,storeId:string,scope:Commun
   const prior=await db.config.findUnique({where:{storeId_key:{storeId,key:key(id)}}})
   if(prior){const saved=JSON.parse(prior.value);if(saved.argsHash!==argsHash||saved.compartmentKey!==scope.compartmentKey||saved.requesterStaffId!==scope.requesterStaffId||saved.sourceId!==sourceId)throw Error('BACKEND_RECEIPT_IDENTITY_CHANGED');return {id,created:false,argsHash}}
   const v=args as any,operation=backendOperation(v?.operationId)
-  const intent=sourceId&&v?.action==='execute'&&operation&&!operation.httpReadMethod&&operation.effect!=='preview'?hash({storeId,sourceId,requesterStaffId:scope.requesterStaffId,operationId:v.operationId,pathParams:v.pathParams,query:v.query,body:v.body}):undefined
+  const intent=sourceId&&v?.action==='execute'&&operation&&!operation.httpReadMethod&&operation.effect!=='preview'?hash({storeId,sourceId,requesterStaffId:scope.requesterStaffId,operationId:v.operationId,pathParams:v.pathParams,query:v.query,body:v.body,files:v.files}):undefined
   const intentKey=intent?'team.communication.employeeRuntime.backendIntent.'+intent:undefined
   if(intentKey){
     await lockTeam(db,storeId,'backend-intent.'+intent)
@@ -44,7 +47,7 @@ export async function reserveBackendOperation(db:any,storeId:string,scope:Commun
   return {id,created:true,argsHash}
 }
 
-async function release(db:any,g:BridgeGrant,scope:CommunicationScope,row:any){
+async function release(db:any,g:NativeBackendPrincipal,scope:CommunicationScope,row:any){
   if(row.compartmentKey!==scope.compartmentKey||row.requesterStaffId!==scope.requesterStaffId)return {ok:false,code:'BACKEND_RECEIPT_NOT_VISIBLE'}
   if(row.state==='blocked')return {ok:false,code:row.fault||'BACKEND_OPERATION_BLOCKED',receiptId:row.id,state:'blocked',mayHaveExecuted:false,retryAllowed:false}
   if(row.state!=='complete')return {ok:false,code:'BACKEND_OUTCOME_UNKNOWN',receiptId:row.id,state:row.state,mayHaveExecuted:true,retryAllowed:false,message:'Inspect this receipt and the native business records. Do not dispatch the operation again.'}
@@ -63,7 +66,7 @@ async function release(db:any,g:BridgeGrant,scope:CommunicationScope,row:any){
 /** Actual HTTP handlers run outside the trace transaction. Their native business
  * transactions and effects remain unchanged. Completion is durable independently
  * of trace CAS/lease, so a late result cannot disappear or invite duplicate work. */
-export async function executeBackendTool(db:any,g:BridgeGrant,scope:CommunicationScope,sourceId:string|undefined,raw:unknown,reservation?:BackendReservation,authorizeDispatch?:()=>Promise<void>,publication?:NativeBackendPublication){
+export async function executeBackendTool(db:any,g:NativeBackendPrincipal,scope:CommunicationScope,sourceId:string|undefined,raw:unknown,reservation?:BackendReservation,authorizeDispatch?:()=>Promise<void>,publication?:NativeBackendPublication){
   const parsed=schema.safeParse(raw)
   if(!parsed.success)return {ok:false,code:'BACKEND_INPUT_INVALID',issues:parsed.error.issues.map(i=>({path:i.path,message:i.message}))}
   const v=parsed.data
@@ -84,7 +87,7 @@ export async function executeBackendTool(db:any,g:BridgeGrant,scope:Communicatio
   if(journal.state!=='reserved'||journal.argsHash!==hash(raw))throw Error('BACKEND_EXECUTION_RESERVATION_CHANGED')
   const persist=async(value:any)=>{await db.config.update({where:{id:record.id},data:{value:JSON.stringify(value)}})}
   try{
-    await assertToolSettings(db,g.storeId,'employee_backend',raw)
+    await assertEmployeeSettings(db,g.storeId)
     if(!authorizeDispatch)throw Error('BACKEND_DISPATCH_AUTHORITY_REQUIRED')
     await authorizeDispatch()
     if(!scope.requesterStaffId||!sourceId)throw Error('BACKEND_REQUESTING_ACCOUNT_REQUIRED')

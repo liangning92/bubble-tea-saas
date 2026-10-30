@@ -1,3 +1,5 @@
+import {TeamError} from './TeamError'
+import {nativeChannelAdmission,enqueueNativeStoreRequest,nativeJobId,nativeJobKey} from './NativeStoreQueue'
 import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
 import prisma from '../config/database'
@@ -40,9 +42,7 @@ export interface TeamTask {
   /** Independent execution principal; mutations use the agent task service exclusively. */
   agentTask?: import('./agentTasks/contract').AgentTaskState
 }
-export class TeamError extends Error {
-  constructor(public status: number, message: string) { super(message) }
-}
+export {TeamError} from './TeamError'
 const fail = (status: number, message: string): never => { throw new TeamError(status, message) }
 const uuid = z.string().uuid()
 const staffId = z.string().min(1).max(128)
@@ -95,6 +95,11 @@ async function identity(db: DB, actor: TeamActor) {
   if (!employee) fail(403, 'TEAM_IDENTITY_REQUIRED')
   return employee
 }
+async function nativeMember(db:DB,storeId:string){
+ if(process.env.EMPLOYEE_HERMES_ENABLED!=='1'||process.env.EMPLOYEE_HERMES_STORE_ID!==storeId||!process.env.EMPLOYEE_HERMES_AGENT_ID)return null
+ const settings=await read(db,storeId,'ai.agent.settings')
+ return settings?.enabled?{id:'agent:'+process.env.EMPLOYEE_HERMES_AGENT_ID,name:settings.agentName||'Hermes AI'}:null
+}
 async function activeMembers(db: DB, storeId: string, ids: string[]) {
   const staffIds = ids.filter(id => !id.startsWith('agent:'))
   const agentIds = ids.filter(id => id.startsWith('agent:')).map(id => id.slice(6))
@@ -103,6 +108,7 @@ async function activeMembers(db: DB, storeId: string, ids: string[]) {
     : []
   if (members.length !== new Set(staffIds).size) fail(403, 'TEAM_MEMBER_UNAVAILABLE')
   for (const agentId of agentIds) {
+    if(process.env.EMPLOYEE_HERMES_ENABLED==='1'&&process.env.EMPLOYEE_HERMES_STORE_ID===storeId&&process.env.EMPLOYEE_HERMES_AGENT_ID===agentId){const member=await nativeMember(db,storeId);if(!member)fail(403,'TEAM_AGENT_DISABLED');members.push(member);continue}
     const grantRow = await db.config.findUnique({ where: { storeId_key: { storeId, key: 'externalAgent.teamBridge.v1.grant.' + agentId } } })
     if (!grantRow) fail(403, 'TEAM_MEMBER_UNAVAILABLE')
     try {
@@ -171,7 +177,7 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
   const prefix = `workflow.job.${c.id}.`, settings = [`workflow.policy.${c.id}`, 'workflow.defaults', `workflow.exception.${c.id}`]
   const hermesRouteKey='externalAgent.teamBridge.v1.employeeRoute.'+c.id
   const intakeKey=(id:string)=>'externalAgent.teamBridge.v1.employeePending.'+createHash('sha256').update(JSON.stringify(['employee_work',c.id,id])).digest('hex')
-  const keys = [...own.map(m => TEAM_PREFIX + prefix + pad(m.seq)), ...settings.map(key => TEAM_PREFIX + key),...own.flatMap(m=>[TEAM_PREFIX+'employeeContinuation.event.'+m.id,intakeKey(m.id)]),hermesRouteKey,TEAM_PREFIX+'ai.agent.settings']
+  const keys = [...own.map(m => TEAM_PREFIX + prefix + pad(m.seq)), ...settings.map(key => TEAM_PREFIX + key),...own.flatMap(m=>[TEAM_PREFIX+'employeeContinuation.event.'+m.id,intakeKey(m.id)]),hermesRouteKey,TEAM_PREFIX+'ai.agent.settings',...own.map(m=>TEAM_PREFIX+nativeJobKey(nativeJobId(a.storeId,c.id,m.id)))]
   const rows = await db.config.findMany({ where: { storeId: a.storeId, key: { in: keys } }, select: { key: true, value: true } })
   const records = new Map<string, any>(rows.map((row: any) => [row.key.slice(TEAM_PREFIX.length), JSON.parse(row.value)]))
   const absoluteRecords=new Map<string,any>(rows.map((row:any)=>[row.key,JSON.parse(row.value)]))
@@ -288,6 +294,13 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
         ...(nowMs-Date.parse(intake.createdAt)>120000?{failureReason:'delayed' as const}:{})})
     }
   }
+  const nativeKeys=own.map(m=>TEAM_PREFIX+nativeJobKey(nativeJobId(a.storeId,c.id,m.id)))
+  const nativeRows=nativeKeys.filter(key=>absoluteRecords.has(key)).map(key=>({value:JSON.stringify(absoluteRecords.get(key))}))
+  for(const row of nativeRows){const j=JSON.parse(row.value),m=own.find(m=>m.id===j.messageId)
+    if(!m||j.requesterStaffId!==a.staffId||j.channelId!==c.id||j.sourceSeq!==m.seq)continue
+    const state:OwnAiHandling['state']=j.outputMessageId?'replied':j.state==='queued'?'queued':['preparing','admitting','running','waiting_children'].includes(j.state)?'processing':'failed'
+    output.set(m.id,{state,updatedAt:j.updatedAt,...(j.lastPollFault?{failureReason:'delayed' as const}:['failed','unknown','blocked'].includes(j.state)?{failureReason:'execution' as const}:{})})
+  }
   return output
 }
 async function closeRound(db: DB, a: TeamActor, c: TeamChannel) {
@@ -319,11 +332,13 @@ export function teamCommunication(db: DB = prisma) {
       const agents = grantRows.map((r: any) => {
         try {
           const g = JSON.parse(r.value)
+          if(process.env.EMPLOYEE_HERMES_ENABLED==='1'&&process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId)return null
           if (!g.revoked) return { id: 'agent:' + g.agentId, name: g.displayName || 'Hermes AI' }
         } catch {}
         return null
       }).filter(Boolean) as { id: string; name: string }[]
-      return [...staff, ...agents]
+      const native=await nativeMember(db,a.storeId)
+      return [...staff, ...agents,...(native?[native]:[])]
     },
     async channels(a: TeamActor, administration = false) {
       await identity(db, a)
@@ -374,7 +389,7 @@ export function teamCommunication(db: DB = prisma) {
 
         // Auto-configure agent bridge if channel includes an agent member
         const agentMember = ids.find(id => id.startsWith('agent:'))
-        if (agentMember) {
+        if (agentMember && !(process.env.EMPLOYEE_HERMES_ENABLED==='1'&&process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId&&agentMember==='agent:'+process.env.EMPLOYEE_HERMES_AGENT_ID)) {
           const agentId = agentMember.slice(6)
           const grantRow = await tx.config.findUnique({ where: { storeId_key: { storeId: a.storeId, key: 'externalAgent.teamBridge.v1.grant.' + agentId } } })
           if (grantRow) {
@@ -486,7 +501,6 @@ export function teamCommunication(db: DB = prisma) {
         const requestKey = `request.${a.staffId}.${v.requestId}`
         const old = await read(tx, a.storeId, requestKey), hash = digest({ id, ...v, ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{nativeAgent}: {}) })
         if (old) { if (old.hash !== hash) fail(409, 'TEAM_REQUEST_CONFLICT'); await teamAgentOutbound(tx, a, c, old.message); return old.message }
-        if(nativeAgent&&await read(tx,a.storeId,'employeeRuntime.nativeReply.'+nativeAgent.executionId))fail(409,'EMPLOYEE_RUNTIME_OUTBOUND_ALREADY_STORED')
         if (teamAgentProvenance(a) && v.expectedLastSeq !== c.lastSeq) fail(409, 'TEAM_MESSAGE_CONTEXT_CHANGED')
         if(nativeAgent&&v.expectedLastSeq!==c.lastSeq)fail(409,'TEAM_MESSAGE_CONTEXT_CHANGED')
         // Serialize the final automatic effect with store revocation, before
@@ -537,12 +551,16 @@ export function teamCommunication(db: DB = prisma) {
           const file = await readWork(a.storeId, `file.${fileId}`, tx)
           if (!file || file.staffId !== a.staffId || file.purpose !== 'team') fail(403, 'TEAM_FILE_FORBIDDEN')
         }
+        if(nativeAgent?.replyToSeq!==undefined){
+          const source=await read(tx,a.storeId,'message.'+c.id+'.'+pad(nativeAgent.replyToSeq))
+          if(!source||c.members.some(m=>nativeAgent.replyToSeq!<m.fromSeq))fail(409,'NATIVE_REPLY_SOURCE_NOT_VISIBLE')
+        }
         if (c.lastSeq >= 999999999999) fail(409, 'TEAM_MESSAGE_LIMIT')
         if (!c.round) c.round = { id: randomUUID(), title: c.title, fromSeq: c.lastSeq + 1, startedAt: new Date(now).toISOString(), participants: c.members.map(m => m.staffId) }
         if (!c.round.participants.includes(a.staffId)) c.round.participants.push(a.staffId)
         const employee = await identity(tx, a)
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
-          authorId: a.staffId, authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId}}: {}) }
+          authorId: a.staffId, authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId,...(nativeAgent.replyToSeq!==undefined?{replyToSeq:nativeAgent.replyToSeq}:{})}}: {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
         const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
@@ -583,6 +601,14 @@ export function teamCommunication(db: DB = prisma) {
         if(existing&&existing.fingerprint!==fingerprint)fail(409,'TEAM_REQUEST_CONFLICT')
         const source=await read(tx,a.storeId,`message.${id}.${pad(v.sourceSeq)}`)
         if(!source||source.seq<fromSeq||source.ai||source.agent||!c.members.some(m=>m.staffId===source.authorId&&source.seq>=m.fromSeq))fail(409,'TEAM_AGENT_REAL_SOURCE_REQUIRED')
+        if(process.env.EMPLOYEE_HERMES_ENABLED==='1'&&process.env.EMPLOYEE_HERMES_STORE_ID===a.storeId&&await nativeChannelAdmission(tx,a.storeId,c,process.env.EMPLOYEE_HERMES_AGENT_ID||'',true)){
+          const eventId=nativeJobId(a.storeId,id,source.id),key=nativeJobKey(eventId),prior=await read(tx,a.storeId,key)
+          if(!prior)await enqueueNativeStoreRequest(tx,a.storeId,c,source)
+          const job=prior||await read(tx,a.storeId,key)
+          if(!job)fail(409,'TEAM_AGENT_SOURCE_UNAVAILABLE')
+          if(!existing)await write(tx,a.storeId,requestKey,{fingerprint,eventId})
+          return {eventId,channelId:id,sourceMessageId:source.id,sourceSeq:source.seq,state:job.state,reason:job.fault||null,alreadySubmitted:!!prior,queued:job.state==='queued',parentContextTransferred:false,businessCompleted:false}
+        }
         const sourceId=createHash('sha256').update(JSON.stringify(['employee_work',id,source.id])).digest('hex'),intakeKey=employeeIntakeKey(sourceId)
         const prior=await tx.config.findUnique({where:{storeId_key:{storeId:a.storeId,key:intakeKey}}})
         const receipt=prior&&JSON.parse(prior.value)

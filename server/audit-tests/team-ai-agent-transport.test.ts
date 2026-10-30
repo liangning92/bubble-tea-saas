@@ -8,8 +8,7 @@ jest.mock('../src/services/TeamCommunicationService', () => ({
   readTeam: async (db: any, _store: string, key: string) => db.records[key] || null
 }))
 import fs from 'fs/promises'
-import { membershipToolSchema } from '../src/services/teamAgentBridge/employeeMembershipTools'
-import { createTeamAgentMiniMaxTransport, TeamAgentModelProviderRequest } from '../src/services/TeamAiService'
+import { createTeamAgentMiniMaxTransport,openNativeSubscribedResponse, TeamAgentModelProviderRequest } from '../src/services/TeamAiService'
 function fixture() {
   const store = 'synthetic-store', syntheticKey = 'synthetic-provider-token-not-a-real-credential', iv = Buffer.alloc(12, 8)
   const cipher = createCipheriv('aes-256-gcm', Buffer.alloc(32, 7), iv); cipher.setAAD(Buffer.from(store + ':cn'))
@@ -46,33 +45,16 @@ describe('server-only CN Flash tool transport (all fetch/key reads synthetic moc
     // mock fs exposes readFile only; mkdir/writeFile/master-key creation would fail this test.
     expect((fs.readFile as any).mock.calls.at(-1)[0]).toContain('.team-ai-master.key')
   })
-  test('employee runtime forwards its business tools without forcing low reasoning', async () => {
-    const f=fixture();delete f.body.reasoning_effort
-    f.body.tools=['employee_manage_inventory','employee_manage_hygiene','employee_manage_staff'].map(name=>({type:'function',function:{name,parameters:{type:'object',properties:{},additionalProperties:false}}}))
-    const fetcher=jest.fn(async (_url:any,init:any)=>{const body=JSON.parse(init.body);expect(body).not.toHaveProperty('reasoning_effort');expect(body).not.toHaveProperty('max_tokens');expect(body.tools).toHaveLength(3);return {ok:true,text:async()=>JSON.stringify({id:'synthetic-business',choices:[]})}})
-    await createTeamAgentMiniMaxTransport(f.db,{enabled:true,fetch:fetcher as any,toolProfile:'employee_work'})(f.store,5,f.body,async()=>{})
-    expect(fetcher).toHaveBeenCalledTimes(1)
+  test('native SDK tools and streaming requests pass without a per-business allowlist',async()=>{
+    const f=fixture(),request:any={...f.body,stream:true,tools:[{type:'function',function:{name:'delegate_task',parameters:{type:'object'}}},{type:'function',function:{name:'store_backend',parameters:{type:'object'}}}],stream_options:{include_usage:true}}
+    delete request.reasoning_effort
+    const original=global.fetch,fetcher=jest.fn(async(_url:any,init:any)=>{expect(JSON.parse(init.body)).toEqual(request);expect(init.headers.Authorization).toBe('Bearer '+f.syntheticKey);return {ok:true,status:200} as Response})
+    global.fetch=fetcher as any
+    try{await openNativeSubscribedResponse(f.db,f.store,5,request,async()=>{},Date.now()+86400000);expect(fetcher).toHaveBeenCalledTimes(1)}finally{global.fetch=original}
   })
-  test('actual membership tool contract reaches the employee provider relay', async () => {
-    const f=fixture(); delete f.body.reasoning_effort
-    f.body.tools=[membershipToolSchema]
-    const fetcher=jest.fn(async (_url:any,init:any)=>{
-      expect(JSON.parse(init.body).tools).toEqual([membershipToolSchema])
-      return {ok:true,text:async()=>JSON.stringify({id:'synthetic-membership',choices:[]})}
-    })
-    await createTeamAgentMiniMaxTransport(f.db,{enabled:true,fetch:fetcher as any,toolProfile:'employee_work'})(f.store,5,f.body,async()=>{})
-    expect(fetcher).toHaveBeenCalledTimes(1)
-  })
-  test('a day-long employee lease still bounds each provider request and never retries an unknown result', async () => {
-    const f=fixture(); delete f.body.reasoning_effort; f.body.tools=[membershipToolSchema]
-    const timeout=jest.spyOn(AbortSignal,'timeout').mockImplementation(()=>new AbortController().signal)
-    const fetcher=jest.fn(async ()=>{throw Error('synthetic-timeout')})
-    try {
-      const transport=createTeamAgentMiniMaxTransport(f.db,{enabled:true,fetch:fetcher as any,toolProfile:'employee_work'})
-      await expect(transport(f.store,5,f.body,async()=>{},Date.now()+86400000)).rejects.toThrow('AGENT_MODEL_PROVIDER_OUTCOME_UNKNOWN')
-      expect(timeout).toHaveBeenLastCalledWith(180000)
-      expect(fetcher).toHaveBeenCalledTimes(1)
-    } finally {timeout.mockRestore()}
+  test('native provider failure never switches to another paid API',async()=>{
+    const f=fixture(),original=global.fetch,fetcher=jest.fn(async()=>{throw Error('synthetic-timeout')});global.fetch=fetcher as any
+    try{await expect(openNativeSubscribedResponse(f.db,f.store,5,f.body,async()=>{},Date.now()+86400000)).rejects.toThrow('NATIVE_PROVIDER_OUTCOME_UNKNOWN');expect(fetcher).toHaveBeenCalledTimes(1)}finally{global.fetch=original}
   })
   test.each(['config_version', 'region', 'model', 'unverified', 'output_cap', 'arbitrary_tool'])('%s is rejected before fetch', async change => {
     const f = fixture(), fetcher = jest.fn()

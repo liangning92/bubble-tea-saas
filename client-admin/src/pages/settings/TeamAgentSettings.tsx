@@ -49,6 +49,7 @@ interface CapabilityItem {
 }
 
 interface SystemStateData {
+  runtimeKind?:'hermes_native_api'
   pilotState: 'running' | 'disabled' | 'failed' | 'expired' | 'invalid' | 'unavailable'
   pdcaPilot?: { state: 'valid' | 'expired' | 'disabled' | 'invalid' | 'unavailable'; renewalRequired: boolean; startedAt?: string; expiresAt?: string }
   employeeBridgeConfigured: boolean
@@ -65,22 +66,6 @@ interface CheckResult {
   checkedAt: string
   details: string
 }
-
-const moduleKeys = [
-  'products',
-  'inventory',
-  'orders',
-  'members',
-  'marketing',
-  'finance',
-  'staff',
-  'hygiene',
-  'channels'
-] as const
-
-type ModuleKey = (typeof moduleKeys)[number]
-
-const highRiskModules: ModuleKey[] = ['finance', 'orders', 'inventory']
 
 export function TeamAgentSettings({
   client,
@@ -140,19 +125,6 @@ export function TeamAgentSettings({
     setNotice('')
   }
 
-  function updatePermission(mod: ModuleKey, type: 'read' | 'write', val: boolean) {
-    if (!draft) return
-    const curMod = draft.permissions?.[mod] || { read: false, write: false }
-    const nextPerms = {
-      ...draft.permissions,
-      [mod]: {
-        ...curMod,
-        [type]: val
-      }
-    }
-    updateDraft({ permissions: nextPerms })
-  }
-
   async function handleSave() {
     if (!draft || !base || busy || checking) return
     const reqId = ++epoch.current
@@ -209,6 +181,7 @@ export function TeamAgentSettings({
     )
   }
 
+  const nativeCopy=language==='zh'?{authority:'按当前账户权限执行',authorityHelp:'Hermes 使用后台现有功能、校验和账户权限。技能、文件、记忆与子 Agent 由原生运行时管理，不再逐项开通业务工具。不同账户、会话和受众的资料保持隔离。',capabilities:'Hermes 原生运行能力',capabilityHelp:'所有原生工具通过 Hermes 自身发现；需要额外凭据或费用的服务不会自动开通。日常工作自主执行；支付、超预算和员工处罚需要店主批准。'}:language==='id'?{authority:'Mengikuti izin akun yang meminta',authorityHelp:'Hermes memakai fungsi, validasi, dan izin akun di sistem toko. Keterampilan, berkas, memori, dan subagen dikelola oleh runtime asli, tanpa izin alat bisnis satu per satu. Data akun, percakapan, dan penerima tetap terpisah.',capabilities:'Kemampuan asli Hermes',capabilityHelp:'Hermes menemukan alat aslinya sendiri. Layanan yang memerlukan kredensial atau biaya tambahan tidak diaktifkan otomatis. Pekerjaan harian berjalan mandiri; pembayaran, biaya di luar anggaran, dan sanksi karyawan memerlukan persetujuan pemilik.'}:{authority:'Uses the requesting account’s permissions',authorityHelp:'Hermes uses the store’s existing functions, validation and account permissions. The native runtime manages skills, files, memory and subagents without separate business-tool switches. Accounts, conversations and audiences remain isolated.',capabilities:'Native Hermes capabilities',capabilityHelp:'Hermes discovers its own native tools. Services requiring additional credentials or fees are not activated automatically. Daily work runs independently; payments, over-budget spending and employee penalties require owner approval.'}
   const agentActive = draft.enabled
   const statusBadge = checking ? (
     <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{c.checking}</span>
@@ -241,7 +214,7 @@ export function TeamAgentSettings({
 
         {systemState?.latestExecution && (
           <p className="mt-3 break-words text-xs text-gray-600" data-testid="agent-execution-diagnostic">
-            {c.recentExecution}: {systemState.latestExecution.phase} · {c.modelRounds}: {systemState.latestExecution.inputs}/{systemState.latestExecution.responses} · {c.businessTools}: {systemState.latestExecution.tools}
+            {c.recentExecution}: {systemState.latestExecution.phase}{systemState.runtimeKind!=='hermes_native_api'&&<> · {c.modelRounds}: {systemState.latestExecution.inputs}/{systemState.latestExecution.responses} · {c.businessTools}: {systemState.latestExecution.tools}</>}
             {systemState.latestExecution.faultCode && <span className="block text-red-700">{systemState.latestExecution.faultCode}</span>}
           </p>
         )}
@@ -315,35 +288,7 @@ export function TeamAgentSettings({
             </div>
           </label>
 
-          {/* 全频道沟通开关 */}
-          <label className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3.5 cursor-pointer">
-            <input
-              type="checkbox"
-              className="mt-1 h-4 w-4 rounded border-primary text-primary focus:ring-primary"
-              checked={draft.allChannelsAllowed}
-              disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
-              onChange={e => updateDraft({ allChannelsAllowed: e.target.checked })}
-            />
-            <div>
-              <span className="text-sm font-semibold text-gray-900">{c.allChannelsTitle}</span>
-              <p className="mt-0.5 text-xs text-gray-600 leading-relaxed">{c.allChannelsDesc}</p>
-            </div>
-          </label>
-
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-3 rounded-lg bg-gray-50 p-3 sm:col-span-2">
-              <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.photoRecognitionEnabled!==false} disabled={busy||checking} onChange={e=>updateDraft({photoRecognitionEnabled:e.target.checked})}/><span><strong className="font-medium">{c.photosEnabled}</strong><span className="mt-1 block text-xs text-gray-600">{c.photosHelp}</span></span></label>
-              <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.memoryEnabled!==false} disabled={busy||checking} onChange={e=>updateDraft({memoryEnabled:e.target.checked})}/><span><strong className="font-medium">{c.memoryEnabled}</strong><span className="mt-1 block text-xs text-gray-600">{c.memoryHelp}</span></span></label>
-              <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" checked={draft.learningEnabled!==false} disabled={busy||checking||draft.memoryEnabled===false} onChange={e=>updateDraft({learningEnabled:e.target.checked})}/><span><strong className="font-medium">{c.learningEnabled}</strong><span className="mt-1 block text-xs text-gray-600">{c.learningHelp}</span></span></label>
-            </div>
-            <label className="block text-sm sm:col-span-2">
-              <span className="font-medium text-gray-700">{c.authorizationExpiry}</span>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <label className="flex items-center gap-2"><input type="checkbox" checked={!draft.expiresAt} disabled={busy||checking} onChange={e=>updateDraft({expiresAt:e.target.checked?null:new Date(Date.now()+86400000).toISOString()})}/>{c.noExpiry}</label>
-                {draft.expiresAt&&<input aria-label={c.authorizationExpiry} className={field} type="datetime-local" disabled={busy||checking} value={new Date(Date.parse(draft.expiresAt)-new Date(draft.expiresAt).getTimezoneOffset()*60000).toISOString().slice(0,16)} onChange={e=>{if(e.target.value)updateDraft({expiresAt:new Date(e.target.value).toISOString()})}}/>}
-              </div>
-              <span className="mt-1 block text-xs text-gray-500">{c.expiryHelp}</span>
-            </label>
             <label className="block text-sm">
               <span className="font-medium text-gray-700">{c.agentName}</span>
               <input
@@ -373,9 +318,9 @@ export function TeamAgentSettings({
               <span className="font-medium text-gray-700">{c.agentOrigin}</span>
               <input
                 className={field}
-                value={draft.agentOrigin}
-                disabled={busy || checking}
-                onChange={e => updateDraft({ agentOrigin: e.target.value })}
+                value={systemState?.hostOrigin||draft.agentOrigin}
+                readOnly
+                disabled
               />
               <span className="mt-1 block text-xs text-gray-500">{c.agentOriginHelp}</span>
             </label>
@@ -383,127 +328,13 @@ export function TeamAgentSettings({
         </div>
       </section>
 
-      {/* 2. 权限设置矩阵（参考员工权限） */}
       <section className="rounded-xl border bg-white p-4 sm:p-6" aria-labelledby="agent-permissions-title">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h4 id="agent-permissions-title" className="font-semibold text-gray-900">{c.permissionsSection}</h4>
-            <p className="mt-0.5 text-xs text-gray-500">{c.permissionsSubtitle}</p>
-          </div>
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">{draft.operationProfile === 'store_operations' ? c.fullOperations : c.customPermissions}</span>
-        </div>
-
-        <label className="mt-4 block text-sm">
-          {c.operationProfile}
-          <select className="input mt-2" value={draft.operationProfile || 'custom'} disabled={busy || checking}
-            onChange={e => updateDraft({operationProfile: e.target.value as 'custom' | 'store_operations', ...(e.target.value === 'store_operations' ? {permissions: Object.fromEntries(moduleKeys.map(key => [key, {read:true,write:true}])) as unknown as AgentPermissions} : {})})}>
-            <option value="custom">{c.customPermissions}</option>
-            <option value="store_operations">{c.fullOperations}</option>
-          </select>
-          <span className="mt-2 block text-xs text-gray-600">{c.operationsHelp}</span>
-        </label>
-        <div className="mt-4 overflow-hidden rounded-xl border border-gray-200">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b bg-gray-50/80 text-xs font-medium text-gray-600">
-              <tr>
-                <th className="px-4 py-3">{c.moduleName}</th>
-                <th className="px-4 py-3 text-center w-36">{c.readPermission}</th>
-                <th className="px-4 py-3 text-center w-36">{c.writePermission}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {moduleKeys.map(key => {
-                const info = c.modules[key]
-                const perm = draft.permissions?.[key] || { read: false, write: false }
-                const isHighRisk = highRiskModules.includes(key)
-
-                return (
-                  <tr key={key} className="transition-colors hover:bg-gray-50/60">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-800">{info.name}</span>
-                        {isHighRisk && (
-                          <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200/50">
-                            {c.riskHigh}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-0.5 text-xs text-gray-500 leading-normal">{info.desc}</p>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                          checked={perm.read}
-                          disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
-                          onChange={e => updatePermission(key, 'read', e.target.checked)}
-                        />
-                        <span className="text-xs text-gray-700">{c.readPermission}</span>
-                      </label>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className={`h-4 w-4 rounded border-gray-300 focus:ring-primary ${isHighRisk ? 'text-amber-600' : 'text-primary'}`}
-                          checked={perm.write}
-                          disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
-                          onChange={e => updatePermission(key, 'write', e.target.checked)}
-                        />
-                        <span className="text-xs text-gray-700">{c.writePermission}</span>
-                      </label>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <h4 id="agent-permissions-title" className="font-semibold text-gray-900">{nativeCopy.authority}</h4>
+        <p className="mt-2 text-sm leading-relaxed text-gray-600">{nativeCopy.authorityHelp}</p>
       </section>
-
-      {/* 3. 业务能力场景 */}
       <section className="rounded-xl border bg-white p-4 sm:p-6">
-        <h4 className="font-semibold text-gray-900">{c.capabilitiesSection}</h4>
-        <div className="mt-4 space-y-3">
-          <label className="flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-gray-50 cursor-pointer">
-            <input
-              type="checkbox"
-              className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-              checked={draft.pdcaPilotEnabled}
-              disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
-              onChange={e => updateDraft({ pdcaPilotEnabled: e.target.checked })}
-            />
-            <div className="min-w-0">
-              <span className="text-sm font-semibold text-gray-900">{c.pdcaTitle}</span>
-              <p className="mt-1 text-xs leading-relaxed text-gray-600">{c.pdcaDesc}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {['store_task_get', 'store_task_claim', 'store_task_read_stock_evidence', 'store_task_report'].map(tool => (
-                  <span key={tool} className="rounded bg-gray-100 px-2 py-0.5 font-mono text-[11px] text-gray-600">{tool}</span>
-                ))}
-              </div>
-            </div>
-          </label>
-
-          <label className="flex items-start gap-3 rounded-lg border p-4 transition-colors hover:bg-gray-50 cursor-pointer">
-            <input
-              type="checkbox"
-              className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-              checked={draft.employeeBridgeEnabled}
-              disabled={busy || checking || !draft.enabled || draft.operationProfile === 'store_operations'}
-              onChange={e => updateDraft({ employeeBridgeEnabled: e.target.checked })}
-            />
-            <div className="min-w-0">
-              <span className="text-sm font-semibold text-gray-900">{c.employeeBridgeTitle}</span>
-              <p className="mt-1 text-xs leading-relaxed text-gray-600">{c.employeeBridgeDesc}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {['store_team_directory', 'store_team_channels', 'store_team_messages', 'store_team_send'].map(tool => (
-                  <span key={tool} className="rounded bg-gray-100 px-2 py-0.5 font-mono text-[11px] text-gray-600">{tool}</span>
-                ))}
-              </div>
-            </div>
-          </label>
-        </div>
+        <h4 className="font-semibold text-gray-900">{nativeCopy.capabilities}</h4>
+        <p className="mt-2 text-sm leading-relaxed text-gray-600">{nativeCopy.capabilityHelp}</p>
       </section>
 
       {/* 4. 安全合规底线 */}
@@ -512,7 +343,7 @@ export function TeamAgentSettings({
         <div className="mt-3 rounded-lg bg-gray-50 p-3.5 flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-gray-900">{c.humanReview}</p>
-            <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">{c.humanReviewDesc}</p>
+            <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">{nativeCopy.capabilityHelp}</p>
           </div>
           <span className="shrink-0 rounded bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 border border-green-200/50">
             {c.humanReview}

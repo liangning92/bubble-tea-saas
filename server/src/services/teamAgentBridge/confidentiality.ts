@@ -4,9 +4,9 @@ import { userAccessV2 } from '../StaffPermissionV2Service'
 import { employeeAppAccess } from '../EmployeeAppAccess'
 import { TeamActor, TeamChannel, TeamError, readTeam } from '../TeamCommunicationService'
 import type { BridgeDependencies, BridgeGrant, TaskRef, CommunicationScope, OutputRequest } from './contract'
-export const contextKey = (g: BridgeGrant, task: TaskRef, channelId?: string, audience?:string) => createHash('sha256').update(JSON.stringify([g.storeId,g.agentId,task.taskId,task.version,channelId || 'new',audience || 'new',g.version,g.clientRevision])).digest('hex')
+export const contextKey = (g: Pick<BridgeGrant,'storeId'|'agentId'|'version'|'clientRevision'>, task: TaskRef, channelId?: string, audience?:string) => createHash('sha256').update(JSON.stringify([g.storeId,g.agentId,task.taskId,task.version,channelId || 'new',audience || 'new',g.version,g.clientRevision])).digest('hex')
 const reject = (): never => { throw new TeamError(403, 'TEAM_COMMUNICATION_DATA_POLICY_DENIED') }
-export async function readCommunicationScope(db: any, g: BridgeGrant, task: TaskRef, channel?: TeamChannel, requesterStaffId?: string): Promise<CommunicationScope> {
+export async function readCommunicationScope(db: any, g: Pick<BridgeGrant,'storeId'|'agentId'|'version'|'clientRevision'>, task: TaskRef, channel?: TeamChannel, requesterStaffId?: string): Promise<CommunicationScope> {
   const audienceStaffIds = channel ? channel.members.filter(m => m.staffId !== 'agent:' + g.agentId).map(m => m.staffId).sort() : []
   const people = await db.staff.findMany({ where: { storeId:g.storeId,id:{in:audienceStaffIds},status:'active' }, select:{id:true,user:{select:{id:true,storeId:true,role:true}}} })
   if (people.length !== audienceStaffIds.length || people.some((s:any) => !s.user || s.user.storeId !== g.storeId || employeeAppAccess(s.user.role).modes['personal.messages'] !== 'allow')) reject()
