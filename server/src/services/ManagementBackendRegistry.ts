@@ -1,6 +1,8 @@
 import { nativeMultipart, nativeFileInput, storeNativeDownload } from './NativeBackendFiles'
 import type { z } from 'zod'
 import express from 'express'
+import {canUseManagementRoute} from './ManagementRouteAccess'
+import {employeeAppAccess,isEmployeeAppRoute} from './EmployeeAppAccess'
 import { IncomingMessage, ServerResponse } from 'node:http'
 import { Duplex } from 'node:stream'
 import { createHash } from 'node:crypto'
@@ -42,13 +44,39 @@ const view = (op: Operation, detailed=false) => ({ operationId:op.id,method:op.m
   pathParameters:[...op.path.matchAll(/:([A-Za-z0-9_]+)/g)].map(m=>m[1]),httpReadMethod:['GET','HEAD'].includes(op.method),sideEffects:'native_handler_semantics',boundary:boundary(op),publicationAudience:op.declaration.publicationAudience||null,
   ...(detailed?{requestContract:op.requestContract,contractCoverage:Object.keys(op.requestContract).length?'declared_native_validator_only':'native_controller_validation_not_described',
     validation:'Same native middleware, controller and service. A GET may perform native initialization. An absent schema is not an empty input contract; do not guess mutation fields.'}: {}) })
-export function backendCatalog(query = '', offset = 0, limit = 25) {
-  const list = [...operations.values()].filter(op=>!query || op.id.toLowerCase().includes(query.toLowerCase()) || (op.declaration.permission||'').toLowerCase().includes(query.toLowerCase())).sort((a,b)=>a.id.localeCompare(b.id))
-  return {contractVersion:backendVersion(),total:list.length,offset,operations:list.slice(offset,offset+limit).map(op=>view(op)),nextOffset:offset+limit<list.length?offset+limit:null}
+/** Account-level preflight uses the same native route declarations and access
+ * helpers as HTTP. Resource/body/publication checks still run in native handlers. */
+export function backendAccountAccess(actor:any,id:string){
+ const op=operations.get(id);if(!op)return {allowed:false,code:'BACKEND_OPERATION_NOT_FOUND'}
+ const spec=op.declaration as any
+ const access=actor.employeeApp?employeeAppAccess(actor.role):actor.accessRole
+ const user={...actor,role:actor.employeeApp?'staff':actor.role,accessRole:access}
+ if(!canUseManagementRoute(user,{...spec,routeKey:op.id}))return {allowed:false,code:'MANAGEMENT_ACCESS_REQUIRED',requiredPermission:spec.permission}
+ if(user.role==='admin'&&!user.employeeApp)return {allowed:true,mode:'allow'}
+ if(spec.ownerOnly)return {allowed:false,code:'STAFF_ACCESS_OWNER_REQUIRED',requiredPermission:spec.permission}
+ if(access?.version===2){
+  const permission=!user.employeeApp&&spec.permission==='personal.tasks'&&access.id==='manager'?(['GET','HEAD'].includes(op.method)?'hygiene.read':'hygiene.write'):spec.permission
+  const mode=user.employeeApp&&isEmployeeAppRoute(op.id,spec)?'allow':permission?access.modes?.[permission]:'allow'
+  if(mode!=='allow')return {allowed:false,code:mode==='approval'?'STAFF_ACCESS_APPROVAL_REQUIRED':'STAFF_ACCESS_PERMISSION_DENIED',requiredPermission:permission,mode:mode||'deny'}
+  if(spec.export&&access.modes?.['data.export']!=='allow')return {allowed:false,code:'STAFF_ACCESS_PERMISSION_DENIED',requiredPermission:'data.export'}
+ }else{
+  if(spec.legacyRoles&&!spec.legacyRoles.includes(user.role))return {allowed:false,code:'STAFF_ACCESS_PERMISSION_DENIED',requiredPermission:spec.permission}
+  if(access&&spec.legacyPermission&&!access.permissions.includes(spec.legacyPermission))return {allowed:false,code:'STAFF_ACCESS_PERMISSION_DENIED',requiredPermission:spec.permission}
+ }
+ return {allowed:true,mode:'allow'}
 }
-export function backendDescription(id: string) {
+export function backendAccountSummary(actor:any){
+ const access=actor.employeeApp?employeeAppAccess(actor.role):actor.accessRole
+ return {role:actor.role,employeeApp:!!actor.employeeApp,accessRole:access?{id:access.id,version:access.version,permissions:access.permissions,modes:access.modes}:null,
+  authority:'current_requesting_account',resourceChecks:'native_handlers',instructions:'Check accountAccess before requesting business details or changes. If denied, explain the missing permission and stop that operation; do not try alternative endpoints. Approval is not allow. Catalog discovery does not grant access.'}
+}
+export function backendCatalog(query = '', offset = 0, limit = 25, actor?:any) {
+  const list = [...operations.values()].filter(op=>!query || op.id.toLowerCase().includes(query.toLowerCase()) || (op.declaration.permission||'').toLowerCase().includes(query.toLowerCase())).sort((a,b)=>a.id.localeCompare(b.id))
+  return {contractVersion:backendVersion(),total:list.length,offset,operations:list.slice(offset,offset+limit).map(op=>({...view(op),...(actor?{accountAccess:backendAccountAccess(actor,op.id)}:{})})),nextOffset:offset+limit<list.length?offset+limit:null}
+}
+export function backendDescription(id: string, actor?:any) {
   const op = operations.get(id)
-  return op ? {ok:true,contractVersion:backendVersion(),...view(op,true),bodyContract:'Use the native backend request body. Do not invent missing mutation contracts or IDs. HTTP acceptance is not independent business acceptance.'} : {ok:false,code:'BACKEND_OPERATION_NOT_FOUND',contractVersion:backendVersion()}
+  return op ? {ok:true,contractVersion:backendVersion(),...view(op,true),...(actor?{accountAccess:backendAccountAccess(actor,id)}:{}),bodyContract:'Use the native backend request body. Do not invent missing mutation contracts or IDs. HTTP acceptance is not independent business acceptance.'} : {ok:false,code:'BACKEND_OPERATION_NOT_FOUND',contractVersion:backendVersion()}
 }
 export const backendOperation = (id:string) => { const op=operations.get(id);return op?view(op):null }
 
