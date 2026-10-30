@@ -286,6 +286,7 @@ async function main(){
    const slowKey=nativeJobKey(nativeJobId(storeId,slow.id,slowSource.id));await engine.runBatch(10);let stalled=await readTeam(db,storeId,slowKey);assert.equal(stalled.state,'running');
    stalled.startedAt=new Date(Date.now()-11*60000).toISOString();await writeTeam(db,storeId,slowKey,stalled);
    runStatus='running';statusUnavailable=true;draining=true;await engine.runBatch(10);assert.equal((await readTeam(db,storeId,slowKey)).state,'running');assert(cancelled>0);
+   statusUnavailable=false;runStatus='cancelled';await engine.runBatch(10);assert.equal((await readTeam(db,storeId,slowKey)).state,'running');
    draining=false;await engine.runBatch(10);stalled=await readTeam(db,storeId,slowKey);assert.equal(stalled.state,'unknown');assert.equal(stalled.fault,'NATIVE_RUN_DEADLINE');assert(stalled.outputMessageId);
    assert.equal((await readTeam(db,storeId,'nativeAgent.channel.'+slow.id)).jobId,null);
    const status=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+slow.id),[slowSource]);assert.equal(status.get(slowSource.id).state,'failed');assert.equal(status.get(slowSource.id).failureReason,'timeout');

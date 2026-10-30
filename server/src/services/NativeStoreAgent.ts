@@ -209,10 +209,12 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
      const minutes=Number(context.settings.taskTimeoutMinutes),deadline=Date.parse(job.startedAt||job.createdAt)+(Number.isFinite(minutes)&&minutes>0?minutes:10)*60000
      let result
      try{result=await client.status(job.runId)}catch(error){if(Date.now()<deadline)throw error;result={status:'unconfirmed'}}
-     if(Date.now()>=deadline&&!['completed','failed','cancelled','interrupted','unknown'].includes(result.status)){
+     const terminal=['completed','failed','cancelled','interrupted','unknown'].includes(result.status)
+     if(Date.now()>=deadline&&(!terminal||job.fault==='NATIVE_RUN_DEADLINE'&&result.status!=='completed')){
       // Stop the original SDK run; release the queue only after native work drains.
       // Unknown business outcomes remain in their journals and are never replayed.
-      await client.cancel(job.runId)
+      job.fault='NATIVE_RUN_DEADLINE'
+      if(!terminal)await client.cancel(job.runId)
       const ready=await client.readiness()
       if(ready.activeRuns||ready.activeDelegations||(ready.blockingProcesses??ready.activeProcesses)){job.lastPollFault='NATIVE_RUN_DEADLINE';await save(job);continue}
       await deliver(job,'Waktu pemrosesan habis. Permintaan ini belum selesai. Catatan yang sudah tersimpan tetap disimpan dan tidak diulang otomatis. Minta pengelola memeriksa hasilnya sebelum mengulangi perubahan data.')
@@ -220,6 +222,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
      }
      delete job.lastPollFault;delete job.nextAttemptAt
      if(result.status==='completed'){
+      if(job.fault==='NATIVE_RUN_DEADLINE')delete job.fault
       const ready=await gateway(job.profileKey).readiness()
       if(ready.activeDelegations||(ready.blockingProcesses??ready.activeProcesses)||ready.activeRuns){job.state='waiting_children';await save(job);continue}
       let output=typeof result.output==='string'?result.output:result.output?.text
@@ -227,6 +230,8 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
       if(output.length>4000){const c=await current(job);if(!job.outputFileId){const file=await storeNativeDownload(db,c.actor,Buffer.from(output),'text/plain',job.id,'team');job.outputFileId=file.id;await save(job)}output=output.slice(0,3800)+'\n\n完整回复见附件 / Jawaban lengkap ada di lampiran.'}
       await deliver(job,output);job.state='completed';await finish(job)
      }else if(['failed','cancelled','interrupted','unknown'].includes(result.status)){
+      const ready=await client.readiness()
+      if(ready.activeRuns||ready.activeDelegations||(ready.blockingProcesses??ready.activeProcesses)){job.state='waiting_children';await save(job);continue}
       await deliver(job,'Maaf, pekerjaan ini belum selesai. Hasil yang sudah tersimpan tidak akan diulang otomatis. Pengelola dapat melihat kendalanya di tugas ini.')
       job.state=result.status;job.fault='NATIVE_RUN_'+result.status.toUpperCase();await finish(job)
      }else await save(job)
