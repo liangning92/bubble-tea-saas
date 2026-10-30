@@ -1,4 +1,5 @@
 import {TeamError} from './TeamError'
+import {nativeReplyFault} from './NativeReplyQuality'
 import {nativeChannelAdmission,enqueueNativeStoreRequest,nativeJobId,nativeJobKey} from './NativeStoreQueue'
 import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
@@ -483,7 +484,12 @@ export function teamCommunication(db: DB = prisma) {
         value: { contains: '"authorId":' + JSON.stringify(a.staffId) } }, orderBy: { key: 'desc' }, take: 100, select: { value: true } }) : []
       const refreshSources = refreshRows.map((row: any) => JSON.parse(row.value)).filter((m: any) => m.channelId === id && m.authorId === a.staffId && !m.ai && !m.agent && m.seq >= fromSeq && m.seq <= after)
       const handling = await projectOwnAiHandling(db, a, c, [...sourceMessages, ...refreshSources])
-      const messages = sourceMessages.map(({ aiHandling: _untrusted, ...m }: any) => ({ ...m, ...(handling.has(m.id) ? { aiHandling: handling.get(m.id) } : {}) }))
+      const messages = sourceMessages.map(({ aiHandling: _untrusted, ...m }: any) => {
+        // Historical malformed replies remain immutable in the journal. Do not
+        // repeatedly render their corrupt body or its auto-generated attachment.
+        const corrupt=(m.agent||m.ai)&&typeof m.text==='string'&&nativeReplyFault(m.text)==='NATIVE_OUTPUT_REPETITION'
+        return { ...m, ...(corrupt?{text:'Jawaban Hermes ini berisi pengulangan yang tidak normal sehingga tidak ditampilkan. Pesan asli dan catatan operasi tetap tersimpan. Hasil pekerjaan ini perlu diperiksa; jangan mengulangi perubahan data secara otomatis.',files:[],outputQuality:'repetition'}:{}), ...(handling.has(m.id) ? { aiHandling: handling.get(m.id) } : {}) }
+      })
       const aiHandlingUpdates = refreshSources.map((m: any) => ({ messageId: m.id, seq: m.seq, aiHandling: handling.get(m.id) || null }))
       return { channel: c, messages, aiHandlingUpdates, cursor: messages.at(-1)?.seq ?? Math.max(after, fromSeq - 1), hasMore: rows.length > 100,
         canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), audit: auditReason !== undefined }
