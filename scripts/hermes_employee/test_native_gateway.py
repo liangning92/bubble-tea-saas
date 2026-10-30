@@ -4,6 +4,28 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib import request,error
 from native_gateway import NativeGateway
+from native_api_service import native_provider_config,native_provider_options
+
+class NativeProviderTests(unittest.TestCase):
+    def test_reasoning_echo_preserves_native_configuration(self):
+        previous={'model':{'supports_vision':True},'memory':{'memory_enabled':True}}
+        updated=native_provider_config(previous,'MiniMax-M3.1-Flash')
+        self.assertTrue(updated['model']['reasoning_echo'])
+        self.assertTrue(updated['model']['supports_vision'])
+        self.assertEqual(updated['memory'],previous['memory'])
+        self.assertNotIn('reasoning_echo',previous['model'])
+        self.assertFalse(native_provider_config(updated,'strict-other-model')['model']['reasoning_echo'])
+    def test_flash_uses_documented_effort_and_preserves_explicit_native_choices(self):
+        value=native_provider_options('MiniMax-M3.1-Flash')
+        self.assertEqual(value['request_overrides'],{'reasoning_effort':'low'})
+        self.assertEqual(value['reasoning_config'],{'enabled':True,'effort':'low'})
+        value=native_provider_options('MiniMax-M3.1-Flash',{'effort':'high'},{'temperature':1})
+        self.assertEqual(value['request_overrides'],{'temperature':1,'reasoning_effort':'high'})
+        self.assertNotIn('max_tokens',value['request_overrides'])
+        self.assertEqual(native_provider_options('another-model'),{})
+        for invalid in [{'enabled':False},{'effort':'none'},{'effort':'ultra'}]:
+            with self.assertRaisesRegex(ValueError,'NATIVE_MINIMAX_REASONING_EFFORT_INVALID'):
+                native_provider_options('MiniMax-M3.1-Flash',invalid)
 
 class NativeGatewayTests(unittest.TestCase):
     def setUp(self):
