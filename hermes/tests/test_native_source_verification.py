@@ -25,6 +25,15 @@ class NativeSourceVerificationTests(unittest.TestCase):
         with patch.object(native.subprocess,'check_output',side_effect=run):self.assertEqual(self.verify(),self.sha)
         self.assertTrue(calls)
         for argv in calls:self.assertIn('safe.directory='+str(self.source),argv);self.assertNotIn('safe.directory=*',argv)
+    def test_shallow_pin_does_not_follow_newer_upstream_head(self):
+        (self.source/'module.py').write_text('VALUE = 2\n');self.git('add','module.py');self.git('-c','user.name=Synthetic','-c','user.email=test@example.invalid','-c','commit.gpgsign=false','commit','-qm','newer fixture')
+        target=Path(self.temp.name)/'shallow'
+        subprocess.check_call(['/usr/bin/git','init','--quiet',str(target)],env=self.env)
+        def git(*args):return subprocess.check_output(['/usr/bin/git','-C',str(target),*args],env=self.env,text=True,stderr=subprocess.DEVNULL)
+        git('fetch','--depth=1',str(self.source),self.sha);git('checkout','--detach',self.sha)
+        self.assertEqual(git('rev-list','--count','HEAD').strip(),'1')
+        self.assertEqual(native.verify_source_tree(target,expected_commit=self.sha),self.sha)
+        self.assertEqual((target/'module.py').read_text(),'VALUE = 1\n')
     def test_index_flags_cannot_hide_changed_source(self):
         self.git('update-index','--assume-unchanged','module.py');(self.source/'module.py').write_text('VALUE = 99\n')
         with self.assertRaises(native.Blocked):self.verify()

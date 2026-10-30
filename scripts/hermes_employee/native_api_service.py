@@ -27,7 +27,14 @@ def native_provider_config(value, model):
     """
     if not isinstance(value, dict) or not isinstance(value.get('model', {}), dict):
         raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
-    return {**value, 'model': {**value.get('model', {}), 'reasoning_echo': model in ('MiniMax-M3.1-Flash', 'MiniMax-M3')}}
+    tools=value.get('tools', {})
+    if not isinstance(tools,dict):raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
+    search=tools.get('tool_search', {})
+    search=search if isinstance(search,dict) else {}
+    # The pinned SDK supports eager loading. One mediated business tool must not
+    # be deferred behind search/describe/call wrappers (extra provider rounds).
+    return {**value, 'model': {**value.get('model', {}), 'reasoning_echo': model in ('MiniMax-M3.1-Flash', 'MiniMax-M3')},
+            'tools':{**tools,'tool_search':{**search,'enabled':'off'}}}
 
 
 def native_provider_options(model, reasoning_config=None, request_overrides=None):

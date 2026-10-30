@@ -11,7 +11,7 @@ class Provider(BaseHTTPRequestHandler):
  def log_message(self,*a):pass
  def do_POST(self):
   body=json.loads(self.rfile.read(int(self.headers['Content-Length'])));calls.append(body)
-  with open(artifact/'synthetic-provider.log','a') as log:log.write(json.dumps({'path':self.path,'tools':len(body.get('tools',[])),'stream':body.get('stream'),'reasoningEffort':body.get('reasoning_effort')})+'\n')
+  with open(artifact/'synthetic-provider.log','a') as log:log.write(json.dumps({'path':self.path,'tools':len(body.get('tools',[])),'toolNames':[t.get('function',{}).get('name') for t in body.get('tools',[])],'stream':body.get('stream'),'reasoningEffort':body.get('reasoning_effort')})+'\n')
   if self.path=='/backend':backend.append(body);return self.reply({'ok':True,'operations':[{'operationId':'GET /api/products'}]})
   if self.path=='/api/show':return self.reply({'model_info':{'minimax.context_length':200000},'capabilities':['completion','tools','vision']})
   names=[t.get('function',{}).get('name') for t in body.get('tools',[])]
@@ -73,7 +73,7 @@ try:
  assert result['output']=='NATIVE_ACCEPTANCE_PASSED',result
  main_requests=[c for c in calls if c.get('tools')]
  replayed=[m for c in main_requests for m in c.get('messages',[]) if m.get('role')=='assistant' and m.get('tool_calls')]
- wire={'mainRequests':len(main_requests),'efforts':sorted({str(c.get('reasoning_effort')) for c in main_requests}),'replayedToolTurns':len(replayed),'missingOrChangedReasoning':sum(m.get('reasoning_content')!='SYNTHETIC_REASONING_'+m['tool_calls'][0]['id'] for m in replayed)}
+ wire={'mainRequests':len(main_requests),'efforts':sorted({str(c.get('reasoning_effort')) for c in main_requests}),'replayedToolTurns':len(replayed),'toolNames':sorted({t.get('function',{}).get('name') for c in main_requests for t in c.get('tools',[])}),'missingOrChangedReasoning':sum(m.get('reasoning_content')!='SYNTHETIC_REASONING_'+m['tool_calls'][0]['id'] for m in replayed)}
  (artifact/'native-wire-verification.json').write_text(json.dumps(wire,indent=2))
  assert all(t.get('function',{}).get('name')=='store_backend' for c in main_requests for t in c.get('tools',[])), 'NATIVE_UNREVIEWED_TOOL_EXPOSED'
  assert main_requests and all(c.get('reasoning_effort')=='low' for c in main_requests),'MINIMAX_EFFORT_NOT_SENT'
