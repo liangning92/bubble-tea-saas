@@ -1,6 +1,6 @@
 import {TeamError} from './TeamError'
 import {nativeReplyFault} from './NativeReplyQuality'
-import {nativePollDelayed} from './NativePollHealth'
+import {nativeReplyDelayed} from './NativePollHealth'
 import {nativeChannelAdmission,enqueueNativeStoreRequest,nativeJobId,nativeJobKey} from './NativeStoreQueue'
 import { createHash, randomUUID } from 'crypto'
 import { z } from 'zod'
@@ -302,7 +302,7 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
     if(!m||j.requesterStaffId!==a.staffId||j.channelId!==c.id||j.sourceSeq!==m.seq)continue
     const terminalFailure=['failed','unknown','blocked','cancelled','interrupted'].includes(j.state)
     const state:OwnAiHandling['state']=terminalFailure?'failed':j.outputMessageId?'replied':j.state==='queued'?'queued':['preparing','admitting','running','waiting_children'].includes(j.state)?'processing':'failed'
-    output.set(m.id,{state,updatedAt:j.updatedAt,...(state==='replied'?{}:terminalFailure?{failureReason:/DEADLINE|TIMEOUT/.test(j.fault||'')?'timeout' as const:/DISABLED/.test(j.fault||'')?'paused' as const:/ACCOUNT|CONTEXT|SOURCE/.test(j.fault||'')?'permission' as const:'execution' as const}:nativePollDelayed(j,nowMs)?{failureReason:j.lastPollFault==='NATIVE_RUN_DEADLINE'?'timeout' as const:'delayed' as const}:{})})
+    output.set(m.id,{state,updatedAt:j.updatedAt,...(state==='replied'?{}:terminalFailure?{failureReason:/DEADLINE|TIMEOUT/.test(j.fault||'')?'timeout' as const:/DISABLED/.test(j.fault||'')?'paused' as const:/ACCOUNT|CONTEXT|SOURCE/.test(j.fault||'')?'permission' as const:'execution' as const}:nativeReplyDelayed(j,nowMs)?{failureReason:j.lastPollFault==='NATIVE_RUN_DEADLINE'?'timeout' as const:'delayed' as const}:{})})
   }
   return output
 }
