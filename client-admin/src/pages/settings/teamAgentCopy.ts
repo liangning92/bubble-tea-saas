@@ -50,9 +50,9 @@ const zh = {
   dirtyWarning: '存在未保存的设置更改',
 
   // 基础设置
-  basicSection: '1. 智能体基础配置',
+  basicSection: '身份设置',
   enableSwitch: '启用 Hermes 智能体服务',
-  enableHelp: '开启后，由 Hermes 理解自由提问，并按保存的业务权限调查和执行；回复依据接收员工权限过滤。',
+  enableHelp: '开启后使用同一个原生 Hermes 处理工作，执行和回复遵循当前账户与接收人的权限。',
   allChannelsTitle: '全频道允许沟通（不限制频道）',
   allChannelsDesc: '开启后，无需逐个频道选点授权，所有团队工作频道均自动允许智能体接入协同与回答。',
   agentName: '智能体身份名称',
@@ -91,8 +91,8 @@ const zh = {
   },
 
   // 安全审计边界
-  boundariesSection: '4. 安全合规底线',
-  humanReview: '管理员人工复核',
+  boundariesSection: '需店主批准的事项',
+  humanReview: '支付、超预算、员工处罚',
   humanReviewDesc: '智能体提交的最终盘点报告与决策建议必须经管理员复核确认，提交不等于自动验收通过。'
 }
 
@@ -147,9 +147,9 @@ const en: typeof zh = {
   conflictError: 'Settings were modified by another administrator. Please reload.',
   dirtyWarning: 'Unsaved changes exist',
 
-  basicSection: '1. Basic Configuration',
+  basicSection: 'Identity settings',
   enableSwitch: 'Enable Hermes Agent Service',
-  enableHelp: 'When enabled, allows assigning bounded audit tasks and employee channel collaboration.',
+  enableHelp: 'Use the same native Hermes for work. Actions and replies follow the requesting account and recipient permissions.',
   allChannelsTitle: 'Allow All Channels (Unrestricted)',
   allChannelsDesc: 'When enabled, Hermes participates across all team work channels without manual per-channel setup.',
   agentName: 'Agent Identity Name',
@@ -185,8 +185,8 @@ const en: typeof zh = {
     channels: { name: 'Team Communication', desc: 'Read employee inquiries; send responses and task follow-ups' }
   },
 
-  boundariesSection: '4. Safety & Review Boundary',
-  humanReview: 'Mandatory Human Review',
+  boundariesSection: 'Actions requiring owner approval',
+  humanReview: 'Payments, over-budget spending, employee penalties',
   humanReviewDesc: 'Agent final reports and recommendations require supervisor review; submission does not equal acceptance.'
 }
 
@@ -241,9 +241,9 @@ const id: typeof zh = {
   conflictError: 'Pengaturan diubah oleh administrator lain. Silakan muat ulang.',
   dirtyWarning: 'Ada perubahan yang belum disimpan',
 
-  basicSection: '1. Konfigurasi Dasar',
+  basicSection: 'Pengaturan identitas',
   enableSwitch: 'Aktifkan Layanan Agen Hermes',
-  enableHelp: 'Saat aktif, mengizinkan penugasan tugas audit terbatas dan kolaborasi kanal pegawai.',
+  enableHelp: 'Gunakan Hermes asli yang sama untuk bekerja. Operasi dan balasan mengikuti izin akun peminta dan penerima.',
   allChannelsTitle: 'Izinkan Semua Kanal (Tanpa Batasan)',
   allChannelsDesc: 'Saat aktif, Hermes otomatis dapat merespons di semua kanal kerja tanpa perlu dipilih satu per satu.',
   agentName: 'Nama Identitas Agen',
@@ -279,8 +279,8 @@ const id: typeof zh = {
     channels: { name: 'Komunikasi Tim', desc: 'Baca pertanyaan pegawai; kirim jawaban dan tindak lanjut tugas' }
   },
 
-  boundariesSection: '4. Batas Keamanan & Peninjauan',
-  humanReview: 'Peninjauan Manusia Wajib',
+  boundariesSection: 'Tindakan yang memerlukan persetujuan pemilik',
+  humanReview: 'Pembayaran, biaya di luar anggaran, sanksi karyawan',
   humanReviewDesc: 'Laporan akhir agen memerlukan persetujuan manajer; pengiriman bukan penerimaan otomatis.'
 }
 

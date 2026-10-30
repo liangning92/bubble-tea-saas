@@ -46,6 +46,17 @@ let server,browser;async function pass(name,fn){await fn();passed.push(name);con
  browser=await chromium.launch({headless:true});
  async function open(language,viewport,tickets=[]){const context=await browser.newContext({viewport});await context.addInitScript(({language,tickets})=>{for(const [key,value]of tickets)localStorage.setItem(key,value);localStorage.setItem('bubble-tea-language',language);sessionStorage.setItem('auth-storage',JSON.stringify({state:{token:'synthetic-browser-session-only',isAuthenticated:true,user:{id:'synthetic-admin',phone:'08000000001',role:'admin',managementAccess:true,storeId:'synthetic-store',staff:{id:'synthetic-staff',name:'Synthetic Owner',position:'admin'}}},version:0}))},{language,tickets});const page=await context.newPage();page.on('pageerror',e=>browserErrors.push(e.message));page.on('request',r=>assert(new URL(r.url()).origin===origin,'External browser request prohibited'));await page.goto(origin+'/settings/ai');await page.getByTestId('ai-save').waitFor();return{page,context}}
  const {page,context}=await open('zh',{width:1440,height:1000});
+ await pass('section navigation preserves an unsaved model draft; legacy controls stay clearly separated',async()=>{
+  const model=page.getByTestId('ai-model'),before=await model.inputValue();
+  await model.fill('Unsubmitted-draft-model');
+  await page.getByRole('navigation',{name:'AI 设置分区'}).getByRole('link',{name:'技能与知识',exact:true}).click();
+  assert.equal(await model.inputValue(),'Unsubmitted-draft-model');
+  const legacy=page.getByTestId('ai-group-communication').locator('details');
+  assert.equal(await legacy.getAttribute('open'),null);
+  await legacy.locator('summary').click();
+  assert(await legacy.getByText('以下设置保留给旧工作流消费者，并不控制当前原生 Hermes 的回复、暂停或人工接管。不要用这里的状态判断原生服务是否运行。',{exact:true}).isVisible());
+  await legacy.locator('summary').click(); await model.fill(before); assert.equal(writes,0);
+ });
  await pass('one native Hermes exposes no per-business or native-capability switches',async()=>{const panel=page.getByTestId('team-agent-settings');assert.equal(await panel.locator('select, table').count(),0);assert.equal(await panel.locator('input[type=checkbox]').count(),1);assert(await panel.getByText('Hermes 原生运行能力',{exact:true}).isVisible());assert.equal(writes,0)});
  await pass('malformed workbench connection state cannot retain credential creation',async()=>{operationsMalformed=true;await page.getByRole('button',{name:'刷新连接状态',exact:true}).click();await page.getByRole('alert').filter({hasText:'连接状态读取失败'}).waitFor();assert.equal(await page.getByRole('button',{name:'创建工作台连接凭据',exact:true}).count(),0);assert.equal(writes,0);operationsMalformed=false;await page.reload();await page.getByTestId('ai-save').waitFor()});
  await pass('unchanged agent settings can be explicitly resynced without changing authority or calling a model',async()=>{
@@ -96,11 +107,12 @@ let server,browser;async function pass(name,fn){await fn();passed.push(name);con
  for(const language of ['zh','id','en'])for(const [label,viewport]of [['desktop',{width:1440,height:1000}],['phone',{width:390,height:844}],...(language==='zh'?[['tablet',{width:768,height:1024}]]:[])]){
   await pass(language+' '+label+' actual built page: model and workflow areas retained alongside Agent and memory panels without horizontal overflow',async()=>{
    const {page,context}=await open(language,viewport),main=page.getByTestId('ai-settings-page'),area=page.getByTestId('team-ai-settings');
-   assert.equal(await main.locator('section').count(),11);assert.equal(await main.getByTestId('team-agent-settings').locator('section').count(),5);assert(await main.getByTestId('agent-memory-panel').isVisible());assert.equal(await area.locator('section').count(),2);
+   for(const group of ['agent','model','communication','knowledge','workbench'])assert(await main.getByTestId('ai-group-'+group).isVisible());assert.equal(await main.getByTestId('team-agent-settings').locator('section').count(),5);assert(await main.getByTestId('agent-memory-panel').isVisible());assert.equal(await area.locator('section').count(),2);
    assert.equal(await main.locator('#ai-capabilities, #ai-boundaries').count(),0);
    assert.equal(await main.getByText(({zh:'查看原有权限草稿',id:'Lihat draf izin tersimpan',en:'Previously saved permission draft'})[language],{exact:true}).count(),0);
    assert.equal(await area.locator('h4, dl').count(),0,'removed static capability cards and approval table must not be rendered');
    assert.equal(await area.locator('select').count(),1);assert.equal(await area.getByRole('checkbox').count(),2);
+   await main.getByTestId('ai-group-communication').locator('details').locator('summary').click();
    const headings=({zh:['模型连接','连接状态与费用','智能体（Agent）设置','工作台连接 · 同一个 Hermes','员工来信处理许可','门店团队工作自动处理'],id:['Koneksi model','Status koneksi dan biaya','Pengaturan Agen (Hermes)','Koneksi workbench · Hermes yang sama','Izin pemrosesan pesan pegawai','Koordinasi kerja toko'],en:['Model connection','Connection status and costs','Agent Settings (Hermes)','Workbench connection · Same Hermes','Incoming employee-message permissions','Store work coordination']})[language];
    for(const heading of headings)assert.equal(await main.getByRole('heading',{name:heading,exact:true}).count(),1);
    const nativePanel=main.getByTestId('team-agent-settings');

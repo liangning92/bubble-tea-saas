@@ -7,7 +7,7 @@ export function StoreOperationsDelegation({client,language}:{client:Pick<TeamCli
  const [state,setState]=useState<any>(null),[confirmed,setConfirmed]=useState(false),[credential,setCredential]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false)
  const load=async()=>{
   try{
-   const next=await client.request('get','/api/team/ai/operations-delegations')
+   const next=await client.request('get','/team/ai/operations-delegations')
    if(!next||!Array.isArray(next.delegations)||typeof next.canDelegate!=='boolean')throw Error('CONNECTION_STATE_INVALID')
    if(client.current()){setState(next);setError('')}
   }catch{
@@ -19,14 +19,14 @@ export function StoreOperationsDelegation({client,language}:{client:Pick<TeamCli
   if(!state?.canDelegate||!confirmed)return
   setBusy(true);setError('')
   try{
-   const result:any=await client.request('post','/api/team/ai/operations-delegations',{activityIds:[],expiresAt:null,confirm:'full_store_operations_role'})
+   const result:any=await client.request('post','/team/ai/operations-delegations',{activityIds:[],expiresAt:null,confirm:'full_store_operations_role'})
    if(client.current()){setCredential(result.credential);setConfirmed(false);await load()}
   }catch{setError(l('连接未保存，请刷新检查当前账户和 Hermes 状态。','Koneksi belum tersimpan. Muat ulang untuk memeriksa akun dan Hermes.','Connection was not saved. Refresh and check the current account and Hermes.'))}
   finally{setBusy(false)}
  }
  const revoke=async(id:string)=>{
   setBusy(true)
-  try{await client.request('post','/api/team/ai/operations-delegations/'+id+'/revoke',{});await load()}
+  try{await client.request('post','/team/ai/operations-delegations/'+id+'/revoke',{});await load()}
   catch{setError(l('撤销失败，请刷新核对。','Gagal mencabut. Muat ulang dan periksa.','Could not revoke. Refresh and check.'))}
   finally{setBusy(false)}
  }

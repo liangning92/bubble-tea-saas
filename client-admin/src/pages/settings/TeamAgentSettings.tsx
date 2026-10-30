@@ -259,14 +259,14 @@ export function TeamAgentSettings({
               <span>{c.agentOrigin}: <code className="rounded bg-gray-200/70 px-1 py-0.5 text-gray-700">{systemState.hostOrigin}</code></span>
             </div>
           )}
-          <div className="mt-4 rounded-lg border border-amber-100 bg-amber-50/40 p-3.5 text-sm" data-testid="pdca-pilot-status" role="status">
+          <details className="mt-4 rounded-lg border bg-white p-3.5 text-sm" data-testid="pdca-pilot-status"><summary className="cursor-pointer text-gray-600">{language.startsWith('zh') ? '历史 PDCA 试点诊断（不控制原生 Hermes）' : language.startsWith('id') ? 'Diagnostik pilot PDCA lama (tidak mengontrol Hermes asli)' : 'Legacy PDCA pilot diagnostics (does not control native Hermes)'}</summary><div className="mt-3" role="status">
             <h4 className="font-semibold text-gray-900">{c.pdcaStatus}</h4>
             <p className="mt-1 text-gray-800">{({ valid: c.pdcaValid, expired: c.pdcaExpired, disabled: c.pdcaDisabled, invalid: c.pdcaInvalid, unavailable: c.pdcaUnavailable })[systemState?.pdcaPilot?.state || 'unavailable']}</p>
             {systemState?.pdcaPilot?.startedAt && systemState.pdcaPilot.expiresAt && (
               <p className="mt-2 break-words text-xs text-gray-600">{c.pdcaPeriod}: {new Date(systemState.pdcaPilot.startedAt).toLocaleString(language === 'zh' ? 'zh-CN' : language === 'id' ? 'id-ID' : 'en-US', { timeZone: 'Asia/Jakarta' })} → {new Date(systemState.pdcaPilot.expiresAt).toLocaleString(language === 'zh' ? 'zh-CN' : language === 'id' ? 'id-ID' : 'en-US', { timeZone: 'Asia/Jakarta' })}</p>
             )}
             <p className="mt-2 text-xs leading-relaxed text-gray-600">{systemState?.pdcaPilot?.renewalRequired ? c.pdcaRenewalHelp : c.pdcaStatusHelp}</p>
-          </div>
+          </div></details>
         </div>
       </section>
 
@@ -300,7 +300,7 @@ export function TeamAgentSettings({
               />
             </label>
 
-            <label className="block text-sm">
+            {systemState?.runtimeKind!=='hermes_native_api' && <label className="block text-sm">
               <span className="font-medium text-gray-700">{c.timeout}</span>
               <input
                 className={field}
@@ -312,7 +312,7 @@ export function TeamAgentSettings({
                 onChange={e => updateDraft({ taskTimeoutMinutes: Math.max(1, Math.min(1440, Number(e.target.value) || 10)) })}
               />
               <span className="mt-1 block text-xs text-gray-500">{c.timeoutHelp}</span>
-            </label>
+            </label>}
 
             <label className="block text-sm sm:col-span-2">
               <span className="font-medium text-gray-700">{c.agentOrigin}</span>
@@ -345,9 +345,7 @@ export function TeamAgentSettings({
             <p className="text-sm font-medium text-gray-900">{c.humanReview}</p>
             <p className="mt-0.5 text-xs text-gray-500 leading-relaxed">{nativeCopy.capabilityHelp}</p>
           </div>
-          <span className="shrink-0 rounded bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700 border border-green-200/50">
-            {c.humanReview}
-          </span>
+
         </div>
       </section>
 
