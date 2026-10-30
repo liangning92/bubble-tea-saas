@@ -112,7 +112,7 @@ let server,browser;async function pass(name,fn){await fn();passed.push(name);con
    assert.equal(await main.getByText(({zh:'查看原有权限草稿',id:'Lihat draf izin tersimpan',en:'Previously saved permission draft'})[language],{exact:true}).count(),0);
    assert.equal(await area.locator('h4, dl').count(),0,'removed static capability cards and approval table must not be rendered');
    assert.equal(await area.locator('select').count(),1);assert.equal(await area.getByRole('checkbox').count(),2);
-   await main.locator('details').filter({has:main.getByTestId('workflow-settings')}).locator('summary').click();
+   await main.getByTestId('ai-group-communication').locator('details').locator('summary').click();
    const headings=({zh:['模型连接','连接状态与费用','智能体（Agent）设置','工作台连接 · 同一个 Hermes','员工来信处理许可','门店团队工作自动处理'],id:['Koneksi model','Status koneksi dan biaya','Pengaturan Agen (Hermes)','Koneksi workbench · Hermes yang sama','Izin pemrosesan pesan pegawai','Koordinasi kerja toko'],en:['Model connection','Connection status and costs','Agent Settings (Hermes)','Workbench connection · Same Hermes','Incoming employee-message permissions','Store work coordination']})[language];
    for(const heading of headings)assert.equal(await main.getByRole('heading',{name:heading,exact:true}).count(),1);
    const nativePanel=main.getByTestId('team-agent-settings');
