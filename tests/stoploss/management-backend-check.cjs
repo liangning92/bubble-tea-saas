@@ -13,8 +13,8 @@ const storeId='whole-backend-own-store',other='whole-backend-other-store';let ow
 const invoke=(actor,operationId,fields={})=>api.invokeManagementBackend(db,actor,{operationId,contractVersion:api.backendVersion(),...fields});
 const description=id=>({id,path:id.slice(id.indexOf(' ')+1),method:id.split(' ')[0],permission:null});
 async function main(){
- for(const [base,name]of[['/api/products','productRouter'],['/api/config','configRouter'],['/api/categories','categoryRouter'],['/api/team','teamCommunicationRouter'],['/api/marketing/activities','activitiesRouter'],['/api/purchase-orders','purchaseOrderRouter'],['/api/salaries','salaryRouter']]){
-  const files={productRouter:'product',configRouter:'config',categoryRouter:'category',teamCommunicationRouter:'teamCommunication',activitiesRouter:'activities',purchaseOrderRouter:'purchaseOrder',salaryRouter:'salary'};
+ for(const [base,name]of[['/api/inventory','inventoryRouter'],['/api/products','productRouter'],['/api/config','configRouter'],['/api/categories','categoryRouter'],['/api/team','teamCommunicationRouter'],['/api/marketing/activities','activitiesRouter'],['/api/purchase-orders','purchaseOrderRouter'],['/api/salaries','salaryRouter']]){
+  const files={inventoryRouter:'inventory',productRouter:'product',configRouter:'config',categoryRouter:'category',teamCommunicationRouter:'teamCommunication',activitiesRouter:'activities',purchaseOrderRouter:'purchaseOrder',salaryRouter:'salary'};
   declareAccessRoutes(base,built('routes/'+files[name])[name]);
  }
  declareAccessRoutes('/api/upload',built('routes/upload').uploadRouter);
@@ -33,6 +33,10 @@ async function main(){
   const op=api.backendDescription('POST /api/products');assert(op.requestContract.body.properties.name);assert.equal(op.contractCoverage,'declared_native_validator_only');
   const activity=api.backendDescription('PUT /api/marketing/activities/:id');assert(activity.requestContract.body.properties.version);assert(activity.requestContract.body.properties.memberOnly);
   assert.equal(api.backendDescription('GET /api/team/channels').contractCoverage,'native_controller_validation_not_described');
+  const inventory=api.backendCatalog('inventory logs stock-out',0,40,employee);assert(inventory.operations.some(op=>op.operationId==='GET /api/inventory/logs/today-stock-out'&&op.summary.includes('business timezone')));
+  const dates=api.backendDescription('GET /api/inventory/consumption-analysis').requestContract.query;assert(dates.required.includes('startDate'));assert(dates.required.includes('endDate'));
+  assert(api.backendDescription('GET /api/inventory/logs/stock-out').summary.includes('200'));
+
  });
  await check('native read uses current account and own store; no foreign admin read',async()=>{
   const own=await invoke(owner,'GET /api/products');assert.equal(own.ok,true);assert.equal(own.data.data.list.length,1);assert.equal(own.data.data.list[0].name,'Own tea');
@@ -228,7 +232,7 @@ async function main(){
   Object.assign(process.env,{EMPLOYEE_HERMES_ENABLED:'1',EMPLOYEE_HERMES_STORE_ID:storeId,EMPLOYEE_HERMES_AGENT_ID:agentId});
   await writeTeam(db,storeId,'ai.agent.settings',{enabled:true,employeeBridgeEnabled:false,expiresAt:'2000-01-01T00:00:00Z',permissions:{},agentName:'Fixture Hermes'});
   await writeTeam(db,storeId,'ai.settings',{enabled:true,provider:'minimax',model:'MiniMax-M3.1-Flash',version:1});
-  let submitted=0,configured=0,lost=false,activeChildren=0,runStatus='completed',cancelled=0,draining=false,statusUnavailable=false;const runs=new Map(),contexts=new Map();
+  let nativeOutput=Array.from({length:120},(_,i)=>`Record ${i}: synthetic item ${i+101}, quantity ${i+1}.`).join('\n');let submitted=0,configured=0,lost=false,activeChildren=0,runStatus='completed',cancelled=0,draining=false,statusUnavailable=false;const runs=new Map(),contexts=new Map();
   global.fetch=async(url,options={})=>{
    const pathname=new URL(url).pathname,body=options.body&&JSON.parse(options.body),profile=/profiles\/([a-f0-9]+)/.exec(pathname)?.[1];
    const response=v=>({ok:true,status:200,json:async()=>v});
@@ -238,7 +242,7 @@ async function main(){
    if(pathname.endsWith('/native/readiness'))return response({activeRuns:draining?1:0,activeDelegations:activeChildren,activeProcesses:0});
    if(pathname.endsWith('/stop')){cancelled++;return response({status:'cancelled'})}
    if(pathname.includes('/v1/runs/')&&statusUnavailable)throw Error('HERMES_NATIVE_TIMEOUT');
-   if(pathname.includes('/v1/runs/'))return response({status:runStatus,output:'SYNTHETIC native SDK result. '.repeat(240)});
+   if(pathname.includes('/v1/runs/'))return response({status:runStatus,output:nativeOutput});
    throw Error('UNEXPECTED_NATIVE_URL');
   };
   const engine=createNativeStoreAgent(db,{storeId,agentId,gatewayOrigin:'http://127.0.0.1:8642',gatewayKey:'synthetic-native-key',backendOrigin:'http://host.docker.internal:3000'});
@@ -292,10 +296,25 @@ async function main(){
    stalled.lastPollFault='HERMES_NATIVE_TIMEOUT';await writeTeam(db,storeId,slowKey,stalled);
    const status=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+slow.id),[slowSource]);assert.equal(status.get(slowSource.id).state,'failed');assert.equal(status.get(slowSource.id).failureReason,'timeout');
    runStatus='completed';statusUnavailable=false;
+   const bad=await create('Malformed native response'),badSource=await teamCommunication(db).send(owner,bad.id,{requestId:randomUUID(),text:'Read existing records only.'});
+   const badKey=nativeJobKey(nativeJobId(storeId,bad.id,badSource.id));await engine.runBatch(10);
+   nativeOutput='Today there is one record.\nAnalisis '+'消耗'.repeat(9382);
+   const beforeSubmit=submitted;await engine.runBatch(10);const badJob=await readTeam(db,storeId,badKey);
+   assert.equal(badJob.state,'failed');assert.equal(badJob.fault,'NATIVE_OUTPUT_REPETITION');assert(!badJob.outputFileId);assert(badJob.outputMessageId);
+   const badChannel=await readTeam(db,storeId,'channel.'+bad.id),badReply=await readTeam(db,storeId,'message.'+bad.id+'.'+String(badChannel.lastSeq).padStart(12,'0'));
+   assert(!badReply.text.includes('消耗'));assert.equal(badReply.files.length,0);
+   await engine.runBatch(10);assert.equal(submitted,beforeSubmit);assert.equal((await readTeam(db,storeId,'channel.'+bad.id)).lastSeq,badChannel.lastSeq);
 
 
 
   }finally{global.fetch=previousFetch;for(const k of ['EMPLOYEE_HERMES_ENABLED','EMPLOYEE_HERMES_STORE_ID','EMPLOYEE_HERMES_AGENT_ID']){if(oldEnv[k]===undefined)delete process.env[k];else process.env[k]=oldEnv[k]}}
+ });
+ await check('native reply repetition guard preserves ordinary long and multilingual answers',async()=>{
+  const {nativeReplyFault}=built('services/NativeReplyQuality');
+  assert.equal(nativeReplyFault('Analisis '+'消耗'.repeat(9382)),'NATIVE_OUTPUT_REPETITION');
+  assert.equal(nativeReplyFault('prefix\n'+'Repeat this paragraph.\n'.repeat(30)),'NATIVE_OUTPUT_REPETITION');
+  assert.equal(nativeReplyFault('答复 '+Array.from({length:250},(_,i)=>`原料 ${i} — ${i+1} kg`).join('\n')),null);
+  assert.equal(nativeReplyFault('今日没有出库记录。 / Tidak ada pengambilan bahan hari ini.'),null);
  });
  console.log(JSON.stringify({suite:'management-backend',passed:passed.length,checks:passed,production:false}));
 }
