@@ -2,7 +2,7 @@ import { nativeFileInput } from '../NativeBackendFiles'
 import { bindNativeBackendPublication, NativeBackendPublication } from '../ManagementBackendIdentity'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
-import { backendCatalog, backendDescription, backendOperation, invokeManagementBackend } from '../ManagementBackendRegistry'
+import { backendAccountAccess, backendAccountSummary, backendCatalog, backendDescription, backendOperation, invokeManagementBackend } from '../ManagementBackendRegistry'
 import { userAccessV2 } from '../StaffPermissionV2Service'
 import { assignedStaffAccess } from '../StaffPermissionService'
 import { hasManagementAccess } from '../../utils/managementAccess'
@@ -49,7 +49,7 @@ export async function reserveBackendOperation(db:any,storeId:string,scope:Commun
 
 async function release(db:any,g:NativeBackendPrincipal,scope:CommunicationScope,row:any){
   if(row.compartmentKey!==scope.compartmentKey||row.requesterStaffId!==scope.requesterStaffId)return {ok:false,code:'BACKEND_RECEIPT_NOT_VISIBLE'}
-  if(row.state==='blocked')return {ok:false,code:row.fault||'BACKEND_OPERATION_BLOCKED',receiptId:row.id,state:'blocked',mayHaveExecuted:false,retryAllowed:false}
+  if(row.state==='blocked')return {ok:false,code:row.fault||'BACKEND_OPERATION_BLOCKED',...(row.requiredPermission?{requiredPermission:row.requiredPermission}:{}),receiptId:row.id,state:'blocked',mayHaveExecuted:false,retryAllowed:false}
   if(row.state!=='complete')return {ok:false,code:'BACKEND_OUTCOME_UNKNOWN',receiptId:row.id,state:row.state,mayHaveExecuted:true,retryAllowed:false,message:'Inspect this receipt and the native business records. Do not dispatch the operation again.'}
   const op=backendOperation(row.operationId),permission=op?.permission?.replace(/\.(write|create|cancel|status|manage|stockIn|stockOut|count)$/i,'.read')
   if(row.resultChannelId){
@@ -70,14 +70,23 @@ export async function executeBackendTool(db:any,g:NativeBackendPrincipal,scope:C
   const parsed=schema.safeParse(raw)
   if(!parsed.success)return {ok:false,code:'BACKEND_INPUT_INVALID',issues:parsed.error.issues.map(i=>({path:i.path,message:i.message}))}
   const v=parsed.data
-  if(v.action==='catalog')return {ok:true,...backendCatalog(v.search,v.offset,v.limit)}
+  const account=async()=>{
+    if(!scope.requesterStaffId||!sourceId)throw Error('BACKEND_REQUESTING_ACCOUNT_REQUIRED')
+    const person=await db.staff.findFirst({where:{id:scope.requesterStaffId,storeId:g.storeId,status:'active'},include:{user:true}}),user=person?.user
+    if(!user||user.storeId!==g.storeId||user.id!==person.userId||!['admin','manager','cashier','staff'].includes(user.role))throw Error('BACKEND_REQUESTING_ACCOUNT_UNAVAILABLE')
+    const actor:any={id:user.id,phone:user.phone||'',role:user.role,storeId:g.storeId,staffId:person.id,issuedAtMs:Date.now()}
+    actor.accessRole=await userAccessV2(actor,db)||await assignedStaffAccess(actor,db)
+    actor.employeeApp=!hasManagementAccess(actor.role,actor.accessRole)
+    return actor
+  }
+  if(v.action==='catalog'){const actor=await account();return {ok:true,account:backendAccountSummary(actor),...backendCatalog(v.search,v.offset,v.limit,actor)}}
   if(v.action==='status'){
     if(!v.receiptId)return {ok:false,code:'BACKEND_RECEIPT_ID_REQUIRED'}
     const row=await db.config.findUnique({where:{storeId_key:{storeId:g.storeId,key:key(v.receiptId)}}})
     return row?release(db,g,scope,JSON.parse(row.value)):{ok:false,code:'BACKEND_RECEIPT_NOT_FOUND'}
   }
   if(!v.operationId)return {ok:false,code:'BACKEND_OPERATION_ID_REQUIRED'}
-  if(v.action==='describe')return backendDescription(v.operationId)
+  if(v.action==='describe'){const actor=await account();return {...backendDescription(v.operationId,actor),account:backendAccountSummary(actor)}}
   if(!v.contractVersion)return {ok:false,code:'BACKEND_CONTRACT_VERSION_REQUIRED'}
   if(!reservation)return {ok:false,code:'BACKEND_EXECUTION_RESERVATION_REQUIRED'}
   const record=await db.config.findUnique({where:{storeId_key:{storeId:g.storeId,key:key(reservation.id)}}})
@@ -90,16 +99,15 @@ export async function executeBackendTool(db:any,g:NativeBackendPrincipal,scope:C
     await assertEmployeeSettings(db,g.storeId)
     if(!authorizeDispatch)throw Error('BACKEND_DISPATCH_AUTHORITY_REQUIRED')
     await authorizeDispatch()
-    if(!scope.requesterStaffId||!sourceId)throw Error('BACKEND_REQUESTING_ACCOUNT_REQUIRED')
-    const person=await db.staff.findFirst({where:{id:scope.requesterStaffId,storeId:g.storeId,status:'active'},include:{user:true}}),user=person?.user
-    if(!user||(person.storeId||user.storeId)!==g.storeId||user.id!==person.userId||!['admin','manager','cashier','staff'].includes(user.role))throw Error('BACKEND_REQUESTING_ACCOUNT_UNAVAILABLE')
-    const actor:any={id:user.id,phone:user.phone||'',role:user.role,storeId:g.storeId,staffId:person.id,issuedAtMs:Date.now()}
+    const actor=await account(),user={id:actor.id,role:actor.role}
     if(publication)bindNativeBackendPublication(actor,publication)
     actor.nativeAgent={agentId:g.agentId,grantVersion:g.version,clientRevision:g.clientRevision,executionId:journal.executionId,name:g.displayName||'Hermes'}
     actor.accessRole=await userAccessV2(actor,db)||await assignedStaffAccess(actor,db)
     actor.employeeApp=!hasManagementAccess(actor.role,actor.accessRole)
     const op=backendOperation(v.operationId)
     if(!op)throw Error('BACKEND_OPERATION_NOT_FOUND')
+    const permission=backendAccountAccess(actor,v.operationId)
+    if(!permission.allowed){const blocked={...journal,state:'blocked',fault:permission.code,requiredPermission:permission.requiredPermission,updatedAt:new Date().toISOString()};await persist(blocked);return {ok:false,...permission,receiptId:reservation.id,state:'blocked',executed:false,mayHaveExecuted:false,retryAllowed:false}}
     const running={...journal,state:'running',actorUserId:user.id,actorRole:user.role,storeId:g.storeId,contractVersion:v.contractVersion,startedAt:new Date().toISOString()}
     const claimed=await db.config.updateMany({where:{id:record.id,value:record.value},data:{value:JSON.stringify(running)}})
     if(claimed.count!==1)throw Error('BACKEND_EXECUTION_ALREADY_CLAIMED')

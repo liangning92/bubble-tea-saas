@@ -171,7 +171,7 @@ export type OwnAiHandling = { state: 'queued' | 'processing' | 'needs_review' | 
 /** Read-only source status. Never project a colleague's job or an audit-only history floor. */
 export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel, messages: any[], nowMs=Date.now()) {
   const member = c.members.find(m => m.staffId === a.staffId)
-  const own = member && !c.archived ? messages.filter(m => m.channelId === c.id && m.authorId === a.staffId && !m.ai && Number.isSafeInteger(m.seq) && m.seq >= member.fromSeq) : []
+  const own = member && !c.archived ? messages.filter(m => m.channelId === c.id && m.authorId === a.staffId && !m.ai && !m.agent && Number.isSafeInteger(m.seq) && m.seq >= member.fromSeq) : []
   const output = new Map<string, OwnAiHandling>()
   if (!own.length) return output
   const prefix = `workflow.job.${c.id}.`, settings = [`workflow.policy.${c.id}`, 'workflow.defaults', `workflow.exception.${c.id}`]
@@ -298,8 +298,9 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
   const nativeRows=nativeKeys.filter(key=>absoluteRecords.has(key)).map(key=>({value:JSON.stringify(absoluteRecords.get(key))}))
   for(const row of nativeRows){const j=JSON.parse(row.value),m=own.find(m=>m.id===j.messageId)
     if(!m||j.requesterStaffId!==a.staffId||j.channelId!==c.id||j.sourceSeq!==m.seq)continue
-    const state:OwnAiHandling['state']=j.outputMessageId?'replied':j.state==='queued'?'queued':['preparing','admitting','running','waiting_children'].includes(j.state)?'processing':'failed'
-    output.set(m.id,{state,updatedAt:j.updatedAt,...(j.lastPollFault?{failureReason:'delayed' as const}:['failed','unknown','blocked'].includes(j.state)?{failureReason:'execution' as const}:{})})
+    const terminalFailure=['failed','unknown','blocked','cancelled','interrupted'].includes(j.state)
+    const state:OwnAiHandling['state']=terminalFailure?'failed':j.outputMessageId?'replied':j.state==='queued'?'queued':['preparing','admitting','running','waiting_children'].includes(j.state)?'processing':'failed'
+    output.set(m.id,{state,updatedAt:j.updatedAt,...(state==='replied'?{}:j.lastPollFault?{failureReason:j.lastPollFault==='NATIVE_RUN_DEADLINE'?'timeout' as const:'delayed' as const}:terminalFailure?{failureReason:j.fault==='NATIVE_RUN_DEADLINE'?'timeout' as const:'execution' as const}:{})})
   }
   return output
 }
@@ -560,7 +561,7 @@ export function teamCommunication(db: DB = prisma) {
         if (!c.round.participants.includes(a.staffId)) c.round.participants.push(a.staffId)
         const employee = await identity(tx, a)
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
-          authorId: a.staffId, authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId,...(nativeAgent.replyToSeq!==undefined?{replyToSeq:nativeAgent.replyToSeq}:{})}}: {}) }
+          authorId: nativeAgent?'agent:'+nativeAgent.agentId:a.staffId, ...(nativeAgent?{actorStaffId:a.staffId}:{}), authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId,...(nativeAgent.replyToSeq!==undefined?{replyToSeq:nativeAgent.replyToSeq}:{})}}: {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
         const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })

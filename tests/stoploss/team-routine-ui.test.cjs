@@ -10,3 +10,15 @@ test('real chat component distinguishes ongoing automatic authorization from hum
   const rendered=require(file);for(const r of rendered){assert(r.html.includes(r.copy.aiRoutine));assert(r.html.includes(r.copy.aiApproved));const auto=r.html.slice(r.html.indexOf('id="team-message-2"'));assert(auto.includes(r.copy.aiRoutine));assert(!auto.includes(r.copy.aiApproved))}
  }finally{fs.rmSync(dir,{recursive:true,force:true})}
 });
+
+test('Hermes historical requester IDs remain on the agent side with no human sent badge or handling',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'agent-ui-')),file=path.join(dir,'fixture.cjs');
+ try{
+  esbuild.buildSync({stdin:{contents:`import React from 'react';import {renderToStaticMarkup} from 'react-dom/server';import{TeamChatMessages}from './shared/TeamChatMessages';
+ const base={authorId:'employee',files:[],createdAt:'2026-10-30T01:35:00Z'};
+ const messages=[{...base,id:'human',seq:121,authorName:'lawrence',text:'设置一个活动'}, {...base,id:'legacy-agent',seq:122,authorName:'Hermes AI',text:'Reply',agent:{agentId:'hermes',grantVersion:1,clientRevision:1,replyToSeq:121},aiHandling:{state:'processing'}}];
+ module.exports=renderToStaticMarkup(<TeamChatMessages messages={messages} client={{}} staffId='employee' channelId='synthetic' query='' language='zh'>{null}</TeamChatMessages>);`,resolveDir:root,loader:'tsx'},jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'},bundle:true,platform:'node',format:'cjs',outfile:file,logLevel:'silent'});
+ const html=require(file),human=html.slice(html.indexOf('<article'),html.indexOf('</article>')),agent=html.slice(html.indexOf('id="team-message-122"'));
+ assert(human.includes('team-bubble-own'));assert(human.includes('✓'));assert(agent.includes('team-bubble-other'));assert(!agent.includes('team-bubble-own'));assert(!agent.includes('✓'));assert(!agent.includes('data-testid="team-ai-handling"'));assert(agent.includes('回复'));assert(agent.includes('#121'));
+ }finally{fs.rmSync(dir,{recursive:true,force:true})}
+});

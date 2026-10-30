@@ -1,5 +1,5 @@
 import {storeOperationsGuide} from './StoreOperationsGuides'
-import {backendOperation} from './ManagementBackendRegistry'
+import {backendAccountSummary,backendOperation} from './ManagementBackendRegistry'
 import {nativeChannelAdmission} from './NativeStoreQueue'
 import {createHash,randomUUID,randomBytes} from 'node:crypto'
 import {z} from 'zod'
@@ -21,7 +21,7 @@ import type {CommunicationScope} from './teamAgentBridge/contract'
 const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const prefix='nativeAgent.job.'
 export interface NativeStoreConfig {storeId:string;agentId:string;gatewayOrigin:string;gatewayKey:string;backendOrigin:string}
-type NativeJob={id:string;storeId:string;channelId:string;sourceSeq:number;messageId:string;requesterStaffId:string;sourceHash:string;publicObjective?:any;authorizationChannelId?:string;sourceAudienceHash?:string;parentJobId?:string;audienceHash?:string;profileKey?:string;scope?:CommunicationScope;principal?:NativeBackendPrincipal;state:string;createdAt:string;updatedAt:string;sessionId?:string;runId?:string;input?:any;callbackCredentialHash?:string;providerCredentialHash?:string;credentials?:never;fault?:string;outputMessageId?:string;outputFileId?:string;model?:string;pollLeaseUntil?:number;pollToken?:string;nextAttemptAt?:number;failureMessageId?:string;statusMessageId?:string;lastPollFault?:string}
+type NativeJob={id:string;storeId:string;channelId:string;sourceSeq:number;messageId:string;requesterStaffId:string;sourceHash:string;publicObjective?:any;authorizationChannelId?:string;sourceAudienceHash?:string;parentJobId?:string;audienceHash?:string;profileKey?:string;scope?:CommunicationScope;principal?:NativeBackendPrincipal;state:string;startedAt?:string;createdAt:string;updatedAt:string;sessionId?:string;runId?:string;input?:any;callbackCredentialHash?:string;providerCredentialHash?:string;credentials?:never;fault?:string;outputMessageId?:string;outputFileId?:string;model?:string;pollLeaseUntil?:number;pollToken?:string;nextAttemptAt?:number;failureMessageId?:string;statusMessageId?:string;lastPollFault?:string}
 const atomic=(tx:any)=>new Proxy(tx,{get(target,key){return key==='$transaction'?async(fn:any)=>fn(atomic(target)):typeof target[key]==='function'?target[key].bind(target):target[key]}})
 const channelLease=(id:string)=>'nativeAgent.channel.'+id
 const stamp=()=>new Date().toISOString()
@@ -66,8 +66,9 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   const ai=await readTeam<any>(db,cfg.storeId,'ai.settings')
   if(!ai?.enabled||ai.provider!=='minimax'||!ai.model)throw Error('NATIVE_PROVIDER_UNAVAILABLE')
   const callbackCredential=randomBytes(48).toString('base64url'),providerCredential=randomBytes(48).toString('base64url')
-  const input={clock:{asOf:stamp(),timeZone:'Asia/Jakarta'},currentRequest:job.publicObjective?{workOrderId:job.id,objective:job.publicObjective,files:job.publicObjective.message?.files||[]}:{messageId:c.source.id,seq:c.source.seq,text:c.source.text,files:c.source.files||[]},store:{id:cfg.storeId},account:{role:c.actor.role},context:{channelId:c.channel.id,cleanHandoff:!!job.authorizationChannelId},instructions:'You are the single store operations agent Hermes. Read and use your store-operations skill; it supplies professional routines, not additional permissions. Use native store operations and actual receipts; distinguish completed actions from independent acceptance. Handle only the current request, not historical unfinished requests. For a clean handoff, the work order contains only a registered native operation and approved public operating guidance or a target-visible source message. The private manager instruction, parent history, memory and attachments were not transferred. Work from these sources and target-visible facts; do not invent missing business choices. Use plain Indonesian with staff and the requested language with administrators. Never modify or deploy the store system. Do not pay, exceed budget or punish employees without owner approval. Reuse the purchased subscription only; never switch to paid fallback.'}
+  const input={clock:{asOf:stamp(),timeZone:'Asia/Jakarta'},currentRequest:job.publicObjective?{workOrderId:job.id,objective:job.publicObjective,files:job.publicObjective.message?.files||[]}:{messageId:c.source.id,seq:c.source.seq,text:c.source.text,files:c.source.files||[]},store:{id:cfg.storeId},account:backendAccountSummary(c.actor),context:{channelId:c.channel.id,cleanHandoff:!!job.authorizationChannelId},instructions:'You are the single store operations agent Hermes. First check the current requesting account and the accountAccess returned by the live backend catalog/describe. If an operation is denied, explain the missing permission immediately and stop that operation; do not gather business details or try alternative endpoints. If authorized but details are missing, ask only for the missing business choices. Read and use your store-operations skill; it supplies professional routines, not additional permissions. Use native store operations and actual receipts; distinguish completed actions from independent acceptance. Handle only the current request, not historical unfinished requests. Return the answer as your final response; the application delivers it to this conversation automatically. Do not poll the current chat for your own reply or call business endpoints merely to diagnose the integration. A saved operation receipt is the source of truth; a connection/status message is not business completion. For a clean handoff, the work order contains only a registered native operation and approved public operating guidance or a target-visible source message. The private manager instruction, parent history, memory and attachments were not transferred. Work from these sources and target-visible facts; do not invent missing business choices. Use plain Indonesian with staff and the requested language with administrators. Never modify or deploy the store system. Do not pay, exceed budget or punish employees without owner approval. Reuse the purchased subscription only; never switch to paid fallback.'}
   Object.assign(job,{scope:c.scope,principal:c.principal,profileKey,sessionId,model:ai.model,state:'admitting',input:job.input||{input:JSON.stringify(input),session_id:sessionId},callbackCredentialHash:digest(callbackCredential),providerCredentialHash:digest(providerCredential)})
+  job.startedAt=job.startedAt||stamp()
   await save(job)
   const client=gateway(profileKey)
   await client.configure({jobId:job.id,sessionKey:sessionId,model:job.model,providerBaseUrl:cfg.backendOrigin+'/api/internal/employee-hermes/native/v1',providerCredential:job.id+'.'+providerCredential,backendUrl:cfg.backendOrigin+'/api/internal/employee-hermes/native/backend',callbackCredential:job.id+'.'+callbackCredential})
@@ -158,7 +159,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
    const file=await storeNativeDownload(db,c.actor,bytes,value.mimeType,c.job.id,'team',{staffIds:c.scope.audienceStaffIds,publicOutput:c.channel.kind==='public'});res.json({ok:true,file});return
   }
   const callId=digest([v.sessionId,v.toolCallId]),executionId=c.job.id
-  const reservation=await db.$transaction(async(tx:any)=>{await lockTeam(tx,cfg.storeId,'native-backend.'+callId);return reserveBackendOperation(tx,cfg.storeId,c.scope,c.source.id,executionId,callId,v.args)})
+  const reservation=raw?.action==='execute'?await db.$transaction(async(tx:any)=>{await lockTeam(tx,cfg.storeId,'native-backend.'+callId);return reserveBackendOperation(tx,cfg.storeId,c.scope,c.source.id,executionId,callId,v.args)}):undefined
   const publication={check:async(tx:any,target:any)=>{const fresh=await current(c.job,tx);if(target.publicOutput&&fresh.channel.kind!=='public'||target.channelId&&target.channelId!==c.job.channelId||target.members.some((m:any)=>!fresh.channel.members.some((x:any)=>x.staffId===m.staffId)))throw Error('BACKEND_TARGET_CONTEXT_REQUIRED')}}
   const result=await executeBackendTool(db,c.principal,c.scope,c.source.id,v.args,reservation,async()=>{await current(c.job)},publication)
   res.json(result)
@@ -204,7 +205,20 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
      else if(result.state==='missing')await admission(job)
      else throw Error('NATIVE_ADMISSION_UNCONFIRMED')
     }else if(job.runId){
-     await current(job);const result=await gateway(job.profileKey).status(job.runId)
+     const context=await current(job),client=gateway(job.profileKey)
+     const minutes=Number(context.settings.taskTimeoutMinutes),deadline=Date.parse(job.startedAt||job.createdAt)+(Number.isFinite(minutes)&&minutes>0?minutes:10)*60000
+     let result
+     try{result=await client.status(job.runId)}catch(error){if(Date.now()<deadline)throw error;result={status:'unconfirmed'}}
+     if(Date.now()>=deadline&&!['completed','failed','cancelled','interrupted','unknown'].includes(result.status)){
+      // Stop the original SDK run; release the queue only after native work drains.
+      // Unknown business outcomes remain in their journals and are never replayed.
+      await client.cancel(job.runId)
+      const ready=await client.readiness()
+      if(ready.activeRuns||ready.activeDelegations||(ready.blockingProcesses??ready.activeProcesses)){job.lastPollFault='NATIVE_RUN_DEADLINE';await save(job);continue}
+      await deliver(job,'Waktu pemrosesan habis. Permintaan ini belum selesai. Catatan yang sudah tersimpan tetap disimpan dan tidak diulang otomatis. Minta pengelola memeriksa hasilnya sebelum mengulangi perubahan data.')
+      job.state='unknown';job.fault='NATIVE_RUN_DEADLINE';delete job.lastPollFault;delete job.nextAttemptAt;await finish(job);continue
+     }
+     delete job.lastPollFault;delete job.nextAttemptAt
      if(result.status==='completed'){
       const ready=await gateway(job.profileKey).readiness()
       if(ready.activeDelegations||(ready.blockingProcesses??ready.activeProcesses)||ready.activeRuns){job.state='waiting_children';await save(job);continue}
@@ -215,7 +229,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
      }else if(['failed','cancelled','interrupted','unknown'].includes(result.status)){
       await deliver(job,'Maaf, pekerjaan ini belum selesai. Hasil yang sudah tersimpan tidak akan diulang otomatis. Pengelola dapat melihat kendalanya di tugas ini.')
       job.state=result.status;job.fault='NATIVE_RUN_'+result.status.toUpperCase();await finish(job)
-     }
+     }else await save(job)
     }
    }catch(error:any){
     const code=/^[A-Z0-9_]{1,100}$/.test(error?.message||'')?error.message:'NATIVE_EXECUTION_UNCONFIRMED'

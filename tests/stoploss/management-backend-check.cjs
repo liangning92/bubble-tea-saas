@@ -159,7 +159,7 @@ async function main(){
   let admitted=0;
   const result=await tools.executeBackendTool(db,g,cleanScope,'target-shared-source',cleanArgs,cleanReservation,async()=>{},{check:async(_tx,target)=>{assert.equal(target.channelId,id);assert.deepEqual(target.members.map(m=>m.staffId).sort(),cleanScope.audienceStaffIds.slice().sort());admitted++;}});
   assert.equal(result.ok,true,JSON.stringify(result));assert(admitted>0);
-  const message=result.data.data;assert.equal(message.agent.agentId,g.agentId);assert.equal(message.authorName,'Hermes fixture');assert.equal(message.authorId,owner.staffId);
+  const message=result.data.data;assert.equal(message.agent.agentId,g.agentId);assert.equal(message.authorName,'Hermes fixture');assert.equal(message.authorId,'agent:'+g.agentId);assert.equal(message.actorStaffId,owner.staffId);
   assert.equal((await readTeam(db,storeId,'workflow.policy.'+id)).paused,false);
   await built('services/TeamWorkflowQueue').enqueueTeamWorkflow(db,owner,{id},message,{read:()=>{throw Error('AGENT_MUST_NOT_TRIGGER_ANOTHER_AI')},write:()=>{throw Error('AGENT_MUST_NOT_TRIGGER_ANOTHER_AI')}});
   const forged=await invoke(owner,'POST /api/team/channels/:id/messages',{pathParams:{id},body:{requestId:randomUUID(),text:'forged',agent:{agentId:g.agentId}}});assert.equal(forged.ok,false);
@@ -198,6 +198,24 @@ async function main(){
    await db.announcement.deleteMany({where:{storeId}});
   }finally{delete owner.nativeAgent}
  });
+ await check('employee discovery explains account denial before collecting activity details or dispatching',async()=>{
+  const g={storeId,agentId:randomUUID(),version:1,clientRevision:1},scope={compartmentKey:'employee-acl',requesterStaffId:employee.staffId,audienceStaffIds:[employee.staffId]};
+  const catalog=await tools.executeBackendTool(db,g,scope,'employee-question',{action:'catalog',search:'/api/marketing/activities',limit:40});
+  const create=catalog.operations.find(op=>op.operationId==='POST /api/marketing/activities');assert(create);assert.equal(create.accountAccess.allowed,false);assert.equal(create.accountAccess.requiredPermission,'marketing.write');assert.equal(catalog.account.role,'staff');
+  const described=await tools.executeBackendTool(db,g,scope,'employee-question',{action:'describe',operationId:create.operationId});assert.equal(described.accountAccess.allowed,false);
+  const args={action:'execute',operationId:create.operationId,contractVersion:api.backendVersion(),body:{name:'NEVER_CREATE_DENIED_ACTIVITY',status:'draft'}};
+  const reservation=await tools.reserveBackendOperation(db,storeId,scope,'employee-question','employee-denied-execution','employee-denied-call',args);
+  const denied=await tools.executeBackendTool(db,g,scope,'employee-question',args,reservation,async()=>{});assert.equal(denied.ok,false);assert.equal(denied.state,'blocked');assert.equal(denied.executed,false);assert.equal(denied.mayHaveExecuted,false);
+  assert.equal(denied.requiredPermission,'marketing.write');
+  const ownerView=api.backendDescription(create.operationId,owner);assert.equal(ownerView.accountAccess.allowed,true);
+  const {defaultRolesV2,effectiveAccess}=built('services/StaffPermissionV2Core');
+  const policy={version:2,revision:1,active:true,roles:defaultRolesV2,assignments:[{staffId:employee.staffId,roleId:'manager',overrides:{}}]};
+  const assigned={...employee,role:'cashier',employeeApp:false,accessRole:effectiveAccess(policy,employee.staffId)};
+  assert.equal(assigned.accessRole.id,'manager');assert.equal(api.backendDescription(create.operationId,assigned).accountAccess.allowed,false);
+  policy.assignments[0].overrides={'marketing.read':'allow','marketing.write':'allow'};assigned.accessRole=effectiveAccess(policy,employee.staffId);assert.equal(api.backendDescription(create.operationId,assigned).accountAccess.allowed,true);
+  policy.assignments[0].overrides={'marketing.read':'allow','marketing.write':'deny'};assigned.accessRole=effectiveAccess(policy,employee.staffId);assert.equal(api.backendDescription(create.operationId,assigned).accountAccess.allowed,false);
+
+ });
  await check('native API jobs recover lost admission, preserve source isolation and deliver long replies',async()=>{
   const {teamCommunication,readTeam,writeTeam}=built('services/TeamCommunicationService');
   const {createNativeStoreAgent}=built('services/NativeStoreAgent');
@@ -206,15 +224,17 @@ async function main(){
   Object.assign(process.env,{EMPLOYEE_HERMES_ENABLED:'1',EMPLOYEE_HERMES_STORE_ID:storeId,EMPLOYEE_HERMES_AGENT_ID:agentId});
   await writeTeam(db,storeId,'ai.agent.settings',{enabled:true,employeeBridgeEnabled:false,expiresAt:'2000-01-01T00:00:00Z',permissions:{},agentName:'Fixture Hermes'});
   await writeTeam(db,storeId,'ai.settings',{enabled:true,provider:'minimax',model:'MiniMax-M3.1-Flash',version:1});
-  let submitted=0,configured=0,lost=false,activeChildren=0;const runs=new Map(),contexts=new Map();
+  let submitted=0,configured=0,lost=false,activeChildren=0,runStatus='completed',cancelled=0,draining=false,statusUnavailable=false;const runs=new Map(),contexts=new Map();
   global.fetch=async(url,options={})=>{
    const pathname=new URL(url).pathname,body=options.body&&JSON.parse(options.body),profile=/profiles\/([a-f0-9]+)/.exec(pathname)?.[1];
    const response=v=>({ok:true,status:200,json:async()=>v});
    if(pathname.endsWith('/native/context')){configured++;contexts.set(body.jobId,body);assert.equal(body.sessionKey,'store_'+profile);assert.equal(body.model,'MiniMax-M3.1-Flash');return response({ok:true})}
    if(pathname.endsWith('/native/admission'))return response(runs.has(body.key)?{state:'reused',run_id:'run_'+body.key}:{state:'missing',run_id:null});
    if(pathname.endsWith('/v1/runs')){const id=options.headers['Idempotency-Key'];if(!runs.has(id)){submitted++;runs.set(id,{profile,body})}if(lost){lost=false;throw Error('synthetic lost acceptance')}return response({run_id:'run_'+id,status:'queued'})}
-   if(pathname.endsWith('/native/readiness'))return response({activeRuns:0,activeDelegations:activeChildren,activeProcesses:0});
-   if(pathname.includes('/v1/runs/'))return response({status:'completed',output:'SYNTHETIC native SDK result. '.repeat(240)});
+   if(pathname.endsWith('/native/readiness'))return response({activeRuns:draining?1:0,activeDelegations:activeChildren,activeProcesses:0});
+   if(pathname.endsWith('/stop')){cancelled++;return response({status:'cancelled'})}
+   if(pathname.includes('/v1/runs/')&&statusUnavailable)throw Error('HERMES_NATIVE_TIMEOUT');
+   if(pathname.includes('/v1/runs/'))return response({status:runStatus,output:'SYNTHETIC native SDK result. '.repeat(240)});
    throw Error('UNEXPECTED_NATIVE_URL');
   };
   const engine=createNativeStoreAgent(db,{storeId,agentId,gatewayOrigin:'http://127.0.0.1:8642',gatewayKey:'synthetic-native-key',backendOrigin:'http://host.docker.internal:3000'});
@@ -228,7 +248,7 @@ async function main(){
    activeChildren=1;await engine.runBatch(1);assert.equal((await readTeam(db,storeId,key)).state,'waiting_children');
    activeChildren=0;await engine.runBatch(1);j=await readTeam(db,storeId,key);assert.equal(j.state,'completed');assert(j.outputFileId);assert(j.outputMessageId);
    const after=await readTeam(db,storeId,'channel.'+c.id),reply=await readTeam(db,storeId,'message.'+c.id+'.'+String(after.lastSeq).padStart(12,'0'));
-   assert.equal(reply.agent.executionId,j.id);assert.deepEqual(reply.files,[j.outputFileId]);assert(reply.text.length<=4000);
+   assert.equal(reply.authorId,'agent:'+agentId);assert.equal(reply.actorStaffId,owner.staffId);assert.equal(reply.agent.executionId,j.id);assert.deepEqual(reply.files,[j.outputFileId]);assert(reply.text.length<=4000);
    await engine.runBatch(1);assert.equal((await readTeam(db,storeId,'channel.'+c.id)).lastSeq,after.lastSeq);
    const changed=await create('Queued audience change'),source=await teamCommunication(db).send(owner,changed.id,{requestId:randomUUID(),text:'OWNER_ONLY_SOURCE_SENTINEL'});
    const channel=await readTeam(db,storeId,'channel.'+changed.id);channel.members.push({staffId:employee.staffId,fromSeq:source.seq+1});await writeTeam(db,storeId,'channel.'+changed.id,channel);
@@ -242,7 +262,7 @@ async function main(){
    const question=await teamCommunication(db).send(employee,direct.id,{requestId:randomUUID(),text:'Apa yang harus saya lakukan untuk stok hari ini?'});
    const directKey=nativeJobKey(nativeJobId(storeId,direct.id,question.id));assert.equal((await readTeam(db,storeId,directKey)).state,'queued');
    await db.config.createMany({data:Array.from({length:1001},(_,i)=>({storeId,key:'team.communication.nativeAgent.job.history-'+i,category:'test',createdAt:new Date('2000-01-01T00:00:00Z'),value:JSON.stringify({id:'history-'+i,state:'completed',createdAt:'2000-01-01T00:00:00Z'})}))});
-   await engine.runBatch(1);let employeeJob=await readTeam(db,storeId,directKey);assert.equal(employeeJob.state,'running');assert.notEqual(employeeJob.profileKey,j.profileKey);assert.equal(submitted,2);
+   await engine.runBatch(1);let employeeJob=await readTeam(db,storeId,directKey);assert.equal(employeeJob.state,'running');assert.equal(JSON.parse(employeeJob.input.input).account.authority,'current_requesting_account');assert.notEqual(employeeJob.profileKey,j.profileKey);assert.equal(submitted,2);
    await engine.runBatch(1);employeeJob=await readTeam(db,storeId,directKey);assert.equal(employeeJob.state,'completed');assert(employeeJob.outputMessageId);
    assert.equal((await readTeam(db,storeId,'channel.'+direct.id)).members.length,2);
    const parentSource=await teamCommunication(db).send(owner,c.id,{requestId:randomUUID(),text:'PRIVATE_HUMAN_PROFIT_SENTINEL Rp123456789. 给员工安排卫生 SOP 工作，不要向员工透露利润。'});
@@ -258,6 +278,15 @@ async function main(){
    await engine.runBatch(10);child=await readTeam(db,storeId,childKey);assert.equal(child.state,'completed');assert(child.outputMessageId);
    const finalChannel=await readTeam(db,storeId,'channel.'+direct.id),finalMessage=await readTeam(db,storeId,'message.'+direct.id+'.'+String(finalChannel.lastSeq).padStart(12,'0'));
    assert.equal(finalMessage.agent.executionId,child.id);assert.equal(finalMessage.agent.replyToSeq,undefined);assert(!finalMessage.text.includes('PARENT_PRIVATE_FINANCE_SENTINEL'));
+   const slow=await create('Bounded request'),slowSource=await teamCommunication(db).send(owner,slow.id,{requestId:randomUUID(),text:'Read only request that stalls'});
+   const slowKey=nativeJobKey(nativeJobId(storeId,slow.id,slowSource.id));await engine.runBatch(10);let stalled=await readTeam(db,storeId,slowKey);assert.equal(stalled.state,'running');
+   stalled.startedAt=new Date(Date.now()-11*60000).toISOString();await writeTeam(db,storeId,slowKey,stalled);
+   runStatus='running';statusUnavailable=true;draining=true;await engine.runBatch(10);assert.equal((await readTeam(db,storeId,slowKey)).state,'running');assert(cancelled>0);
+   draining=false;await engine.runBatch(10);stalled=await readTeam(db,storeId,slowKey);assert.equal(stalled.state,'unknown');assert.equal(stalled.fault,'NATIVE_RUN_DEADLINE');assert(stalled.outputMessageId);
+   assert.equal((await readTeam(db,storeId,'nativeAgent.channel.'+slow.id)).jobId,null);
+   const status=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+slow.id),[slowSource]);assert.equal(status.get(slowSource.id).state,'failed');assert.equal(status.get(slowSource.id).failureReason,'timeout');
+   runStatus='completed';statusUnavailable=false;
+
 
 
   }finally{global.fetch=previousFetch;for(const k of ['EMPLOYEE_HERMES_ENABLED','EMPLOYEE_HERMES_STORE_ID','EMPLOYEE_HERMES_AGENT_ID']){if(oldEnv[k]===undefined)delete process.env[k];else process.env[k]=oldEnv[k]}}

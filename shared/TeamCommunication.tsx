@@ -173,7 +173,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
           .map(m => {
             const update = handlingUpdates.get(m.id)
             if (!ownMember || m.seq < ownMember.fromSeq) { const { aiHandling: _stale, ...source } = m; return source }
-            if (m.authorId !== staffId || m.channelId !== selectedId || m.ai || m.seq < ownMember.fromSeq || update?.seq !== m.seq) return m
+            if (m.authorId !== staffId || m.channelId !== selectedId || m.ai || m.agent || m.seq < ownMember.fromSeq || update?.seq !== m.seq) return m
             const { aiHandling: _old, ...source } = m
             return { ...source, ...(update.aiHandling ? { aiHandling: update.aiHandling } : {}) }
           }).sort((a, b) => a.seq - b.seq))
@@ -204,7 +204,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
   }, [client, scope, selectedId, auditReason, currentChannel?.member])
   useEffect(() => { void pollRef.current?.() }, [refreshKey])
   useEffect(() => {
-    const acknowledged = outbox.filter(pending => messages.some(message => message.authorId === staffId && message.requestId === pending.id))
+    const acknowledged = outbox.filter(pending => messages.some(message => message.authorId === staffId && !message.ai && !message.agent && message.requestId === pending.id))
     if (acknowledged.length) void Promise.all(acknowledged.map(m => removePending(m.id))).then(async () => { if (client.current()) setOutbox(await pendingMessages(scope)) }).catch(() => setError('OUTBOX_STORAGE_FAILED'))
   }, [messages, outbox, scope, client, staffId])
   function select(c: Channel) {

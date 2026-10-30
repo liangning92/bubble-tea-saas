@@ -19,7 +19,7 @@ export class HermesNativeClient {
    const response=await fetch(new URL((this.profileKey?'/profiles/'+this.profileKey:'')+path,this.origin),{method:body===undefined?'GET':'POST',redirect:'error',headers:{authorization:'Bearer '+this.key,...(body===undefined?{}:{'content-type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:controller.signal})
    if(!response.ok){const error:any=Error('HERMES_NATIVE_HTTP_'+response.status);error.status=response.status;throw error}
    return await response.json()
-  }finally{clearTimeout(timer)}
+  }catch(error:any){if(controller.signal.aborted)throw Error('HERMES_NATIVE_TIMEOUT');throw error}finally{clearTimeout(timer)}
  }
  async configure(context:Record<string,unknown>){return this.request('/native/context',context)}
  async admission(request:NativeHermesRequest,key:string){return this.request('/native/admission',{request,key})}
