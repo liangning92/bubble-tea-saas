@@ -300,7 +300,7 @@ export async function projectOwnAiHandling(db: DB, a: TeamActor, c: TeamChannel,
     if(!m||j.requesterStaffId!==a.staffId||j.channelId!==c.id||j.sourceSeq!==m.seq)continue
     const terminalFailure=['failed','unknown','blocked','cancelled','interrupted'].includes(j.state)
     const state:OwnAiHandling['state']=terminalFailure?'failed':j.outputMessageId?'replied':j.state==='queued'?'queued':['preparing','admitting','running','waiting_children'].includes(j.state)?'processing':'failed'
-    output.set(m.id,{state,updatedAt:j.updatedAt,...(state==='replied'?{}:j.lastPollFault?{failureReason:j.lastPollFault==='NATIVE_RUN_DEADLINE'?'timeout' as const:'delayed' as const}:terminalFailure?{failureReason:j.fault==='NATIVE_RUN_DEADLINE'?'timeout' as const:'execution' as const}:{})})
+    output.set(m.id,{state,updatedAt:j.updatedAt,...(state==='replied'?{}:terminalFailure?{failureReason:/DEADLINE|TIMEOUT/.test(j.fault||'')?'timeout' as const:/DISABLED/.test(j.fault||'')?'paused' as const:/ACCOUNT|CONTEXT|SOURCE/.test(j.fault||'')?'permission' as const:'execution' as const}:j.lastPollFault?{failureReason:j.lastPollFault==='NATIVE_RUN_DEADLINE'?'timeout' as const:'delayed' as const}:{})})
   }
   return output
 }
