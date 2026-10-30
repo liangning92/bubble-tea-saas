@@ -61,3 +61,23 @@ Use `with-docker-test.py` for image and disposable PostgreSQL tests. The native
 API harness uses a synthetic provider with real upstream discovery/tools/API;
 it spends no subscription/API credits and is not production acceptance. It must
 run the immutable candidate image without editable adapter mounts.
+
+## MiniMax protocol compatibility
+
+For MiniMax-M3.1-Flash and MiniMax-M3, enable the upstream SDK's
+`model.reasoning_echo` in the same account-local home. This preserves complete
+`reasoning_content` on tool-call replays; never reconstruct or rewrite history.
+The private proxy hostname cannot activate the SDK's host-based provider rules.
+For Flash, use native `reasoning_config` and `request_overrides.reasoning_effort`
+with a default of `low`, preserving explicitly supplied supported levels.
+Omission otherwise selects MiniMax's `max` thinking level. Do not disable thinking,
+set arbitrary output-token caps, switch subscriptions or introduce a paid fallback.
+
+References: https://platform.minimax.io/docs/api-reference/text-openai-api and
+https://platform.minimax.io/docs/guides/text-generation .
+
+The immutable native API harness verifies that every assistant tool-call replay
+retains the exact synthetic reasoning string and every main Flash request uses
+the documented effort field. This must fail for the old incompatible image and
+pass for the candidate, in addition to native discovery, original run identity,
+backend callback identity and no-duplicate admission checks.

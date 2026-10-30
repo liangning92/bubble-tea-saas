@@ -11,12 +11,12 @@ class Provider(BaseHTTPRequestHandler):
  def log_message(self,*a):pass
  def do_POST(self):
   body=json.loads(self.rfile.read(int(self.headers['Content-Length'])));calls.append(body)
-  with open(artifact/'synthetic-provider.log','a') as log:log.write(json.dumps({'path':self.path,'tools':len(body.get('tools',[])),'stream':body.get('stream')})+'\n')
+  with open(artifact/'synthetic-provider.log','a') as log:log.write(json.dumps({'path':self.path,'tools':len(body.get('tools',[])),'stream':body.get('stream'),'reasoningEffort':body.get('reasoning_effort')})+'\n')
   if self.path=='/backend':backend.append(body);return self.reply({'ok':True,'operations':[{'operationId':'GET /api/products'}]})
   if self.path=='/api/show':return self.reply({'model_info':{'minimax.context_length':200000},'capabilities':['completion','tools','vision']})
   names=[t.get('function',{}).get('name') for t in body.get('tools',[])]
   seen={m.get('tool_call_id') for m in body.get('messages',[]) if m.get('role')=='tool'}
-  def tool(name,args,call_id):return {'role':'assistant','content':None,'tool_calls':[{'id':call_id,'type':'function','function':{'name':name,'arguments':json.dumps(args)}}]}
+  def tool(name,args,call_id):return {'role':'assistant','content':None,'reasoning_content':'SYNTHETIC_REASONING_'+call_id,'tool_calls':[{'id':call_id,'type':'function','function':{'name':name,'arguments':json.dumps(args)}}]}
   reason='tool_calls'
   if not names:message={'role':'assistant','content':'NATIVE_PROBE_OK'};reason='stop'
   elif 'call_native_fixture' in seen:message={'role':'assistant','content':'NATIVE_ACCEPTANCE_PASSED'};reason='stop'
@@ -38,7 +38,12 @@ server=ThreadingHTTPServer(('0.0.0.0',0),Provider);thread=threading.Thread(targe
 with socket.socket() as probe:probe.bind(('127.0.0.1',0));port=probe.getsockname()[1]
 name=run+'-native-api';home=base/'home';home.mkdir();child=None
 loaded=subprocess.run(['docker','image','inspect',image],capture_output=True).returncode!=0
+if metadata.get('imageTarSha256'):
+ with (artifact/'native-image.tar').open('rb') as stream:assert hashlib.file_digest(stream,'sha256').hexdigest()==metadata['imageTarSha256'],'NATIVE_IMAGE_TAR_CHANGED'
 if loaded:subprocess.run(['docker','load','-i',str(artifact/'native-image.tar')],check=True,stdout=subprocess.DEVNULL)
+if metadata.get('sourceSha'):
+ revision=subprocess.check_output(['docker','image','inspect',image,'--format','{{index .Config.Labels "org.opencontainers.image.revision"}}'],text=True).strip()
+ assert revision==metadata['sourceSha'],'NATIVE_IMAGE_SOURCE_CHANGED'
 def call(path,body=None):
  req=request.Request('http://127.0.0.1:'+str(port)+path,data=None if body is None else json.dumps(body).encode(),headers={'Authorization':'Bearer '+key,'Content-Type':'application/json','X-Hermes-Session-Key':'store_'+profile,**({'Idempotency-Key':'native-sdk-real-fixture'} if path=='/v1/runs' else {})})
  with request.urlopen(req,timeout=120) as response:return json.load(response)
@@ -53,6 +58,9 @@ try:
   except Exception:time.sleep(.5)
  else:raise RuntimeError('NATIVE_API_TEST_START_TIMEOUT')
  capabilities=call('/v1/capabilities');assert capabilities
+ for relative,sha in metadata.get('adapterFiles',{}).items():
+  actual=subprocess.check_output(['docker','exec',name,'sha256sum','/opt/store-adapter/'+relative],text=True).split()[0]
+  assert actual==sha,'NATIVE_ADAPTER_CHANGED: '+relative
  context={'jobId':'synthetic-job','sessionKey':'store_'+profile,'model':'MiniMax-M3.1-Flash','providerBaseUrl':'http://host.docker.internal:'+str(server.server_port)+'/v1','providerCredential':'synthetic-provider','backendUrl':'http://host.docker.internal:'+str(server.server_port)+'/backend','callbackCredential':'synthetic-callback'}
  assert call('/native/context',context)['ok']
  body={'input':'NATIVE_TOOL_TEST: discover product routes only, never mutate.','session_id':'store_'+profile}
@@ -63,10 +71,17 @@ try:
   time.sleep(.5)
  assert result['status']=='completed',result
  assert result['output']=='NATIVE_ACCEPTANCE_PASSED',result
+ main_requests=[c for c in calls if c.get('tools')]
+ replayed=[m for c in main_requests for m in c.get('messages',[]) if m.get('role')=='assistant' and m.get('tool_calls')]
+ wire={'mainRequests':len(main_requests),'efforts':sorted({str(c.get('reasoning_effort')) for c in main_requests}),'replayedToolTurns':len(replayed),'missingOrChangedReasoning':sum(m.get('reasoning_content')!='SYNTHETIC_REASONING_'+m['tool_calls'][0]['id'] for m in replayed)}
+ (artifact/'native-wire-verification.json').write_text(json.dumps(wire,indent=2))
+ assert main_requests and all(c.get('reasoning_effort')=='low' for c in main_requests),'MINIMAX_EFFORT_NOT_SENT'
+ assert replayed,'NO_NATIVE_TOOL_REPLAY'
+ assert all(m.get('reasoning_content')=='SYNTHETIC_REASONING_'+m['tool_calls'][0]['id'] for m in replayed),'MINIMAX_REASONING_CHAIN_STRIPPED'
  assert len(backend)==1,backend
  assert backend[0]['toolCallId'];assert backend[0]['sessionId']
  assert call('/native/admission',{'key':'native-sdk-real-fixture','request':body})['run_id']==run_id
- result={'state':'passed','upstreamHermesSha':metadata['hermesSha'],'baseImageId':image,'adapterOverlay':False,'adapterFiles':metadata.get('adapterFiles',{}),'nativeRunId':run_id,'nativeToolCount':max(len(c.get('tools',[])) for c in calls),'providerCalls':len(calls)-len(backend),'backendCalls':len(backend),'production':False,'paidProviderCalls':0,'testBatch':run}
+ result={'state':'passed','upstreamHermesSha':metadata['hermesSha'],'baseImageId':image,'adapterOverlay':False,'adapterFiles':metadata.get('adapterFiles',{}),'nativeRunId':run_id,'nativeToolCount':max(len(c.get('tools',[])) for c in calls),'providerCalls':len(calls)-len(backend),'backendCalls':len(backend),'reasoningEchoTurnsVerified':len(replayed),'reasoningEffort':'low','production':False,'paidProviderCalls':0,'testBatch':run}
  (artifact/'native-api-acceptance.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
 finally:
  subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

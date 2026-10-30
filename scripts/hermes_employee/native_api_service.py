@@ -15,8 +15,52 @@ import shutil
 from pathlib import Path
 import sys
 import threading
+import tempfile
 from urllib import request
 from urllib.parse import urlsplit
+
+
+def native_provider_config(value, model):
+    """Use the upstream SDK's opt-in for providers behind our private proxy.
+    MiniMax requires complete reasoning_content on assistant tool-call replays.
+    Keep every other account-local setting and the original session journal.
+    """
+    if not isinstance(value, dict) or not isinstance(value.get('model', {}), dict):
+        raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
+    return {**value, 'model': {**value.get('model', {}), 'reasoning_echo': model in ('MiniMax-M3.1-Flash', 'MiniMax-M3')}}
+
+
+def native_provider_options(model, reasoning_config=None, request_overrides=None):
+    """Supply MiniMax's documented wire field through native AIAgent options.
+    Omitted Flash effort defaults to max at the provider; store work defaults to
+    low without disabling thinking, capping tokens or changing the model.
+    """
+    if model != 'MiniMax-M3.1-Flash':return {}
+    reasoning_config = reasoning_config or {}
+    overrides = dict(request_overrides or {})
+    effort = overrides.get('reasoning_effort', reasoning_config.get('effort', 'low'))
+    if reasoning_config.get('enabled') is False or effort not in ('low', 'medium', 'high', 'xhigh', 'max'):
+        raise ValueError('NATIVE_MINIMAX_REASONING_EFFORT_INVALID')
+    return {'reasoning_config': {**reasoning_config, 'enabled': True, 'effort': effort},
+            'request_overrides': {**overrides, 'reasoning_effort': effort}}
+
+
+def configure_native_provider(home, model):
+    import yaml
+    path = home/'config.yaml'
+    if path.is_symlink():raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
+    value = yaml.safe_load(path.read_text()) if path.exists() else {}
+    updated = native_provider_config(value or {}, model)
+    if value == updated:return
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w',prefix='.native-provider-',dir=home,delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(updated, stream)
+            stream.flush();os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary and temporary.exists():temporary.unlink()
 
 
 def private_url(value):
@@ -114,7 +158,8 @@ def main():
             # availability; this adapter adds only the one native store transport tool.
             toolsets=sorted(set(get_all_toolsets())|{'store_backend'})
             callbacks={k:kwargs.get(k) for k in ('stream_delta_callback','tool_progress_callback','tool_start_callback','tool_complete_callback')}
-            agent=AIAgent(model=c['model'],provider='custom',api_mode='chat_completions',base_url=private_url(c['providerBaseUrl']),api_key=c['providerCredential'],fallback_model=None,enabled_toolsets=toolsets,session_id=kwargs.get('session_id'),gateway_session_key=c['sessionKey'],session_db=self._ensure_session_db(),platform='api_server',quiet_mode=True,ephemeral_system_prompt=kwargs.get('ephemeral_system_prompt'),**callbacks)
+            options=native_provider_options(c['model'],kwargs.get('reasoning_config'),kwargs.get('request_overrides'))
+            agent=AIAgent(model=c['model'],provider='custom',api_mode='chat_completions',base_url=private_url(c['providerBaseUrl']),api_key=c['providerCredential'],fallback_model=None,enabled_toolsets=toolsets,session_id=kwargs.get('session_id'),gateway_session_key=c['sessionKey'],session_db=self._ensure_session_db(),platform='api_server',quiet_mode=True,ephemeral_system_prompt=kwargs.get('ephemeral_system_prompt'),**options,**callbacks)
             agent._hermes_api_runtime={'provider':'custom','model':c['model'],'route_source':'subscribed_store_provider'}
             return agent
 
@@ -141,6 +186,7 @@ def main():
             required={'jobId','sessionKey','model','providerBaseUrl','providerCredential','backendUrl','callbackCredential'}
             if not required.issubset(v) or v['sessionKey']!='store_'+config['profileKey']:return web.json_response({'error':'native_context_invalid'},status=400)
             private_url(v['providerBaseUrl']);private_url(v['backendUrl'])
+            configure_native_provider(home,v['model'])
             with context_lock:context.clear();context.update(v)
             return web.json_response({'ok':True,'profileKey':config['profileKey']})
 

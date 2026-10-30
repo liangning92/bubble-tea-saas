@@ -3,7 +3,11 @@
 import argparse,hashlib,json,os,pathlib,shutil,subprocess,tarfile,tempfile
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 PIN='a7198a8855ad98681114ff5138eb01fe132a62e7'
-p=argparse.ArgumentParser();p.add_argument('--source',required=True);p.add_argument('--artifact',required=True);p.add_argument('--base-artifact');args=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('--source');p.add_argument('--artifact',required=True);p.add_argument('--base-artifact');args=p.parse_args()
+if not args.source and not args.base_artifact:p.error('--source or --base-artifact is required')
+source_sha=subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'],text=True).strip()
+tracked=subprocess.check_output(['git','-C',str(ROOT),'status','--porcelain','--untracked-files=no'],text=True)
+if tracked.strip():raise ValueError('NATIVE_SOURCE_MUST_BE_COMMITTED')
 run=os.environ['BT_TEST_RUN'];assert run.startswith('bt-test-') and os.environ['BT_TEST_LABEL']=='com.bubbletea.test-run='+run
 artifact=pathlib.Path(args.artifact).resolve();artifact.mkdir(parents=True,exist_ok=True)
 context=pathlib.Path(tempfile.mkdtemp(prefix=run+'-',dir='/tmp'))
@@ -12,6 +16,9 @@ try:
     extra=[]
     if args.base_artifact:
         base=pathlib.Path(args.base_artifact).resolve()
+        proof=json.loads((base/'image.json').read_text())
+        with (base/'native-image.tar').open('rb') as stream:
+            if hashlib.file_digest(stream,'sha256').hexdigest()!=proof.get('imageTarSha256'):raise ValueError('NATIVE_BASE_ARTIFACT_HASH_MISMATCH')
         layout=(context/'native-base').resolve();layout.mkdir()
         with tarfile.open(base/'native-image.tar') as archive:
             for member in archive.getmembers():
@@ -29,8 +36,9 @@ try:
     else:shutil.copy2(ROOT/'ops/hermes-native/Dockerfile',context/'Dockerfile')
     command('docker','buildx','create','--name',run,'--driver','docker-container')
     with open(artifact/'build.log','w') as log:
-        command('docker','buildx','build','--builder',run,'--load','--label',os.environ['BT_TEST_LABEL'],'--tag',run+':native',*extra,str(context),stdout=log,stderr=subprocess.STDOUT)
+        command('docker','buildx','build','--builder',run,'--load','--label',os.environ['BT_TEST_LABEL'],'--label','org.opencontainers.image.revision='+source_sha,'--tag',run+':native',*extra,str(context),stdout=log,stderr=subprocess.STDOUT)
     result=subprocess.check_output(['docker','image','inspect',run+':native','--format','{{.Id}}'],text=True).strip()
     command('docker','save','-o',str(artifact/'native-image.tar'),run+':native')
-    (artifact/'image.json').write_text(json.dumps({'imageId':result,'hermesSha':PIN,'testBatch':run,'state':'built_not_accepted','adapterFiles':{str(f.relative_to(context/'adapter')):hashlib.sha256(f.read_bytes()).hexdigest() for f in (context/'adapter').rglob('*') if f.is_file()}},indent=2))
+    with (artifact/'native-image.tar').open('rb') as stream:tar_sha=hashlib.file_digest(stream,'sha256').hexdigest()
+    (artifact/'image.json').write_text(json.dumps({'imageId':result,'sourceSha':source_sha,'imageTarSha256':tar_sha,'hermesSha':PIN,'testBatch':run,'state':'built_not_accepted','adapterFiles':{str(f.relative_to(context/'adapter')):hashlib.sha256(f.read_bytes()).hexdigest() for f in (context/'adapter').rglob('*') if f.is_file()}},indent=2))
 finally:shutil.rmtree(context)
