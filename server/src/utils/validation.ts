@@ -8,6 +8,12 @@ export function describeNativeBody(schema:z.ZodSchema) {
   return Object.assign((_req:Request,_res:Response,next:NextFunction)=>next(),{backendRequestContract:{body:zodToJsonSchema(schema)}})
 }
 
+/** Query documentation for parameters validated by the native controller/service.
+ * Does not strip fields or change the HTTP controller's validation semantics. */
+export function describeNativeQuery(schema:z.ZodSchema) {
+  return Object.assign((_req:Request,_res:Response,next:NextFunction)=>next(),{backendRequestContract:{query:zodToJsonSchema(schema)}})
+}
+
 export function validateBody(schema: z.ZodSchema) {
   const handler = (req: Request, res: Response, next: NextFunction) => {
     try {

@@ -41,6 +41,7 @@ function boundary(op: Operation): string | null {
   return null
 }
 const view = (op: Operation, detailed=false) => ({ operationId:op.id,method:op.method,path:op.path,permission:op.declaration.permission,ownerOnly:op.declaration.ownerOnly,effect:op.effect,
+  ...(op.requestContract.query?.description?{summary:op.requestContract.query.description}:{}),
   pathParameters:[...op.path.matchAll(/:([A-Za-z0-9_]+)/g)].map(m=>m[1]),httpReadMethod:['GET','HEAD'].includes(op.method),sideEffects:'native_handler_semantics',boundary:boundary(op),publicationAudience:op.declaration.publicationAudience||null,
   ...(detailed?{requestContract:op.requestContract,contractCoverage:Object.keys(op.requestContract).length?'declared_native_validator_only':'native_controller_validation_not_described',
     validation:'Same native middleware, controller and service. A GET may perform native initialization. An absent schema is not an empty input contract; do not guess mutation fields.'}: {}) })
@@ -71,7 +72,8 @@ export function backendAccountSummary(actor:any){
   authority:'current_requesting_account',resourceChecks:'native_handlers',instructions:'Check accountAccess before requesting business details or changes. If denied, explain the missing permission and stop that operation; do not try alternative endpoints. Approval is not allow. Catalog discovery does not grant access.'}
 }
 export function backendCatalog(query = '', offset = 0, limit = 25, actor?:any) {
-  const list = [...operations.values()].filter(op=>!query || op.id.toLowerCase().includes(query.toLowerCase()) || (op.declaration.permission||'').toLowerCase().includes(query.toLowerCase())).sort((a,b)=>a.id.localeCompare(b.id))
+  const terms=query.toLowerCase().split(/[\s/]+/).filter(Boolean)
+  const list = [...operations.values()].filter(op=>terms.every(term=>(op.id+' '+(op.declaration.permission||'')+' '+(op.requestContract.query?.description||'')).toLowerCase().includes(term))).sort((a,b)=>a.id.localeCompare(b.id))
   return {contractVersion:backendVersion(),total:list.length,offset,operations:list.slice(offset,offset+limit).map(op=>({...view(op),...(actor?{accountAccess:backendAccountAccess(actor,op.id)}:{})})),nextOffset:offset+limit<list.length?offset+limit:null}
 }
 export function backendDescription(id: string, actor?:any) {

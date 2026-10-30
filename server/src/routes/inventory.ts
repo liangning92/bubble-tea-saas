@@ -14,7 +14,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import { getStoreId } from '../utils/storeHelper'
-import { validateBody } from '../utils/validation'
+import { validateBody, describeNativeQuery } from '../utils/validation'
 import * as InventoryService from '../services/InventoryService'
 import { getInventoryAlertConfig, saveInventoryAlertConfig, DEFAULT_INVENTORY_ALERT_CONFIG } from '../services/InventoryAlertConfigService'
 
@@ -292,14 +292,14 @@ router.get('/logs/stock-in', authenticate, async (req: AuthRequest, res) => {
 })
 
 // Employee requests remain bound to their authenticated store via getStoreId.
-router.get('/logs/today-stock-out', authenticate, async (req: AuthRequest, res) => {
+router.get('/logs/today-stock-out', authenticate, describeNativeQuery(z.object({}).describe('All physical stock-out registrations for today in the store business timezone, grouped by material, with operators, notes and time. No history limit or date parameters. Excludes automatic sales consumption and count corrections. Use this for today\'s registered warehouse withdrawals.')), async (req: AuthRequest, res) => {
   res.set('Cache-Control', 'no-store')
   try { res.json({ code: 200, data: await todayStockOuts(getStoreId(req)), timestamp: new Date().toISOString() }) }
   catch (error) { console.error('Get today stock outs error:', error); res.status(500).json({ code: 500, message: 'Failed to load today stock outs' }) }
 })
 
 // GET /api/inventory/logs/stock-out
-router.get('/logs/stock-out', authenticate, async (req: AuthRequest, res) => {
+router.get('/logs/stock-out', authenticate, describeNativeQuery(z.object({inventoryId:z.string().optional()}).describe('Recent stock-out history (up to 200 records), optionally filtered by inventoryId; no date filter. Not a complete daily report. For today\'s physical registrations use GET /api/inventory/logs/today-stock-out.')), async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
     const inventoryId = req.query.inventoryId as string
@@ -398,7 +398,7 @@ router.get('/recipe-usage',authenticate,authorize('admin','manager'),async(req:A
  catch(error:any){res.status(error.message==='USAGE_MATERIAL_NOT_FOUND'?404:400).json({code:400,message:error.message})}
 })
 
-router.get('/employee-consumption',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
+router.get('/employee-consumption',authenticate,authorize('admin','manager'),describeNativeQuery(z.object({startDate:z.string(),endDate:z.string()}).describe('Employee consumption analysis for an explicit date range. Both startDate and endDate (YYYY-MM-DD) are required. Separate from physical stock-out registrations.')),async(req:AuthRequest,res)=>{
  try{if(typeof req.query.startDate!=='string'||typeof req.query.endDate!=='string')return res.status(400).json({code:400,message:'ANALYSIS_DATES_REQUIRED'});res.json({code:200,data:await employeeConsumption({storeId:getStoreId(req),startDate:req.query.startDate,endDate:req.query.endDate})})}
  catch(error:any){res.status(400).json({code:400,message:error.message})}
 })
@@ -407,7 +407,7 @@ router.get('/consumption-alerts',authenticate,authorize('admin','manager'),async
 })
 
 // GET /api/inventory/consumption-analysis
-router.get('/consumption-analysis', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res) => {
+router.get('/consumption-analysis', authenticate, authorize('admin', 'manager'), describeNativeQuery(z.object({startDate:z.string(),endDate:z.string(),varianceThreshold:z.string().optional(),category:z.string().optional(),latest:z.enum(['true','false']).optional()}).describe('Recipe and sales consumption analysis for an explicit date range. Both startDate and endDate (YYYY-MM-DD) are required. Separate from physical stock-out registrations.')), async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
     const { startDate, endDate, varianceThreshold, category } = req.query
