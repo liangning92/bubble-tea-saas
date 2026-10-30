@@ -49,7 +49,7 @@ def call(path,body=None):
  with request.urlopen(req,timeout=120) as response:return json.load(response)
 try:
  log=open(artifact/'native-api-test.log','wb')
- child=subprocess.Popen(['docker','run','--rm','--name',name,'--label',os.environ['BT_TEST_LABEL'],'--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--shm-size=256m',*(['--add-host','host.docker.internal:host-gateway'] if sys.platform=='linux' else []),'-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes','-i',image],stdin=subprocess.PIPE,stdout=log,stderr=log)
+ child=subprocess.Popen(['docker','run','--rm','--name',name,'--label',os.environ['BT_TEST_LABEL'],'--read-only','--cap-drop=ALL','--user',str(os.getuid())+':'+str(os.getgid()),'--security-opt=no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--shm-size=256m',*(['--add-host','host.docker.internal:host-gateway'] if sys.platform=='linux' else []),'-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes','-i',image],stdin=subprocess.PIPE,stdout=log,stderr=log)
  config={'profileRoot':'/home/hermes','profileKey':profile,'port':8643,'listenHost':'0.0.0.0','apiKey':key,'repository':'/opt/store-adapter','hermesSource':'/opt/hermes','hermesExpectedSha':metadata['hermesSha'],'path':'/opt/venv/bin:/usr/local/bin:/usr/bin:/bin'}
  child.stdin.write(json.dumps(config).encode()+b'\n');child.stdin.close();log.close()
  for _ in range(180):

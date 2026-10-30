@@ -80,7 +80,7 @@ class NativeGateway:
                     if mapped['HostIp']!='127.0.0.1':raise ValueError('NATIVE_CONTAINER_LISTENER_CHANGED')
                     p={'process':None,'port':int(mapped['HostPort']),'key':api_key,'container':container};self.profiles[name]=p;return p
                 subprocess.run(['docker','rm',container],check=True,stdout=subprocess.DEVNULL,env=env)
-            cmd=['docker','run','--name',container,'--rm','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=256','--shm-size=256m','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--label','com.bubbletea.native-profile='+name,'-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes','-i',image]
+            cmd=['docker','run','--name',container,'--rm','--read-only','--cap-drop=ALL','--user',str(os.getuid())+':'+str(os.getgid()),'--security-opt=no-new-privileges','--pids-limit=256','--shm-size=256m','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--label','com.bubbletea.native-profile='+name,'-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes','-i',image]
             self.make_room(name,env)
             log=open(self.root/(name+'.log'),'ab',buffering=0)
             child=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=log,stderr=log,start_new_session=True,env={'PATH':self.cfg.get('path','/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin'),'HOME':str(Path.home())})
