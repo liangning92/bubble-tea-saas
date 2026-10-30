@@ -22,8 +22,8 @@ async function main(){
  declareAccessRoutes('/api/training/library',built('routes/trainingLibrary').trainingLibraryRouter);
  // This suite tests native handler/receipt transport independently of the
  // production tool review policy, which has its own default-closed tests.
- const reviewed=built('services/ManagementAgentPolicy').agentOperations;
- for(let offset=0;;offset+=40){const page=api.backendCatalog('',offset,40);for(const op of page.operations)reviewed.set(op.operationId,op.permission);if(page.nextOffset===null)break}
+ const reviewed=built('services/ManagementAgentPolicy').agentOperations,inputContracts=built('services/ManagementAgentPolicy').agentInputContracts;
+ for(let offset=0;;offset+=40){const page=api.backendCatalog('',offset,40);for(const op of page.operations){reviewed.set(op.operationId,op.permission);inputContracts.set(op.operationId,()=>null)}if(page.nextOffset===null)break}
  const tenant=await db.tenant.create({data:{name:'Whole backend isolated test'}});
  for(const id of [storeId,other])await db.store.create({data:{id,tenantId:tenant.id,name:id}});
  for(const [role,phone]of[['admin','08919101001'],['staff','08919101002']]){
@@ -129,7 +129,7 @@ async function main(){
   router.stack[1].route.accessSpecs={get:{permission:'products.read',ownerOnly:false,export:false,personal:false,routeKey:'GET /api/isolated-backend-fixture/file'}};
   for(const layer of router.stack.slice(2)){const method=layer.route.methods.get?'get':'post';layer.route.accessSpecs={[method]:{permission:'products.'+(method==='get'?'read':'write'),ownerOnly:false,export:false,personal:false,routeKey:method.toUpperCase()+' /api/isolated-backend-fixture'+layer.route.path}}}
   api.registerManagementRouter('/api/isolated-backend-fixture',router);
-  for(const op of ['POST /api/isolated-backend-fixture/slow','GET /api/isolated-backend-fixture/file','GET /api/isolated-backend-fixture/query','POST /api/isolated-backend-fixture/upload'])reviewed.set(op,'products.read');
+  for(const op of ['POST /api/isolated-backend-fixture/slow','GET /api/isolated-backend-fixture/file','GET /api/isolated-backend-fixture/query','POST /api/isolated-backend-fixture/upload']){reviewed.set(op,'products.read');inputContracts.set(op,()=>null)}
   const scope={compartmentKey:'late-scope',requesterStaffId:owner.staffId,audienceStaffIds:[owner.staffId]},g={storeId};
   const args={action:'execute',operationId:'POST /api/isolated-backend-fixture/slow',contractVersion:api.backendVersion(),body:{}};
   const reservation=await tools.reserveBackendOperation(db,storeId,scope,'late-source','late-execution','late-call',args);

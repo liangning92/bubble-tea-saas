@@ -1,5 +1,5 @@
 import {ACCESS_ROUTE_MANIFEST} from './StaffPermissionRouteManifest'
-import {agentOperationAccess} from './ManagementAgentPolicy'
+import {agentOperationAccess,agentOperationInput} from './ManagementAgentPolicy'
 import { nativeMultipart, nativeFileInput, storeNativeDownload } from './NativeBackendFiles'
 import type { z } from 'zod'
 import express from 'express'
@@ -120,6 +120,8 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
   if (input.contractVersion !== backendVersion()) return {ok:false,code:'BACKEND_CONTRACT_CHANGED',contractVersion:backendVersion(),executed:false}
   const access=backendAccountAccess(actor,op.id)
   if(!access.allowed)return {ok:false,...access,executed:false}
+  const scopeBlocked=(actor as any).nativeAgent?agentOperationInput(op.id,input):null
+  if(scopeBlocked)return {ok:false,code:scopeBlocked,executed:false}
   const blocked=boundary(op)
   if (blocked) return {ok:false,code:blocked,executed:false}
   const inputBlocked=backendInputBoundary({...op,permission:op.declaration.permission},input)
