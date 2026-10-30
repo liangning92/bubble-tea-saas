@@ -304,6 +304,11 @@ async function main(){
    const badChannel=await readTeam(db,storeId,'channel.'+bad.id),badReply=await readTeam(db,storeId,'message.'+bad.id+'.'+String(badChannel.lastSeq).padStart(12,'0'));
    assert(!badReply.text.includes('消耗'));assert.equal(badReply.files.length,0);
    await engine.runBatch(10);assert.equal(submitted,beforeSubmit);assert.equal((await readTeam(db,storeId,'channel.'+bad.id)).lastSeq,badChannel.lastSeq);
+   const legacyKey='message.'+bad.id+'.'+String(badChannel.lastSeq).padStart(12,'0');
+   await writeTeam(db,storeId,legacyKey,{...badReply,text:nativeOutput,files:[j.outputFileId]});
+   const legacyView=await teamCommunication(db).messages(owner,bad.id,0),legacyMessage=legacyView.messages.find(m=>m.id===badReply.id);
+   assert.equal(legacyMessage.outputQuality,'repetition');assert(!legacyMessage.text.includes('消耗'));assert.deepEqual(legacyMessage.files,[]);
+   assert.equal((await readTeam(db,storeId,legacyKey)).text,nativeOutput);assert.equal((await readTeam(db,storeId,legacyKey)).files[0],j.outputFileId);
 
 
 
