@@ -9,20 +9,31 @@ import './notificationAwareness.css'
 
 // Only same-origin app paths are actionable, even if a malformed item is returned.
 export const awarenessPath = (url: string) => /^\/(?!\/)/.test(url) && !/[\\\u0000-\u001f]/.test(url) ? url : null
-export function AwarenessEntry() {
+export const isPendingApproval = (item: AwarenessItem) => item.kind === 'approval_request' && item.pending === true
+export function approvalPath(data: { items: AwarenessItem[]; counts: { approvalPending: number } }, administration: boolean) {
+  const pending = data.items.filter(isPendingApproval)
+  if (data.counts.approvalPending === 1 && pending.length === 1) {
+    const item = pending[0]
+    const path = awarenessPath(administration ? item.adminUrl || item.url : item.url)
+    if (path && path.split('?')[0] !== '/inbox') return path
+  }
+  return '/inbox?filter=approval'
+}
+export function AwarenessEntry({ administration = false }: { administration?: boolean }) {
   const { data } = useAwareness(), { i18n } = useTranslation(), w = notificationAwarenessCopy(i18n.language)
-  return <Link to="/inbox" className="awareness-entry" aria-label={`${w.title} · ${w.unread} ${data.counts.unread} · ${w.pending} ${data.counts.approvalPending}`}>
+  return <div className="awareness-entry"><Link to="/inbox" className="awareness-message-link" aria-label={`${w.title} · ${w.unread} ${data.counts.unread} · ${w.pending} ${data.counts.approvalPending}`}>
     <Bell size={18} aria-hidden="true" /><span>{w.title}</span>
     {data.counts.unread > 0 && <span className="awareness-unread">{data.counts.unread}</span>}
-    {data.counts.approvalPending > 0 && <span className="awareness-pending">{w.pending} {data.counts.approvalPending}</span>}
     {data.counts.trainingUnread > 0 && <span className="awareness-training">{w.training} · {w.new}</span>}
-  </Link>
+    </Link>
+    {data.counts.approvalPending > 0 && <Link to={approvalPath(data, administration)} className="awareness-pending awareness-approval-link">{w.pending} {data.counts.approvalPending} →</Link>}
+  </div>
 }
 export function NotificationAwarenessInbox({ administration = false }: { administration?: boolean }) {
   const { data, loading, failed, refresh, markRead, isCurrent } = useAwareness(), { i18n } = useTranslation(), navigate = useNavigate()
-  const [params] = useSearchParams(), notice = params.get('notice') || ''
+  const [params] = useSearchParams(), notice = params.get('notice') || '', requestedFilter = params.get('filter')
   const w = notificationAwarenessCopy(i18n.language), [filter, setFilter] = useState('unread'), [opening, setOpening] = useState('')
-  useEffect(() => { setOpening(''); setFilter('unread') }, [isCurrent])
+  useEffect(() => { setOpening(''); setFilter(requestedFilter === 'approval' ? 'approval' : 'unread') }, [isCurrent, requestedFilter])
   useEffect(() => {
     if (!notice || loading) return
     const row = data.items.find(item => item.id === notice)
@@ -43,11 +54,11 @@ export function NotificationAwarenessInbox({ administration = false }: { adminis
     catch { /* The destination remains usable; the server will retry read state later. */ }
     finally { if (isCurrent()) { setOpening(''); navigate(path) } }
   }
-  const items = data.items.filter(item => filter === 'all' || filter === 'unread' && !item.read || filter === 'read' && item.read || filter === 'pending' && item.pending || item.kind === filter)
+  const items = data.items.filter(item => filter === 'all' || filter === 'approval' && isPendingApproval(item) || filter === 'unread' && !item.read || filter === 'read' && item.read || filter === 'pending' && item.pending || item.kind === filter)
   return <section className="awareness-inbox" aria-labelledby="awareness-title">
     <header className="awareness-heading"><div><h1 id="awareness-title">{w.title}</h1><p>{w.hint}</p></div><button type="button" onClick={() => void refresh()} disabled={loading}>{w.retry}</button></header>
-    <div className="awareness-summary" aria-live="polite"><span>{w.unread} <strong>{data.counts.unread}</strong></span><span>{w.pending} <strong>{data.counts.approvalPending}</strong></span><span>{w.training} <strong>{data.counts.trainingUnread}</strong></span></div>
-    <div className="awareness-filters" aria-label={w.title}>{[['unread', w.unread], ['all', w.all], ['read', w.history], ['chat', w.chat], ['training_update', w.training], ['pending', w.actionPending]].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
+    <div className="awareness-summary" aria-live="polite"><span>{w.unread} <strong>{data.counts.unread}</strong></span><Link to={approvalPath(data, administration)} className="awareness-summary-approval">{w.pending} <strong>{data.counts.approvalPending}</strong><span aria-hidden="true"> →</span></Link><span>{w.training} <strong>{data.counts.trainingUnread}</strong></span></div>
+    <div className="awareness-filters" aria-label={w.title}>{[['unread', w.unread], ['all', w.all], ['read', w.history], ['chat', w.chat], ['training_update', w.training], ['approval', w.pending], ['pending', w.actionPending]].map(([value, label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div>
     {failed && <p role="alert" className="awareness-error">{w.failed}</p>}
     {loading ? <p role="status">{w.loading}</p> : <>
       {items.length === 0 && <p className="awareness-empty">{w.empty}</p>}

@@ -437,7 +437,7 @@ export function MainLayout() {
             />
           </header>
           <div className="p-4 sm:p-6">
-            <div className="mb-4 flex justify-end"><AwarenessEntry /></div>
+            <div className="mb-4 flex justify-end"><AwarenessEntry administration /></div>
             {!ready ? (
               access?.failed ? (
                 <div role="alert" className="card text-red-600">
