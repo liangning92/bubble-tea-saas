@@ -1,3 +1,4 @@
+import { isQrAttendance } from '../services/AttendanceEvidencePolicy'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { Router } from 'express'
 import { authenticate, AuthRequest } from '../middlewares/auth'
@@ -124,6 +125,7 @@ router.post('/verify', authenticate, async (req: AuthRequest, res) => {
         return res.status(404).json({ code: 404, message: 'No active check-in found' })
       }
 
+      if(!isQrAttendance(attendance))return res.status(409).json({code:409,message:'QR_CHECK_IN_REQUIRED'})
       if (attendance.checkOutTime) return res.json({code:200,data:attendance,alreadyRecorded:true})
       const updated = await prisma.attendance.update({
         where: { id: attendance.id },

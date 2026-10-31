@@ -12,24 +12,24 @@ beforeEach(()=>{jest.clearAllMocks();db.staff.findUnique.mockResolvedValue({id:'
 test('manual workdays retain deposits and adjustments without inferring absences but retain deposits and rewards/penalties',async()=>{const result=await calculateSalary('staff',10,2026,{probation:0,regular:31});expect(result.baseSalary).toBe(1400000);expect(result.deductions).toBe(120000);expect(result.bonuses).toBe(50000);expect(result.totalSalary).toBe(1330000)})
 test('approved overtime and leave queries end on the inclusive termination day',async()=>{db.staff.findUnique.mockResolvedValue({id:'staff',storeId:'s',name:'Test',baseSalary:1400000,hireDate:new Date('2026-10-12T00:00:00+07:00'),terminationDate:new Date('2026-10-20T00:00:00+07:00')});const result=await calculateSalary('staff',10,2026,{probation:0,regular:9});expect(result.baseSalary).toBe(406452);expect(db.overtimeRequest.findMany).toHaveBeenCalledWith({where:{staffId:'staff',status:'approved',date:{gte:new Date('2026-10-12T00:00:00+07:00'),lte:new Date('2026-10-20T23:59:59.999+07:00')}}});expect(result.payrollBasis.eligibleDays).toBe(9)})
 
-test('18 automatic attendance days are paid with fixed credits and do not also incur absence penalties',async()=>{db.attendance.findMany.mockResolvedValue(Array.from({length:18},(_,i)=>({checkInTime:new Date(`2026-10-${String(i+1).padStart(2,'0')}T09:00:00+07:00`),checkOutTime:new Date(`2026-10-${String(i+1).padStart(2,'0')}T18:00:00+07:00`),status:'normal'})));const result=await calculateSalary('staff',10,2026,undefined,undefined,'attendance');expect(result.payrollBasis.workedDays).toBe(18);expect(result.payrollBasis.paidRestDays).toBe(2);expect(result.baseSalary).toBe(Math.round(1400000*18/31)+Math.round(1400000*2/31));expect(result.deductions).toBe(120000)})
+test('18 automatic attendance days are paid with fixed credits and do not also incur absence penalties',async()=>{db.attendance.findMany.mockResolvedValue(Array.from({length:18},(_,i)=>({checkInTime:new Date(`2026-10-${String(i+1).padStart(2,'0')}T09:00:00+07:00`),checkOutTime:new Date(`2026-10-${String(i+1).padStart(2,'0')}T18:00:00+07:00`),status:'normal',gpsLocation:'POS:synthetic',note:'QR Check-in at POS synthetic'})));const result=await calculateSalary('staff',10,2026,undefined,undefined,'attendance');expect(result.payrollBasis.workedDays).toBe(18);expect(result.payrollBasis.paidRestDays).toBe(2);expect(result.baseSalary).toBe(Math.round(1400000*18/31)+Math.round(1400000*2/31));expect(result.deductions).toBe(120000)})
 
 test('changing workdays alone retains configured lateness and early-leave deductions',async()=>{
  db.attendanceRule.findFirst.mockResolvedValue({lateDeductionType:'fixed',lateDeductionFixed:500000,earlyLeaveDeductionType:'fixed',earlyLeaveDeductionFixed:300000,overtimeRate:1.5,overtimeMinHours:1})
- db.attendance.findMany.mockResolvedValue([{checkInTime:new Date('2026-10-05T10:00:00+07:00'),checkOutTime:new Date('2026-10-05T17:00:00+07:00'),status:'late'}])
+ db.attendance.findMany.mockResolvedValue([{checkInTime:new Date('2026-10-05T10:00:00+07:00'),checkOutTime:new Date('2026-10-05T17:00:00+07:00'),status:'late',gpsLocation:'POS:synthetic',note:'QR Check-in at POS synthetic'}])
  const result=await calculateSalary('staff',10,2026,{probation:0,regular:18})
  expect(result.latePenalty).toBe(5000);expect(result.deductions).toBe(128000)
 })
 
 test('custom payroll divisors, bonus thresholds and paid rest are consumed by salary calculation',async()=>{
  db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='staff.payroll.rules'?{value:JSON.stringify({paidRestDays:3,dailyRateDivisor:20,overtimeMonthlyHours:100,attendanceBonusDays:1,attendanceBonusAmount:12345})}:null)
- db.attendance.findMany.mockResolvedValue([{checkInTime:new Date('2026-10-05T09:00:00+07:00'),checkOutTime:new Date('2026-10-05T18:00:00+07:00'),status:'normal'}])
+ db.attendance.findMany.mockResolvedValue([{checkInTime:new Date('2026-10-05T09:00:00+07:00'),checkOutTime:new Date('2026-10-05T18:00:00+07:00'),status:'normal',gpsLocation:'POS:synthetic',note:'QR Check-in at POS synthetic'}])
  db.overtimeRequest.findMany.mockResolvedValue([{hours:2,date:new Date('2026-10-05T00:00:00+07:00')}])
  const result=await calculateSalary('staff',10,2026,undefined,undefined,'attendance')
  expect(result.payrollBasis.paidRestDays).toBe(3)
  expect(result.overtimePay).toBe(42000)
  expect(result.bonuses).toBe(62345)
- expect(result.calculationBasis).toEqual({workDaysPerMonth:20,hoursPerMonth:100})
+ expect(result.calculationBasis).toEqual({workDaysPerMonth:31,hoursPerMonth:100})
 })
 test.each([['full_month',0],['prorated',0],['any_employment',0]])('partial-month paid rest follows %s policy',async(mode,expected)=>{
  db.staff.findUnique.mockResolvedValue({id:'staff',storeId:'s',name:'Test',baseSalary:1400000,hireDate:new Date('2026-10-16T00:00:00+07:00'),terminationDate:null})

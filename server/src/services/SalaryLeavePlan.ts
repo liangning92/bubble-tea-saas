@@ -3,6 +3,7 @@ import { businessDate, dayNumber, monthlyRateCents, WorkingDays, ProbationInputE
 // Paid rest/leave is already included in a monthly salary. Deduct only verified
 // unpaid dates; multiple overlapping records cannot charge more than one day.
 export function unpaidLeavePlan(staff: any, enrollment: any, basis: any, leaves: any[], unpaidCodes: Set<string>, override?: WorkingDays) {
+  if (basis.qrAttendanceRequired) return { days: {probation:0,regular:0}, deduction:0, paidDays:0, source:'included_in_days' }
   // Explicit partial-month workdays already exclude non-worked days.
   // Calendar estimates still deduct verified leave, without paid credit.
   if (basis.fullMonthEligible === false && basis.workingDays) return { days: {probation:0,regular:0}, deduction:0, paidDays:0, source:'included_in_days' }
