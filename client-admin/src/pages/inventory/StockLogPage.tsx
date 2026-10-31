@@ -49,6 +49,7 @@ export function StockLogPage() {
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
   const [appliedDates,setAppliedDates]=useState({start:'',end:''})
+  const [dateInputInvalid,setDateInputInvalid]=useState(false)
   const validDraft=stockLogDateRange(customStartDate,customEndDate,dateSettings.timezone)
   const dirtyDates=customStartDate!==appliedDates.start||customEndDate!==appliedDates.end
   const clearFilters=()=>{setActiveTab('all');setSearch('');setSelectedCategory('');setDatePreset('all')}
@@ -555,7 +556,7 @@ export function StockLogPage() {
         </div>
 
         {datePreset === 'custom' && (
-          <div className="flex flex-wrap items-center gap-2">
+          <form className="flex flex-wrap items-center gap-2" onChange={e=>setDateInputInvalid(!e.currentTarget.checkValidity())} onInvalidCapture={()=>setDateInputInvalid(true)} onSubmit={e=>{e.preventDefault();if(validDraft&&e.currentTarget.checkValidity()){setDateInputInvalid(false);setAppliedDates({start:customStartDate,end:customEndDate})}}}>
             <LocalizedDateTimeInput
               type="date"
               aria-label={copy.start}
@@ -573,8 +574,8 @@ export function StockLogPage() {
               onChange={(e) => setCustomEndDate(e.target.value)}
               className="input w-36"
             />
-            <button className="btn btn-primary" disabled={!validDraft} onClick={()=>setAppliedDates({start:customStartDate,end:customEndDate})}>{copy.apply}</button>
-          </div>
+            <button type="submit" className="btn btn-primary" disabled={!validDraft||dateInputInvalid}>{copy.apply}</button>
+          </form>
         )}
 
         <select
@@ -603,7 +604,7 @@ export function StockLogPage() {
       <div className="text-sm text-gray-600 space-y-2">
         <p>{copy.range}: {dateRange.startDate ? `${datePreset==='custom'?appliedDates.start:formatDateTime(dateRange.startDate)} — ${datePreset==='custom'?appliedDates.end:formatDateTime(dateRange.endDate!)} · ${dateSettings.timezone}` : copy.all}</p>
         <p>{copy.loaded}</p>
-        {datePreset==='custom'&&!validDraft&&<p role="alert" className="text-red-700">{copy.invalid}</p>}
+        {datePreset==='custom'&&(!validDraft||dateInputInvalid)&&<p role="alert" className="text-red-700">{copy.invalid}</p>}
         {datePreset==='custom'&&dirtyDates&&<p role="status" className="text-amber-700">{copy.draft}</p>}
         {isError&&<p role="alert" className="text-red-700">{copy.failed} <button className="underline" onClick={()=>refetch()}>{copy.retry}</button></p>}
       </div>

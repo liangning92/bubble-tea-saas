@@ -20,6 +20,12 @@ for(const table of ['Order','OrderItem']){
  const old=sql.match(block)?.[1]||'',now=currentSql.match(block)?.[1]||'';
  for(const line of now.split('\n')){const column=line.match(/^\s+"([^"]+)"\s+(.+?),?$/);if(column&&!old.includes('"'+column[1]+'"'))legacySql+='\nALTER TABLE "'+table+'" ADD COLUMN "'+column[1]+'" '+column[2].replace(/,$/,'')+';';}
 }
+// Historical business-date fields are installed by the desktop preflight before the
+// Node inventory upgrader starts. Model that supported boundary without changing
+// the inventory/order legacy columns under test (desktop date preservation has its own tests).
+for(const [table,column] of [['StockInLog','occurredOn'],['StockOutLog','occurredOn'],['PurchaseOrder','purchasedOn']]){
+ if(!sql.match(new RegExp(String.raw`CREATE TABLE "${table}" \(([\s\S]*?)\);`))?.[1].includes('"'+column+'"'))legacySql+='\nALTER TABLE "'+table+'" ADD COLUMN "'+column+'" DATETIME;';
+}
 fs.writeFileSync(path.join(run,'legacy.sql'),legacySql);env.INVENTORY_FLOW_LEGACY_SQL=path.join(run,'legacy.sql');
 invoke(['generate','--schema',file]);invoke(['db','push','--skip-generate','--schema',file]);
 const config={rootDir:server,testEnvironment:'node',testMatch:[path.join(server,'audit-flow-tests/**/*.test.ts')],transform:{'^.+\\.ts$':[path.join(server,'node_modules/ts-jest'),{tsconfig:{module:'CommonJS',esModuleInterop:true},diagnostics:true}]},maxWorkers:1,cache:false,testTimeout:30000,setupFiles:[path.join(server,'audit-flow-tests/safety.cjs')],moduleNameMapper:{'^@prisma/client$':`${run}/client`}};
