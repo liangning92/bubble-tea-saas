@@ -17,6 +17,7 @@ c=sqlite3.connect(sys.argv[1]);c.executescript(open(sys.argv[2]).read());c.close
   const supplier=await db.supplier.create({data:{storeId:store.id,name:'Legacy supplier'}})
   await db.$executeRawUnsafe('INSERT INTO "PurchaseOrder" (id,storeId,supplierId,orderNumber,status,totalAmount,updatedAt) VALUES (?,?,?,?,?,?,?)','legacy-po',store.id,supplier.id,'LEGACY-PO','pending',1000,new Date())
   await db.$executeRawUnsafe('INSERT INTO "PurchaseOrderItem" (id,purchaseOrderId,inventoryId,quantity,unitCost,receivedQty) VALUES (?,?,?,?,?,?)','legacy-item','legacy-po',inventory.id,1,1000,0)
+  const purchasedOn=new Date('2026-10-15T17:00:00Z');await db.$executeRawUnsafe('UPDATE "PurchaseOrder" SET "purchasedOn"=? WHERE id=?',purchasedOn,'legacy-po')
   await upgradeLocalSqlite(db,'file:'+file);await upgradeInventoryFlow(db,'file:'+file)
   const rows=await db.$queryRawUnsafe<any[]>('SELECT backupPath FROM "LocalSchemaMigration" WHERE version=3');expect(rows).toHaveLength(1);expect(existsSync(rows[0].backupPath)).toBe(true)
   expect((await db.purchaseOrder.findUniqueOrThrow({where:{id:'legacy-po'},include:{items:true}})).items).toHaveLength(1)
@@ -24,6 +25,8 @@ c=sqlite3.connect(sys.argv[1]);c.executescript(open(sys.argv[2]).read());c.close
   const online=await db.purchaseOrder.create({data:{storeId:store.id,orderNumber:randomUUID(),status:'awaiting_receipt',source:'online'}});expect(online.supplierId).toBeNull()
   await upgradeLocalSqlite(db,'file:'+file);await upgradeInventoryFlow(db,'file:'+file)
   expect(await db.purchaseOrderItem.count({where:{purchaseOrderId:'legacy-po'}})).toBe(1)
+  expect((await db.purchaseOrder.findUniqueOrThrow({where:{id:'legacy-po'}})).purchasedOn?.toISOString()).toBe(purchasedOn.toISOString())
+  expect((await db.$queryRawUnsafe<any[]>('PRAGMA index_list("PurchaseOrder")')).some(index=>index.name==='PurchaseOrder_storeId_purchasedOn_id_idx')).toBe(true)
   expect(await db.$queryRawUnsafe<any[]>('PRAGMA foreign_key_check')).toEqual([])
  }finally{await db.$disconnect()}
 })

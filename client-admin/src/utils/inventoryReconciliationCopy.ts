@@ -1,6 +1,8 @@
 export function inventoryReconciliationCopy(language:string){
  const at=language.startsWith('zh')?0:language.startsWith('id')?2:1,c=(zh:string,en:string,id:string)=>[zh,en,id][at]
  return {
+  recipeProducts:c('以下商品的配方证据不完整，已保留其他可核实用量；补配方不会回填历史快照。','Recipe evidence is incomplete for these products. Verified usage remains visible; recipe edits do not rewrite historical snapshots.','Bukti resep produk berikut belum lengkap. Pemakaian terverifikasi tetap terlihat; perubahan resep tidak mengisi ulang snapshot historis.'),
+  knownPart:c('已核实部分','Verified portion','Bagian terverifikasi'),evidence:c('订单快照 / 缺失订单 / 配方问题','Order snapshots / missing orders / recipe issues','Snapshot pesanan / pesanan belum lengkap / masalah resep'),
   dailyTitle:c('每日耗用对比','Daily usage comparison','Perbandingan pemakaian harian'),countTitle:c('盘点库存核对','Count reconciliation','Rekonsiliasi opname'),
   dailyHint:c('按门店日期汇总订单配方理论耗用与实际登记出库，不需要盘点数据。','Compare order recipe usage with registered stock-out by store date. Counts are not required.','Bandingkan pemakaian resep pesanan dan stok keluar tercatat per tanggal toko. Tidak memerlukan opname.'),
   countHint:c('以已完成盘点为基准，加上期间入库、减去期间实际出库，核对下一次实盘；订单理论量不参与库存核对。','Opening completed count + receipts − actual physical stock-out is compared with the next physical count. Order theory does not determine this balance.','Opname awal selesai + penerimaan − stok keluar fisik dibandingkan opname berikutnya. Teori pesanan tidak menentukan saldo ini.'),

@@ -5,6 +5,7 @@ export interface UsageProduction {
   products?: {productId: string; name: string; theoreticalQuantity: number | null}[]
 }
 export interface UsageRow {
+ knownTheoreticalConsumption?:number|null; theoryEvidence?:{complete:boolean;snapshotCount:number;uncoveredOrderCount:number;issueCount:number};
   inventoryId: string; inventoryName: string; unit: string;
   theoreticalConsumption: number | null; actualConsumption: number | null;
   actualWithdrawal?: number | null; variance: number | null; variancePercent: number | null;
@@ -16,6 +17,7 @@ export interface UsageRow {
   breakdown?: Record<string, number>; production?: UsageProduction[]; partialPeriod?: boolean; provisional?: boolean
 }
 export interface UsageResult {
+ recipeIssues?:{productId:string;productName:string;code:string;count:number}[];
   list: UsageRow[]; hasBusinessActivity?: boolean;
   coverage?: {start: string | null; end: string | null; mixed: boolean};
   segments?: {basis: string; start: string; end: string}[]; legacyOnly?: boolean

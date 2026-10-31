@@ -39,11 +39,17 @@ export async function upgradeInventoryFlow(db: PrismaClient, databaseUrl: string
                         if (Number(foreignKeys[0]?.foreign_keys) !== 0)
                             throw Error('INVENTORY_FLOW_REBUILD_REQUIRES_FK_OFF');
                         await tx.$executeRawUnsafe(purchaseTable.replace('"PurchaseOrder"', '"__flow_PurchaseOrder"'));
+                        // Preserve later nullable date fields already installed by desktop preflight.
+                        // Keep the recorded v3 checksum stable for databases that have migrated.
+                        for (const name of ['paidAt','purchasedOn']) {
+                            if (columns.some(c => c.name === name)) await tx.$executeRawUnsafe(`ALTER TABLE "__flow_PurchaseOrder" ADD COLUMN "${name}" DATETIME`);
+                        }
                         const fields = columns.map(c => `"${c.name}"`).join(',');
                         await tx.$executeRawUnsafe(`INSERT INTO "__flow_PurchaseOrder" (${fields}) SELECT ${fields} FROM "PurchaseOrder"`);
                         await tx.$executeRawUnsafe('DROP TABLE "PurchaseOrder"');
                         await tx.$executeRawUnsafe('ALTER TABLE "__flow_PurchaseOrder" RENAME TO "PurchaseOrder"');
                         await tx.$executeRawUnsafe('CREATE UNIQUE INDEX "PurchaseOrder_orderNumber_key" ON "PurchaseOrder"("orderNumber")');
+                        if(columns.some(c=>c.name==='purchasedOn')) await tx.$executeRawUnsafe('CREATE INDEX "PurchaseOrder_storeId_purchasedOn_id_idx" ON "PurchaseOrder"("storeId","purchasedOn","id")');
                     }
                     for (const sql of newTables)
                         await tx.$executeRawUnsafe(sql.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'));
