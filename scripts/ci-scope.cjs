@@ -142,6 +142,7 @@ function selectScope(files,{root=process.cwd(),full=false,tvSchemaOnly=false}={}
  const browser=[];
  for(const domain of selectedDomains){const check=browserChecks[domain];if(check&&(check.components.some(component=>typecheck.has(component))||(domain==='tv'&&typecheck.has('api'))||(domain==='teamManagement'&&files.some(file=>check.scripts.includes(file)))))browser.push({domain,...check})}
  const http=[...new Set(selectedDomains.flatMap(domain=>httpChecks[domain]||[]))];
+ if(files.some(file=>/StaffPermission(?:Catalog|RouteManifest)|pos-log-permission/.test(file)))http.push('tests/stoploss/pos-log-permission-http-check.cjs');
  const builds=new Set(typecheck);
  for(const check of browser)for(const component of check.components)builds.add(component);
  const media=selectedDomains.includes('media')||files.some(file=>/^(?:server\/audit-tests\/(?:media-library|product-insights)\.check\.ts|tests\/media-insights\/)/.test(file));

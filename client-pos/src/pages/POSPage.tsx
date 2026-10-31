@@ -1,3 +1,4 @@
+import { checkoutPriceChanged } from '../utils/checkoutPricing'
 import { membershipQualificationCopy } from '../utils/membershipQualificationCopy'
 import { auditedDrawer } from '../utils/drawerAudit'
 import { DrawerReasonDialog } from '../components/DrawerReasonDialog'
@@ -2930,8 +2931,25 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
     if(isVerifyingCoupon || activityPriceNeedsConfirmation || quoteLoading || !currentQuote || currentQuote.pendingSelections?.length){showToast(quoteError||t('activityPricing.wait','活动价格计算中，请选择赠品并稍后重试'),'warning');return}
     const checkoutStarted=performance.now()
     const checkoutTiming=(phase:string)=>console.info(`[CHECKOUT-TIMING] ${phase}_ms=${Math.round(performance.now()-checkoutStarted)}`)
-    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>offlineActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(()=>null)
-    if(!verifiedQuote||verifiedQuote.signature!==currentQuote.signature){if(verifiedQuote)setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey});setActivityRevision(v=>v+1);setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>{}});return}
+    let quoteFailure: any
+    const verifiedQuote=await (currentQuote.offline?activitiesApi.offlineSnapshot().then(r=>offlineActivityQuote(r.data.data,quoteInput)):activitiesApi.quote(quoteInput).then(r=>r.data.data)).catch(error=>{quoteFailure=error;return null})
+    if(!verifiedQuote || !Array.isArray(verifiedQuote.items) || !verifiedQuote.signature || !Number.isFinite(verifiedQuote.grandTotal)){
+      const failureCode=String(quoteFailure?.response?.data?.message||quoteFailure?.code||quoteFailure?.message||'CHECKOUT_PRICE_UNAVAILABLE').slice(0,160)
+      logPOSAction({action:'checkout_failed',description:'结账前价格核验暂时失败，未提交订单',metadata:{failureCode,phase:'price_verification',totalAmount:total,paymentMethod},severity:'warning'})
+      setActivityRevision(v=>v+1)
+      showToast(t('activityPricing.unavailable'),'warning')
+      return
+    }
+    if(checkoutPriceChanged(currentQuote,verifiedQuote)){
+      setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey})
+      setActivityRevision(v=>v+1)
+      setConfirmModal({isOpen:true,title:t('activityPricing.changedTitle','活动价格已变化'),message:t('activityPricing.changed','请核对更新后的金额后再次确认支付。'),type:'warning',onConfirm:()=>{}})
+      return
+    }
+    if(verifiedQuote.pendingSelections?.length){setUnifiedQuote({...verifiedQuote,inputKey:quoteInputKey});showToast(t('activityPricing.wait'),'warning');return}
+    // Use the newly verified signature even when only non-price benefits changed.
+    const checkoutQuote=verifiedQuote
+    setUnifiedQuote({...checkoutQuote,inputKey:quoteInputKey})
 
     if (paymentIssue) { showToast(t(`paymentValidation.${paymentIssue}`), 'error'); return }
 
@@ -2979,11 +2997,11 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
         specId: item.specId,
         specName: item.specName,
         quantity: item.quantity,
-        unitPrice: currentQuote?.items.find((i:any)=>i.productId===item.productId&&i.specId===item.specId)?.unitPrice??item.unitPrice,  // 服务端或签名缓存报价中的基础单价
+        unitPrice: checkoutQuote?.items.find((i:any)=>i.productId===item.productId&&i.specId===item.specId)?.unitPrice??item.unitPrice,  // 服务端或签名缓存报价中的基础单价
         addons: item.addons.map(a => ({ name: a.name, price: a.price, qty:a.qty }))
       })),
-      activityQuoteSignature:currentQuote?.offline?undefined:currentQuote?.signature,
-      activityOfflineToken:currentQuote?.offline?currentQuote.offlineToken:undefined,activityOccurredAt:currentQuote?.offline?verifiedQuote.occurredAt:undefined,activityChannelCode:selectedChannel?.code||'DINE_IN',
+      activityQuoteSignature:checkoutQuote?.offline?undefined:checkoutQuote?.signature,
+      activityOfflineToken:checkoutQuote?.offline?checkoutQuote.offlineToken:undefined,activityOccurredAt:checkoutQuote?.offline?verifiedQuote.occurredAt:undefined,activityChannelCode:selectedChannel?.code||'DINE_IN',
       offlineMemberToken:verifiedQuote.offlineMemberToken,offlineMemberPointsBefore:verifiedQuote.offlineMemberPointsBefore,offlineMemberPointsEarned:verifiedQuote.offlineMemberPointsEarned,offlineMemberCouponId:verifiedQuote.offlineMemberCouponId,offlineMemberCouponTemplateId:verifiedQuote.offlineMemberCouponTemplateId,
       activityCouponId:selectedCoupon?.id,activityPointsRequested:pointsToRedeem||0,activityGroupId:activityGroupId||undefined,activityGiftSelections:giftSelections,
       paymentMethod,
@@ -2991,7 +3009,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       manualDiscountAmount:manualDiscountAmount||undefined,
       discountBasketId:manualDiscountAmount?discountBasketId:undefined,
       approvalId:manualDiscountAmount?manualDiscountGrant?.id:undefined,
-      pointsRedeemed: currentQuote?.pointsRedeemed||0,  // 仅扣减最终择优方案使用的积分
+      pointsRedeemed: checkoutQuote?.pointsRedeemed||0,  // 仅扣减最终择优方案使用的积分
       taxEnabled: taxSettings.enabled !== false,  // 税费开关
       pickupNumber: paymentModalOrderNum || getNextPickupNumber(selectedChannel?.code)
     }
@@ -3023,13 +3041,13 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       await requireOpenShift()
       checkoutTiming('quote_and_shift')
       // Both recovery writes must commit before an HTTP request can leave this browser.
-      if(manualDiscountAmount&&(!navigator.onLine||currentQuote?.offline)&&!access.can('orders.discount'))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
+      if(manualDiscountAmount&&(!navigator.onLine||checkoutQuote?.offline)&&!access.can('orders.discount'))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if(manualDiscountAmount&&!access.can('orders.discount')&&(!manualDiscountGrant||new Date(manualDiscountGrant.expiresAt)<new Date()))throw Error('STAFF_ACCESS_APPROVAL_REQUIRED')
       if (manualQris) orderData.note = [orderData.note,t('manualPayment.customerPaid')].filter(Boolean).join(' ')
-      if (member?.status==='pending'&&(!navigator.onLine||currentQuote?.offline))throw new Error(qualificationCopy.offline)
-      if ((!navigator.onLine || !useAuthStore.getState().token) && (!currentQuote?.offline&&(member || pointsToRedeem || selectedCoupon || discountAmount))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
+      if (member?.status==='pending'&&(!navigator.onLine||checkoutQuote?.offline))throw new Error(qualificationCopy.offline)
+      if ((!navigator.onLine || !useAuthStore.getState().token) && (!checkoutQuote?.offline&&(member || pointsToRedeem || selectedCoupon || discountAmount))) throw new Error('OFFLINE_POLICY_UNRESOLVED')
       let res
-      if ((paymentMethod === 'cash' || manualQris || externalPaymentConfirmed) && (!discountAmount||currentQuote?.offline) && currentQuote?.offline) {
+      if ((paymentMethod === 'cash' || manualQris || externalPaymentConfirmed) && (!discountAmount||checkoutQuote?.offline) && checkoutQuote?.offline) {
         const local = await recordLocalSale(orderData,{subtotal,ppn:tax,finalAmount:total},basketGeneration,manualQris,paymentMethod === 'cash' ? {receivedCash:Number(paidAmount),changeGiven:Number(paidAmount)-total} : undefined,externalPaymentConfirmed)
         accepted = true
         settledCartRef.current = cart
@@ -3135,7 +3153,7 @@ export function POSPage({ scanRoute = false }: { scanRoute?: boolean } = {}) {
       // 结账成功：立即清空购物车和关闭弹窗
       clearCart('settled')
       setShowPaymentModal(false)
-      showToast(`${t(receiptSent ? (currentQuote?.offline ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
+      showToast(`${t(receiptSent ? (checkoutQuote?.offline ? 'offlineSale.saved' : 'pos.orderSuccess') : 'checkoutIntent.outputFailed')} #${finalPickupNum}`, receiptSent ? 'success' : 'warning')
       void syncManager.syncPendingOrders()
       // 重置桌号与人数，自动弹出下一个订单的渠道选择弹窗
       setTableNumber('')
