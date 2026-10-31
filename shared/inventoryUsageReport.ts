@@ -1,4 +1,4 @@
-export interface TheoryBackfillProduct {productId:string;productName:string;orderCount:number;servings:number;recipeHash?:string;reason?:string;firstAt?:string;lastAt?:string}
+export interface TheoryBackfillProduct {productId:string;productName:string;orderCount:number;servings:number|null;recipeHash?:string;reason?:string;firstAt?:string;lastAt?:string}
 export interface TheoryBackfill {basis:'current_recipe_missing_bom';calculatedAt:string;resolved:TheoryBackfillProduct[];unresolved:TheoryBackfillProduct[]}
 /** Additive response contract shared by the two inventory reports. */
 export interface UsageProduction {
