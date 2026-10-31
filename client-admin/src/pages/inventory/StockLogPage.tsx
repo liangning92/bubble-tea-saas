@@ -532,8 +532,8 @@ export function StockLogPage() {
       {comparisonItem&&<><div className="inventory-ledger-material-context"><strong>{formatItemName(comparisonItem.name,i18n.language)}</strong></div>
       <div className="inventory-ledger-metrics inventory-ledger-material-metrics" aria-label={copy.comparison}>
         <div className="card"><p>{copy.actualTotal}</p><strong>{statsUnavailable?'—':quantity(comparison.actual)}</strong></div>
-        <div className="card"><p>{copy.theoryTotal}</p><strong>{theoryUnavailable?'—':quantity(comparison.theory)}</strong>{(theoryRow?.backfilledTheoreticalConsumption||0)>0&&<small className="text-primary">{backfillCopy.backfilled}</small>}{comparison.partial&&<small className="text-amber-800">{backfillCopy.pending}</small>}</div>
-        <div className="card"><p>{copy.difference}</p><strong>{theoryUnavailable?'—':quantity(comparison.difference)}</strong></div>
+        <div className="card"><p>{copy.theoryTotal}</p><strong>{theoryUnavailable?'—':quantity(comparison.theory)}</strong>{(theoryRow?.backfilledTheoreticalConsumption||0)>0&&<small className="text-primary">{backfillCopy.backfilled}</small>}</div>
+        <div className="card"><p>{copy.difference}</p><strong>{statsUnavailable||theoryUnavailable?'—':quantity(comparison.difference)}</strong>{!statsUnavailable&&!theoryUnavailable&&comparison.partial&&comparison.difference!==null&&<small className="text-gray-500">{copy.partialDifference}</small>}</div>
         <div className="card"><p>{t('inventory.totalMovements')}</p><strong>{statsUnavailable?'—':metrics.totalCount}</strong></div>
       </div>
       </>}
