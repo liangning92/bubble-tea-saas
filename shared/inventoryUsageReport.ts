@@ -10,6 +10,7 @@ export interface UsageRow {
   actualWithdrawal?: number | null; variance: number | null; variancePercent: number | null;
   varianceAmountEstimate?: number | null; varianceStatus: string; unavailableReason?: string | null;
   usableObservationCount?: number; observationCount?: number; completedObservationCount?: number; latestObservationAt?: string | null;
+  actualOut?: number|null; expectedClosing?:number|null; closingCountId?:string|null; closingCountItemId?:string|null; closingStatus?:string|null;
   openingPhysical?: number | null; closingPhysical?: number | null; receipts?: number | null;
   knownNonSaleOut?: number | null; windowStart: string; windowEnd: string;
   breakdown?: Record<string, number>; production?: UsageProduction[]; partialPeriod?: boolean; provisional?: boolean

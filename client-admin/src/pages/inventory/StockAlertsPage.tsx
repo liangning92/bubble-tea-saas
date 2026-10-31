@@ -1,3 +1,4 @@
+import {inventoryReconciliationCopy} from '../../utils/inventoryReconciliationCopy'
 import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { AdminDialog } from '../../components/AdminDialog'
 import { LocalizedDateTimeInput } from '../../components/LocalizedDateTimeInput'
@@ -19,6 +20,7 @@ export function StockAlertsPage() {
     const refresh = () => { qc.invalidateQueries({ queryKey: ['inventory-alert-center'] }); setSelected(null); setNote(''); setExpiry(''); setError(''); };
     const mutation = useMutation({ mutationFn: () => selected.action === 'expiry' ? inventoryApi.setExpiry({ inventoryId: selected.detail.inventoryId, batchId: selected.detail.batchId || undefined, expiryDate: expiry }) : inventoryApi.handleAlert(selected.id, note), onSuccess: refresh, onError: () => setError(t('inventoryFlow.failed')) });
     const list: any[] = query.data?.data?.data?.list || [], visible = list.filter(a => (!alertId || a.id===alertId) && (alertId || status === 'all' || a.status === status) && (!type || a.type === type));
+    const rc=inventoryReconciliationCopy(i18n.language);
     const n = (v: any) => consumptionQuantity(v,i18n.language,3), label = (key: string) => t('inventoryAlerts.' + key);
     if (!context.valid)
         return <DashboardReadFailure scope/>;
@@ -33,7 +35,7 @@ export function StockAlertsPage() {
  {d.currentStock !== undefined && <p className="text-sm">{t(d.calibrationRequired?'inventoryUnified.legacyBalance':'inventoryFlow.currentStock')}: {n(d.currentStock)} {d.unit} · {label('safe')}: {n(d.effectiveSafetyStock)} {d.unit} · {label('daily')}: {n(d.dailyUsage)} {d.unit} · {t('inventoryAlerts.sample', { days: d.historyDays ?? 0 })} · {label('daysLeft')}: {n(d.daysUntilStockOut)} {t('common.days')}</p>}
  {d.basis === 'recorded_sales_ledger_estimate' && <p className="text-sm">{label('legacy')}</p>}
  {d.businessDate && <p>{d.businessDate} · {t('inventoryFlow.theory')}: {consumptionQuantity(d.theoreticalConsumption,i18n.language)} {d.unit} · {t('inventoryFlow.actualOut')}: {consumptionQuantity(d.actualConsumption,i18n.language)} {d.unit} · {label('variance')}: {n(d.variancePercent)} {d.variancePercent === null ? '' : '%'}</p>}
- {a.type === 'count_variance' && <p>{t('inventoryFlow.currentStock')}: {n(d.systemQty)} {d.unit} · {t('inventory.actualQty')}: {n(d.countedQty)} {d.unit} · {label('variance')}: {n(d.variance)} {d.unit} ({n(d.variancePercent)}%)</p>}
+ {a.type === 'count_variance' && <p>{d.basis==='count_stock_reconciliation'?rc.expected:t('inventoryFlow.currentStock')}: {n(d.systemQty)} {d.unit} · {t('inventory.actualQty')}: {n(d.countedQty)} {d.unit} · {label('variance')}: {n(d.variance)} {d.unit} {d.variancePercent==null?'':`(${n(d.variancePercent)}%)`}</p>}
  {a.type === 'excessive_loss' && <p>{label('loss')}: {n(d.lossUsage)} {d.unit} ({n(d.lossPercent)}%)</p>}
  {d.expectedDate && <p>{label('expectedDate')}: {formatStoreDate(d.expectedDate,dateSettings)} · {d.orderNumber}</p>}
  {a.type.startsWith('expiry_') && <p>{d.batchNumber} · {label('quantity')}: {n(d.quantity)} {d.unit} · {label('expiryDate')}: {d.expiryDate ? formatStoreDate(d.expiryDate,dateSettings) : '—'}</p>}

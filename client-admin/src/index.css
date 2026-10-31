@@ -428,3 +428,4 @@ body {
 .admin-workspace .inventory-report-table .inventory-expanded-data > * { min-width:0; overflow-wrap:anywhere; }
 .admin-workspace .inventory-report-table .inventory-production-table { min-width:26rem; table-layout:auto; }
 .admin-workspace .inventory-report-table .inventory-production-table th,.admin-workspace .inventory-report-table .inventory-production-table td { position:static; width:auto; min-width:0; max-width:none; padding:8px; }
+.admin-workspace .inventory-reconciliation-table { min-width:1420px; }

@@ -1,3 +1,4 @@
+import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar'
 import {actualInventorySince,ACTUAL_STOCK_KEY} from './ActualInventoryPolicy'
 import { manualCorrectionMetadata } from './ManualStockCorrectionService'
 import {unifiedInventorySince,CALIBRATED_PREFIX} from './UnifiedInventoryService'
@@ -332,6 +333,7 @@ export interface StockLogInFilter {
   category?: string
   search?: string
   take?: number
+  skip?: number
 }
 
 export interface StockLogOutFilter {
@@ -343,6 +345,7 @@ export interface StockLogOutFilter {
   category?: string
   search?: string
   take?: number
+  skip?: number
 }
 
 export async function getStockInLogs(
@@ -367,22 +370,17 @@ export async function getStockInLogs(
     where.inventory.category = filter.category
   }
 
-  if (filter.search) {
-    where.inventory.name = containsText(filter.search)
+  if (filter.search?.trim()) {
+    const text=containsText(filter.search.trim())
+    where.OR=[{inventory:{name:text}},{note:text},{supplier:{name:text}}]
   }
 
   if (filter.startDate || filter.endDate) {
+    const calendar = await inventoryBusinessCalendar(filter.storeId)
     where.createdAt = {}
-    if (filter.startDate) {
-      const start = new Date(filter.startDate)
-      start.setHours(0, 0, 0, 0)
-      where.createdAt.gte = start
-    }
-    if (filter.endDate) {
-      const end = new Date(filter.endDate)
-      end.setHours(23, 59, 59, 999)
-      where.createdAt.lte = end
-    }
+    // Explicit instants already encode the store boundary. Never reset them in the server timezone.
+    if (filter.startDate) where.createdAt.gte = /^\d{4}-\d{2}-\d{2}$/.test(filter.startDate) ? calendar.boundary(filter.startDate) : new Date(filter.startDate)
+    if (filter.endDate) where.createdAt.lte = /^\d{4}-\d{2}-\d{2}$/.test(filter.endDate) ? calendar.boundary(filter.endDate,true) : new Date(filter.endDate)
   }
 
   const logs = await prisma.stockInLog.findMany({
@@ -391,7 +389,8 @@ export async function getStockInLogs(
       inventory: { select: { id: true, name: true, unit: true, category: true, avgCost: true } },
       supplier: { select: { id: true, name: true } }
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    skip: filter.skip || 0,
     take: filter.take || 200
   })
 
@@ -435,22 +434,18 @@ export async function getStockOutLogs(
     where.inventory.category = filter.category
   }
 
-  if (filter.search) {
-    where.inventory.name = containsText(filter.search)
+  if (filter.search?.trim()) {
+    const text=containsText(filter.search.trim())
+    const orders=await prisma.order.findMany({where:{storeId:filter.storeId,OR:[{orderNumber:text},{pickupNumber:text}]},select:{id:true}})
+    where.OR=[{inventory:{name:text}},{note:text},{orderId:text},...(orders.length?[{orderId:{in:orders.map(o=>o.id)}}]:[])]
   }
 
   if (filter.startDate || filter.endDate) {
+    const calendar = await inventoryBusinessCalendar(filter.storeId)
     where.createdAt = {}
-    if (filter.startDate) {
-      const start = new Date(filter.startDate)
-      start.setHours(0, 0, 0, 0)
-      where.createdAt.gte = start
-    }
-    if (filter.endDate) {
-      const end = new Date(filter.endDate)
-      end.setHours(23, 59, 59, 999)
-      where.createdAt.lte = end
-    }
+    // Explicit instants already encode the store boundary. Never reset them in the server timezone.
+    if (filter.startDate) where.createdAt.gte = /^\d{4}-\d{2}-\d{2}$/.test(filter.startDate) ? calendar.boundary(filter.startDate) : new Date(filter.startDate)
+    if (filter.endDate) where.createdAt.lte = /^\d{4}-\d{2}-\d{2}$/.test(filter.endDate) ? calendar.boundary(filter.endDate,true) : new Date(filter.endDate)
   }
 
   const logs = await prisma.stockOutLog.findMany({
@@ -458,7 +453,8 @@ export async function getStockOutLogs(
     include: {
       inventory: { select: { id: true, name: true, unit: true, category: true, avgCost: true } }
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    skip: filter.skip || 0,
     take: filter.take || 200
   })
 

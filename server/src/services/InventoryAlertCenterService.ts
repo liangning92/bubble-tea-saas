@@ -1,3 +1,4 @@
+import {inventoryReconciliation} from './InventoryReconciliationService'
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy';
 import {inventoryBusinessCalendar} from '../utils/inventoryBusinessCalendar';
 import prisma from '../config/database';
@@ -94,13 +95,20 @@ export async function calculateInventoryAlerts(storeId: string, now = new Date()
             if (order.expectedDate && endOfDay(order.expectedDate) < now)
                 add('purchase_overdue', order.id, 'warning', { purchaseOrderId: order.id, orderNumber: order.onlineOrderNumber || order.orderNumber, expectedDate: endOfDay(order.expectedDate).toISOString(), items: order.items.map(i => ({ quantity: i.quantity, name: inventory.find(m => m.id === i.inventoryId)?.name || i.inventoryId })) });
     if (settings.enableCountVarianceAlert) {
+        const reconciliation=await inventoryReconciliation({storeId,startDate:'2000-01-01',endDate:formatDate(now),latest:true})
+        const reconciled=new Set<string>()
+        for(const row of reconciliation){
+            if(row.closingCountItemId&&row.variance!==null)reconciled.add(row.closingCountItemId)
+            if(row.closingCountItemId&&['warning','critical'].includes(row.varianceStatus)&&inventoryUsageMode(inventory.find(m=>m.id===row.inventoryId)||{})!=='self_produced')
+                add('count_variance',row.closingCountItemId,row.varianceStatus as 'warning'|'critical',{...row,countId:row.closingCountId,systemQty:row.expectedClosing,countedQty:row.closingPhysical})
+        }
         const counts = await prisma.inventoryCount.findMany({ where: { storeId, status: 'pending_review' }, include: { items: { include: { inventory: { select: { name: true, unit: true } } } } } });
         for (const count of counts)
             for (const item of count.items) {
-                if (inventoryUsageMode(item.inventory)==='self_produced' || item.variance === null || !item.variance)
+                if (reconciled.has(item.id) || inventoryUsageMode(item.inventory)==='self_produced' || item.variance === null || !item.variance)
                     continue;
                 const percent = item.systemQty === 0 ? null : Math.abs(item.variance) / Math.abs(item.systemQty) * 100;
-                if (percent === null || percent >= settings.countVarianceWarningPercent)
+                if (Math.abs(item.variance)>=1e-6)
                     add('count_variance', item.id, percent !== null && percent >= settings.countVarianceCriticalPercent ? 'critical' : 'warning', { inventoryId: item.inventoryId, inventoryName: item.inventory.name, unit: item.inventory.unit, countId: count.id, systemQty: item.systemQty, countedQty: item.countedQty, variance: item.variance, variancePercent: percent, note: item.note });
             }
     }

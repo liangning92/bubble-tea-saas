@@ -1,3 +1,4 @@
+import {inventoryReconciliation} from '../services/InventoryReconciliationService'
 import {usageCoverage} from '../utils/inventoryReportCoverage'
 import {materialRecipeUsage} from '../services/MaterialRecipeUsageService'
 import { operationDateSchema } from '../utils/operationDate'
@@ -121,10 +122,13 @@ router.get('/operation-records', authenticate, async (req: AuthRequest, res) => 
 router.get('/logs', authenticate, async (req: AuthRequest, res) => {
   try {
     const storeId = getStoreId(req)
-    const { inventoryId, type, reason, category, search, startDate, endDate, limit } = req.query as any
-    const take = limit ? parseInt(limit as string) : 200
+    const { inventoryId, type, reason, category, search, startDate, endDate, limit, offset } = req.query as any
+    const take = Math.min(1000, Math.max(1, Number(limit) || 200))
+    const skip = Math.max(0, Math.floor(Number(offset) || 0))
+    if ((startDate && !Number.isFinite(Date.parse(startDate))) || (endDate && !Number.isFinite(Date.parse(endDate))) || (startDate && endDate && new Date(startDate) > new Date(endDate))) return res.status(400).json({code:400,message:"INVALID_ANALYSIS_PERIOD"})
 
     let logs: any[] = []
+    let hasMore = false
 
     const filter = {
       storeId,
@@ -133,24 +137,26 @@ router.get('/logs', authenticate, async (req: AuthRequest, res) => {
       search: search as string | undefined,
       startDate: startDate as string | undefined,
       endDate: endDate as string | undefined,
-      take
+      take: take + 1, skip
     }
 
     if (!type || type === 'stock_in') {
       const stockInLogs = await InventoryService.getStockInLogs(filter)
-      logs = logs.concat(stockInLogs.map((l: any) => ({ ...l, type: 'stock_in' })))
+      hasMore = hasMore || stockInLogs.length > take
+      logs = logs.concat(stockInLogs.slice(0,take).map((l: any) => ({ ...l, type: 'stock_in' })))
     }
 
     if (!type || type === 'stock_out') {
       const stockOutLogs = await InventoryService.getStockOutLogs({ ...filter, reason: reason as string | undefined })
-      logs = logs.concat(stockOutLogs.map((l: any) => ({ ...l, type: 'stock_out' })))
+      hasMore = hasMore || stockOutLogs.length > take
+      logs = logs.concat(stockOutLogs.slice(0,take).map((l: any) => ({ ...l, type: 'stock_out' })))
     }
 
     logs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
     res.json({
       code: 200,
-      data: { list: logs },
+      data: { list: logs, hasMore },
       timestamp: new Date().toISOString()
     })
   } catch (error: any) {
@@ -411,6 +417,15 @@ router.get('/employee-consumption',authenticate,authorize('admin','manager'),des
 })
 router.get('/consumption-alerts',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{
  try{const list=await getConsumptionAlerts(getStoreId(req));res.json({code:200,data:{list,count:list.length}})}catch(error:any){res.status(500).json({code:500,message:'ALERTS_LOAD_FAILED'})}
+})
+
+// Independent of sales recipes: expected warehouse balance versus the next physical observation.
+router.get('/count-reconciliation',authenticate,authorize('admin','manager'),describeNativeQuery(z.object({startDate:z.string(),endDate:z.string(),latest:z.enum(['true','false']).optional()}).describe('Read-only physical stock reconciliation: opening count plus receipts minus actual physical out versus closing count. Includes a pending-review closing observation; never modifies stock.')),async(req:AuthRequest,res)=>{
+ try{
+  const dates=z.object({startDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),endDate:z.string().regex(/^\d{4}-\d{2}-\d{2}$/)}).parse(req.query)
+  const list=await inventoryReconciliation({startDate:dates.startDate!,endDate:dates.endDate!,storeId:getStoreId(req),latest:req.query.latest==='true'})
+  res.set('Cache-Control','no-store').json({code:200,data:{list,coverage:usageCoverage(list)}})
+ }catch(error){if(error instanceof z.ZodError||error instanceof Error&&error.message==='INVALID_ANALYSIS_PERIOD')return res.status(400).json({code:400,message:'INVALID_ANALYSIS_PERIOD'});res.status(500).json({code:500,message:'RECONCILIATION_FAILED'})}
 })
 
 // GET /api/inventory/consumption-analysis

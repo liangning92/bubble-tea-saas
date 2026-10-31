@@ -1,3 +1,4 @@
+import {stockLogDateRange,stockLogQueryCopy,physicalStockOutQuantity} from '../../utils/stockLogQuery'
 import {StockPhotoEvidence} from '../../components/StockPhotoEvidence'
 import { ManualStockCorrection } from '../../components/ManualStockCorrection'
 import { useAuthStore } from '../../stores/auth'
@@ -12,7 +13,7 @@ import { inventoryInputUnits, defaultInventoryInputUnit, inventoryUnitFactor } f
 import { Link } from 'react-router-dom'
 import { countDetailUrl, inventoryLogDisplay, isProcessingInbound, isInventoryAdjustment } from '../../utils/inventoryCountFlow'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
-import {QUERY_PERIODS,QueryPeriod,queryInstantRange,calendarStart} from '../../utils/queryPeriods'
+import {QUERY_PERIODS,QueryPeriod,queryInstantRange} from '../../utils/queryPeriods'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
@@ -34,6 +35,7 @@ type LogTab = 'withdrawal' | 'other' | 'all' | 'in' | 'sold' | 'waste' | 'proces
 export function StockLogPage() {
   const dateSettings=useStoreDateSettings()
   const { t, i18n } = useTranslation()
+  const copy=stockLogQueryCopy(i18n.language)
   const queryClient = useQueryClient()
 
   const isCorrectionAdmin = useAuthStore(state => state.user?.role === 'admin')
@@ -46,6 +48,10 @@ export function StockLogPage() {
   const [datePreset, setDatePreset] = useState<'all' | QueryPeriod | 'custom'>('all')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
+  const [appliedDates,setAppliedDates]=useState({start:'',end:''})
+  const validDraft=stockLogDateRange(customStartDate,customEndDate,dateSettings.timezone)
+  const dirtyDates=customStartDate!==appliedDates.start||customEndDate!==appliedDates.end
+  const clearFilters=()=>{setActiveTab('all');setSearch('');setSelectedCategory('');setDatePreset('all')}
 
   // Modals
   const [showStockInModal, setShowStockInModal] = useState(false)
@@ -73,13 +79,10 @@ export function StockLogPage() {
     if (QUERY_PERIODS.includes(datePreset as QueryPeriod)) {
       return queryInstantRange(datePreset as QueryPeriod,dateSettings.timezone)
     } else if (datePreset === 'custom') {
-      return {
-        startDate: customStartDate ? calendarStart(customStartDate,dateSettings.timezone).toISOString() : undefined,
-        endDate: customEndDate ? new Date(calendarStart(new Date(Date.parse(customEndDate+'T00:00:00Z')+86400000).toISOString().slice(0,10),dateSettings.timezone).getTime()-1).toISOString() : undefined
-      }
+      return stockLogDateRange(appliedDates.start,appliedDates.end,dateSettings.timezone) || {startDate:undefined,endDate:undefined}
     }
     return { startDate: undefined, endDate: undefined }
-  }, [datePreset, customStartDate, customEndDate,dateSettings.timezone])
+  }, [datePreset, appliedDates,dateSettings.timezone])
 
   // Fetch inventory items for dropdowns and display
   const { data: inventoryData } = useQuery({
@@ -118,17 +121,23 @@ export function StockLogPage() {
   }, [orders])
 
   // Fetch logs
-  const { data: logsData, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['inventory-logs-comprehensive', dateRange],
-    queryFn: () => inventoryApi.logs({
-      startDate: dateRange.startDate,
-      endDate: dateRange.endDate,
-      limit: 1000
-    }),
+  const { data: logsData, isLoading, refetch, isFetching, isError } = useQuery({
+    queryKey: ['inventory-logs-comprehensive', dateRange, search.trim(), selectedCategory],
+    enabled: datePreset!=='custom'||!!stockLogDateRange(appliedDates.start,appliedDates.end,dateSettings.timezone),
+    queryFn: async () => {
+      const list:any[]=[]
+      for(let offset=0;;offset+=1000){
+        const response=await inventoryApi.logs({...dateRange,search:search.trim()||undefined,category:selectedCategory||undefined,limit:1000,offset})
+        const data=response.data.data
+        list.push(...(data?.list||[]))
+        if(!data?.hasMore)break
+      }
+      return list
+    },
     refetchInterval: 30000
   })
 
-  const rawLogs: any[] = (logsData?.data?.data?.list || logsData?.data?.list || []).map(inventoryLogDisplay)
+  const rawLogs: any[] = (logsData || []).map((log:any)=>({...inventoryLogDisplay(log),physicalQuantity:physicalStockOutQuantity(log)}))
 
   // Client-side filtering for rapid response
   const filteredLogs = useMemo(() => {
@@ -149,25 +158,6 @@ export function StockLogPage() {
 
       }
 
-      // 2. Category filter
-      if (selectedCategory && log.inventory?.category !== selectedCategory) {
-        return false
-      }
-
-      // 3. Search query
-      if (search.trim()) {
-        const q = search.toLowerCase()
-        const name = (log.inventory?.name || '').toLowerCase()
-        const note = (log.note || '').toLowerCase()
-        const orderId = (log.orderId || '').toLowerCase()
-        const orderInfo = log.orderId ? orderMap.get(log.orderId) : null
-        const resolvedOrderNo = orderInfo ? `${orderInfo.orderNumber} ${orderInfo.pickupNumber || ''}`.toLowerCase() : ''
-        const supplierName = (log.supplier?.name || '').toLowerCase()
-        if (!name.includes(q) && !note.includes(q) && !orderId.includes(q) && !resolvedOrderNo.includes(q) && !supplierName.includes(q)) {
-          return false
-        }
-      }
-
       return true
     })
   }, [rawLogs, activeTab, selectedCategory, search, orderMap])
@@ -179,7 +169,7 @@ export function StockLogPage() {
     let totalWasteCost = 0
     let costAdjustments = 0
 
-    rawLogs.forEach((log: any) => {
+    filteredLogs.forEach((log: any) => {
       if (log.type === 'stock_in') {
         totalInboundCost += stockLogCost(log)
       } else if (log.type === 'stock_out') {
@@ -198,9 +188,9 @@ export function StockLogPage() {
       totalSalesCost,
       totalWasteCost,
       costAdjustments,
-      totalCount: rawLogs.length
+      totalCount: filteredLogs.length
     }
-  }, [rawLogs])
+  }, [filteredLogs])
 
   // Mutations
   const stockInMutation = useMutation({
@@ -554,7 +544,7 @@ export function StockLogPage() {
           ].map(preset => (
             <button
               key={preset.key}
-              onClick={() => setDatePreset(preset.key as any)}
+              onClick={() => { if(preset.key==='custom'&&!customStartDate){const date=new Intl.DateTimeFormat('en-CA',{timeZone:dateSettings.timezone}).format(new Date());setCustomStartDate(date);setCustomEndDate(date);setAppliedDates({start:date,end:date})} setDatePreset(preset.key as any) }}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 datePreset === preset.key ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
               }`}
@@ -565,9 +555,11 @@ export function StockLogPage() {
         </div>
 
         {datePreset === 'custom' && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <LocalizedDateTimeInput
               type="date"
+              aria-label={copy.start}
+              min="2000-01-01" max="2100-12-31"
               value={customStartDate}
               onChange={(e) => setCustomStartDate(e.target.value)}
               className="input w-36"
@@ -575,10 +567,13 @@ export function StockLogPage() {
             <span className="text-gray-400 text-sm">{t('inventory.to')}</span>
             <LocalizedDateTimeInput
               type="date"
+              aria-label={copy.end}
+              min="2000-01-01" max="2100-12-31"
               value={customEndDate}
               onChange={(e) => setCustomEndDate(e.target.value)}
               className="input w-36"
             />
+            <button className="btn btn-primary" disabled={!validDraft} onClick={()=>setAppliedDates({start:customStartDate,end:customEndDate})}>{copy.apply}</button>
           </div>
         )}
 
@@ -593,7 +588,7 @@ export function StockLogPage() {
           <option value="semi_finished">{t('inventory.semiFinished')}</option>
         </select>
 
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 min-w-48 max-w-md">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -605,6 +600,14 @@ export function StockLogPage() {
         </div>
       </div>
 
+      <div className="text-sm text-gray-600 space-y-2">
+        <p>{copy.range}: {dateRange.startDate ? `${datePreset==='custom'?appliedDates.start:formatDateTime(dateRange.startDate)} — ${datePreset==='custom'?appliedDates.end:formatDateTime(dateRange.endDate!)} · ${dateSettings.timezone}` : copy.all}</p>
+        <p>{copy.loaded}</p>
+        {datePreset==='custom'&&!validDraft&&<p role="alert" className="text-red-700">{copy.invalid}</p>}
+        {datePreset==='custom'&&dirtyDates&&<p role="status" className="text-amber-700">{copy.draft}</p>}
+        {isError&&<p role="alert" className="text-red-700">{copy.failed} <button className="underline" onClick={()=>refetch()}>{t('common.retry',{defaultValue:'Retry'})}</button></p>}
+      </div>
+      {filteredLogs.some(log=>log.physicalQuantity!==null)&&<section className="card p-4" aria-label={copy.quantities}><p className="font-medium mb-2">{copy.quantities}</p><div className="flex flex-wrap gap-3">{Object.values(filteredLogs.reduce((result:Record<string,{name:string,quantity:number,unit:string}>,log:any)=>{if(log.physicalQuantity!==null){const key=log.inventoryId;result[key]??={name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.physicalQuantity}return result},{})).map(row=><span key={row.name} className="rounded bg-gray-50 px-3 py-2">{row.name}: <strong>{row.quantity.toLocaleString(undefined,{maximumFractionDigits:6})} {row.unit}</strong></span>)}</div></section>}
       {/* Table Card */}
       <div className="card">
         {isLoading ? (
@@ -613,7 +616,8 @@ export function StockLogPage() {
           </div>
         ) : filteredLogs.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            {t('common.noData')}
+            {isError ? copy.failed : copy.empty}
+            <button className="btn btn-secondary block mx-auto mt-3" onClick={clearFilters}>{copy.clear}</button>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -660,7 +664,7 @@ export function StockLogPage() {
                       </td>
                       <td className="py-3 text-sm text-right px-4 whitespace-nowrap font-medium">
                         <span className={log.stockDelta >= 0 ? 'text-green-600' : 'text-red-600'}>
-                          {log.stockDelta !== null && log.stockDelta > 0 ? '+' : ''}{log.stockDelta?.toLocaleString(undefined, { maximumFractionDigits: 0 }) ?? '—'} {log.inventory?.unit || ''}
+                          {log.stockDelta !== null && log.stockDelta > 0 ? '+' : ''}{log.stockDelta?.toLocaleString(undefined, { maximumFractionDigits: 6 }) ?? '—'} {log.inventory?.unit || ''}
                         </span>
                       </td>
                       <td className="py-3 text-sm text-right text-gray-600 px-4 whitespace-nowrap">

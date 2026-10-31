@@ -1,3 +1,4 @@
+import {inventoryReconciliation} from '../src/services/InventoryReconciliationService'
 import {beforeAll,afterAll,test,expect} from '@jest/globals'
 import {randomUUID} from 'crypto'
 import prisma from '../src/config/database'
@@ -125,4 +126,43 @@ test('registered report distinguishes no business activity from zero values whil
  const f=await fixture(),date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),report=()=>employeeConsumption({storeId:f.store.id,startDate:date,endDate:date})
  const empty=await report();expect(empty.hasBusinessActivity).toBe(false);expect(empty.list).toHaveLength(1)
  await f.issue(3);const active=await report();expect(active.hasBusinessActivity).toBe(true);expect(active.list[0].actualWithdrawal).toBe(3)
+})
+
+test('daily theory and actual stock out exist without any count',async()=>{
+ const f=await fixture('kg');await f.issue(3);await f.sale(2)
+ const date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),daily=(await employeeConsumption({storeId:f.store.id,startDate:date,endDate:date})).list[0]
+ expect(await prisma.inventoryCountItem.count({where:{inventoryId:f.material.id}})).toBe(0);expect(daily.actualWithdrawal).toBe(3);expect(daily.theoreticalConsumption).toBe(2);expect(daily.variance).toBe(1)
+})
+test('15kg baseline and 3kg physical out reconcile to 12kg regardless of sale recipe evidence',async()=>{
+ const f=await fixture('kg');await f.observe(15);await f.issue(3000,randomUUID(),'g')
+ const report=()=>inventoryReconciliation({storeId:f.store.id,startDate:'2026-01-01',endDate:'2027-01-01',latest:true})
+ let row=(await report())[0];expect(row.openingPhysical).toBe(15);expect(row.actualOut).toBe(3);expect(row.expectedClosing).toBe(12);expect(row.closingPhysical).toBeNull();expect(row.varianceStatus).toBe('awaiting_count')
+ await f.observe(12);row=(await report())[0];expect(row.expectedClosing).toBe(12);expect(row.closingPhysical).toBe(12);expect(row.variance).toBe(0);expect(row.varianceStatus).toBe('normal')
+})
+test('a pending mismatched count warns, survives approval, and resolves after the next matching count',async()=>{
+ const {calculateInventoryAlerts,refreshInventoryAlerts}=await import('../src/services/InventoryAlertCenterService')
+ const f=await fixture('kg');await f.observe(15);await f.issue(3)
+ // Missing sales evidence must never block a physical stock reconciliation.
+ await prisma.order.create({data:{storeId:f.store.id,staffId:'counter',orderNumber:randomUUID(),totalAmount:100,finalAmount:100,paymentMethod:'cash',status:'paid'}})
+ const c=await createInventoryCount({storeId:f.store.id,period:'ad_hoc',startDate:new Date('2026-01-01'),endDate:new Date('2027-01-01'),inventoryIds:[f.material.id]}),i=c.items[0]
+ await updateCountItem(i.id,11.99,'counter',undefined,{countId:c.id,storeId:f.store.id,expectedStock:i.inventory.currentStock,observedVersion:i.inventory.updatedAt.toISOString()});await submitInventoryCount(c.id,f.store.id)
+ const report=()=>inventoryReconciliation({storeId:f.store.id,startDate:'2026-01-01',endDate:'2027-01-01',latest:true})
+ let row=(await report())[0];expect(row.expectedClosing).toBe(12);expect(row.variance).toBe(-0.01);expect(row.closingStatus).toBe('pending_review');expect(row.varianceStatus).toBe('warning')
+ let alerts=(await calculateInventoryAlerts(f.store.id)).filter(a=>a.type==='count_variance'&&a.resourceId===i.id);expect(alerts).toHaveLength(1);expect(alerts[0].detail.systemQty).toBe(12)
+ await completeInventoryCount(c.id,'manager',f.store.id);row=(await report())[0];expect(row.variance).toBe(-0.01);expect(row.closingStatus).toBe('completed');expect(await f.balance()).toBeCloseTo(11.99)
+ let events=await refreshInventoryAlerts(f.store.id);expect(events.list.some(a=>a.type==='count_variance'&&a.resourceId===i.id&&a.active)).toBe(true)
+ await f.observe(11.99);events=await refreshInventoryAlerts(f.store.id);expect(events.list.find(a=>a.type==='count_variance'&&a.resourceId===i.id)?.active??false).toBe(false)
+})
+
+test('material ledger search precedes paging and preserves Jakarta midnight instants and fractional kg',async()=>{
+ const {getStockOutLogs}=await import('../src/services/InventoryService')
+ const f=await fixture('kg');await prisma.inventory.update({where:{id:f.material.id},data:{name:'{"zh":"香草冰淇淋粉","en":"Vanilla powder","id":"Bubuk vanila"}'}})
+ const first=await f.issue(0.25),second=await f.issue(1)
+ const logs=await prisma.stockOutLog.findMany({where:{inventoryId:f.material.id},orderBy:{createdAt:'asc'}})
+ await prisma.stockOutLog.update({where:{id:logs[0].id},data:{createdAt:new Date('2026-10-29T18:00:00Z')}})
+ await prisma.stockOutLog.update({where:{id:logs[1].id},data:{createdAt:new Date('2026-10-30T18:00:00Z')}})
+ const filter={storeId:f.store.id,search:'  VANILLA  ',startDate:'2026-10-29T17:00:00Z',endDate:'2026-10-30T16:59:59.999Z',take:1}
+ const results=await getStockOutLogs(filter);expect(results).toHaveLength(1);expect(results[0].quantity).toBe(0.25)
+ expect(await getStockOutLogs({...filter,skip:1})).toHaveLength(0)
+ expect(await getStockOutLogs({...filter,search:'no-such-material'})).toHaveLength(0)
 })
