@@ -227,12 +227,14 @@ export function backendQueryHints(text:string){
   [/(?:商品|产品|product|produk)/i,['GET /api/products','GET /api/categories']],
   [/(?:卫生|hygiene|kebersihan)/i,['GET /api/hygiene/tasks','GET /api/hygiene/stats']],
  ]
- const ids=[...new Set(groups.filter(([pattern])=>pattern.test(text)).flatMap(([,ids])=>ids))].slice(0,5)
+ const creating=/(?:创建|新建|设置|安排).{0,20}(?:活动|促销)|(?:create|buat|atur).{0,20}(?:campaign|promotion|promosi|kampanye)/i.test(text)
+ const allProducts=/全部商品|所有商品|全店商品|all products|semua produk/i.test(text)
+ const ids=creating?['POST /api/marketing/activities',...(!allProducts?['GET /api/marketing/activities/resources']:[])]:[...new Set(groups.filter(([pattern])=>pattern.test(text)).flatMap(([,ids])=>ids))].slice(0,5)
  const hints=ids.filter(id=>!agentOperationAccess(id)).map(id=>backendDescription(id)).filter((d:any)=>d.ok)
  // Preserve the real validator fields while omitting the large optional poster
  // editor subtree from the initial prompt. Full contracts remain discoverable.
  for(const hint of hints as any[])if(hint.operationId==='POST /api/marketing/activities'&&hint.requestContract?.body?.properties){
-  const body=hint.requestContract.body,keys=['name','description','type','status','startsAt','endsAt','timezone','weekdays','dailyStart','dailyEnd','productIds','specIds','memberOnly','rule']
+  const body=hint.requestContract.body,keys=['name','description','type','status','startsAt','endsAt','timezone','weekdays','dailyStart','dailyEnd','productIds','specIds','memberOnly','showOnTv','rule']
   hint.requestContract={body:{...body,properties:Object.fromEntries(Object.entries(body.properties).filter(([key])=>keys.includes(key)))},note:'Initial core activity fields only; describe the operation for optional poster/display fields.'}
  }
  return hints.length?{contractVersion:backendVersion(),operations:hints}:undefined
