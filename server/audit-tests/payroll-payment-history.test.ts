@@ -34,3 +34,15 @@ test('confirmed resignation payroll can close before month end, refund and retai
 test('administrator reads the retained paid snapshot rather than re-running current wage rules',async()=>{
  try{record.status='paid';const handler=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id/payslip').route.stack.at(-1).handle;const res=response();await handler({params:{id:'salary'}},res);expect(res.statusCode).toBe(200);expect(res.data.data.staffName).toBe('Saved');expect(readPayslip).toHaveBeenCalledWith(db,'store','salary')}finally{jest.useRealTimers()}
 })
+
+test('QR attendance changing after confirmation requires re-confirmation before recording payment',async()=>{
+ const probation=await import('../src/services/ProbationService')
+ const recalc=jest.spyOn(probation,'calculatePayrollBasis').mockResolvedValue({amount:1300000} as any)
+ try{
+  db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.probationBasis.salary'?{value:JSON.stringify({version:2,settlementVersion:1,confirmed:true,manualCorrection:true,daysSource:'attendance',qrAttendanceRequired:true,depositRefund:{amount:300000,items:[{staffDepositId:'deposit',amountMinor:30000000}]}})}:null)
+  const handler=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id/mark-paid').route.stack.at(-1).handle,res=response()
+  await handler({params:{id:'salary'},user:{id:'admin',role:'admin',storeId:'store'}},res)
+  expect(res.statusCode).toBe(409);expect(res.data.message).toBe('SALARY_ATTENDANCE_RECALC_REQUIRED')
+  expect(db.salary.updateMany).not.toHaveBeenCalled();expect(db.expense.create).not.toHaveBeenCalled()
+ }finally{recalc.mockRestore();jest.useRealTimers()}
+})
