@@ -1,4 +1,4 @@
-import {explicitlyPublishesActivity,agentAdditionalPermissions,activityRequestIntent,activityExecutionBody,activityReceiptText} from './ManagementAgentPolicy'
+import {explicitlyPublishesActivity,agentAdditionalPermissions,activityRequestIntent,activityExecutionBody,activityReceiptText,agentOperationPermission} from './ManagementAgentPolicy'
 import {executeBusinessTopic,topicDefinition,BusinessTopic,storeBusinessTopic} from './StoreBusinessTopic'
 import {audienceAllows} from './teamAgentBridge/employeeAccess'
 import {backendAccountAccess} from './ManagementBackendRegistry'
@@ -128,7 +128,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
    if(kind==='result'&&job.topicReceipt&&job.topicPermission)dataPermissions.add(job.topicPermission)
    if(kind!=='status'&&job.executor==='hermes_native'){
     const receipts=await tx.config.findMany({where:{storeId:cfg.storeId,key:{startsWith:'team.communication.employeeRuntime.backendOperation.'},value:{contains:JSON.stringify('executionId')+':'+JSON.stringify(job.id)}},select:{value:true}})
-    for(const row of receipts){const receipt=JSON.parse(row.value);if(receipt.state!=='complete'||!receipt.result?.executed)continue;const permission=backendOperation(receipt.operationId)?.permission?.replace(/\.(write|create|cancel|status|manage|stockIn|stockOut|count)$/i,'.read');if(permission)dataPermissions.add(permission);for(const required of receipt.requiredPermissions||agentAdditionalPermissions(receipt.operationId))dataPermissions.add(required)}
+    for(const row of receipts){const receipt=JSON.parse(row.value);if(receipt.state!=='complete'||!receipt.result?.executed)continue;const permission=(backendOperation(receipt.operationId)?.permission??agentOperationPermission(receipt.operationId))?.replace(/\.(write|create|cancel|status|manage|stockIn|stockOut|count)$/i,'.read');if(permission)dataPermissions.add(permission);for(const required of receipt.requiredPermissions||agentAdditionalPermissions(receipt.operationId))dataPermissions.add(required)}
    }
    for(const permission of dataPermissions)if(!await audienceAllows(tx,c.principal,c.scope,permission))throw Error('NATIVE_OUTPUT_ACCESS_CHANGED')
    const actor:any={...c.actor};bindNativeBackendAgent(actor,{dataPermissions:[...dataPermissions],agentId:cfg.agentId,grantVersion:c.principal.version,clientRevision:1,executionId:deliveryId,name:c.principal.displayName||'Hermes',...(!job.authorizationChannelId?{replyToSeq:job.sourceSeq}:{})})

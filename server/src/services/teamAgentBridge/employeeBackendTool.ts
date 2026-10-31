@@ -1,4 +1,4 @@
-import {agentOperationAccess,agentAdditionalPermissions} from '../ManagementAgentPolicy'
+import {agentOperationAccess,agentAdditionalPermissions,agentOperationPermission} from '../ManagementAgentPolicy'
 import { nativeFileInput } from '../NativeBackendFiles'
 import { bindNativeBackendPublication, NativeBackendPublication } from '../ManagementBackendIdentity'
 import { z } from 'zod'
@@ -62,8 +62,8 @@ async function release(db:any,g:NativeBackendPrincipal,scope:CommunicationScope,
    if(!await audienceAllows(db,g,scope,permission))return {ok:false,code:'BACKEND_RESULT_ACCESS_CHANGED',detailsWithheld:true,requiredPermission:permission,receiptId:row.id,state:row.state}
   }
   if(agentOperationAccess(row.operationId))return {ok:false,code:'AGENT_OPERATION_NOT_REVIEWED',detailsWithheld:true,receiptId:row.id,state:row.state}
-  if(!await audienceAllows(db,g,scope,backendOperation(row.operationId)?.permission||'__unclassified__'))return {ok:false,code:'BACKEND_RESULT_ACCESS_CHANGED',detailsWithheld:true,receiptId:row.id,state:row.state}
-  const op=backendOperation(row.operationId),permission=op?.permission?.replace(/\.(write|create|cancel|status|manage|stockIn|stockOut|count)$/i,'.read')
+  if(!await audienceAllows(db,g,scope,(backendOperation(row.operationId)?.permission??agentOperationPermission(row.operationId))||'__unclassified__'))return {ok:false,code:'BACKEND_RESULT_ACCESS_CHANGED',detailsWithheld:true,receiptId:row.id,state:row.state}
+  const op=backendOperation(row.operationId)||{permission:agentOperationPermission(row.operationId)},permission=op?.permission?.replace(/\.(write|create|cancel|status|manage|stockIn|stockOut|count)$/i,'.read')
   if(row.resultChannelId){
     const channel=await readTeam<any>(db,g.storeId,'channel.'+row.resultChannelId)
     const members=new Set((channel?.members||[]).map((m:any)=>m.staffId))
