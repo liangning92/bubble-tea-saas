@@ -38,7 +38,7 @@ const root=path.resolve(__dirname,'../..'),deps=root+'/server/node_modules';cons
 
  // Admin-only self-refund exception: cover direct and durable approval transports.
  async function ownRefund(actor,id,reasonCode='customer_dissatisfied'){
-  const itemId=id+'-item';await db.order.create({data:{id,storeId:'store',staffId:'cashier-staff',orderNumber:'SYNTHETIC-'+id,totalAmount:10000,finalAmount:10000,paymentMethod:'cash',status:'completed',items:{create:[{id:itemId,productId:'product',specId:'spec',productName:'Tea',specName:'Regular',quantity:1,unitPrice:10000,addons:'[]'}]}}});
+  const itemId=id+'-item';await db.order.create({data:{id,storeId:'store',staffId:actor==='owner'?'cashier-staff':actor+'-staff',orderNumber:'SYNTHETIC-'+id,totalAmount:10000,finalAmount:10000,paymentMethod:'cash',status:'completed',items:{create:[{id:itemId,productId:'product',specId:'spec',productName:'Tea',specName:'Regular',quantity:1,unitPrice:10000,addons:'[]'}]}}});
   if(reasonCode==='paid_unprepared')await db.orderConsumptionSnapshot.create({data:{storeId:'store',orderId:id,materials:'[]',issues:'[]'}});
   return call(actor,'POST','orders/refund-request',{orderId:id,reason:'Synthetic self approval',reasonCode,selectedItemIds:[itemId],requestId:crypto.randomUUID()},201)
  }
