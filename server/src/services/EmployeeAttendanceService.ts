@@ -1,3 +1,4 @@
+import { isQrAttendance } from './AttendanceEvidencePolicy'
 import { randomUUID } from "crypto";
 import prisma from "../config/database";
 import {
@@ -305,15 +306,12 @@ export async function createEmployeeAttendance(data: any, storeId: string, trans
       `attendance.${data.staffId}.`,
       db,
     );
-    const duplicate = existingSnapshots.find(
-      (s) =>
-        s.businessDate === day &&
-        (!shift || s.start === shift.start.toISOString()),
-    );
-    if (duplicate)
-      return db.attendance.findUniqueOrThrow({
-        where: { id: duplicate.attendanceId },
-      });
+    const duplicates = existingSnapshots.filter((s) => s.businessDate === day && (!shift || s.start === shift.start.toISOString()));
+    for(const duplicate of duplicates){
+      const previous=await db.attendance.findUniqueOrThrow({where:{id:duplicate.attendanceId}});
+      // A legacy GPS record must not suppress a later genuine QR check-in.
+      if(!isQrAttendance(data)||isQrAttendance(previous))return previous;
+    }
     const attendance = await db.attendance.create({ data });
     await snapshotAttendance(attendance, storeId, db);
     if (shift)

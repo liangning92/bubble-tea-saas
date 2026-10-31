@@ -7,6 +7,7 @@ import { isPayrollEmployee, saveStaffIdentity } from '../services/StaffIdentityS
 import { getPayrollRules, savePayrollRules } from '../services/PayrollRuleService'
 import { isLegacyAutomaticBasis, refreshEmploymentPayroll, getProbationRule, saveProbationRule, probationRuleSchema, saveEnrollment, staffProbation, calculatePayrollBasis, savedPayrollBasis, ProbationInputError, dayNumber } from '../services/ProbationService'
 import { allocateEmployeeNumber } from '../services/EmployeeNumberService'
+import { attendanceEvidence, isQrAttendance } from '../services/AttendanceEvidencePolicy'
 import { createEmployeeAttendance } from '../services/EmployeeAttendanceService'
 import { updateStaffSystemRole, StaffAccessError } from '../services/StaffPermissionService'
 import { savedAdjustmentPlan } from '../services/SalaryAdjustmentService'
@@ -413,6 +414,7 @@ router.delete('/:id', authenticate, authorize('admin'), async (_req: AuthRequest
 router.post('/attendance', authenticate, async (req: AuthRequest, res) => {
   try {
     const { type, gpsLocation, note } = req.body
+    if(type==='check_in'||type==='check_out')return res.status(400).json({code:400,error:'QR_ATTENDANCE_REQUIRED',message:'Scan the current POS QR code to check in or out.'})
 
     // Find staff by user id
     const staff = await prisma.staff.findFirst({
@@ -523,7 +525,7 @@ router.get('/attendance/today', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: attendance || null,
+      data: attendance&&isQrAttendance(attendance)?attendance:null,
       timestamp: new Date().toISOString()
     })
   } catch (error) {
@@ -556,7 +558,7 @@ router.get('/attendance/summary', authenticate, authorize('admin', 'manager'), a
       }
     })
 
-    const attendanceMap = new Map(attendances.map(a => [a.staffId, a]))
+    const attendanceMap = new Map(attendances.filter(isQrAttendance).map(a => [a.staffId, a]))
 
     let present = 0
     let late = 0
@@ -582,7 +584,7 @@ router.get('/attendance/summary', authenticate, authorize('admin', 'manager'), a
         onTime: present - late,
         late,
         notCheckedIn,
-        records: attendances
+        records: attendances.map(attendanceEvidence)
       },
       timestamp: new Date().toISOString()
     })
@@ -631,7 +633,7 @@ router.get('/attendance/list', authenticate, async (req: AuthRequest, res) => {
 
     res.json({
       code: 200,
-      data: attendances,
+      data: attendances.map(attendanceEvidence),
       timestamp: new Date().toISOString()
     })
   } catch (error) {

@@ -10,11 +10,8 @@ import { staffApi } from "../services/api";
 import { QRCameraScannerModal } from "../components/QRCameraScannerModal";
 import {
   Clock,
-  MapPin,
   CheckCircle,
-  LogOut,
   Calendar,
-  Loader2,
   X,
   Camera,
   RotateCcw,
@@ -112,106 +109,6 @@ export function AttendancePage() {
         text: error.response?.data?.message || t("attendance.invalidQR"),
       });
       throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCheckIn = async () => {
-    setIsLoading(true);
-    setMessage(null);
-
-    // Try to get GPS location
-    let locationStr = "";
-    try {
-      if ("geolocation" in navigator) {
-        const position = await new Promise<GeolocationPosition>(
-          (resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              timeout: 5000,
-            });
-          },
-        );
-        locationStr = `${position.coords.latitude},${position.coords.longitude}`;
-      }
-    } catch (e) {
-      console.warn("Could not get GPS location:", e);
-      locationStr = "GPS unavailable";
-    }
-
-    try {
-      const response = await staffApi.checkIn({
-        storeId: user!.storeId,
-        date: businessDate(),
-        checkInTime: new Date().toISOString(),
-        location: locationStr,
-      });
-
-      if (response.code === 201 || response.code === 200) {
-        setAttendance(response.data);
-        setMessage({ type: "success", text: t("attendance.checkInSuccess") });
-        await refresh();
-      } else {
-        setMessage({
-          type: "error",
-          text: response.message || t("attendance.checkInFailed"),
-        });
-      }
-    } catch (error: any) {
-      setMessage({
-        type: "error",
-        text: error.response?.data?.message || t("attendance.errorOccurred"),
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCheckOut = async () => {
-    if (!attendance?.id) return;
-
-    setIsLoading(true);
-    setMessage(null);
-
-    // Try to get GPS location
-    let locationStr = "";
-    try {
-      if ("geolocation" in navigator) {
-        const position = await new Promise<GeolocationPosition>(
-          (resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-              timeout: 5000,
-            });
-          },
-        );
-        locationStr = `${position.coords.latitude},${position.coords.longitude}`;
-      }
-    } catch (e) {
-      console.warn("Could not get GPS location:", e);
-      locationStr = "GPS unavailable";
-    }
-
-    try {
-      const response = await staffApi.checkOut(attendance.id, {
-        checkOutTime: new Date().toISOString(),
-        location: locationStr,
-      });
-
-      if (response.data) {
-        setAttendance({
-          ...attendance,
-          checkOutTime: response.data.checkOutTime,
-        });
-        setMessage({ type: "success", text: t("attendance.checkOutSuccess") });
-        await refresh();
-      } else {
-        setMessage({ type: "error", text: response.message || t("attendance.errorOccurred") });
-      }
-    } catch (error: any) {
-      setMessage({
-        type: "error",
-        text: error.response?.data?.message || t("attendance.errorOccurred"),
-      });
     } finally {
       setIsLoading(false);
     }
@@ -383,18 +280,6 @@ export function AttendancePage() {
                   <Camera size={22} />
                   {t("attendance.scanPosQrCheckOut", "扫码下班打卡")}
                 </button>
-                <button
-                  onClick={handleCheckOut}
-                  disabled={isLoading}
-                  className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  {isLoading ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <LogOut size={14} />
-                  )}
-                  {t("attendance.checkOut", "直接签退 (备用)")}
-                </button>
               </>
             ) : isShiftFinished ? (
               <div className="flex gap-2">
@@ -423,18 +308,6 @@ export function AttendancePage() {
                 >
                   <Camera size={22} />
                   {t("attendance.scanPosQrCheckIn", "扫码上班签到")}
-                </button>
-                <button
-                  onClick={handleCheckIn}
-                  disabled={isLoading}
-                  className="w-full py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm font-medium hover:bg-gray-200 disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  {isLoading ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <MapPin size={14} />
-                  )}
-                  {t("attendance.gpsCheckIn", "GPS打卡 (备用)")}
                 </button>
               </>
             )}

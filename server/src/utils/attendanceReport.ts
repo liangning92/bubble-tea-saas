@@ -35,7 +35,8 @@ export function buildAttendanceReport(input: {date: string; period: string; now?
     else if(assigned.length && !working.length)state='rest'
     else if(assigned.some(s=>s.status==='absent'))state='absent'
     else if(working.length && plans.length!==working.length)state='pending_review'
-    else if(plans.length)state=now<new Date(plans[0]!.start!)?'not_started':plans.some(p=>p!.end && now<=new Date(p!.end))?'awaiting':'missing'
+    else if(plans.length)state=now<new Date(plans[0]!.start!)?'not_started':plans.some(p=>p!.end && now<=new Date(p!.end))?'awaiting':'absent'
+    else if(now>=new Date(day+'T23:59:59.999+07:00'))state='absent'
     const starts=entries.length?entries.map(r=>r.start).filter(Boolean):plans.map(p=>p!.start)
     return {staffId:person.id,staffName:person.name,employeeNumber:person.employeeNumber||'',state,scheduled:!!starts.length,shiftName:entries.length?entries.map(r=>r.shiftName).filter(Boolean).join(' / '):plans.map(p=>p!.name).join(' / '),scheduledStarts:starts,checkIn:entries[0]?.checkIn||null,checkOut:entries.length && entries.every(r=>r.checkOut)?entries.map(r=>r.checkOut!).sort().at(-1):null,lateMinutes:entries.length && !unknown?knownMinutes:null,knownLateMinutes:knownMinutes,exemptMinutes:entries.filter(r=>r.exempt).reduce((n,r)=>n+(r.lateMinutes||0),0),needsReview:unknown || ['pending_review','missing','unscheduled'].includes(state) || entries.some(r=>r.missingCheckout),missingCheckout:entries.some(r=>r.missingCheckout),records:entries,outsideEmployment:outside}
   }
