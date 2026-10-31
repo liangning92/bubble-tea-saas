@@ -64,6 +64,7 @@ export function SalaryListPage() {
   const canWrite=useEmployeePermission('salary.write')
   const { t, i18n } = useTranslation()
   const { user } = useAuthStore()
+  const estimateHint=i18n.language.startsWith('zh')?'按当月自然天数折算；请核对有效扫码考勤或人工确认的实际工作天数。仅整月在职享有月度带薪假。确认前金额不计入应付工资。':i18n.language.startsWith('en')?'Prorated by calendar days in the month. Review verified QR attendance or manually confirmed workdays. Monthly paid leave applies only to full employment months. Unconfirmed estimates are excluded from payables.':'Dihitung menurut hari kalender bulan tersebut. Periksa absensi QR sah atau hari kerja yang dikonfirmasi manual. Cuti berbayar bulanan hanya untuk masa kerja sebulan penuh. Perkiraan belum dikonfirmasi tidak masuk utang gaji.'
   const confirmFlow=i18n.language.startsWith('zh')?{title:'确认工资',intro:'核对金额无误后即可确认，无需填写更正原因。需要修改时请取消并使用“更正”。',reason:'按当前计算结果核对并确认工资，未修改计算数据。',calendar:'按在职日期预计',actual:'按实际工作天数'}:i18n.language.startsWith('en')?{title:'Confirm salary',intro:'Review the calculated amounts and confirm. No correction reason is required. Cancel and use Correction to make changes.',reason:'Reviewed and confirmed the current calculation without changing its data.',calendar:'Estimate by employment dates',actual:'Use actual workdays'}:{title:'Konfirmasi gaji',intro:'Periksa jumlah lalu konfirmasi, tanpa alasan koreksi. Batalkan dan gunakan Koreksi untuk mengubah data.',reason:'Memeriksa dan mengonfirmasi perhitungan saat ini tanpa mengubah data.',calendar:'Perkiraan tanggal kerja',actual:'Hari kerja aktual'}
 
   const [expandedSalary,setExpandedSalary]=useState<string|null>(null)
@@ -472,7 +473,7 @@ export function SalaryListPage() {
         </div>
       </div>
 
-      <p className="px-4 text-sm text-gray-500">{pl.estimateHint}</p>
+      <p className="px-4 text-sm text-gray-500">{estimateHint}</p>
       {/* List */}
       <div className="p-4">
         {isLoading ? (
