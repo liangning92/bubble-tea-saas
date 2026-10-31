@@ -4,7 +4,7 @@ export interface NativeHermesRun {
  id:string;status:string;output?:unknown;error?:unknown;usage?:unknown
 }
 export interface NativeHermesRequest {
- input:unknown;session_id:string;instructions?:string
+ input:unknown;session_id:string;instructions?:string;conversation_history?:Array<{role:'user'|'assistant';content:string}>
 }
 export class HermesNativeClient {
  private readonly origin:URL
