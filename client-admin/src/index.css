@@ -382,3 +382,44 @@ body {
  .admin-workspace .inventory-report-filters > input:first-child { flex-basis: 100%; }
  .admin-workspace .inventory-report-filters > input:not(:first-child) { width: calc((100% - 34px)/2); flex: 1 1 calc((100% - 34px)/2); min-width: 0; }
 }
+
+/* Usage reports: method, period and filters remain distinct at every width. */
+.inventory-report-mode,.inventory-report-range,.inventory-report-tools { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+.inventory-report-mode { align-items:center; }
+.inventory-usage-report label { display:flex; flex-direction:column; gap:5px; font-size:13px; color:#4b5563; min-width:0; }
+.inventory-usage-report .input { min-height:40px; height:40px; padding:8px 12px; width:100%; }
+.inventory-report-range label { flex:0 1 210px; }
+.inventory-report-tools label { flex:0 1 230px; }
+.inventory-report-tools .inventory-report-search { flex:1 1 240px; max-width:420px; }
+.inventory-report-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.inventory-report-summary > div { border:1px solid #e5e7eb; background:white; border-radius:10px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.inventory-report-summary strong { font-size:24px; }
+.inventory-report-context { display:grid; gap:4px; }
+.inventory-report-basis { padding:12px 16px; background:#f3f4f6; border-radius:10px; font-size:13px; line-height:1.7; }
+.inventory-report-basis summary { cursor:pointer; color:#4b5563; }
+.inventory-report-guidance { background:#fffbeb; border:1px solid #fde68a; border-radius:10px; padding:12px 16px; font-size:13px; }
+.inventory-report-guidance ul { display:grid; gap:8px; margin-top:8px; }
+.inventory-report-guidance li { display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap; }
+.inventory-report-error { padding:12px; background:#fef2f2; color:#b91c1c; border-radius:8px; }
+.admin-workspace .inventory-report-table { min-width:1080px; border-collapse:separate; border-spacing:0; table-layout:auto; }
+.admin-workspace .inventory-report-table th,.admin-workspace .inventory-report-table td { padding:12px; border-bottom:1px solid #e5e7eb; text-align:right; vertical-align:top; font-variant-numeric:tabular-nums; }
+.admin-workspace .inventory-report-table th { background:#f9fafb; font-weight:600; color:#4b5563; }
+.admin-workspace .inventory-report-table th:first-child,.admin-workspace .inventory-report-table td:first-child { position:sticky; left:0; z-index:1; background:white; text-align:left; width:250px; min-width:200px; max-width:280px; }
+.admin-workspace .inventory-report-table th:first-child { background:#f9fafb; }
+.admin-workspace .inventory-report-table td:nth-child(2),.admin-workspace .inventory-report-table th:nth-child(2) { text-align:left; }
+.admin-workspace .inventory-report-table .inventory-report-state { min-width:210px; max-width:300px; text-align:left; white-space:normal; }
+.inventory-report-state p { font-size:12px; line-height:1.5; margin:4px 0; color:#6b7280; }
+.inventory-report-state a { font-size:12px; }
+.inventory-report-material { display:flex; flex-direction:column; gap:5px; text-align:left; width:100%; }
+.inventory-report-material strong { overflow-wrap:anywhere; }
+.inventory-report-row-period { font-size:11px; color:#6b7280; margin-top:6px; white-space:normal; }
+.admin-workspace .inventory-report-table .inventory-detail-row > td { position:static; text-align:left; max-width:none; }
+.inventory-report-scroll:focus-visible { outline:2px solid #ec6b8a; outline-offset:2px; }
+@media (max-width:767px) {
+ .inventory-report-summary { gap:6px; }
+ .inventory-report-summary > div { flex-direction:column; align-items:start; padding:10px; font-size:12px; }
+ .inventory-report-range label,.inventory-report-tools label { flex:1 1 145px; }
+ .inventory-report-tools .inventory-report-search { flex-basis:100%; max-width:none; }
+ .admin-workspace .inventory-report-table th:first-child,.admin-workspace .inventory-report-table td:first-child { min-width:150px; max-width:170px; }
+}
+.admin-workspace .inventory-report-table .inventory-expanded-data { max-width:min(80rem,calc(100vw - 64px)); }

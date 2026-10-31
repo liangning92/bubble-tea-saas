@@ -1,3 +1,4 @@
+import {usageCoverage} from '../utils/inventoryReportCoverage'
 import {materialRecipeUsage} from '../services/MaterialRecipeUsageService'
 import { operationDateSchema } from '../utils/operationDate'
 import { operationRecords, operationQuerySchema } from '../services/InventoryOperationRecordsService'
@@ -435,10 +436,11 @@ router.get('/consumption-analysis', authenticate, authorize('admin', 'manager'),
 
     res.json({
       code: 200,
-      data: { list: analysis },
+      data: { list: analysis, coverage: usageCoverage(analysis) },
       timestamp: new Date().toISOString()
     })
   } catch (error) {
+    if(error instanceof Error&&error.message==='INVALID_ANALYSIS_PERIOD')return res.status(400).json({code:400,message:error.message})
     console.error('Get consumption analysis error:', error)
     res.status(500).json({ code: 500, message: 'Failed to get consumption analysis' })
   }
