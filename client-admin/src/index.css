@@ -511,3 +511,13 @@ body {
 .inventory-ledger-table-wrap [role=region]:focus-visible { outline:2px solid var(--color-primary); outline-offset:-2px; }
 @media(max-width:1279px) { .inventory-ledger-scroll-hint { display:inline; } }
 @media(max-width:640px) { .inventory-ledger-results-header { flex-wrap:wrap; } .inventory-ledger-scroll-hint { order:2; flex-basis:100%; } }
+
+.inventory-ledger-material-context { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px; font-size:13px; color:#6b7280; }
+.inventory-ledger-material-context strong { color:#111827; font-size:15px; }
+.inventory-ledger-material-metrics p { color:#6b7280; font-size:13px; }
+.inventory-ledger-material-metrics strong { display:block; font-size:22px; line-height:30px; margin:4px 0; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.inventory-ledger-material-metrics small { color:#6b7280; font-size:11px; }
+.inventory-ledger-financial>summary { cursor:pointer; font-size:12px; color:#6b7280; }
+.inventory-ledger-financial[open]>.inventory-ledger-metrics { margin-top:8px; }
+.inventory-ledger-material-choice { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:13px; }
+.inventory-ledger-material-choice select { width:auto; max-width:100%; }

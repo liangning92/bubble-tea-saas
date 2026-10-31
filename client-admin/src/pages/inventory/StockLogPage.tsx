@@ -1,4 +1,5 @@
-import {stockLogDateRange,stockLogQueryCopy,physicalStockOutQuantity} from '../../utils/stockLogQuery'
+import {stockLogDateRange,stockLogQueryCopy,physicalStockOutQuantity,materialComparison} from '../../utils/stockLogQuery'
+import type {UsageResult} from '../../../../shared/inventoryUsageReport'
 import {StockPhotoEvidence} from '../../components/StockPhotoEvidence'
 import { ManualStockCorrection } from '../../components/ManualStockCorrection'
 import { useAuthStore } from '../../stores/auth'
@@ -41,6 +42,8 @@ export function StockLogPage() {
   const copy=stockLogQueryCopy(i18n.language)
   const queryClient = useQueryClient()
 
+  const user=useAuthStore(state=>state.user)
+  const [comparisonId,setComparisonId]=useState('')
   const isCorrectionAdmin = useAuthStore(state => state.user?.role === 'admin')
   const [correctionLog, setCorrectionLog] = useState<any>(null)
 
@@ -48,6 +51,7 @@ export function StockLogPage() {
   const [activeTab, setActiveTab] = useState<LogTab>('all')
   const [search, setSearch] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('')
+  useEffect(()=>setComparisonId(''),[search,selectedCategory])
   const [datePreset, setDatePreset] = useState<'all' | QueryPeriod | 'custom'>('all')
   const [customStartDate, setCustomStartDate] = useState('')
   const [customEndDate, setCustomEndDate] = useState('')
@@ -147,9 +151,20 @@ export function StockLogPage() {
 
   const statsUnavailable=isLoading||(isError&&!logsData)
 
+  const comparisonItems=useMemo(()=>{
+    if(!search.trim())return []
+    const items=new Map<string,any>()
+    for(const item of [...inventoryItems,...rawLogs.map(log=>({...log.inventory,id:log.inventoryId}))]){
+      if(item?.id&&JSON.stringify(item.name||'').toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())&&(!selectedCategory||item.category===selectedCategory))items.set(item.id,item)
+    }
+    return [...items.values()]
+  },[inventoryItems,rawLogs,search,selectedCategory])
+  const comparisonItem=comparisonItems.find(item=>item.id===comparisonId)||(comparisonItems.length===1?comparisonItems[0]:null)
+
   // Client-side filtering for rapid response
   const filteredLogs = useMemo(() => {
     return rawLogs.filter((log: any) => {
+      if(comparisonItem&&log.inventoryId!==comparisonItem.id)return false
       // 1. Tab filter
       if (activeTab === 'withdrawal' || activeTab === 'other') {
         if(log.type!=='stock_out'||(log.reason!==activeTab && !(activeTab==='other' && log.reason==='receipt_cost_adjustment')))return false
@@ -168,9 +183,9 @@ export function StockLogPage() {
 
       return true
     })
-  }, [rawLogs, activeTab, selectedCategory, search, orderMap])
+  }, [rawLogs, activeTab, selectedCategory, search, orderMap,comparisonItem?.id])
 
-  useEffect(()=>setPage(1),[activeTab,search,selectedCategory,dateRange.startDate,dateRange.endDate])
+  useEffect(()=>setPage(1),[activeTab,search,selectedCategory,dateRange.startDate,dateRange.endDate,comparisonItem?.id])
   const pageCount=Math.max(1,Math.ceil(filteredLogs.length/pageSize)),currentPage=Math.min(page,pageCount),pageStart=(currentPage-1)*pageSize
   const pageLogs=filteredLogs.slice(pageStart,pageStart+pageSize)
 
@@ -208,6 +223,15 @@ export function StockLogPage() {
     if(log.physicalQuantity!==null){const key=log.inventoryId;result[key]??={id:key,name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.physicalQuantity}
     return result
   },{})).sort((a,b)=>a.name.localeCompare(b.name)),[filteredLogs,i18n.language])
+  const theoryParams={startDate:dateRange.startDate||'2000-01-01',endDate:dateRange.endDate||'2100-12-31'}
+  const theoryQuery=useQuery({queryKey:['ledger-material-theory',user?.id,user?.storeId,theoryParams],enabled:!!comparisonItem&&!statsUnavailable&&(datePreset!=='custom'||!!dateRange.startDate),queryFn:async():Promise<UsageResult>=>(await inventoryApi.employeeConsumption(theoryParams)).data.data,refetchInterval:30000})
+  const theoryRow=theoryQuery.data?.list.find(row=>row.inventoryId===comparisonItem?.id)
+  const comparison=materialComparison(filteredLogs,comparisonItem,theoryRow,theoryQuery.data?.legacyOnly)
+  const quantity=(value:number|null)=>value===null?'—':value.toLocaleString(i18n.language,{maximumFractionDigits:6})+' '+(comparisonItem?.unit||'')
+  const theoryUnavailable=theoryQuery.isLoading||theoryQuery.isError||!theoryRow
+  const financialMetrics=<div className="inventory-ledger-metrics">{[
+    ['inventory.totalInboundCost',metrics.totalInboundCost],['inventory.totalSalesCost',metrics.totalSalesCost],['inventory.totalWasteCost',metrics.totalWasteCost]
+  ].map(([key,value])=><div className="card p-4" key={key}><p className="text-sm text-gray-500 font-medium">{t(String(key))}</p><p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':formatCurrency(Number(value))}</p></div>)}{!comparisonItem&&<div className="card p-4"><p className="text-sm text-gray-500 font-medium">{t('inventory.totalMovements')}</p><p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':metrics.totalCount}</p></div>}</div>
   const hasFilters=activeTab!=='all'||datePreset!=='all'||!!search||!!selectedCategory
 
   // Mutations
@@ -468,7 +492,7 @@ export function StockLogPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => refetch()}
+            onClick={() => {void refetch();if(comparisonItem)void theoryQuery.refetch()}}
             disabled={isFetching}
             className="btn btn-outline btn-sm flex items-center gap-1.5"
           >
@@ -503,34 +527,23 @@ export function StockLogPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="inventory-ledger-metrics">
-        <div className="card p-4">
-          <p className="text-sm text-gray-500 font-medium">{t('inventory.totalInboundCost')}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':formatCurrency(metrics.totalInboundCost)}</p>
-        </div>
-
-        <div className="card p-4">
-          <p className="text-sm text-gray-500 font-medium">{t('inventory.totalSalesCost')}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':formatCurrency(metrics.totalSalesCost)}</p>
-        </div>
-
-        <div className="card p-4">
-          <p className="text-sm text-gray-500 font-medium">{t('inventory.totalWasteCost')}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':formatCurrency(metrics.totalWasteCost)}</p>
-        </div>
-
-        <div className="card p-4">
-          <p className="text-sm text-gray-500 font-medium">{t('inventory.totalMovements')}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':metrics.totalCount}</p>
-        </div>
+      {comparisonItem&&<><div className="inventory-ledger-material-context"><strong>{formatItemName(comparisonItem.name,i18n.language)}</strong><span>{copy.comparisonScope}</span></div>
+      <div className="inventory-ledger-metrics inventory-ledger-material-metrics" aria-label={copy.comparison}>
+        <div className="card"><p>{copy.actualTotal}</p><strong>{statsUnavailable?'—':quantity(comparison.actual)}</strong><small>{copy.filteredActual}</small></div>
+        <div className="card"><p>{copy.theoryTotal}</p><strong>{theoryUnavailable?'—':quantity(comparison.theory)}</strong><small>{comparison.partial?copy.verifiedPart:copy.orderRecipe}</small></div>
+        <div className="card"><p>{copy.difference}</p><strong>{theoryUnavailable?'—':quantity(comparison.difference)}</strong><small>{copy.differenceFormula}</small></div>
+        <div className="card"><p>{t('inventory.totalMovements')}</p><strong>{statsUnavailable?'—':metrics.totalCount}</strong><small>{copy.allMatches}</small></div>
       </div>
+      {theoryQuery.isError?<p role="alert" className="text-sm text-amber-800">{copy.theoryFailed} <button className="underline" onClick={()=>void theoryQuery.refetch()}>{copy.retry}</button></p>:!theoryQuery.isLoading&&(comparison.partial||!theoryRow)&&<p className="text-sm text-amber-800">{copy.incompleteTheory} <Link className="underline" to="/inventory/consumption">{copy.theoryDetails}</Link></p>}
+      </>}
+      {comparisonItem?<details className="inventory-ledger-financial"><summary>{copy.financial}</summary>{financialMetrics}</details>:financialMetrics}
 
       <details className="inventory-ledger-correction">
         <summary><span>{t('manualStockCorrection.consumptionDifference')}: <strong>{statsUnavailable?'—':formatCurrency(metrics.costAdjustments)}</strong></span><span className="text-gray-500">{copy.costInfo}</span><ChevronDown size={14}/></summary>
         <p>{t('manualStockCorrection.postingHint')}</p>
       </details>
 
+      {comparisonItems.length>1&&<label className="inventory-ledger-material-choice">{copy.chooseMaterial}<select className="input" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">{copy.chooseMaterial}</option>{comparisonItems.map(item=><option key={item.id} value={item.id}>{formatItemName(item.name,i18n.language)}</option>)}</select></label>}
       <section className="inventory-ledger-panel" aria-label={copy.ledger}>
         <div className="inventory-ledger-types" role="group" aria-label={copy.type}>
           {[
