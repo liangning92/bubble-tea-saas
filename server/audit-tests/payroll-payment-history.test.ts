@@ -17,7 +17,7 @@ beforeEach(()=>{
  record={id:'salary',staffId:'employee',month:'2026-10',status:'pending',baseSalary:1129032,overtime:0,commission:0,bonus:0,deduction:0,finalAmount:1129032,staff:{id:'employee',storeId:'store',name:'Saved',employeeNumber:'EMP',terminationDate:new Date('2026-10-25')}}
  db.salary.findUniqueOrThrow.mockImplementation(async()=>({...record}));db.salary.updateMany.mockImplementation(async()=>{const count=record.status==='pending'?1:0;record.status='paid';return {count}})
  db.staff.findUniqueOrThrow.mockResolvedValue({storeId:'store'});db.expense.create.mockResolvedValue({id:'expense'});db.$transaction.mockImplementation(async(fn:any)=>fn(db))
- db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.probationBasis.salary'?{value:JSON.stringify({version:2,settlementVersion:1,confirmed:true,manualCorrection:true,depositRefund:{amount:300000,items:[{staffDepositId:'deposit',amountMinor:30000000}]}})}:null)
+ db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.probationBasis.salary'?{value:JSON.stringify({version:2,settlementVersion:1,confirmed:true,manualCorrection:true,daysSource:'manual',depositRefund:{amount:300000,items:[{staffDepositId:'deposit',amountMinor:30000000}]}})}:null)
 })
 const response=()=>({statusCode:200,data:null as any,status(n:number){this.statusCode=n;return this},json(d:any){this.data=d;return this}})
 test('confirmed resignation payroll can close before month end, refund and retain payslip in the payment transaction; retry performs neither twice',async()=>{
@@ -39,7 +39,7 @@ test('QR attendance changing after confirmation requires re-confirmation before 
  const probation=await import('../src/services/ProbationService')
  const recalc=jest.spyOn(probation,'calculatePayrollBasis').mockResolvedValue({amount:1300000} as any)
  try{
-  db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.probationBasis.salary'?{value:JSON.stringify({version:2,settlementVersion:1,confirmed:true,manualCorrection:true,daysSource:'attendance',qrAttendanceRequired:true,depositRefund:{amount:300000,items:[{staffDepositId:'deposit',amountMinor:30000000}]}})}:null)
+  db.config.findUnique.mockImplementation(async({where}:any)=>where.storeId_key.key==='salary.probationBasis.salary'?{value:JSON.stringify({version:2,settlementVersion:1,confirmed:true,manualCorrection:true,daysSource:'attendance',depositRefund:{amount:300000,items:[{staffDepositId:'deposit',amountMinor:30000000}]}})}:null)
   const handler=(salaryRouter as any).stack.find((l:any)=>l.route?.path==='/:id/mark-paid').route.stack.at(-1).handle,res=response()
   await handler({params:{id:'salary'},user:{id:'admin',role:'admin',storeId:'store'}},res)
   expect(res.statusCode).toBe(409);expect(res.data.message).toBe('SALARY_ATTENDANCE_RECALC_REQUIRED')
