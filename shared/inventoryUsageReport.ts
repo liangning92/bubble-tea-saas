@@ -15,7 +15,7 @@ export interface UsageRow {
   breakdown?: Record<string, number>; production?: UsageProduction[]; partialPeriod?: boolean; provisional?: boolean
 }
 export interface UsageResult {
-  list: UsageRow[];
+  list: UsageRow[]; hasBusinessActivity?: boolean;
   coverage?: {start: string | null; end: string | null; mixed: boolean};
   segments?: {basis: string; start: string; end: string}[]; legacyOnly?: boolean
 }

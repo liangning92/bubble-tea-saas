@@ -75,6 +75,7 @@ function ReportBody({mode,storageKey}:{mode:ReportMode;storageKey:string}) {
   {query.data&&<>
    <div className="inventory-report-summary">{(['comparable','missing','difference'] as const).map(key=><div key={key}><span>{c[key]}</span><strong>{summary[key]}</strong></div>)}</div>
    {(query.data.legacyOnly||query.data.segments?.some(s=>s.basis==='legacy'))&&<p className="text-amber-800">{c.partial}</p>}
+   {mode==='registered'&&query.data.hasBusinessActivity===false&&!query.data.legacyOnly&&<p role="status" className="text-sm text-gray-600">{c.noActivity}</p>}
    {all.some(r=>r.provisional)&&<p className="text-sm text-gray-600">{c.provisional}</p>}
    {reasons.size>0&&<aside className="inventory-report-guidance"><h2 className="font-semibold">{c.guidance}</h2><ul>{Array.from(reasons,([reason,count])=><li key={reason}><span>{reasonText(reason)} ({count})</span>{repair(reason)}</li>)}</ul></aside>}
   </>}
