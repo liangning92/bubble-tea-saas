@@ -73,14 +73,15 @@ export async function calculatePayrollBasis(db: PayrollDB, staff: Employee, mont
  for(const date of dates){const segment=available.segments.find(s=>date>=s.startDate&&date<=s.endDate);if(segment)attendanceDays[segment.type]++}
  const rules=await getPayrollRules(db,staff.storeId)
  const fullMonthEligible=!!staff.hireDate&&businessDate(staff.hireDate)<=month+'-01'&&(!staff.terminationDate||dayNumber(businessDate(staff.terminationDate))>=dayNumber(month+'-01')+available.daysInMonth-1)
- // A partial month uses verified workdays, never projected employment days.
- const basis=payrollBasis(staff,enrollment,month,workingDays || (source==='attendance'||!fullMonthEligible?attendanceDays:undefined))
+ // Estimates cover every employment calendar day, including partial months.
+ // Attendance is applied only when explicitly imported or manually corrected.
+ const basis=payrollBasis(staff,enrollment,month,workingDays || (source==='attendance'?attendanceDays:undefined))
  const paidRestDays=source!=='estimate'&&fullMonthEligible?Math.min(rules.paidRestDays,Math.max(0,basis.eligibleDays-basis.payableDays)):0
  // Fixed monthly credits have no leave dates. Across probation/regular rates,
  // use the month's employment-weighted rate and disclose the credit separately.
  const workNumerator=basis.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
  const monthNumerator=available.segments.reduce((sum,s)=>sum+Math.round(s.monthlyRate*100)*s.days,0)
- const divisor=fullMonthEligible?basis.daysInMonth:rules.dailyRateDivisor
+ const divisor=basis.daysInMonth
  const workedAmount=Math.round(workNumerator/(100*divisor))
  const totalAmount=Math.round((workNumerator+(basis.eligibleDays ? monthNumerator*paidRestDays/basis.eligibleDays : 0))/(100*divisor))
  const paidRestAmount=totalAmount-workedAmount
