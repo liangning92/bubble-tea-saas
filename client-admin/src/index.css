@@ -521,3 +521,9 @@ body {
 .inventory-ledger-financial[open]>.inventory-ledger-metrics { margin-top:8px; }
 .inventory-ledger-material-choice { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:13px; }
 .inventory-ledger-material-choice select { width:auto; max-width:100%; }
+
+.inventory-ledger-basis { border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; background:#f9fafb; font-size:12px; color:#6b7280; }
+.inventory-ledger-basis dl { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px 16px; }
+.inventory-ledger-basis dd { color:#374151; font-weight:600; margin-top:2px; overflow-wrap:anywhere; }
+.inventory-ledger-basis p { margin-top:6px; }
+@media(max-width:900px){.inventory-ledger-basis dl {grid-template-columns:repeat(2,minmax(0,1fr));}}
