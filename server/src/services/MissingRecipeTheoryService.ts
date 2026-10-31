@@ -1,6 +1,6 @@
 import {createHash} from 'crypto'
 import {convertQuantity} from '../utils/inventoryUnits'
-export interface TheoryBackfillProduct {productId:string;productName:string;orderCount:number;servings:number;recipeHash?:string;reason?:string;firstAt?:string;lastAt?:string}
+export interface TheoryBackfillProduct {productId:string;productName:string;orderCount:number;servings:number|null;recipeHash?:string;reason?:string;firstAt?:string;lastAt?:string}
 const round=(n:number)=>Math.round(n*1e9)/1e9
 /** Query-time estimates only. No snapshots, ledgers, costs, stock or recipes are written. */
 export async function backfillMissingRecipeTheory(db:any,storeId:string,source:any[],inventory:any[],now=new Date()){
@@ -51,7 +51,7 @@ export async function backfillMissingRecipeTheory(db:any,storeId:string,source:a
   const issues:any[]=JSON.parse(snapshot.issues),materials:any[]=JSON.parse(snapshot.materials),remaining:any[]=[]
   for(const productId of [...new Set<string>(issues.map(i=>i.productId))]){
    const pi=issues.filter(i=>i.productId===productId),order=orderMap.get(snapshot.orderId),p=productMap.get(productId)
-   let reason='',quantity=0,basis:ReturnType<typeof recipeBasis>|undefined
+   let reason='',quantity=0,quantityKnown=false,basis:ReturnType<typeof recipeBasis>|undefined
    if(pi.some(i=>i.code!=='BOM_MISSING'))reason='PARTIAL_HISTORICAL_RECIPE'
    else if(snapshot.theoryCorrectionApplied)reason='AUDITED_CORRECTION_REQUIRES_REVIEW'
    else if(!order)reason='SOURCE_ORDER_UNAVAILABLE'
@@ -61,11 +61,12 @@ export async function backfillMissingRecipeTheory(db:any,storeId:string,source:a
      for(const refund of order.refundRequests||[]){const data=JSON.parse(refund.selectedItemIds);if(data?.version!==2||!Array.isArray(data.items)||!data.items.length)throw Error('UNVERIFIED_REFUND');for(const line of data.items){if(!order.items.some((i:any)=>i.id===line.itemId)||!Number.isSafeInteger(line.quantity)||line.quantity<=0)throw Error('UNVERIFIED_REFUND');returned.set(line.itemId,(returned.get(line.itemId)||0)+line.quantity)}}
      for(const item of order.items){if(!Number.isSafeInteger(item.quantity)||item.quantity<=0||(returned.get(item.id)||0)>item.quantity)throw Error('UNVERIFIED_ORDER_QUANTITY');if(item.productId===productId)quantity+=item.quantity-(returned.get(item.id)||0)}
      if(!order.items.some((i:any)=>i.productId===productId))throw Error('SOURCE_ORDER_UNAVAILABLE')
+     quantityKnown=true
     }catch(error:any){reason=error.message}
     if(!reason){basis=quantity===0?{leaves:[],hash:createHash('sha256').update('zero-net-order-quantity-v1').digest('hex')}:recipeBasis(productId);if('error' in basis)reason=basis.error;else if(basis.leaves.some(leaf=>!Number.isFinite(leaf.quantity*quantity)||leaf.quantity*quantity>1e12))reason='INVALID_QUANTITY';else if(basis.leaves.some(leaf=>materials.some(m=>m.inventoryId===leaf.inventoryId&&m.unit!==leaf.unit)))reason='BACKFILL_UNIT_MISMATCH'}
    }
    const key=productId+':'+(reason||'resolved'),group=groups.get(key)||{productId,productName:p?.name||productId,orderCount:0,servings:0,reason:reason||undefined,recipeHash:basis&&'hash' in basis?basis.hash:undefined,firstAt:snapshot.createdAt?.toISOString(),lastAt:snapshot.createdAt?.toISOString()}
-   group.orderCount++;group.servings+=quantity;const at=snapshot.createdAt?.toISOString();if(at&&(!group.firstAt||at<group.firstAt))group.firstAt=at;if(at&&(!group.lastAt||at>group.lastAt))group.lastAt=at;groups.set(key,group)
+   group.orderCount++;group.servings=quantityKnown&&group.servings!==null?group.servings+quantity:null;const at=snapshot.createdAt?.toISOString();if(at&&(!group.firstAt||at<group.firstAt))group.firstAt=at;if(at&&(!group.lastAt||at>group.lastAt))group.lastAt=at;groups.set(key,group)
    if(reason){remaining.push(...pi);continue}
    if(basis&&'leaves' in basis)for(const leaf of basis.leaves){const amount=round(leaf.quantity*quantity),old=materials.find(m=>m.inventoryId===leaf.inventoryId);if(old&&old.unit!==leaf.unit)throw Error('BACKFILL_UNIT_MISMATCH');if(old)old.quantity=round(old.quantity+amount);else materials.push({...leaf,quantity:amount});totals.set(leaf.inventoryId,round((totals.get(leaf.inventoryId)||0)+amount))}
   }
