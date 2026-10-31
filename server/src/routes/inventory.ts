@@ -4,7 +4,7 @@ import { operationRecords, operationQuerySchema } from '../services/InventoryOpe
 import {stockOutPhoto} from '../services/teamAgentBridge/employeePhotos'
 import { inventoryEvidenceHandler } from '../services/InventoryEvidenceHttp'
 import { getManualCorrection, correctManualStock } from '../services/ManualStockCorrectionService'
-import { todayStockOuts } from '../services/TodayStockOutService'
+import { todayStockOuts,registeredStockOutReport,stockOutReportSchema } from '../services/TodayStockOutService'
 import {refreshInventoryAlerts,handleInventoryAlert} from '../services/InventoryAlertCenterService'
 import {setBatchExpiry} from '../services/InventoryBatchService'
 import {employeeConsumption,getConsumptionAlerts} from '../services/EmployeeConsumptionService'
@@ -296,6 +296,12 @@ router.get('/logs/today-stock-out', authenticate, describeNativeQuery(z.object({
   res.set('Cache-Control', 'no-store')
   try { res.json({ code: 200, data: await todayStockOuts(getStoreId(req)), timestamp: new Date().toISOString() }) }
   catch (error) { console.error('Get today stock outs error:', error); res.status(500).json({ code: 500, message: 'Failed to load today stock outs' }) }
+})
+
+router.get('/logs/stock-out-report',authenticate,describeNativeQuery(stockOutReportSchema),async(req:AuthRequest,res)=>{
+ res.set('Cache-Control','no-store')
+ try{const {storeId,...query}=req.query;res.json({code:200,data:await registeredStockOutReport(getStoreId(req),query)})}
+ catch(error:any){res.status(400).json({code:400,message:error.message})}
 })
 
 // GET /api/inventory/logs/stock-out

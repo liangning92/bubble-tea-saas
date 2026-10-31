@@ -1,5 +1,6 @@
+import {ownFinancialRecords} from './StoreRevenueAccess'
 import {ACCESS_ROUTE_MANIFEST} from './StaffPermissionRouteManifest'
-import {agentOperationAccess,agentOperationInput} from './ManagementAgentPolicy'
+import {agentOperationAccess,agentOperationInput,agentAdditionalPermissions,agentOperations} from './ManagementAgentPolicy'
 import { nativeMultipart, nativeFileInput, storeNativeDownload } from './NativeBackendFiles'
 import type { z } from 'zod'
 import express from 'express'
@@ -18,7 +19,7 @@ type Operation = { id: string; method: string; path: string; base: string; decla
 const operations = new Map<string, Operation>()
 const mounts:Array<{base:string;router:any}>=[]
 const digest = (value: any) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
-export const backendVersion = () => digest({ source: process.env.APP_SOURCE_SHA || 'development', routes: [...operations.values()].map(({id,declaration,requestContract,effect})=>({id,declaration,requestContract,effect})).sort((a,b)=>a.id.localeCompare(b.id)) })
+export const backendVersion = () => digest({ source: process.env.APP_SOURCE_SHA || 'development', agentPolicy:[...agentOperations].sort(), routes: [...operations.values()].map(({id,declaration,requestContract,effect})=>({id,declaration,requestContract,effect})).sort((a,b)=>a.id.localeCompare(b.id)) })
 
 /** Called by the normal HTTP route declaration, after its actual access guards.
  * There is no second list of Agent-only business handlers to keep in sync. */
@@ -49,7 +50,7 @@ const view = (op: Operation, detailed=false) => ({ operationId:op.id,method:op.m
     validation:'Same native middleware, controller and service. A GET may perform native initialization. An absent schema is not an empty input contract; do not guess mutation fields.'}: {}) })
 /** Account-level preflight uses the same native route declarations and access
  * helpers as HTTP. Resource/body/publication checks still run in native handlers. */
-export function backendAccountAccess(actor:any,id:string){
+export function backendAccountAccess(actor:any,id:string,input?:any){
  const registered=operations.get(id),declaration=registered?.declaration||ACCESS_ROUTE_MANIFEST[id]
  if(!declaration)return {allowed:false,code:'BACKEND_OPERATION_NOT_FOUND'}
  // The independent worker uses the same server-owned permission declarations
@@ -62,6 +63,12 @@ export function backendAccountAccess(actor:any,id:string){
  const user={...actor,role:actor.employeeApp?'staff':actor.role,accessRole:access}
  if(!canUseManagementRoute(user,{...spec,routeKey:op.id}))return {allowed:false,code:'MANAGEMENT_ACCESS_REQUIRED',requiredPermission:spec.permission}
  if(user.role==='admin'&&!user.employeeApp)return {allowed:true,mode:'allow'}
+ if(actor.nativeAgent){
+  if(!spec.permission)return {allowed:false,code:'STAFF_ACCESS_OWNER_REQUIRED',requiredPermission:'owner.only'}
+  for(const requiredPermission of agentAdditionalPermissions(id,input)){
+   if(access?.version===2?access.modes?.[requiredPermission]!=='allow':!access?.permissions?.includes(requiredPermission))return {allowed:false,code:'STAFF_ACCESS_PERMISSION_DENIED',requiredPermission}
+  }
+ }
  if(spec.ownerOnly)return {allowed:false,code:'STAFF_ACCESS_OWNER_REQUIRED',requiredPermission:spec.permission}
  if(access?.version===2){
   const permission=!user.employeeApp&&spec.permission==='personal.tasks'&&access.id==='manager'?(['GET','HEAD'].includes(op.method)?'hygiene.read':'hygiene.write'):spec.permission
@@ -76,13 +83,13 @@ export function backendAccountAccess(actor:any,id:string){
 }
 export function backendAccountSummary(actor:any){
  const access=actor.employeeApp?employeeAppAccess(actor.role):actor.accessRole
- return {role:actor.role,employeeApp:!!actor.employeeApp,accessRole:access?{id:access.id,version:access.version,permissions:access.permissions,modes:access.modes}:null,
+ return {financialRecordScope:actor.staffId?ownFinancialRecords(actor):{scope:'unresolved'},storeId:actor.storeId,role:actor.role,employeeApp:!!actor.employeeApp,accessRole:access?{id:access.id,version:access.version,permissions:access.permissions,modes:access.modes}:null,
   authority:'current_requesting_account',resourceChecks:'native_handlers',instructions:'Check accountAccess before requesting business details or changes. If denied, explain the missing permission and stop that operation; do not try alternative endpoints. Approval is not allow. Catalog discovery does not grant access.'}
 }
 export function backendCatalog(query = '', offset = 0, limit = 25, actor?:any) {
   const terms=query.toLowerCase().split(/[\s/]+/).filter(Boolean)
   const list = [...operations.values()].filter(op=>!actor?.nativeAgent||!agentOperationAccess(op.id)).filter(op=>terms.every(term=>(op.id+' '+(op.declaration.permission||'')+' '+(op.requestContract.query?.description||'')).toLowerCase().includes(term))).sort((a,b)=>a.id.localeCompare(b.id))
-  return {contractVersion:backendVersion(),total:list.length,offset,operations:list.slice(offset,offset+limit).map(op=>({...view(op),...(actor?{accountAccess:backendAccountAccess(actor,op.id)}:{})})),nextOffset:offset+limit<list.length?offset+limit:null}
+  return {contractVersion:backendVersion(),total:list.length,offset,operations:list.slice(offset,offset+limit).map(op=>({...view(op,!!actor?.nativeAgent),...(actor?{accountAccess:backendAccountAccess(actor,op.id)}:{})})),nextOffset:offset+limit<list.length?offset+limit:null}
 }
 export function backendDescription(id: string, actor?:any) {
   const op = operations.get(id)
@@ -102,7 +109,7 @@ function assertStore(value:any, storeId:string, depth=0) {
 
 async function assertRelatedStores(db:any,value:any,storeId:string,operationPath:string):Promise<void>{
   if(!value||typeof value!=='object')return
-  const models:Record<string,string>={staffId:'staff',productId:'product',inventoryId:'inventory',memberId:'member',supplierId:'supplier',orderId:'order',addonId:'addon',mediaId:'mediaAsset',channelId:'channel',couponId:'coupon'}
+  const models:Record<string,string>={staffId:'staff',productId:'product',inventoryId:'inventory',memberId:'member',supplierId:'supplier',orderId:'order',addonId:'addon',mediaId:'mediaAsset',channelId:'channel',couponId:'coupon',campaignId:'campaign',expenseId:'expense',accountId:'financeAccount',rewardId:'rewardCatalog',marketingChannelId:'marketingChannel',recipeId:'processRecipe'}
   for(const [key,v] of Object.entries(value)){
     const model=key==='categoryId'?(operationPath.startsWith('/api/products')?'category':operationPath.startsWith('/api/marketing/activities')?'campaignCategory':undefined):models[key]
     if(model&&typeof v==='string'&&v){const row=await db[model].findUnique({where:{id:v},select:{storeId:true}});if(!row||row.storeId!==storeId)throw Error('BACKEND_TARGET_NOT_IN_STORE')}
@@ -118,14 +125,19 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
   const op = operations.get(input.operationId)
   if (!op) return {ok:false,code:'BACKEND_OPERATION_NOT_FOUND',contractVersion:backendVersion()}
   if (input.contractVersion !== backendVersion()) return {ok:false,code:'BACKEND_CONTRACT_CHANGED',contractVersion:backendVersion(),executed:false}
-  const access=backendAccountAccess(actor,op.id)
+  const access=backendAccountAccess(actor,op.id,input)
   if(!access.allowed)return {ok:false,...access,executed:false}
   const scopeBlocked=(actor as any).nativeAgent?agentOperationInput(op.id,input):null
   if(scopeBlocked)return {ok:false,code:scopeBlocked,executed:false}
   const blocked=boundary(op)
   if (blocked) return {ok:false,code:blocked,executed:false}
   const inputBlocked=backendInputBoundary({...op,permission:op.declaration.permission},input)
-  if(inputBlocked)return {ok:false,code:inputBlocked,executed:false}
+  if(inputBlocked){
+   const activityPublication=inputBlocked==='EXPLICIT_ACTIVITY_PUBLICATION_REQUIRED'&&['POST /api/marketing/activities','PUT /api/marketing/activities/:id'].includes(op.id)&&input.body?.status==='published'
+   const authority=activityPublication?nativeBackendPublication(actor):undefined
+   if(!authority?.activityPublication)return {ok:false,code:inputBlocked,executed:false}
+   await authority.activityPublication(db,op.id,input.body)
+  }
   if(op.id==='POST /api/expenses'&&actor.role==='cashier')return {ok:false,code:'OWNER_APPROVAL_REQUIRED',executed:false}
   assertStore(input.body,actor.storeId);assertStore(input.query,actor.storeId);assertStore(input.pathParams,actor.storeId)
   await assertRelatedStores(db,input.body,actor.storeId,op.path);await assertRelatedStores(db,input.query,actor.storeId,op.path);await assertRelatedStores(db,input.pathParams,actor.storeId,op.path)
@@ -135,7 +147,21 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
   for(const key of parameters){const value=input.pathParams?.[key];if(!value||/[\/?#\\\u0000-\u001f]/.test(value)||value==='.'||value==='..')throw Error('BACKEND_PATH_PARAMETER_REQUIRED:'+key);target=target.replace(':'+key,encodeURIComponent(value))}
   if (op.path.startsWith('/api/stores/') && input.pathParams?.id && input.pathParams.id !== actor.storeId) throw Error('BACKEND_STORE_MISMATCH')
   // Enforce store ownership for declared URL resources even for the owner role.
-  const resource=op.declaration.resource
+  // Older read routes can use an id-only service while their HTTP declaration
+  // lacks a resource annotation. Bind those IDs before executing even for admin.
+  const inferredResources:Array<[RegExp,string]>=[
+   [/^\/api\/marketing\/(?:analytics\/)?campaigns\/:id(?:\/|$)/,'campaign'],
+   [/^\/api\/marketing\/coupons\/:id$/,'coupon'],[/^\/api\/finance\/accounts\/:id$/,'financeAccount'],
+   [/^\/api\/(?:reports\/)?channels\/:id(?:\/|$)/,'channel'],[/^\/api\/marketing\/channels\/:id(?:\/|$)/,'marketingChannel'],
+   [/^\/api\/marketing\/referrals\/:id(?:\/|$)/,'referralCampaign'],[/^\/api\/marketing\/tier-benefits\/:id$/,'tierBenefit'],
+   [/^\/api\/marketing\/campaign-categories\/:id$/,'campaignCategory'],[/^\/api\/rewards\/:id$/,'rewardCatalog'],
+   [/^\/api\/media\/:id\/references$/,'mediaAsset'],[/^\/api\/addons\/:id$/,'addon'],
+   [/^\/api\/inventory-counts\/:id$/,'inventoryCount'],[/^\/api\/(?:process-recipes\/:id|product-analysis\/recipes\/:id\/cost)$/,'processRecipe'],
+   [/^\/api\/hygiene\/templates\/:id$/,'hygieneTemplate'],[/^\/api\/leave\/:id$/,'leave'],[/^\/api\/reimbursement\/:id$/,'reimbursement'],
+   [/^\/api\/receipt-templates\/:id$/,'receiptTemplate'],
+  ]
+  const inferred=inferredResources.find(([path])=>path.test(op.path))
+  const resource=op.declaration.resource||(inferred?{model:inferred[1],param:'id'}:undefined)
   if(resource&&input.pathParams?.[resource.param]){
     const model=db[resource.model];if(!model)throw Error('BACKEND_RESOURCE_MODEL_UNAVAILABLE')
     const record=await model.findUnique({where:{id:input.pathParams[resource.param]},select:resource.model==='salary'?{staff:{select:{storeId:true}}}:{storeId:true}})
@@ -179,7 +205,7 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
         const download=nonJson?bytes:Buffer.from(JSON.stringify(redactBackendSecrets(body)));
         const artifact=await storeNativeDownload(db,actor,download,contentType.split(';')[0],op.id);
         finish({ok:res.statusCode<400,statusCode:res.statusCode,artifact,operationId:op.id,contractVersion:input.contractVersion,executed:true,acceptance:'native_response_only'});
-      }else finish({ok:res.statusCode<400&&body?.success!==false&&body?.ok!==false&&(!body?.code||typeof body.code==='number'&&body.code>=200&&body.code<300),statusCode:res.statusCode,data:redactBackendSecrets(body),operationId:op.id,contractVersion:input.contractVersion,executed:true,acceptance:'native_response_only'});
+      }else finish({ok:res.statusCode<400&&body?.success!==false&&body?.ok!==false&&(!body?.code||typeof body.code==='number'&&body.code>=200&&body.code<300),statusCode:res.statusCode,data:scopedBackendResult(body,actor.storeId),operationId:op.id,contractVersion:input.contractVersion,executed:true,acceptance:'native_response_only'});
       process.nextTick(()=>socket.destroy());
     })().catch(reject)});
     const app=express();app.disable('x-powered-by');app.use(require('../middlewares/auth').authenticateBeforeRouting)
@@ -187,4 +213,33 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
     app.use((error:any,_req:any,response:any,_next:any)=>response.status(400).json({code:400,message:error?.message||'BACKEND_OPERATION_FAILED'}))
     try{(app as any).handle(req,res,()=>finish({ok:false,code:'BACKEND_HANDLER_NOT_FOUND',executed:false}))}catch(error){reject(error)}
   })
+}
+
+/** Server-issued metadata for the current question, never a second permission
+ * grant. A handful of relevant native contracts avoids repeated discovery. */
+export function backendQueryHints(text:string){
+ const groups:Array<[RegExp,string[]]>=[
+  [/(?:活动|促销|campaign|promotion|promosi|kampanye)/i,['POST /api/marketing/activities','GET /api/marketing/activities/resources','GET /api/marketing/activities','PUT /api/marketing/activities/:id']],
+  [/(?:营收|营业额|收入|银行|现金|财务|利润|支出|费用|revenue|profit|expense|bank|omzet|pendapatan)/i,['GET /api/revenue/query','GET /api/revenue/handover-receipts','GET /api/finance/revenue','GET /api/finance/profit']],
+  [/(?:出库|库存|领料|stock|stok|inventory)/i,['GET /api/inventory/logs/stock-out-report','GET /api/inventory','GET /api/inventory/consumption-analysis']],
+  [/(?:工资|薪资|salary|payroll|gaji)/i,['GET /api/salaries','GET /api/staff/salary/my','GET /api/staff-management/payroll']],
+  [/(?:员工|排班|考勤|staff|attendance|schedule|jadwal|absen)/i,['GET /api/staff','GET /api/staff/schedule/list','GET /api/staff/attendance/list']],
+  [/(?:商品|产品|product|produk)/i,['GET /api/products','GET /api/categories']],
+  [/(?:卫生|hygiene|kebersihan)/i,['GET /api/hygiene/tasks','GET /api/hygiene/stats']],
+ ]
+ const ids=[...new Set(groups.filter(([pattern])=>pattern.test(text)).flatMap(([,ids])=>ids))].slice(0,5)
+ const hints=ids.filter(id=>!agentOperationAccess(id)).map(id=>backendDescription(id)).filter((d:any)=>d.ok)
+ // Preserve the real validator fields while omitting the large optional poster
+ // editor subtree from the initial prompt. Full contracts remain discoverable.
+ for(const hint of hints as any[])if(hint.operationId==='POST /api/marketing/activities'&&hint.requestContract?.body?.properties){
+  const body=hint.requestContract.body,keys=['name','description','type','status','startsAt','endsAt','timezone','weekdays','dailyStart','dailyEnd','productIds','specIds','memberOnly','rule']
+  hint.requestContract={body:{...body,properties:Object.fromEntries(Object.entries(body.properties).filter(([key])=>keys.includes(key)))},note:'Initial core activity fields only; describe the operation for optional poster/display fields.'}
+ }
+ return hints.length?{contractVersion:backendVersion(),operations:hints}:undefined
+}
+
+function scopedBackendResult(body:any,storeId:string):any {
+ const safe=redactBackendSecrets(body)
+ const check=(value:any)=>{if(!value||typeof value!=='object')return;if(typeof value.storeId==='string'&&value.storeId!==storeId)throw Error('BACKEND_RESULT_STORE_MISMATCH');for(const child of Object.values(value))check(child)}
+ check(safe);return safe
 }

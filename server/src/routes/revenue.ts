@@ -1,8 +1,9 @@
-import { revenueQueryOptions, revenueQuery, RevenueQueryError,canReadRevenueRefunds } from '../services/RevenueQueryService'
+import { revenueQueryOptions, revenueQuery,revenueQuerySchema, RevenueQueryError,canReadRevenueRefunds } from '../services/RevenueQueryService'
 import { loadStoreDateSettings } from '../utils/storeDateSettings'
 import prisma from '../config/database'
 import { getHandoverReceipts } from '../services/ShiftManualReceipts'
 import { Router } from 'express'
+import {describeNativeQuery} from '../utils/validation'
 import { authenticate, authorize, AuthRequest } from '../middlewares/auth'
 import * as RevenueService from '../services/RevenueService'
 import { RevenueDateError, revenuePeriodRange, revenueDailyRange, revenueComparisonRange } from '../utils/revenueDateRange'
@@ -18,7 +19,7 @@ const queryHandler = (endpoint:'query-options'|'query') => async (req:AuthReques
  } catch(error) {if(error instanceof RevenueQueryError || error instanceof RevenueDateError)return res.status(error instanceof RevenueQueryError?error.status:400).json({code:400,message:error.message});next(error)}
 }
 router.get('/query-options', authenticate, authorize('admin','manager'), queryHandler('query-options'))
-router.get('/query', authenticate, authorize('admin','manager'), queryHandler('query'))
+router.get('/query', authenticate, authorize('admin','manager'), describeNativeQuery(revenueQuerySchema.describe('Native financial report with complete date/metric filters. period: today/yesterday/week/month/custom; custom requires inclusive startDate/endDate. dataset: net (net receipt income), orders, grossProfit, expense, drawer, manual:cash, manual:qris, payment:<method>, channel:<id>, expense:<category>. Use query-options only for custom channel/payment/category IDs. Do not infer bank deposits from sales.')), queryHandler('query'))
 
 router.get('/handover-receipts', authenticate, authorize('admin', 'manager'), async (req: AuthRequest, res, next) => {
   try { const settings=await loadStoreDateSettings(prisma,req.user!.storeId); const {start,end} = revenuePeriodRange(req.query,new Date(),'today',settings.timezone); res.json({code:200,data:await getHandoverReceipts(prisma,req.user!.storeId,start,end,settings.timezone)}) }

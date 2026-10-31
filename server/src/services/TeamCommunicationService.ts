@@ -1,3 +1,4 @@
+import {visibleHermesReply} from './HermesReplyVisibility'
 import {TeamError} from './TeamError'
 import {nativeReplyFault} from './NativeReplyQuality'
 import {nativeReplyDelayed} from './NativePollHealth'
@@ -357,7 +358,7 @@ export function teamCommunication(db: DB = prisma) {
             value: { not: { contains: `"authorId":${JSON.stringify(a.staffId)}` } } } }),
           db.config.findFirst({ where: { storeId: a.storeId, key: { startsWith: prefix, gte: prefix + pad(membership.fromSeq) } }, orderBy: { key: 'desc' } })
         ]) : [0, null]
-        const message = latest ? JSON.parse(latest.value) : null
+        const message = latest ? visibleHermesReply(a,JSON.parse(latest.value)) : null
         return { ...c, unread, preview: message ? { text: [...message.text].slice(0, 120).join(''), authorName: message.authorName,
           createdAt: message.createdAt, hasFiles: message.files?.length > 0 } : null,
           member: !!membership, canEdit: c.ownerId === a.staffId || canTeam(a, 'team.manage'), canAudit: canTeam(a, 'team.audit') }
@@ -485,7 +486,7 @@ export function teamCommunication(db: DB = prisma) {
         value: { contains: '"authorId":' + JSON.stringify(a.staffId) } }, orderBy: { key: 'desc' }, take: 100, select: { value: true } }) : []
       const refreshSources = refreshRows.map((row: any) => JSON.parse(row.value)).filter((m: any) => m.channelId === id && m.authorId === a.staffId && !m.ai && !m.agent && m.seq >= fromSeq && m.seq <= after)
       const handling = await projectOwnAiHandling(db, a, c, [...sourceMessages, ...refreshSources])
-      const messages = sourceMessages.map(({ aiHandling: _untrusted, ...m }: any) => {
+      const messages = sourceMessages.map(m=>visibleHermesReply(a,m)).map(({ aiHandling: _untrusted, ...m }: any) => {
         // Historical malformed replies remain immutable in the journal. Do not
         // repeatedly render their corrupt body or its auto-generated attachment.
         const corrupt=(m.agent||m.ai)&&typeof m.text==='string'&&nativeReplyFault(m.text)==='NATIVE_OUTPUT_REPETITION'
@@ -568,7 +569,7 @@ export function teamCommunication(db: DB = prisma) {
         if (!c.round.participants.includes(a.staffId)) c.round.participants.push(a.staffId)
         const employee = await identity(tx, a)
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
-          authorId: nativeAgent?'agent:'+nativeAgent.agentId:a.staffId, ...(nativeAgent?{actorStaffId:a.staffId}:{}), authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId,...(nativeAgent.replyToSeq!==undefined?{replyToSeq:nativeAgent.replyToSeq}:{})}}: {}) }
+          authorId: nativeAgent?'agent:'+nativeAgent.agentId:a.staffId, ...(nativeAgent?{actorStaffId:a.staffId}:{}), authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId,...(nativeAgent.dataPermissions?{dataPermissions:nativeAgent.dataPermissions}:{}),...(nativeAgent.replyToSeq!==undefined?{replyToSeq:nativeAgent.replyToSeq}:{})}}: {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
         const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
@@ -848,8 +849,9 @@ export function teamCommunication(db: DB = prisma) {
     async attachment(a: TeamActor, id: string, fileId: string, auditReason?: string) {
       uuid.parse(fileId); const { fromSeq } = await channel(db, a, id, auditReason)
       const prefix = TEAM_PREFIX + `fileGrant.${id}.${fileId}.`
-      const grant = await db.config.findFirst({ where: { storeId: a.storeId, key: { startsWith: prefix, gte: prefix + pad(fromSeq) } }, select: { id: true } })
+      const grant = await db.config.findFirst({ where: { storeId: a.storeId, key: { startsWith: prefix, gte: prefix + pad(fromSeq) } }, select: { id: true,value:true } })
       if (!grant) fail(403, 'TEAM_FILE_FORBIDDEN')
+      if(a.role!=='admin'||a.employeeApp){const source=await read(db,a.storeId,'message.'+id+'.'+pad(JSON.parse(grant.value).seq));if(!source||visibleHermesReply(a,source).accessWithheld)fail(403,'TEAM_FILE_DATA_PERMISSION_DENIED')}
       const file = await readWork(a.storeId, `file.${fileId}`, db)
       if (!file) fail(404, 'TEAM_FILE_NOT_FOUND')
       return file

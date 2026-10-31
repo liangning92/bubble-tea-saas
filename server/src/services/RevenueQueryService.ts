@@ -13,8 +13,8 @@ type Label = { name: string; nameZh?: string | null; nameId?: string | null }
 export type QueryOption = Label & { value: string; group: string; paymentFilter: boolean; channelFilter: boolean; labelKey?: string }
 export const canReadRevenueRefunds=(actor:any)=>actor.role==='admin'||!actor.accessRole||actor.accessRole.permissions.some((permission:string)=>['orders.refund','orders.refund.approve'].includes(permission))
 export class RevenueQueryError extends Error { constructor(message: string, public status = 400) { super(message) } }
-const filterSchema = z.object({ period: z.enum(['today','yesterday','week','month','custom']).default('today'), startDate:z.string().optional(), endDate:z.string().optional(), dataset:z.string().max(200).default('net'), paymentMethod:z.string().max(100).optional(), channelId:z.string().max(100).optional(), page:z.coerce.number().int().min(1).max(100000).default(1) })
-export type RevenueQueryFilter = z.infer<typeof filterSchema>
+export const revenueQuerySchema = z.object({ period: z.enum(['today','yesterday','week','month','custom']).default('today'), startDate:z.string().optional(), endDate:z.string().optional(), dataset:z.string().max(200).default('net'), paymentMethod:z.string().max(100).optional(), channelId:z.string().max(100).optional(), page:z.coerce.number().int().min(1).max(100000).default(1) })
+export type RevenueQueryFilter = z.infer<typeof revenueQuerySchema>
 export type RevenueQueryRow = { id:string; kind:string; date:Date; associationAt:Date; amount:number|null; reference:string; items?:{productName:string;quantity:number}[]; paymentMethod:string|null; channelId:string|null; channel:Label|null; category:string|null; sessionId:string|null; source:string; dateBasis:string; legacyDate:boolean }
 const option = (value:string,group:string,labelKey:string,paymentFilter=false,channelFilter=false):QueryOption=>({value,group,labelKey,name:labelKey,paymentFilter,channelFilter})
 
@@ -39,7 +39,7 @@ export async function revenueQueryOptions(db:DB,storeId:string,canRefund=true) {
 }
 
 export async function revenueQuery(db:DB,storeId:string,input:unknown,canRefund=true,now=new Date(),verifyIncome=requireVerifiedReceiptIncome) {
- const parsed=filterSchema.safeParse(input);if(!parsed.success)throw new RevenueQueryError('INVALID_REVENUE_QUERY')
+ const parsed=revenueQuerySchema.safeParse(input);if(!parsed.success)throw new RevenueQueryError('INVALID_REVENUE_QUERY')
  const filter=parsed.data,settings=await loadStoreDateSettings(db,storeId),options=await revenueQueryOptions(db,storeId,canRefund),selected=options.datasets.find(o=>o.value===filter.dataset)
  if(!selected)throw new RevenueQueryError('INVALID_QUERY_DATASET')
  if((filter.paymentMethod && (!selected.paymentFilter||!options.payments.includes(filter.paymentMethod)))||(filter.channelId && (!selected.channelFilter||!options.channels.some(c=>c.id===filter.channelId))))throw new RevenueQueryError('INVALID_QUERY_FILTER')

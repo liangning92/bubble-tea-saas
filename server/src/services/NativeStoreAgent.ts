@@ -1,3 +1,4 @@
+import {explicitlyPublishesActivity,agentAdditionalPermissions,activityRequestIntent} from './ManagementAgentPolicy'
 import {executeBusinessTopic,topicDefinition,BusinessTopic,storeBusinessTopic} from './StoreBusinessTopic'
 import {audienceAllows} from './teamAgentBridge/employeeAccess'
 import {backendAccountAccess} from './ManagementBackendRegistry'
@@ -17,16 +18,17 @@ import {assignedStaffAccess} from './StaffPermissionService'
 import {hasManagementAccess} from '../utils/managementAccess'
 import {HermesNativeClient} from './HermesNativeClient'
 import {openNativeSubscribedResponse} from './TeamAiService'
+import {loadStoreDateSettings} from '../utils/storeDateSettings'
 import {accountFile,storeNativeDownload} from './NativeBackendFiles'
 import fs from 'node:fs/promises'
 import {nativeReplyFault} from './NativeReplyQuality'
-import {nativePollDelayed} from './NativePollHealth'
+import {nativePollDelayed,nativeReplyDelayed} from './NativePollHealth'
 import type {CommunicationScope} from './teamAgentBridge/contract'
 
 const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const prefix='nativeAgent.job.'
 export interface NativeStoreConfig {storeId:string;agentId:string;gatewayOrigin:string;gatewayKey:string;backendOrigin:string}
-type NativeJob={budgetMs?:number;businessTopic?:BusinessTopic;executor?:'business_topic'|'hermes_native';topicPermission?:string;topicReceipt?:any;id:string;storeId:string;channelId:string;sourceSeq:number;messageId:string;requesterStaffId:string;sourceHash:string;publicObjective?:any;authorizationChannelId?:string;sourceAudienceHash?:string;parentJobId?:string;audienceHash?:string;profileKey?:string;scope?:CommunicationScope;principal?:NativeBackendPrincipal;state:string;startedAt?:string;createdAt:string;updatedAt:string;sessionId?:string;runId?:string;input?:any;callbackCredentialHash?:string;providerCredentialHash?:string;credentials?:never;fault?:string;outputMessageId?:string;outputFileId?:string;model?:string;pollLeaseUntil?:number;pollToken?:string;nextAttemptAt?:number;failureMessageId?:string;statusMessageId?:string;lastPollFault?:string;firstPollFaultAt?:string;pollFaultCount?:number}
+type NativeJob={activityContext?:any;backendHints?:any;routedNative?:boolean;budgetMs?:number;businessTopic?:BusinessTopic;executor?:'business_topic'|'hermes_native';topicPermission?:string;topicReceipt?:any;id:string;storeId:string;channelId:string;sourceSeq:number;messageId:string;requesterStaffId:string;sourceHash:string;publicObjective?:any;authorizationChannelId?:string;sourceAudienceHash?:string;parentJobId?:string;audienceHash?:string;profileKey?:string;scope?:CommunicationScope;principal?:NativeBackendPrincipal;state:string;startedAt?:string;createdAt:string;updatedAt:string;sessionId?:string;runId?:string;input?:any;callbackCredentialHash?:string;providerCredentialHash?:string;credentials?:never;fault?:string;outputMessageId?:string;outputFileId?:string;model?:string;pollLeaseUntil?:number;pollToken?:string;nextAttemptAt?:number;failureMessageId?:string;statusMessageId?:string;lastPollFault?:string;firstPollFaultAt?:string;pollFaultCount?:number}
 const atomic=(tx:any)=>new Proxy(tx,{get(target,key){return key==='$transaction'?async(fn:any)=>fn(atomic(target)):typeof target[key]==='function'?target[key].bind(target):target[key]}})
 const channelLease=(id:string)=>'nativeAgent.channel.'+id
 const stamp=()=>new Date().toISOString()
@@ -65,8 +67,13 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   const task={taskId:taskId([cfg.storeId,cfg.agentId,channel.id].join(':')),version:1}
   const scope=await readCommunicationScope(tx,principal,task,channel,staff.id)
   if(job.scope&&job.scope.compartmentKey!==scope.compartmentKey)throw Error('NATIVE_CONTEXT_CHANGED')
+  let activityContext:any
+  if(job.activityContext?.scopeKey===scope.compartmentKey&&job.activityContext.requesterStaffId===staff.id){
+   const previous=await readTeam<any>(tx,cfg.storeId,'message.'+channel.id+'.'+String(job.activityContext.sourceSeq).padStart(12,'0'))
+   if(previous?.id===job.activityContext.sourceId&&previous.authorId===staff.id&&channel.members.every((member:any)=>previous.seq>=member.fromSeq))activityContext=job.activityContext
+  }
   actor.nativeAgent={agentId:cfg.agentId,grantVersion:1,clientRevision:1,executionId:job.id,name:principal.displayName}
-  return {actor,principal,scope,source,channel,settings}
+  return {actor,principal,scope,source,channel,settings,activityContext}
  }
  async function admission(job:NativeJob){
   job.startedAt=job.startedAt||stamp()
@@ -76,17 +83,29 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   if(topic){
    job.businessTopic=topic;job.executor='business_topic';job.startedAt=job.startedAt||stamp();await save(job)
    const result=await executeBusinessTopic(db,topic,c,()=>current(job),jobDeadline(job))
-   job.topicPermission=result.permission;job.topicReceipt=result.receipt
-   await deliver(job,result.text);job.state=result.state;await finish(job);return
+   if(result.state!=='native_required'){
+    if(topic==='marketing_setup'&&result.state==='needs_input')await writeTeam(db,cfg.storeId,'nativeAgent.activityQuestion.'+job.channelId+'.'+c.actor.staffId,{state:'needs_input',requesterStaffId:c.actor.staffId,audienceHash:digest(c.channel.members),scopeKey:c.scope.compartmentKey,sourceId:c.source.id,sourceSeq:c.source.seq,objective:c.source.text,question:result.text,createdAt:stamp()})
+    job.topicPermission=result.permission;job.topicReceipt=result.receipt
+    await deliver(job,result.text!);job.state=result.state;await finish(job);return
+   }
+   if(!job.routedNative){
+    // Rejoin the native lane before starting a model. Fast permission checks do
+    // not borrow another active request's channel lease.
+    job.routedNative=true;delete job.businessTopic;job.executor='hermes_native';job.state='queued';await save(job);return
+   }
   }
+  delete job.businessTopic
   job.executor='hermes_native'
-  // New security generation and per-request native sessions never replay old
-  // leaked tool content or stale authorization through SDK memory.
-  const profileKey=digest(['controlled-business-v1',cfg.storeId,c.actor.id,c.scope.compartmentKey,job.id,c.actor.accessRole]),sessionId='store_'+profileKey
+  // Reuse a warm process only for the same account, audience and policy hash.
+  // Revocation or audience changes select a different profile; the new security
+  // generation cannot load the old unauthorized session. Each job keeps its
+  // own durable execution identity, even within this authorized conversation.
+  const profileKey=digest(['management-business-v2',cfg.storeId,c.actor.id,c.scope.compartmentKey,c.actor.accessRole]),sessionId='store_'+profileKey
   const ai=await readTeam<any>(db,cfg.storeId,'ai.settings')
   if(!ai?.enabled||ai.provider!=='minimax'||!ai.model)throw Error('NATIVE_PROVIDER_UNAVAILABLE')
   const callbackCredential=randomBytes(48).toString('base64url'),providerCredential=randomBytes(48).toString('base64url')
-  const input={clock:{asOf:stamp(),timeZone:'Asia/Jakarta'},currentRequest:job.publicObjective?{workOrderId:job.id,objective:job.publicObjective,files:job.publicObjective.message?.files||[]}:{messageId:c.source.id,seq:c.source.seq,text:c.source.text,files:c.source.files||[]},store:{id:cfg.storeId},account:backendAccountSummary(c.actor),context:{channelId:c.channel.id,cleanHandoff:!!job.authorizationChannelId},instructions:'You are the single store operations agent Hermes. First check the current requesting account and the accountAccess returned by the live backend catalog/describe. If an operation is denied, explain the missing permission immediately and stop that operation; do not gather business details or try alternative endpoints. If authorized but details are missing, ask only for the missing business choices. Use only reviewed business operations. This runtime has no terminal, file, generic HTTP or SQL tools. Public operating guidance does not grant business access. If an operation is unavailable, say so without claiming completion. Use native store operations and actual receipts; distinguish completed actions from independent acceptance. Handle only the current request, not historical unfinished requests. Prefer the live operation whose documented scope directly answers the question. For a single metric or short record lookup, use a permitted scoped summary and return only the requested result and necessary scope limits. Do not expand it into a full audit of individual orders, item subtotals, refunds, payment reconciliation, shift handovers, table numbers or missing sequence numbers unless the requester explicitly asks for that audit. A missing sequence number is not evidence of a deleted order. If the scoped report is denied or unavailable, explain the access or evidence limit; do not reconstruct a denied report through alternative endpoints. Once sufficient evidence is available, answer promptly and stop; do not expand a simple record lookup into unrelated analyses or write scripts when a matching scoped backend report already provides the answer. Keep the final reply concise, without repeated text or internal processing traces. Return the answer as your final response; the application delivers it to this conversation automatically. Do not poll the current chat for your own reply or call business endpoints merely to diagnose the integration. A saved operation receipt is the source of truth; a connection/status message is not business completion. For a clean handoff, the work order contains only a registered native operation and approved public operating guidance or a target-visible source message. The private manager instruction, parent history, memory and attachments were not transferred. Work from these sources and target-visible facts; do not invent missing business choices. Use plain Indonesian with staff and the requested language with administrators. Never modify or deploy the store system. Do not pay, exceed budget or punish employees without owner approval. Reuse the purchased subscription only; never switch to paid fallback.'}
+  const clockSettings=await loadStoreDateSettings(db,cfg.storeId)
+  const input={clock:{asOf:stamp(),timeZone:clockSettings.timezone},currentRequest:job.publicObjective?{workOrderId:job.id,objective:job.publicObjective,files:job.publicObjective.message?.files||[]}:{messageId:c.source.id,seq:c.source.seq,text:c.source.text,files:c.source.files||[]},store:{id:cfg.storeId},account:backendAccountSummary(c.actor),context:{channelId:c.channel.id,cleanHandoff:!!job.authorizationChannelId},activityContext:c.activityContext,backendHints:job.backendHints?{...job.backendHints,operations:job.backendHints.operations.map((op:any)=>({...op,accountAccess:backendAccountAccess(c.actor,op.operationId)}))}:undefined,instructions:'You are the single store operations agent Hermes. First check the current requesting account and the accountAccess returned by the live backend catalog/describe. If an operation is denied, explain the missing permission immediately and stop that operation; do not gather business details or try alternative endpoints. If authorized but details are missing, ask only for the missing business choices. Use the existing management read APIs under the current account, across all supported dates and business modules; do not claim that only two daily reports are available. The owner/admin may read all business data of this store, never another store or credentials. Only activity creation/editing and quote preview are enabled for writes; do not operate checkout, payments, printers, hardware, or authentication. Use the server-issued backendHints contractVersion and requestContract directly when they match the question, instead of repeating catalog and describe. For activities, ask for missing name, products, promotion rule and dates before creating; save as draft unless the human explicitly requests publication. Use the native activity body. rule.percent is percent OFF (九折 means 10, not 90); rule.price is integer Rupiah. An explicit all-products activity uses empty productIds and needs no product enumeration. Use actual product IDs from resources for named products; after creation report the stored ID and actual status. Never claim creation based on a proposal or an unconfirmed receipt. This runtime has no terminal, file, generic HTTP or SQL tools. Public operating guidance does not grant business access. If an operation is unavailable, say so without claiming completion. Use native store operations and actual receipts; distinguish completed actions from independent acceptance. Handle only the current request, not historical unfinished requests. Prefer the live operation whose documented scope directly answers the question. For a single metric or short record lookup, use a permitted scoped summary and return only the requested result and necessary scope limits. Do not expand it into a full audit of individual orders, item subtotals, refunds, payment reconciliation, shift handovers, table numbers or missing sequence numbers unless the requester explicitly asks for that audit. A missing sequence number is not evidence of a deleted order. If the scoped report is denied or unavailable, explain the access or evidence limit; do not reconstruct a denied report through alternative endpoints. Once sufficient evidence is available, answer promptly and stop; do not expand a simple record lookup into unrelated analyses or write scripts when a matching scoped backend report already provides the answer. Keep the final reply concise, without repeated text or internal processing traces. Return the answer as your final response; the application delivers it to this conversation automatically. Do not poll the current chat for your own reply or call business endpoints merely to diagnose the integration. A saved operation receipt is the source of truth; a connection/status message is not business completion. For a clean handoff, the work order contains only a registered native operation and approved public operating guidance or a target-visible source message. The private manager instruction, parent history, memory and attachments were not transferred. Work from these sources and target-visible facts; do not invent missing business choices. Use plain Indonesian with staff and the requested language with administrators. Never modify or deploy the store system. Do not pay, exceed budget or punish employees without owner approval. Reuse the purchased subscription only; never switch to paid fallback.'}
   Object.assign(job,{scope:c.scope,principal:c.principal,profileKey,sessionId,model:ai.model,state:'admitting',input:job.input||{input:JSON.stringify(input),session_id:sessionId},callbackCredentialHash:digest(callbackCredential),providerCredentialHash:digest(providerCredential)})
   job.startedAt=job.startedAt||stamp()
   await save(job)
@@ -101,10 +120,16 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
    await lockTeam(tx,cfg.storeId,'native-agent-delivery.'+job.id)
    const saved=await read(job.id,tx);if(saved?.[field]){job[field]=saved[field];return}
    const c=await current(job,tx)
-   if(job.topicPermission&&job.topicReceipt&&(!backendAccountAccess(c.actor,topicDefinition(job.businessTopic!).operationId).allowed||!await audienceAllows(tx,c.principal,c.scope,job.topicPermission)))throw Error('BUSINESS_TOPIC_ACCESS_CHANGED')
+   if(job.topicPermission&&job.topicReceipt&&(!backendAccountAccess(c.actor,job.topicReceipt.operationId).allowed||!await audienceAllows(tx,c.principal,c.scope,job.topicPermission)))throw Error('BUSINESS_TOPIC_ACCESS_CHANGED')
    const native=await employeeNativeReply(tx,cfg.storeId,{ticket:{executionId:deliveryId},scope:c.scope,grant:c.principal})
    if(native){const message=await readTeam<any>(tx,cfg.storeId,'message.'+job.channelId+'.'+String(native.seq).padStart(12,'0'));if(message?.text===text){job[field]=native.messageId;await save(job,tx);return}}
-   const actor:any={...c.actor};bindNativeBackendAgent(actor,{agentId:cfg.agentId,grantVersion:c.principal.version,clientRevision:1,executionId:deliveryId,name:c.principal.displayName||'Hermes',...(!job.authorizationChannelId?{replyToSeq:job.sourceSeq}:{})})
+   const dataPermissions=new Set<string>()
+   if(kind==='result'&&job.topicReceipt&&job.topicPermission)dataPermissions.add(job.topicPermission)
+   if(kind==='result'&&job.executor==='hermes_native'){
+    const receipts=await tx.config.findMany({where:{storeId:cfg.storeId,key:{startsWith:'team.communication.employeeRuntime.backendOperation.'},value:{contains:JSON.stringify('executionId')+':'+JSON.stringify(job.id)}},select:{value:true}})
+    for(const row of receipts){const receipt=JSON.parse(row.value);if(receipt.state!=='complete'||!receipt.result?.executed)continue;const permission=backendOperation(receipt.operationId)?.permission?.replace(/\.(write|create|cancel|status|manage|stockIn|stockOut|count)$/i,'.read');if(permission)dataPermissions.add(permission);for(const required of receipt.requiredPermissions||agentAdditionalPermissions(receipt.operationId))dataPermissions.add(required)}
+   }
+   const actor:any={...c.actor};bindNativeBackendAgent(actor,{dataPermissions:[...dataPermissions],agentId:cfg.agentId,grantVersion:c.principal.version,clientRevision:1,executionId:deliveryId,name:c.principal.displayName||'Hermes',...(!job.authorizationChannelId?{replyToSeq:job.sourceSeq}:{})})
    bindNativeBackendPublication(actor,{check:async(_tx,target)=>{if(target.channelId!==job.channelId||digest(target.members)!==digest(c.channel.members))throw Error('NATIVE_OUTPUT_CONTEXT_CHANGED')}})
    const requestId=taskId('native-output:'+deliveryId)
    const result=await teamCommunication(atomic(tx)).send(actor,job.channelId,{requestId,text,files:kind==='result'&&job.outputFileId?[job.outputFileId]:[],expectedLastSeq:c.channel.lastSeq})
@@ -125,6 +150,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   const c=await access(token(req),'callback'),v=z.object({jobId:z.string(),sessionId:z.string().min(1),toolCallId:z.string().min(1),args:z.unknown()}).strict().parse(req.body)
   if(v.jobId!==c.job.id)throw Error('NATIVE_JOB_MISMATCH')
   const raw=v.args as any
+  if(raw?.action==='execute'&&['POST /api/marketing/activities','PUT /api/marketing/activities/:id'].includes(raw.operationId)&&!activityRequestIntent(c.source.text)&&!c.activityContext)throw Error('ACTIVITY_REQUEST_INTENT_REQUIRED')
   if(['file_read','file_write'].includes(raw?.action))throw Error('AGENT_OPERATION_NOT_REVIEWED')
   if(raw?.action==='handoff'){
    const value=z.object({action:z.literal('handoff'),targetChannelId:z.string().uuid(),operationId:z.string().min(1),guideId:z.string().optional(),targetSourceSeq:z.number().int().positive().optional()}).strict().refine(v=>!!v.guideId||!!v.targetSourceSeq).parse(raw)
@@ -184,8 +210,12 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   }
   const callId=digest([v.sessionId,v.toolCallId]),executionId=c.job.id
   const reservation=raw?.action==='execute'?await db.$transaction(async(tx:any)=>{await lockTeam(tx,cfg.storeId,'native-backend.'+callId);return reserveBackendOperation(tx,cfg.storeId,c.scope,c.source.id,executionId,callId,v.args)}):undefined
-  const publication={check:async(tx:any,target:any)=>{const fresh=await current(c.job,tx);if(target.publicOutput&&fresh.channel.kind!=='public'||target.channelId&&target.channelId!==c.job.channelId||target.members.some((m:any)=>!fresh.channel.members.some((x:any)=>x.staffId===m.staffId)))throw Error('BACKEND_TARGET_CONTEXT_REQUIRED')}}
+  const publication={activityPublication:async(tx:any,operationId:string)=>{const fresh=await current(c.job,tx);if(!explicitlyPublishesActivity(fresh.source.text)||!backendAccountAccess(fresh.actor,operationId).allowed)throw Error('EXPLICIT_ACTIVITY_PUBLICATION_REQUIRED')},check:async(tx:any,target:any)=>{const fresh=await current(c.job,tx);if(target.publicOutput&&fresh.channel.kind!=='public'||target.channelId&&target.channelId!==c.job.channelId||target.members.some((m:any)=>!fresh.channel.members.some((x:any)=>x.staffId===m.staffId)))throw Error('BACKEND_TARGET_CONTEXT_REQUIRED')}}
   const result=await executeBackendTool(db,c.principal,c.scope,c.source.id,v.args,reservation,async()=>{await current(c.job)},publication)
+  if(raw?.action==='execute'&&['POST /api/marketing/activities','PUT /api/marketing/activities/:id'].includes(raw.operationId)&&result.ok&&result.executed&&result.data?.data?.id){
+   const activity=result.data.data
+   await writeTeam(db,cfg.storeId,'nativeAgent.activityQuestion.'+c.job.channelId+'.'+c.actor.staffId,{state:'created',requesterStaffId:c.actor.staffId,audienceHash:digest(c.channel.members),scopeKey:c.scope.compartmentKey,sourceId:c.source.id,sourceSeq:c.source.seq,objective:c.source.text,activity:{id:activity.id,version:activity.version,status:activity.status},createdAt:stamp()})
+  }
   res.json(result)
  }catch(error){failure(res,error)}})
  router.post('/native/v1/chat/completions',async(req,res)=>{try{
@@ -286,7 +316,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
     const code=/^[A-Z0-9_]{1,100}$/.test(error?.message||'')?error.message:'NATIVE_EXECUTION_UNCONFIRMED'
     if(!job.lastPollFault||!job.firstPollFaultAt)job.firstPollFaultAt=stamp()
     job.pollFaultCount=(job.pollFaultCount||0)+1
-    job.lastPollFault=code;job.nextAttemptAt=Date.now()+15000
+    job.lastPollFault=code;job.nextAttemptAt=Date.now()+(Date.now()>=jobDeadline(job)?3000:5000)
     // Transport failures are read/reconciled, never a reason to replay a business call.
     // Invalid source/account context is terminal and cannot publish private output.
     if(/NATIVE_(AGENT_DISABLED|ACCOUNT_UNAVAILABLE|CHANNEL_UNAVAILABLE|SOURCE_CHANGED|CONTEXT_CHANGED)|BUSINESS_TOPIC_ACCESS_CHANGED/.test(code)){
@@ -295,7 +325,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
      job.fault=code;await deliver(job,/[\u3400-\u9fff]/u.test((await current(job)).source.text)?'查询未完成，请稍后重试。没有执行数据修改。':'Permintaan belum selesai. Coba lagi nanti. Tidak ada data yang diubah.');job.state='failed';await finish(job)
     }else{
      if(!job.runId&&[400,401,403].includes(error?.status)){job.state='failed';job.fault=code;await deliver(job,'Maaf, layanan Hermes belum dapat menerima pekerjaan ini. Pengelola perlu memeriksa sambungannya.');await finish(job)}
-     else {await save(job);if(!job.statusMessageId&&nativePollDelayed(job))await deliver(job,'Pesan Anda sudah tersimpan. Sambungan Hermes sedang bermasalah; pekerjaan belum dinyatakan selesai. Hasil yang sudah tersimpan tidak akan diulang otomatis.','status').catch(()=>{})}
+     else {await save(job);if(!job.statusMessageId&&nativeReplyDelayed(job))await deliver(job,Date.now()>=jobDeadline(job)?'请求已超时，结果尚未确认；不会自动重复提交。 / Batas waktu terlewati; hasil belum dikonfirmasi dan tidak dikirim ulang.':'正在处理本次后台请求；完成后会回复，尚未确认任何修改完成。 / Permintaan backend sedang diproses; perubahan belum dinyatakan selesai.','status').catch(()=>{})}
     }
    }finally{
     await db.$transaction(async(tx:any)=>{await lockTeam(tx,cfg.storeId,'native-admission.'+job.channelId);const saved=await read(job.id,tx);if(saved?.pollToken===job.pollToken){saved.pollLeaseUntil=0;delete saved.pollToken;await save(saved,tx)}})

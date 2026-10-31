@@ -275,11 +275,11 @@ async function main(){
    const question=await teamCommunication(db).send(employee,direct.id,{requestId:randomUUID(),text:'Apa yang harus saya lakukan untuk stok hari ini?'});
    const directKey=nativeJobKey(nativeJobId(storeId,direct.id,question.id));assert.equal((await readTeam(db,storeId,directKey)).state,'queued');
    await db.config.createMany({data:Array.from({length:1001},(_,i)=>({storeId,key:'team.communication.nativeAgent.job.history-'+i,category:'test',createdAt:new Date('2000-01-01T00:00:00Z'),value:JSON.stringify({id:'history-'+i,state:'completed',createdAt:'2000-01-01T00:00:00Z'})}))});
-   await engine.runBatch(1);let employeeJob=await readTeam(db,storeId,directKey);assert.equal(employeeJob.state,'running');assert.equal(JSON.parse(employeeJob.input.input).account.authority,'current_requesting_account');assert.notEqual(employeeJob.profileKey,j.profileKey);assert.equal(submitted,2);
+   await engine.runBatch(1);let employeeJob=await readTeam(db,storeId,directKey);assert.equal(employeeJob.state,'queued');await engine.runBatch(1);employeeJob=await readTeam(db,storeId,directKey);assert.equal(employeeJob.state,'running');assert.equal(JSON.parse(employeeJob.input.input).account.authority,'current_requesting_account');assert.notEqual(employeeJob.profileKey,j.profileKey);assert.equal(submitted,2);
    await engine.runBatch(1);employeeJob=await readTeam(db,storeId,directKey);assert.equal(employeeJob.state,'completed');assert(employeeJob.outputMessageId);
    assert.equal((await readTeam(db,storeId,'channel.'+direct.id)).members.length,2);
    const parentSource=await teamCommunication(db).send(owner,c.id,{requestId:randomUUID(),text:'PRIVATE_HUMAN_PROFIT_SENTINEL Rp123456789. 给员工安排卫生 SOP 工作，不要向员工透露利润。'});
-   const parentKey=nativeJobKey(nativeJobId(storeId,c.id,parentSource.id));await engine.runBatch(1);const parent=await readTeam(db,storeId,parentKey);assert.equal(parent.state,'running');
+   const parentKey=nativeJobKey(nativeJobId(storeId,c.id,parentSource.id));await engine.runBatch(1);if((await readTeam(db,storeId,parentKey)).state==='queued')await engine.runBatch(1);const parent=await readTeam(db,storeId,parentKey);assert.equal(parent.state,'running');
    parent.privateHistory='PARENT_PRIVATE_FINANCE_SENTINEL';await writeTeam(db,storeId,parentKey,parent);
    const app=require(root+'/server/node_modules/express')();app.use(engine.router);const request=require(root+'/server/node_modules/supertest');
    const rpc=async(args)=>request(app).post('/native/backend').set('Authorization','Bearer '+contexts.get(parent.id).callbackCredential).send({jobId:parent.id,sessionId:parent.sessionId,toolCallId:'handoff-call',args});
@@ -305,12 +305,12 @@ async function main(){
    const transientKey=nativeJobKey(nativeJobId(storeId,transient.id,transientSource.id));await engine.runBatch(10);
    let transientJob=await readTeam(db,storeId,transientKey);transientJob.budgetMs=600000;transientJob.createdAt=new Date(Date.now()-90000).toISOString();await writeTeam(db,storeId,transientKey,transientJob);
    const beforeTransient=submitted;statusUnavailable=true;await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
-   assert.equal(transientJob.state,'running');assert.equal(transientJob.pollFaultCount,1);assert(!transientJob.statusMessageId);assert(transientJob.firstPollFaultAt);
+   assert.equal(transientJob.state,'running');assert.equal(transientJob.pollFaultCount,1);assert(transientJob.statusMessageId);const waitingStatusId=transientJob.statusMessageId;const waitingMessage=await db.config.findFirst({where:{storeId,key:{startsWith:'team.communication.message.'+transient.id+'.'},value:{contains:transientJob.statusMessageId}}});assert(waitingMessage);assert(!JSON.parse(waitingMessage.value).text.includes('Sambungan Hermes'));assert(transientJob.firstPollFaultAt);
    let projected=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+transient.id),[transientSource]);assert.equal(projected.get(transientSource.id).state,'processing');assert.equal(projected.get(transientSource.id).failureReason,'delayed');
    // A successful status clears the fault window even while the model is running.
    statusUnavailable=false;runStatus='running';delete transientJob.nextAttemptAt;await writeTeam(db,storeId,transientKey,transientJob);await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
    assert(!transientJob.firstPollFaultAt);assert(!transientJob.pollFaultCount);assert(!transientJob.lastPollFault);
-   statusUnavailable=true;await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);assert.equal(transientJob.pollFaultCount,1);assert(!transientJob.statusMessageId);
+   statusUnavailable=true;await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);assert.equal(transientJob.pollFaultCount,1);assert.equal(transientJob.statusMessageId,waitingStatusId);
    transientJob.firstPollFaultAt=new Date(Date.now()-65000).toISOString();delete transientJob.nextAttemptAt;await writeTeam(db,storeId,transientKey,transientJob);await engine.runBatch(10);transientJob=await readTeam(db,storeId,transientKey);
    assert(transientJob.statusMessageId);assert.equal(transientJob.pollFaultCount,2);
    projected=await built('services/TeamCommunicationService').projectOwnAiHandling(db,owner,await readTeam(db,storeId,'channel.'+transient.id),[transientSource]);assert.equal(projected.get(transientSource.id).failureReason,'delayed');
