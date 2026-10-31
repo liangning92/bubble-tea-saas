@@ -62,6 +62,8 @@ interface StaffOption {
   employeeNumber: string
 }
 
+const historicalCollectionMonth = (note?:string) => note?.match(/^\[HISTORICAL_RECONCILIATION:(\d{4}-\d{2})\]/)?.[1]
+
 const STATUS_LABELS: Record<string, string> = {
   active: 'Active',
   completed: 'Completed',
@@ -77,7 +79,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function StaffDepositListPage() {
   const { t, i18n } = useTranslation()
-  const release = i18n.language.startsWith('zh') ? {label:'离职已解除',amount:'已解除待收押金',refund:'待退还已收押金'} : i18n.language.startsWith('en') ? {label:'Released on leaving',amount:'Uncollected deposit released',refund:'Collected deposit awaiting refund'} : {label:'Dilepas saat keluar',amount:'Sisa deposit dibatalkan',refund:'Deposit terkumpul menunggu pengembalian'}
+  const release = i18n.language.startsWith('zh') ? {label:'离职已解除',amount:'已解除待收押金',refund:'待退还已收押金',history:'历史扣款月份',recorded:'补录时间'} : i18n.language.startsWith('en') ? {label:'Released on leaving',amount:'Uncollected deposit released',refund:'Collected deposit awaiting refund',history:'Historical collection month',recorded:'Recorded on'} : {label:'Dilepas saat keluar',amount:'Sisa deposit dibatalkan',refund:'Deposit terkumpul menunggu pengembalian',history:'Bulan potongan historis',recorded:'Dicatat pada'}
   const { user } = useAuthStore()
   const [deposits, setDeposits] = useState<StaffDeposit[]>([])
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
@@ -381,7 +383,7 @@ export function StaffDepositListPage() {
                     {deposit.deductionLogs.map(log => (
                       <div key={log.id} className="flex flex-wrap gap-2 justify-between text-sm p-2 bg-red-50 rounded">
                         <span className="text-red-600">{formatCurrency(-log.amount)}</span>{user?.role==='admin'&&log.amount>0&&!log.salaryId&&!deposit.deductionLogs.some(row=>row.note?.startsWith(`[REVERSAL:${log.id}]`))&&<button onClick={()=>setCorrection({deposit,kind:'deduction',logId:log.id})}>{t('entryFix.reverseDeduction')}</button>}
-                        <span className="text-gray-500">{formatDate(log.createdAt)}</span>
+                        <span className="text-gray-500">{historicalCollectionMonth(log.note) ? `${release.history}: ${historicalCollectionMonth(log.note)} · ${release.recorded}: ${formatDate(log.createdAt)}` : formatDate(log.createdAt)}</span>
                       </div>
                     ))}
 
