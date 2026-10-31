@@ -15,12 +15,13 @@ import shutil
 from pathlib import Path
 import sys
 import threading
+import time
 import tempfile
 from urllib import request
 from urllib.parse import urlsplit
 
 
-def native_provider_config(value, model):
+def native_provider_config(value, model, base_url=None):
     """Use the upstream SDK's opt-in for providers behind our private proxy.
     MiniMax requires complete reasoning_content on assistant tool-call replays.
     Keep every other account-local setting and the original session journal.
@@ -33,7 +34,22 @@ def native_provider_config(value, model):
     search=search if isinstance(search,dict) else {}
     # The pinned SDK supports eager loading. One mediated business tool must not
     # be deferred behind search/describe/call wrappers (extra provider rounds).
-    return {**value, 'model': {**value.get('model', {}), 'reasoning_echo': model in ('MiniMax-M3.1-Flash', 'MiniMax-M3')},
+    model_config={**value.get('model', {}), 'reasoning_echo': model in ('MiniMax-M3.1-Flash', 'MiniMax-M3')}
+    # The pinned SDK catalog declares MiniMax M3's 1M window. Our mediated URL
+    # is not an Ollama server; bind the documented window to this exact route
+    # instead of probing /models, /props and /api/show on every fresh agent.
+    if base_url and model in ('MiniMax-M3.1-Flash', 'MiniMax-M3'):
+        model_config.update(default=model,provider='custom',base_url=private_url(base_url),context_length=1000000)
+    auxiliary=value.get('auxiliary', {})
+    if not isinstance(auxiliary,dict):raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
+    agent=value.get('agent', {})
+    if not isinstance(agent,dict):raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
+    title=auxiliary.get('title_generation', {})
+    title=title if isinstance(title,dict) else {}
+    # The management system already owns channel titles. No second LLM call.
+    return {**value, 'model':model_config,
+            'agent':{**agent,'environment_probe':False},
+            'auxiliary':{**auxiliary,'title_generation':{**title,'enabled':False}},
             'tools':{**tools,'tool_search':{**search,'enabled':'off'}}}
 
 
@@ -52,12 +68,12 @@ def native_provider_options(model, reasoning_config=None, request_overrides=None
             'request_overrides': {**overrides, 'reasoning_effort': effort}}
 
 
-def configure_native_provider(home, model):
+def configure_native_provider(home, model, base_url=None):
     import yaml
     path = home/'config.yaml'
     if path.is_symlink():raise ValueError('NATIVE_MODEL_CONFIG_INVALID')
     value = yaml.safe_load(path.read_text()) if path.exists() else {}
-    updated = native_provider_config(value or {}, model)
+    updated = native_provider_config(value or {}, model, base_url)
     if value == updated:return
     temporary = None
     try:
@@ -110,7 +126,10 @@ def main():
     skill=Path(config['repository'])/'hermes'/'store-operations'/'SKILL.md'
     if skill.is_file():
         target=home/'skills'/'store-operations'/'SKILL.md'
-        if not target.exists():target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(skill,target)
+        target.parent.mkdir(parents=True,exist_ok=True)
+        if target.is_symlink() or not target.resolve().is_relative_to(home.resolve()):raise ValueError('NATIVE_SKILL_PATH_INVALID')
+        # Refresh only the bundled management skill, not account memory or user skills.
+        if not target.exists() or target.read_bytes()!=skill.read_bytes():shutil.copyfile(skill,target)
     os.chdir(workspace)
     sys.path.insert(0,config['hermesSource'])
     sys.path.insert(0,str(Path(config['repository'])/'hermes'))
@@ -122,8 +141,13 @@ def main():
     from tools.registry import registry
     from tools import approval_context
     from run_agent import AIAgent
+    # Eager imports only: keep the original SDK unchanged and perform no agent
+    # construction, provider request, session turn or business call during warmup.
+    # Bedrock dependencies are installed from the upstream lock at image build.
+    from agent import bedrock_adapter, conversation_loop, turn_context, system_prompt
+    from openai import OpenAI
 
-    context={};context_lock=threading.RLock()
+    context={};context_lock=threading.RLock();runtime_timings={'readyAt':time.time()}
     def backend(args,**kwargs):
         with context_lock:c=dict(context)
         if not c:raise RuntimeError('NATIVE_CONTEXT_NOT_CONFIGURED')
@@ -165,7 +189,9 @@ def main():
             toolsets=['store_backend']
             callbacks={k:kwargs.get(k) for k in ('stream_delta_callback','tool_progress_callback','tool_start_callback','tool_complete_callback')}
             options=native_provider_options(c['model'],kwargs.get('reasoning_config'),kwargs.get('request_overrides'))
-            agent=AIAgent(model=c['model'],provider='custom',api_mode='chat_completions',base_url=private_url(c['providerBaseUrl']),api_key=c['providerCredential'],fallback_model=None,enabled_toolsets=toolsets,session_id=kwargs.get('session_id'),gateway_session_key=c['sessionKey'],session_db=self._ensure_session_db(),platform='api_server',quiet_mode=True,ephemeral_system_prompt=kwargs.get('ephemeral_system_prompt'),**options,**callbacks)
+            initialized_at=time.monotonic()
+            agent=AIAgent(model=c['model'],provider='custom',api_mode='chat_completions',base_url=private_url(c['providerBaseUrl']),api_key=c['providerCredential'],fallback_model=None,skip_background_review=True,enabled_toolsets=toolsets,session_id=kwargs.get('session_id'),gateway_session_key=c['sessionKey'],session_db=self._ensure_session_db(),platform='api_server',quiet_mode=True,ephemeral_system_prompt=kwargs.get('ephemeral_system_prompt'),**options,**callbacks)
+            runtime_timings['lastAgentInitMs']=round((time.monotonic()-initialized_at)*1000)
             agent._hermes_api_runtime={'provider':'custom','model':c['model'],'route_source':'subscribed_store_provider'}
             return agent
 
@@ -192,7 +218,7 @@ def main():
             required={'jobId','sessionKey','model','providerBaseUrl','providerCredential','backendUrl','callbackCredential'}
             if not required.issubset(v) or v['sessionKey']!='store_'+config['profileKey']:return web.json_response({'error':'native_context_invalid'},status=400)
             private_url(v['providerBaseUrl']);private_url(v['backendUrl'])
-            configure_native_provider(home,v['model'])
+            configure_native_provider(home,v['model'],v['providerBaseUrl'])
             with context_lock:context.clear();context.update(v)
             return web.json_response({'ok':True,'profileKey':config['profileKey']})
 
@@ -208,7 +234,7 @@ def main():
 
         async def readiness(self,req):
             if not self.authorized(req):return web.json_response({'error':'unauthorized'},status=401)
-            return web.json_response({'status':'ok',**self.native_work(),'profileKey':config['profileKey'],'runtime':'hermes_native_api'})
+            return web.json_response({'status':'ok',**self.native_work(),'profileKey':config['profileKey'],'runtime':'hermes_native_api','timings':dict(runtime_timings)})
 
     adapter=StoreAPI(PlatformConfig(enabled=True,extra={'host':config.get('listenHost','127.0.0.1'),'port':config['port'],'key':config['apiKey'],'model_name':'hermes-agent'}))
     # Conversations serialize within their own compartment; independent compartments

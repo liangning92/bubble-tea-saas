@@ -24,6 +24,8 @@ export class HermesNativeClient {
  }
  async configure(context:Record<string,unknown>,deadline?:number){return this.request('/native/context',context,{},deadline)}
  async admission(request:NativeHermesRequest,key:string){return this.request('/native/admission',{request,key},{},Date.now()+3000)}
+ /** Preparation has no model context or business authority. Cold startup may exceed a status probe. */
+ async prepare(){return this.request('/native/readiness',undefined,{},Date.now()+25000)}
  async readiness(){return this.request('/native/readiness',undefined,{},Date.now()+3000)}
  async gatewayHealth(){return this.request('/health')}
  async capabilities(){

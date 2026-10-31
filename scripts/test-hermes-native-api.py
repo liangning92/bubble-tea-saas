@@ -4,13 +4,13 @@ import argparse,base64,hashlib,importlib.util,json,os,pathlib,shutil,socket,subp
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib import request,error
 ROOT=pathlib.Path(__file__).resolve().parents[1]
-p=argparse.ArgumentParser();p.add_argument('--artifact',required=True);args=p.parse_args();artifact=pathlib.Path(args.artifact).resolve();metadata=json.loads((artifact/'image.json').read_text());image=metadata['imageId']
+p=argparse.ArgumentParser();p.add_argument('--artifact',required=True);p.add_argument('--adapter-source');args=p.parse_args();artifact=pathlib.Path(args.artifact).resolve();metadata=json.loads((artifact/'image.json').read_text());image=metadata['imageId']
 run=os.environ['BT_TEST_RUN'];assert run.startswith('bt-test-') and os.environ['BT_TEST_LABEL']=='com.bubbletea.test-run='+run
-base=pathlib.Path(tempfile.mkdtemp(prefix=run+'-',dir='/tmp'));profile='a'*64;key='synthetic-native-api-authentication-key-00000';calls=[];backend=[]
+base=pathlib.Path(tempfile.mkdtemp(prefix=run+'-',dir='/tmp'));profile='a'*64;key='synthetic-native-api-authentication-key-00000';calls=[];backend=[];timing={'started':time.monotonic()};provider_times=[]
 class Provider(BaseHTTPRequestHandler):
  def log_message(self,*a):pass
  def do_POST(self):
-  body=json.loads(self.rfile.read(int(self.headers['Content-Length'])));calls.append(body)
+  body=json.loads(self.rfile.read(int(self.headers['Content-Length'])));calls.append(body);provider_times.append({'atMs':round((time.monotonic()-timing['started'])*1000),'toolCount':len(body.get('tools',[])),'path':self.path})
   with open(artifact/'synthetic-provider.log','a') as log:log.write(json.dumps({'path':self.path,'tools':len(body.get('tools',[])),'toolNames':[t.get('function',{}).get('name') for t in body.get('tools',[])],'stream':body.get('stream'),'reasoningEffort':body.get('reasoning_effort')})+'\n')
   if self.path=='/backend':backend.append(body);return self.reply({'ok':True,'operations':[{'operationId':'GET /api/products'}]})
   if self.path=='/api/show':return self.reply({'model_info':{'minimax.context_length':200000},'capabilities':['completion','tools','vision']})
@@ -48,8 +48,14 @@ def call(path,body=None):
  req=request.Request('http://127.0.0.1:'+str(port)+path,data=None if body is None else json.dumps(body).encode(),headers={'Authorization':'Bearer '+key,'Content-Type':'application/json','X-Hermes-Session-Key':'store_'+profile,**({'Idempotency-Key':'native-sdk-real-fixture'} if path=='/v1/runs' else {})})
  with request.urlopen(req,timeout=120) as response:return json.load(response)
 try:
+ overlay=[]
+ if args.adapter_source:
+  adapter=base/'adapter'
+  for relative in ['scripts/hermes_employee/native_api_service.py','hermes/source_verification.py','hermes/store-operations/SKILL.md']:
+   target=adapter/relative;target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(pathlib.Path(args.adapter_source)/relative,target)
+  overlay=['--mount','type=bind,src='+str(adapter)+',dst=/opt/store-adapter,readonly']
  log=open(artifact/'native-api-test.log','wb')
- child=subprocess.Popen(['docker','run','--rm','--name',name,'--label',os.environ['BT_TEST_LABEL'],'--read-only','--cap-drop=ALL','--user',str(os.getuid())+':'+str(os.getgid()),'--security-opt=no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--shm-size=256m',*(['--add-host','host.docker.internal:host-gateway'] if sys.platform=='linux' else []),'-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes','-i',image],stdin=subprocess.PIPE,stdout=log,stderr=log)
+ child=subprocess.Popen(['docker','run','--rm','--name',name,'--label',os.environ['BT_TEST_LABEL'],'--read-only','--cap-drop=ALL','--user',str(os.getuid())+':'+str(os.getgid()),'--security-opt=no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--shm-size=256m',*(['--add-host','host.docker.internal:host-gateway'] if sys.platform=='linux' else []),'-p','127.0.0.1:'+str(port)+':8643','--mount','type=bind,src='+str(home)+',dst=/home/hermes',*overlay,'-i',image],stdin=subprocess.PIPE,stdout=log,stderr=log)
  config={'profileRoot':'/home/hermes','profileKey':profile,'port':8643,'listenHost':'0.0.0.0','apiKey':key,'repository':'/opt/store-adapter','hermesSource':'/opt/hermes','hermesExpectedSha':metadata['hermesSha'],'path':'/opt/venv/bin:/usr/local/bin:/usr/bin:/bin'}
  child.stdin.write(json.dumps(config).encode()+b'\n');child.stdin.close();log.close()
  for _ in range(180):
@@ -57,13 +63,16 @@ try:
   try:call('/health');break
   except Exception:time.sleep(.5)
  else:raise RuntimeError('NATIVE_API_TEST_START_TIMEOUT')
+ timing['readyMs']=round((time.monotonic()-timing['started'])*1000)
  capabilities=call('/v1/capabilities');assert capabilities
- for relative,sha in metadata.get('adapterFiles',{}).items():
+ for relative,sha in ({} if args.adapter_source else metadata.get('adapterFiles',{})).items():
   actual=subprocess.check_output(['docker','exec',name,'sha256sum','/opt/store-adapter/'+relative],text=True).split()[0]
   assert actual==sha,'NATIVE_ADAPTER_CHANGED: '+relative
  context={'jobId':'synthetic-job','sessionKey':'store_'+profile,'model':'MiniMax-M3.1-Flash','providerBaseUrl':'http://host.docker.internal:'+str(server.server_port)+'/v1','providerCredential':'synthetic-provider','backendUrl':'http://host.docker.internal:'+str(server.server_port)+'/backend','callbackCredential':'synthetic-callback'}
  assert call('/native/context',context)['ok']
+ timing['configuredMs']=round((time.monotonic()-timing['started'])*1000)
  body={'input':'NATIVE_TOOL_TEST: discover product routes only, never mutate.','session_id':'store_'+profile}
+ timing['submitMs']=round((time.monotonic()-timing['started'])*1000)
  result=call('/v1/runs',body);run_id=result['run_id'];assert call('/v1/runs',body)['run_id']==run_id
  for _ in range(120):
   result=call('/v1/runs/'+run_id)
@@ -82,7 +91,13 @@ try:
  assert len(backend)==1,backend
  assert backend[0]['toolCallId'];assert backend[0]['sessionId']
  assert call('/native/admission',{'key':'native-sdk-real-fixture','request':body})['run_id']==run_id
- result={'state':'passed','upstreamHermesSha':metadata['hermesSha'],'baseImageId':image,'adapterOverlay':False,'adapterFiles':metadata.get('adapterFiles',{}),'nativeRunId':run_id,'nativeToolCount':max(len(c.get('tools',[])) for c in calls),'providerCalls':len(calls)-len(backend),'backendCalls':len(backend),'reasoningEchoTurnsVerified':len(replayed),'reasoningEffort':'low','production':False,'paidProviderCalls':0,'testBatch':run}
+ ready=call('/native/readiness')
+ first_main=next(v['atMs'] for v in provider_times if v['toolCount'])
+ (artifact/'latency-timeline.json').write_text(json.dumps({'readyMs':timing['readyMs'],'configuredMs':timing['configuredMs'],'submitMs':timing['submitMs'],'firstModelAfterSubmitMs':first_main-timing['submitMs'],'runtimeTimings':ready.get('timings'),'providerCalls':provider_times},indent=2))
+ if args.adapter_source or metadata.get('sourceSha')==subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip():
+  assert first_main-timing['submitMs']<5000, 'NATIVE_AGENT_INITIALIZATION_TOO_SLOW'
+  assert len(main_requests)==len(calls)-len(backend), 'UNNECESSARY_AUXILIARY_PROVIDER_CALL'
+ result={'state':'passed','upstreamHermesSha':metadata['hermesSha'],'baseImageId':image,'adapterOverlay':bool(args.adapter_source),'adapterFiles':metadata.get('adapterFiles',{}),'nativeRunId':run_id,'nativeToolCount':max(len(c.get('tools',[])) for c in calls),'providerCalls':len(calls)-len(backend),'backendCalls':len(backend),'reasoningEchoTurnsVerified':len(replayed),'reasoningEffort':'low','production':False,'paidProviderCalls':0,'testBatch':run}
  (artifact/'native-api-acceptance.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
 finally:
  subprocess.run(['docker','rm','-f',name],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

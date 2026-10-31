@@ -56,7 +56,7 @@ export const createChannelSchema = z.object({
 }).strict()
 export const agentContinuationSchema=z.object({requestId:uuid,sourceSeq:seq}).strict()
 export const messageSchema = z.object({
-  requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional(), takeover: z.boolean().optional()
+  language: z.enum(['zh','en','id']).optional(), requestId: uuid, text: z.string().trim().max(4000).default(''), files: z.array(uuid).max(5).default([]), expectedLastSeq: seq.optional(), takeover: z.boolean().optional()
 }).strict().refine(v => v.text.length > 0 || v.files.length > 0, 'EMPTY_MESSAGE')
 export const minutesSchema = z.object({
   requestId: uuid, expectedVersion: z.number().int().positive(), title: z.string().trim().min(1).max(120),
@@ -569,7 +569,7 @@ export function teamCommunication(db: DB = prisma) {
         if (!c.round.participants.includes(a.staffId)) c.round.participants.push(a.staffId)
         const employee = await identity(tx, a)
         const message = { id: randomUUID(), requestId: v.requestId, channelId: id, seq: ++c.lastSeq, roundId: c.round.id,
-          authorId: nativeAgent?'agent:'+nativeAgent.agentId:a.staffId, ...(nativeAgent?{actorStaffId:a.staffId}:{}), authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId,...(nativeAgent.dataPermissions?{dataPermissions:nativeAgent.dataPermissions}:{}),...(nativeAgent.replyToSeq!==undefined?{replyToSeq:nativeAgent.replyToSeq}:{})}}: {}) }
+          authorId: nativeAgent?'agent:'+nativeAgent.agentId:a.staffId, ...(nativeAgent?{actorStaffId:a.staffId}:{}), authorName: nativeAgent?nativeAgent.name:ownerOperationsDelegation ? 'Operations Agent (owner delegation)' : employee.name, ...(ownerOperationsDelegation ? {origin:{kind:'owner_operations_delegation',delegationId:ownerOperationsDelegation.id,requestId:ownerOperationsDelegation.requestId}} : {}), text: v.text, ...(v.language?{language:v.language}:{}), files: v.files, createdAt: new Date(now).toISOString(), ...(ai ? { ai } : {}), ...(teamAgentProvenance(a) ? { agent: teamAgentProvenance(a) } : nativeAgent?{agent:{agentId:nativeAgent.agentId,grantVersion:nativeAgent.grantVersion,clientRevision:nativeAgent.clientRevision,executionId:nativeAgent.executionId,...(nativeAgent.dataPermissions?{dataPermissions:nativeAgent.dataPermissions}:{}),...(nativeAgent.replyToSeq!==undefined?{replyToSeq:nativeAgent.replyToSeq}:{})}}: {}) }
         await write(tx, a.storeId, `message.${id}.${pad(message.seq)}`, message)
         const sourceWrittenAt = new Date().toISOString() // Write completion inside the atomic message/job transaction, not a separate commit.
         for (const f of v.files) await write(tx, a.storeId, `fileGrant.${id}.${f}.${pad(message.seq)}`, { seq: message.seq })
