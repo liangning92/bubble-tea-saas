@@ -36,10 +36,16 @@ export async function employeeConsumption(filter: {
         unit: string;
     }>();
     let incomplete = uncovered > 0;
+    let issueCount=0,activeSnapshotCount=0;
+    const productIssues=new Map<string,{productId:string;code:string;count:number}>();
+    const mixedUnits=new Set<string>();
     for (const snapshot of snapshots) {
         if (snapshot.reversedAt)
             continue;
+        activeSnapshotCount++;
         const issues: ConsumptionIssue[] = JSON.parse(snapshot.issues);
+        issueCount+=issues.length;
+        for(const issue of issues){const key=issue.productId+':'+issue.code,previous=productIssues.get(key);productIssues.set(key,{productId:issue.productId,code:issue.code,count:(previous?.count||0)+1})}
         if (issues.length)
             incomplete = true;
         for (const material of JSON.parse(snapshot.materials) as ConsumptionMaterial[]) {
@@ -47,11 +53,14 @@ export async function employeeConsumption(filter: {
             // Keep that evidence intact and do not compare it to raw withdrawals as if equivalent.
             if(inventory.some((i:any)=>i.id===material.inventoryId&&i.type==='semi_finished'&&i.processRecipeId))incomplete=true;
             const previous = materials.get(material.inventoryId);
-            if (previous && previous.unit !== material.unit)
-                incomplete = true;
+            if (previous && previous.unit !== material.unit) {
+                incomplete = true; mixedUnits.add(material.inventoryId);
+            }
             materials.set(material.inventoryId, { quantity: (previous?.quantity || 0) + material.quantity, unit: material.unit });
         }
     }
+    const issueProducts=productIssues.size?await db.product.findMany({where:{storeId:filter.storeId,id:{in:[...new Set([...productIssues.values()].map(issue=>issue.productId))]}},select:{id:true,name:true}}):[];
+    const recipeIssues=[...productIssues.values()].map(issue=>({...issue,productName:issueProducts.find((p:any)=>p.id===issue.productId)?.name||issue.productId}));
     const withdrawals=new Map<string,number>(),withdrawalTimes=new Map<string,Date>();
     for(const log of logs)if(log.reason==='withdrawal'){withdrawals.set(log.inventoryId,(withdrawals.get(log.inventoryId)||0)+log.quantity);const first=withdrawalTimes.get(log.inventoryId);if(!first||log.createdAt<first)withdrawalTimes.set(log.inventoryId,log.createdAt);}
     const production=await inventoryProductionComparison(db,filter.storeId,effectiveStart,end,withdrawals,withdrawalTimes);
@@ -67,9 +76,9 @@ export async function employeeConsumption(filter: {
         const classification = classifyEmployeeConsumption(theory?.quantity || 0, actual, setting.varianceWarningPercent, setting.varianceCriticalPercent, setting.enableConsumptionAlert, incomplete || !!theory && theory.unit !== item.unit);
         const usageMode=inventoryUsageMode(item),evidenceIncomplete=incomplete || !!theory && theory.unit!==item.unit;
         const comparison=evidenceIncomplete?{variance:null,variancePercent:null,varianceStatus:'unavailable',unavailableReason:'INCOMPLETE_RECIPE'}:{variance:usageMode==='self_produced'?null:Math.round((actual-(theory?.quantity||0))*1e9)/1e9,variancePercent:null,varianceStatus:'not_compared',unavailableReason:usageMode==='bulk'?'BULK_ISSUE':usageMode==='self_produced'?'SELF_PRODUCED':'BATCH_WITHDRAWAL'};
-        return { usageMode, inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: evidenceIncomplete?null:theory?.quantity || 0, actualConsumption: actual, actualWithdrawal: actual, varianceAmountEstimate:comparison.variance===null?null:Math.round(comparison.variance*Number(item.avgCost)), production:production.get(item.id)||[], breakdown: totals, ...comparison, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
+        return { knownTheoreticalConsumption:activeSnapshotCount>0&&!mixedUnits.has(item.id)&&(!theory||theory.unit===item.unit)?theory?.quantity||0:null,theoryEvidence:{complete:!evidenceIncomplete,snapshotCount:activeSnapshotCount,uncoveredOrderCount:uncovered,issueCount}, usageMode, inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: evidenceIncomplete?null:theory?.quantity || 0, actualConsumption: actual, actualWithdrawal: actual, varianceAmountEstimate:comparison.variance===null?null:Math.round(comparison.variance*Number(item.avgCost)), production:production.get(item.id)||[], breakdown: totals, ...comparison, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
     });
-    return { list, hasBusinessActivity:logs.length>0||snapshots.length>0||uncovered>0, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
+    return { list, recipeIssues, hasBusinessActivity:logs.length>0||snapshots.length>0||uncovered>0, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
 }
 export async function checkConsumptionDay(storeId: string, businessDate: string, now = new Date()) {
     const {boundary,startOfDay}=await inventoryBusinessCalendar(storeId);

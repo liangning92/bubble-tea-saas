@@ -166,3 +166,16 @@ test('material ledger search precedes paging and preserves Jakarta midnight inst
  expect(await getStockOutLogs({...filter,skip:1})).toHaveLength(0)
  expect(await getStockOutLogs({...filter,search:'no-such-material'})).toHaveLength(0)
 })
+
+test('incomplete daily evidence retains verified theory but never invents the full theory or variance',async()=>{
+ const f=await fixture('kg');await f.issue(3);await f.sale(2);await prisma.order.create({data:{storeId:f.store.id,staffId:'counter',orderNumber:randomUUID(),totalAmount:100,finalAmount:100,paymentMethod:'cash',status:'paid'}})
+ const date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),row=(await employeeConsumption({storeId:f.store.id,startDate:date,endDate:date})).list[0]
+ expect(row.actualWithdrawal).toBe(3);expect(row.knownTheoreticalConsumption).toBe(2);expect(row.theoreticalConsumption).toBeNull();expect(row.variance).toBeNull();expect(row.theoryEvidence).toEqual({complete:false,snapshotCount:1,uncoveredOrderCount:1,issueCount:0})
+})
+
+test('daily missing recipe guidance identifies the actual product while retaining other frozen quantities',async()=>{
+ const f=await fixture('kg');await f.sale(2);const product=await prisma.product.create({data:{storeId:f.store.id,categoryId:f.product.categoryId,name:'Synthetic missing snack recipe',code:randomUUID()}}),order=await prisma.order.create({data:{storeId:f.store.id,staffId:'counter',orderNumber:randomUUID(),totalAmount:100,finalAmount:100,paymentMethod:'cash',status:'completed'}})
+ await prisma.$transaction(tx=>recordOrderConsumption(tx,f.store.id,order.id,[{productId:product.id,quantity:1}]))
+ const date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),result=await employeeConsumption({storeId:f.store.id,startDate:date,endDate:date})
+ expect(result.list[0].knownTheoreticalConsumption).toBe(2);expect(result.list[0].variance).toBeNull();expect(result.recipeIssues).toEqual([{productId:product.id,productName:product.name,code:'BOM_MISSING',count:1}])
+})
