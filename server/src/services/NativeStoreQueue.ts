@@ -1,4 +1,4 @@
-import {backendQueryHints} from './ManagementBackendRegistry'
+import {backendQueryHints,backendNativeContracts} from './ManagementBackendRegistry'
 import {storeBusinessTopic} from './StoreBusinessTopic'
 import {createHash} from 'node:crypto'
 const hash=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
@@ -48,7 +48,8 @@ export async function enqueueNativeStoreRequest(db:any,storeId:string,channel:an
  // Prior activity context may clarify a follow-up; it never classifies a new
  // question or inserts a creation command into the current human request.
  const backendHints=topic&&topic!=='marketing_setup'&&topic!=='management_query'&&topic!=='revenue_scope'&&topic!=='stock_out_scope'?undefined:backendQueryHints(message.text)
- const value={...(activityContext?{activityContext}:{}),...(backendHints?{backendHints}:{}),budgetMs:/(?:深入|全面|详细|审计|多步|analisis mendalam|audit lengkap)/i.test(message.text)?600000:30000,...(topic?{businessTopic:topic,executor:'business_topic'}:{}),id,storeId,channelId:channel.id,sourceSeq:message.seq,messageId:message.id,requesterStaffId:message.authorId,sourceHash:hash({id:message.id,seq:message.seq,authorId:message.authorId,text:message.text,...(message.language?{language:message.language}:{}),files:message.files||[]}),audienceHash:hash(channel.members),state:uncertainLegacy?'blocked':'queued',...(uncertainLegacy?{fault:'NATIVE_LEGACY_RESULT_RECONCILIATION_REQUIRED'}:{}),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}
+ const backendContracts=!topic||topic==='marketing_setup'?backendNativeContracts():undefined
+ const value={...(backendContracts?{backendContracts}:{}),...(activityContext?{activityContext}:{}),...(backendHints?{backendHints}:{}),budgetMs:/(?:深入|全面|详细|审计|多步|analisis mendalam|audit lengkap)/i.test(message.text)?600000:30000,...(topic?{businessTopic:topic,executor:'business_topic'}:{}),id,storeId,channelId:channel.id,sourceSeq:message.seq,messageId:message.id,requesterStaffId:message.authorId,sourceHash:hash({id:message.id,seq:message.seq,authorId:message.authorId,text:message.text,...(message.language?{language:message.language}:{}),files:message.files||[]}),audienceHash:hash(channel.members),state:uncertainLegacy?'blocked':'queued',...(uncertainLegacy?{fault:'NATIVE_LEGACY_RESULT_RECONCILIATION_REQUIRED'}:{}),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}
  await db.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,category:'native_agent',value:JSON.stringify(value)},update:{}})
  return true
 }
