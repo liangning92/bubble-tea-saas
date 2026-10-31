@@ -217,7 +217,7 @@ export function SalaryListPage() {
     const basis=salary?.payrollBasis
     const correction=basis?.correction
     setLateMinutes(String(correction?.lateMinutes||0));setLateMode(correction?.lateMode||'rule');setManualLateDeduction(String(correction?.manualLateDeduction||0));setOtherAttendanceDeduction(String(correction?.otherAttendanceDeduction||0))
-    setDaySource(basis?.settlementVersion===1&&basis?.fullMonthEligible!==false?'estimate':basis?.daysSource==='attendance'?'attendance':'manual')
+    setDaySource(basis?.settlementVersion===1&&(basis?.fullMonthEligible!==false||basis?.daysSource==='estimate')?'estimate':basis?.daysSource==='attendance'?'attendance':'manual')
     setUnpaidDays({probation:String((basis?.unpaidLeave?.requestedDays??basis?.unpaidLeave?.days)?.probation||0),regular:String((basis?.unpaidLeave?.requestedDays??basis?.unpaidLeave?.days)?.regular||0)})
     appliedLeaveAmount.current=basis?.unpaidLeave?.deduction||0;setDepositRefundAmount(salary?.depositRefundAmount||0)
     const legacyMonthlyLate=salary?.compensationItems?.find(item=>item.id===`late-${salary.staffId}-${salary.month}`)?.amount||0
