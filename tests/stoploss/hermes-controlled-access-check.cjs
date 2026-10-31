@@ -131,6 +131,23 @@ async function main(){
    }
   }finally{global.fetch=previous}
  });
+ await check('natural draft commands use account authorization and actual receipts instead of command verbs',async()=>{
+  const previous=global.fetch,contexts=new Map(),engine=createNativeStoreAgent(db,{storeId,agentId,gatewayOrigin:'http://127.0.0.1:8642',gatewayKey:'synthetic-only',backendOrigin:'http://host.docker.internal:3000'});
+  global.fetch=async(url,options={})=>{const path=new URL(url).pathname,body=options.body&&JSON.parse(options.body);if(path.endsWith('/native/context')){contexts.set(body.jobId,body);return new Response(JSON.stringify({ok:true}))}if(path.endsWith('/v1/runs'))return new Response(JSON.stringify({run_id:'natural_'+options.headers['Idempotency-Key']}));if(path.endsWith('/native/readiness'))return new Response(JSON.stringify({activeRuns:0,activeProcesses:0,activeDelegations:0}));if(path.endsWith('/stop'))return new Response(JSON.stringify({status:'cancelled'}));return new Response(JSON.stringify({status:'failed'}))};
+  const app=require(root+'/server/node_modules/express')();app.use(engine.router);const request=require(root+'/server/node_modules/supertest'),before=await db.config.count({where:{storeId,key:{startsWith:'marketing.unified.activity.'}}});
+  try{
+   for(const actor of [owner,employee]){
+    const text='帮我搞一场门店促销，名字叫自然语言测试。全部商品优惠0%，只存草稿，不投电视。';assert.equal(built('services/ManagementAgentPolicy').activityRequestIntent(text),false);
+    const channel=await teamCommunication(db).create(actor,{requestId:randomUUID(),title:'Natural draft command fixture',kind:'group',members:['agent:'+agentId]}),source=await teamCommunication(db).send(actor,channel.id,{requestId:randomUUID(),text,language:'zh'}),id=nativeJobId(storeId,channel.id,source.id),key=nativeJobKey(id);await engine.runBatch(10,'native');let job=await readTeam(db,storeId,key);assert.equal(job.state,'running');
+    const rpc=(body,toolCallId)=>request(app).post('/native/backend').set('Authorization','Bearer '+contexts.get(id).callbackCredential).send({jobId:id,sessionId:job.sessionId,toolCallId,args:{action:'execute',operationId:'POST /api/marketing/activities',contractVersion:api.backendVersion(),body}});
+    const body={name:'Natural command fixture',type:'percent',status:'draft',showOnTv:false,rule:{percent:0},productIds:[]};
+    const result=await rpc(body,'natural-draft');assert.equal(result.status,200,JSON.stringify(result.body));
+    if(actor===owner){assert(result.body.ok,JSON.stringify(result.body));assert.equal(result.body.data.data.status,'draft');assert.equal(result.body.data.data.showOnTv,false);await engine.runBatch(10,'native');job=await readTeam(db,storeId,key);const journal=(await db.config.findMany({where:{storeId,key:{startsWith:'team.communication.employeeRuntime.backendOperation.'},value:{contains:id}},select:{value:true}})).map(r=>{const v=JSON.parse(r.value);return {state:v.state,code:v.result?.code,ok:v.result?.ok,executed:v.result?.executed}});assert.equal(job.state,'completed',JSON.stringify({fault:job.fault,lastPollFault:job.lastPollFault,journal}));assert.equal(job.completionSource,'native_activity_receipt');assert(job.receiptMessageId);}
+    else{assert.equal(result.body.ok,false);assert.equal(result.body.code,'STAFF_ACCESS_PERMISSION_DENIED');await engine.runBatch(10,'native');}
+   }
+   assert.equal(await db.config.count({where:{storeId,key:{startsWith:'marketing.unified.activity.'}}}),before+1);
+  }finally{global.fetch=previous}
+ });
  await check('committed activity receipt survives native failure without replay or another model call',async()=>{
   const policyModule=built('services/ManagementAgentPolicy'),tools=built('services/teamAgentBridge/employeeBackendTool'),{readCommunicationScope}=built('services/teamAgentBridge/confidentiality'),hash=value=>require('node:crypto').createHash('sha256').update(JSON.stringify(value)).digest('hex');
   const text='创建一个活动，名称为“Receipt fixture”。仅保存草稿，不发布，不在电视大屏展示。适用全部商品，限时折扣0%，明天到后天。';
