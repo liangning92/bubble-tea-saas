@@ -1,3 +1,4 @@
+import { isQrAttendance } from './AttendanceEvidencePolicy'
 import prisma from '../config/database'
 import { WORK_PREFIX } from './EmployeeWorkspaceStore'
 import { attendanceDay, attendanceWindow, moveAttendanceDay, buildAttendanceReport } from '../utils/attendanceReport'
@@ -11,7 +12,8 @@ export async function getAttendanceReport(storeId: string, date: string, period:
     db.shift.findMany({where:{storeId}}),
     db.leave.findMany({where:{storeId,...(staffId?{staffId}:{}),status:'approved',startDate:{lt:end},endDate:{gte:start}}})
   ])
+  const validAttendance=attendance.filter(isQrAttendance)
   const snapshots:any[]=[]
-  for(let i=0;i<attendance.length;i+=400){const keys=attendance.slice(i,i+400).map((a:any)=>WORK_PREFIX+`attendance.${a.staffId}.${a.id}`);const saved=await db.config.findMany({where:{storeId,key:{in:keys}},select:{value:true}});for(const row of saved){try{snapshots.push(JSON.parse(row.value))}catch{throw Error('ATTENDANCE_SNAPSHOT_INVALID')}}}
-  return buildAttendanceReport({date,period,staff,attendance,schedules,shifts,leaves,snapshots})
+  for(let i=0;i<validAttendance.length;i+=400){const keys=validAttendance.slice(i,i+400).map((a:any)=>WORK_PREFIX+`attendance.${a.staffId}.${a.id}`);const saved=await db.config.findMany({where:{storeId,key:{in:keys}},select:{value:true}});for(const row of saved){try{snapshots.push(JSON.parse(row.value))}catch{throw Error('ATTENDANCE_SNAPSHOT_INVALID')}}}
+  return buildAttendanceReport({date,period,staff,attendance:validAttendance,schedules,shifts,leaves,snapshots})
 }

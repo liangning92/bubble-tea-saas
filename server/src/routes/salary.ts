@@ -268,6 +268,10 @@ router.put('/:id/mark-paid', authenticate, authorize('admin'), salaryStore, asyn
         const current=await calculateSalary(before.staffId,Number(before.month.slice(5)),Number(before.month.slice(0,4)))
         if(current.totalSalary<0)throw new SalaryConflict('SALARY_REVIEW_REQUIRED')
       }
+      if(before.status==='pending'&&basis?.qrAttendanceRequired&&basis.daysSource!=='manual'&&!basis.manualAdjustment){
+        const latest=await calculatePayrollBasis(tx,before.staff,before.month,undefined,'attendance')
+        if(latest.amount!==before.baseSalary)throw new SalaryConflict('SALARY_ATTENDANCE_RECALC_REQUIRED')
+      }
       const changed = await tx.salary.updateMany({ where: { id: req.params.id, status: 'pending' }, data: { status: 'paid' } })
       const salary = await tx.salary.findUniqueOrThrow({ where: { id: req.params.id } })
       if (changed.count === 1) {

@@ -1,3 +1,4 @@
+import { isQrAttendance } from './AttendanceEvidencePolicy'
 import {createHash} from 'crypto'
 import jwt from 'jsonwebtoken'
 import {z} from 'zod'
@@ -37,14 +38,14 @@ export async function syncEmployeeOfflineAttendance(body:unknown){
   const proof={gpsLocation:'POS:'+payload.p,note:`Offline employee QR ${input.type}; original ${input.occurredAt}`}
   let attendance:any
   if(input.type==='check_in'){
-   if(await tx.attendance.findFirst({where:{staffId:user.staff.id,checkOutTime:null}}))throw new EmployeeOfflineAttendanceError('EMPLOYEE_OFFLINE_ALREADY_OPEN')
+   const open=await tx.attendance.findFirst({where:{staffId:user.staff.id,checkOutTime:null}});if(open&&isQrAttendance(open))throw new EmployeeOfflineAttendanceError('EMPLOYEE_OFFLINE_ALREADY_OPEN')
    attendance=await createEmployeeAttendance({id:'POSATT-'+input.id,staffId:user.staff.id,checkInTime:when,createdAt:when,status:'pending_review',...proof},grant.storeId,tx)
    if(attendance.id!=='POSATT-'+input.id)throw new EmployeeOfflineAttendanceError('EMPLOYEE_OFFLINE_ALREADY_RECORDED')
    const snapshot=await readWork(grant.storeId,`attendance.${user.staff.id}.${attendance.id}`,tx)
    if(snapshot)await writeWork(grant.storeId,`attendance.${user.staff.id}.${attendance.id}`,{...snapshot,recordedAt:input.occurredAt},tx)
   }else{
    const old=await tx.attendance.findFirst({where:{id:input.attendanceId||'',staffId:user.staff.id,checkOutTime:null}})
-   if(!old||when<old.checkInTime)throw new EmployeeOfflineAttendanceError('EMPLOYEE_OFFLINE_ATTENDANCE_CHANGED')
+   if(!old||!isQrAttendance(old)||when<old.checkInTime)throw new EmployeeOfflineAttendanceError('EMPLOYEE_OFFLINE_ATTENDANCE_CHANGED')
    attendance=await tx.attendance.update({where:{id:old.id},data:{checkOutTime:when,...proof}})
   }
   const result={operationId:input.id,attendance}
