@@ -1704,8 +1704,8 @@ export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOn
     ],
     "legacyPermission": "__unclassified__",
     "resource": null,
-    "permission": "owner.only",
-    "ownerOnly": true,
+    "permission": "orders.create",
+    "ownerOnly": false,
     "export": false,
     "personal": false
   },

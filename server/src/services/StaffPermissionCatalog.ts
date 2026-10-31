@@ -88,6 +88,7 @@ export function staffPermissionForRequest(method: string, originalUrl: string, u
   // Durable paid receipts must remain ingestible after a role is restricted;
   // their dedicated routes preserve/audit receipts before validating the sale.
   if (method==='POST' && /^\/orders\/received-receipts$/.test(path)) return null
+  if (method==='POST' && path==='/pos-action-logs') return 'orders.create'
   if (/^\/sync\/order$/.test(path)) return 'orders.create'
   if (/^\/queue(?:\/|$)/.test(path)) return read ? 'orders.read' : 'orders.status'
   if (method==='PUT' && path==='/config/hardware-settings') return 'orders.create'
