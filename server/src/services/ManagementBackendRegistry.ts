@@ -231,6 +231,22 @@ export async function invokeManagementBackend(db:any, actor:AuthUser, input:{ope
   })
 }
 
+/** Documented native contracts are available for every natural-language request.
+ * Selection follows route schemas, never the wording or the name of an account.
+ * This contains metadata only; each execution still rechecks live authorization. */
+export function backendNativeContracts(){
+ const documented=[...operations.values()].filter(op=>!agentOperationAccess(op.id)&&
+  (op.method==='GET'?!!op.requestContract.query?.description:!!op.requestContract.body))
+ return {contractVersion:backendVersion(),source:'documented_native_routes',operations:documented.map(op=>{
+  const requestContract={...op.requestContract}
+  if(['POST /api/marketing/activities','PUT /api/marketing/activities/:id'].includes(op.id)&&requestContract.body?.properties){
+   const keys=['id','version','name','description','type','status','startsAt','endsAt','timezone','weekdays','dailyStart','dailyEnd','productIds','specIds','memberOnly','showOnTv','rule']
+   requestContract.body={...requestContract.body,properties:Object.fromEntries(Object.entries(requestContract.body.properties).filter(([key])=>keys.includes(key)))}
+  }
+  return {operationId:op.id,permission:op.declaration.permission,summary:op.requestContract.query?.description,requestContract}
+ })}
+}
+
 /** Server-issued metadata for the current question, never a second permission
  * grant. A handful of relevant native contracts avoids repeated discovery. */
 export function backendQueryHints(text:string){
