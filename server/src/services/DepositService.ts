@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../config/database'
+import { depositLifecycle, hasLeftEmployment } from './DepositLifecycle'
 
 export class DepositInputError extends Error {}
 const requireAmount = (amount: number) => {
@@ -73,29 +74,32 @@ export async function deleteDepositRule(id: string) {
 
 // Get staff deposit record
 export async function getStaffDeposit(staffId: string) {
-  return prisma.staffDeposit.findFirst({
+  const deposit = await prisma.staffDeposit.findFirst({
     where: { staffId },
     orderBy: { createdAt: 'desc' },
     include: {
+      staff: { select: {status:true,terminationDate:true} },
       depositRule: true,
       deductionLogs: { orderBy: { createdAt: 'desc' } },
       refundLogs: { orderBy: { createdAt: 'desc' } }
     }
   })
+  return deposit ? depositLifecycle(deposit, deposit.staff) : null
 }
 
 // Get all staff deposits for a store
 export async function getAllStaffDeposits(storeId: string) {
-  return prisma.staffDeposit.findMany({
+  const deposits = await prisma.staffDeposit.findMany({
     where: { storeId },
     include: {
-      staff: { select: { id: true, name: true, employeeNumber: true } },
+      staff: { select: { id: true, name: true, employeeNumber: true, status:true, terminationDate:true } },
       depositRule: true,
       deductionLogs: { orderBy: { createdAt: 'desc' } },
       refundLogs: { orderBy: { createdAt: 'desc' } }
     },
     orderBy: { createdAt: 'desc' }
   })
+  return deposits.map(deposit => depositLifecycle(deposit, deposit.staff))
 }
 
 // Create staff deposit record
@@ -110,6 +114,7 @@ export async function createStaffDeposit(data: {
     prisma.staff.findUnique({ where: { id: data.staffId } }),
     prisma.depositRule.findUnique({ where: { id: data.depositRuleId } })
   ])
+  if (hasLeftEmployment(staff)) throw new DepositInputError('DEPOSIT_RELEASED_ON_TERMINATION')
   if (!staff || staff.storeId !== data.storeId || !rule || rule.storeId !== data.storeId || !rule.isActive) {
     throw new DepositInputError('Staff and active rule must belong to this store')
   }
@@ -183,6 +188,8 @@ export async function recordDepositDeduction(data: {
     if (!deposit) throw new DepositInputError('Staff deposit not found')
     const receipt = await depositReceipt(tx, deposit, 'deduct', data)
     if (receipt?.logId) return tx.staffDepositDeduction.findUniqueOrThrow({ where: { id: receipt.logId } })
+    const staff = await tx.staff.findUnique({where:{id:deposit.staffId},select:{status:true,terminationDate:true}})
+    if (hasLeftEmployment(staff)) throw new DepositInputError('DEPOSIT_RELEASED_ON_TERMINATION')
     if (deposit.status !== 'active' || data.amount > deposit.totalAmount - deposit.deductedAmount) {
       throw new DepositInputError('Deduction exceeds unpaid deposit or deposit is closed')
     }
