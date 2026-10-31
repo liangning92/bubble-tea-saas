@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom'
 import { countDetailUrl, inventoryLogDisplay, isProcessingInbound, isInventoryAdjustment } from '../../utils/inventoryCountFlow'
 import {useStoreDateSettings} from '../../hooks/useStoreDateSettings'
 import {QUERY_PERIODS,QueryPeriod,queryInstantRange} from '../../utils/queryPeriods'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { inventoryApi, supplierApi, orderApi } from '../../services/api'
@@ -22,6 +22,9 @@ import { formatCurrency, formatDateTime, formatItemName } from '../../utils/help
 import * as XLSX from 'xlsx'
 import {
   Search,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Plus,
   RefreshCw,
@@ -50,6 +53,8 @@ export function StockLogPage() {
   const [customEndDate, setCustomEndDate] = useState('')
   const [appliedDates,setAppliedDates]=useState({start:'',end:''})
   const [dateInputInvalid,setDateInputInvalid]=useState(false)
+  const [page,setPage]=useState(1)
+  const [pageSize,setPageSize]=useState(50)
   const validDraft=stockLogDateRange(customStartDate,customEndDate,dateSettings.timezone)
   const dirtyDates=customStartDate!==appliedDates.start||customEndDate!==appliedDates.end
   const clearFilters=()=>{setActiveTab('all');setSearch('');setSelectedCategory('');setDatePreset('all')}
@@ -140,6 +145,8 @@ export function StockLogPage() {
 
   const rawLogs: any[] = (logsData || []).map((log:any)=>({...inventoryLogDisplay(log),physicalQuantity:physicalStockOutQuantity(log)}))
 
+  const statsUnavailable=isLoading||(isError&&!logsData)
+
   // Client-side filtering for rapid response
   const filteredLogs = useMemo(() => {
     return rawLogs.filter((log: any) => {
@@ -162,6 +169,10 @@ export function StockLogPage() {
       return true
     })
   }, [rawLogs, activeTab, selectedCategory, search, orderMap])
+
+  useEffect(()=>setPage(1),[activeTab,search,selectedCategory,dateRange.startDate,dateRange.endDate])
+  const pageCount=Math.max(1,Math.ceil(filteredLogs.length/pageSize)),currentPage=Math.min(page,pageCount),pageStart=(currentPage-1)*pageSize
+  const pageLogs=filteredLogs.slice(pageStart,pageStart+pageSize)
 
   // Top KPI Metrics calculation based on loaded logs
   const metrics = useMemo(() => {
@@ -192,6 +203,12 @@ export function StockLogPage() {
       totalCount: filteredLogs.length
     }
   }, [filteredLogs])
+
+  const materialTotals=useMemo(()=>Object.values(filteredLogs.reduce((result:Record<string,{id:string,name:string,quantity:number,unit:string}>,log:any)=>{
+    if(log.physicalQuantity!==null){const key=log.inventoryId;result[key]??={id:key,name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.physicalQuantity}
+    return result
+  },{})).sort((a,b)=>a.name.localeCompare(b.name)),[filteredLogs,i18n.language])
+  const hasFilters=activeTab!=='all'||datePreset!=='all'||!!search||!!selectedCategory
 
   // Mutations
   const stockInMutation = useMutation({
@@ -442,7 +459,7 @@ export function StockLogPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="inventory-ledger">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -487,130 +504,71 @@ export function StockLogPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="inventory-ledger-metrics">
         <div className="card p-4">
           <p className="text-sm text-gray-500 font-medium">{t('inventory.totalInboundCost')}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(metrics.totalInboundCost)}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':formatCurrency(metrics.totalInboundCost)}</p>
         </div>
 
         <div className="card p-4">
           <p className="text-sm text-gray-500 font-medium">{t('inventory.totalSalesCost')}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(metrics.totalSalesCost)}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':formatCurrency(metrics.totalSalesCost)}</p>
         </div>
 
         <div className="card p-4">
           <p className="text-sm text-gray-500 font-medium">{t('inventory.totalWasteCost')}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(metrics.totalWasteCost)}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':formatCurrency(metrics.totalWasteCost)}</p>
         </div>
 
         <div className="card p-4">
           <p className="text-sm text-gray-500 font-medium">{t('inventory.totalMovements')}</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{metrics.totalCount}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{statsUnavailable?'—':metrics.totalCount}</p>
         </div>
       </div>
 
-      <div className="card p-4 text-sm"><span className="text-gray-600">{t('manualStockCorrection.consumptionDifference')}: </span><strong>{formatCurrency(metrics.costAdjustments)}</strong><p className="text-xs text-gray-500 mt-1">{t('manualStockCorrection.postingHint')}</p></div>
+      <details className="inventory-ledger-correction">
+        <summary><span>{t('manualStockCorrection.consumptionDifference')}: <strong>{statsUnavailable?'—':formatCurrency(metrics.costAdjustments)}</strong></span><span className="text-gray-500">{copy.costInfo}</span><ChevronDown size={14}/></summary>
+        <p>{t('manualStockCorrection.postingHint')}</p>
+      </details>
 
-      {/* Sub Tabs */}
-      <div className="admin-module-nav">
-        {[
-          { key: 'all', label: t('inventory.allLogs') },
-          { key: 'in', label: t('inventory.inboundLogs') },
-          { key: 'withdrawal', label: t('inventoryFlow.withdrawal') },
-          { key: 'other', label: t('inventoryFlow.other') },
-          { key: 'sold', label: t('inventory.salesLogs') },
-          { key: 'waste', label: t('inventory.wasteLogs') },
-          { key: 'process', label: t('inventory.processLogs') },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key as LogTab)}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
-              activeTab === tab.key ? 'bg-primary text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-4 items-center">
-        {/* Preset Date Selector */}
-        <div className="admin-module-nav">
+      <section className="inventory-ledger-panel" aria-label={copy.ledger}>
+        <div className="inventory-ledger-types" role="group" aria-label={copy.type}>
           {[
-            ...QUERY_PERIODS.map(key=>({key,label:t('queryPeriods.'+key)})),
-            { key: 'all', label: t('common.all') },
-            { key: 'custom', label: t('inventory.customRange') }
-          ].map(preset => (
-            <button
-              key={preset.key}
-              onClick={() => { if(preset.key==='custom'&&!customStartDate){const date=new Intl.DateTimeFormat('en-CA',{timeZone:dateSettings.timezone}).format(new Date());setCustomStartDate(date);setCustomEndDate(date);setAppliedDates({start:date,end:date})} setDatePreset(preset.key as any) }}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                datePreset === preset.key ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
-              }`}
-            >
-              {preset.label}
-            </button>
-          ))}
+            {key:'all',label:t('inventory.allLogs')},{key:'in',label:t('inventory.inboundLogs')},
+            {key:'withdrawal',label:t('inventoryFlow.withdrawal')},{key:'other',label:t('inventoryFlow.other')},
+            {key:'sold',label:t('inventory.salesLogs')},{key:'waste',label:t('inventory.wasteLogs')},{key:'process',label:t('inventory.processLogs')}
+          ].map(tab=><button className="inventory-ledger-view" key={tab.key} type="button" aria-pressed={activeTab===tab.key} onClick={()=>setActiveTab(tab.key as LogTab)}>{tab.label}</button>)}
         </div>
-
-        {datePreset === 'custom' && (
-          <form className="flex flex-wrap items-center gap-2" onChange={e=>setDateInputInvalid(!e.currentTarget.checkValidity())} onInvalidCapture={()=>setDateInputInvalid(true)} onSubmit={e=>{e.preventDefault();if(validDraft&&e.currentTarget.checkValidity()){setDateInputInvalid(false);setAppliedDates({start:customStartDate,end:customEndDate})}}}>
-            <LocalizedDateTimeInput
-              type="date"
-              aria-label={copy.start}
-              min="2000-01-01" max="2100-12-31"
-              value={customStartDate}
-              onChange={(e) => setCustomStartDate(e.target.value)}
-              className="input w-36"
-            />
+        <div className="inventory-ledger-toolbar">
+          <label className="inventory-ledger-search"><span className="sr-only">{t('inventory.searchPlaceholder')}</span><Search size={16}/><input type="search" value={search} onChange={e=>setSearch(e.target.value)} placeholder={t('inventory.searchPlaceholder')} className="input pl-10"/></label>
+          <select aria-label={t('inventory.category')} value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)} className="input inventory-ledger-category">
+            <option value="">{t('inventory.allCategories')}</option><option value="raw_material">{t('inventory.rawMaterial')}</option><option value="packaging">{t('inventory.packaging')}</option><option value="semi_finished">{t('inventory.semiFinished')}</option>
+          </select>
+          <div className="inventory-ledger-periods" role="group" aria-label={copy.period}>
+            {[...QUERY_PERIODS.map(key=>({key,label:t('queryPeriods.'+key)})),{key:'all',label:t('common.all')},{key:'custom',label:t('inventory.customRange')}].map(preset=><button className="inventory-ledger-period" key={preset.key} type="button" aria-pressed={datePreset===preset.key} onClick={()=>{if(preset.key==='custom'&&!customStartDate){const date=new Intl.DateTimeFormat('en-CA',{timeZone:dateSettings.timezone}).format(new Date());setCustomStartDate(date);setCustomEndDate(date);setAppliedDates({start:date,end:date})}setDatePreset(preset.key as any)}}>{preset.label}</button>)}
+          </div>
+          {datePreset==='custom'&&<form className="inventory-ledger-date-form" onChange={e=>setDateInputInvalid(!e.currentTarget.checkValidity())} onInvalidCapture={()=>setDateInputInvalid(true)} onSubmit={e=>{e.preventDefault();if(validDraft&&e.currentTarget.checkValidity()){setDateInputInvalid(false);setAppliedDates({start:customStartDate,end:customEndDate})}}}>
+            <LocalizedDateTimeInput type="date" aria-label={copy.start} min="2000-01-01" max="2100-12-31" value={customStartDate} onChange={e=>setCustomStartDate(e.target.value)} className="input"/>
             <span className="text-gray-400 text-sm">{t('inventory.to')}</span>
-            <LocalizedDateTimeInput
-              type="date"
-              aria-label={copy.end}
-              min="2000-01-01" max="2100-12-31"
-              value={customEndDate}
-              onChange={(e) => setCustomEndDate(e.target.value)}
-              className="input w-36"
-            />
+            <LocalizedDateTimeInput type="date" aria-label={copy.end} min="2000-01-01" max="2100-12-31" value={customEndDate} onChange={e=>setCustomEndDate(e.target.value)} className="input"/>
             <button type="submit" className="btn btn-primary" disabled={!validDraft||dateInputInvalid}>{copy.apply}</button>
-          </form>
-        )}
-
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="input w-44"
-        >
-          <option value="">{t('inventory.allCategories')}</option>
-          <option value="raw_material">{t('inventory.rawMaterial')}</option>
-          <option value="packaging">{t('inventory.packaging')}</option>
-          <option value="semi_finished">{t('inventory.semiFinished')}</option>
-        </select>
-
-        <div className="relative flex-1 min-w-48 max-w-md">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('inventory.searchPlaceholder')}
-            className="input pl-10 w-full"
-          />
+          </form>}
         </div>
-      </div>
-
-      <div className="text-sm text-gray-600 space-y-2">
-        <p>{copy.range}: {dateRange.startDate ? `${datePreset==='custom'?appliedDates.start:formatDateTime(dateRange.startDate)} — ${datePreset==='custom'?appliedDates.end:formatDateTime(dateRange.endDate!)} · ${dateSettings.timezone}` : copy.all}</p>
-        <p>{copy.loaded}</p>
-        {datePreset==='custom'&&(!validDraft||dateInputInvalid)&&<p role="alert" className="text-red-700">{copy.invalid}</p>}
-        {datePreset==='custom'&&dirtyDates&&<p role="status" className="text-amber-700">{copy.draft}</p>}
-        {isError&&<p role="alert" className="text-red-700">{copy.failed} <button className="underline" onClick={()=>refetch()}>{copy.retry}</button></p>}
-      </div>
-      {filteredLogs.some(log=>log.physicalQuantity!==null)&&<section className="card p-4" aria-label={copy.quantities}><p className="font-medium mb-2">{copy.quantities}</p><div className="flex flex-wrap gap-3">{Object.values(filteredLogs.reduce((result:Record<string,{name:string,quantity:number,unit:string}>,log:any)=>{if(log.physicalQuantity!==null){const key=log.inventoryId;result[key]??={name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.physicalQuantity}return result},{})).map(row=><span key={row.name} className="rounded bg-gray-50 px-3 py-2">{row.name}: <strong>{row.quantity.toLocaleString(undefined,{maximumFractionDigits:6})} {row.unit}</strong></span>)}</div></section>}
+        <div className="inventory-ledger-context">
+          <p title={copy.loaded}>{copy.range}: {dateRange.startDate?`${datePreset==='custom'?appliedDates.start:formatDateTime(dateRange.startDate)} — ${datePreset==='custom'?appliedDates.end:formatDateTime(dateRange.endDate!)} · ${dateSettings.timezone}`:copy.all}</p>
+          {hasFilters&&<button className="inventory-ledger-clear" type="button" onClick={clearFilters}>{copy.clear}</button>}
+          {datePreset==='custom'&&(!validDraft||dateInputInvalid)&&<p role="alert" className="text-red-700">{copy.invalid}</p>}
+          {datePreset==='custom'&&dirtyDates&&<p role="status" className="text-amber-700">{copy.draft}</p>}
+          {isError&&<p role="alert" className="text-red-700">{copy.failed} <button className="underline" onClick={()=>refetch()}>{copy.retry}</button></p>}
+        </div>
+        {materialTotals.length===1&&<section className="inventory-ledger-outbound inventory-ledger-single" aria-label={copy.quantities}><span>{copy.outbound}</span><span>{materialTotals[0].name}: <strong>{materialTotals[0].quantity.toLocaleString(undefined,{maximumFractionDigits:6})} {materialTotals[0].unit}</strong></span></section>}
+        {materialTotals.length>1&&<details className="inventory-ledger-outbound" aria-label={copy.quantities}>
+          <summary><span>{copy.outbound}</span><strong>{copy.materials(materialTotals.length)}</strong><span className="inventory-ledger-summary-show">{copy.summary}</span><span className="inventory-ledger-summary-hide">{copy.hideSummary}</span><ChevronDown size={14}/></summary>
+          <dl className="inventory-ledger-material-totals">{materialTotals.map(row=><div key={row.id}><dt>{row.name}</dt><dd>{row.quantity.toLocaleString(undefined,{maximumFractionDigits:6})} {row.unit}</dd></div>)}</dl>
+        </details>}
+        <div className="inventory-ledger-results-header"><h2>{copy.ledger}</h2><span aria-live="polite">{isLoading?t('common.loading'):copy.entries(filteredLogs.length)}</span></div>
       {/* Table Card */}
-      <div className="card">
+      <div className="inventory-ledger-table-wrap">
         {isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -622,7 +580,7 @@ export function StockLogPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full inventory-ledger-table">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
                   <th className="pb-3 font-medium whitespace-nowrap pr-4">{t('inventory.date')}</th>
@@ -639,7 +597,7 @@ export function StockLogPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLogs.map((log: any) => {
+                {pageLogs.map((log: any) => {
                   const avgCost = Number(log.unitCost ?? log.inventory?.avgCost ?? 0)
                   const unitCost = log.unitCost !== undefined && log.unitCost !== null && log.unitCost >= 0
                     ? Number(log.unitCost)
@@ -691,6 +649,14 @@ export function StockLogPage() {
           </div>
         )}
       </div>
+
+      {filteredLogs.length>0&&<nav className="inventory-ledger-pagination" aria-label={copy.pagination}>
+        <span>{copy.pageRange(pageStart+1,Math.min(pageStart+pageSize,filteredLogs.length),filteredLogs.length)}</span>
+        <div><label>{copy.perPage}<select className="input" aria-label={copy.perPage} value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1)}}>{[25,50,100].map(size=><option key={size} value={size}>{size}</option>)}</select></label>
+        <button className="btn-secondary" type="button" aria-label={copy.previous} disabled={currentPage===1} onClick={()=>setPage(currentPage-1)}><ChevronLeft size={16}/></button>
+        <button className="btn-secondary" type="button" aria-label={copy.next} disabled={currentPage>=pageCount} onClick={()=>setPage(currentPage+1)}><ChevronRight size={16}/></button></div>
+      </nav>}
+      </section>
 
       {correctionLog && <ManualStockCorrection log={correctionLog} items={inventoryItems} onClose={() => setCorrectionLog(null)} onSaved={() => { queryClient.invalidateQueries({queryKey:['inventory-logs-comprehensive']}); queryClient.invalidateQueries({queryKey:['inventory']}); queryClient.invalidateQueries({queryKey:['inventory-all-items']}); queryClient.invalidateQueries({queryKey:['products']}); queryClient.invalidateQueries({queryKey:['bom-products']}); }} />}
       {/* Modal: Quick Stock In */}
