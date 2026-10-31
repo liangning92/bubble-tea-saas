@@ -507,3 +507,7 @@ body {
 .admin-workspace .inventory-ledger-pagination .input { width:70px; height:36px; min-height:36px; padding:6px 10px; background:white; }
 .admin-workspace .inventory-ledger-pagination button { min-width:36px; min-height:36px; padding:6px; }
 @media(max-width:640px) { .inventory-ledger-pagination { padding:12px; } .admin-workspace .inventory-ledger-pagination .input,.admin-workspace .inventory-ledger-pagination button { min-height:44px; } }
+.inventory-ledger-scroll-hint { display:none; }
+.inventory-ledger-table-wrap [role=region]:focus-visible { outline:2px solid var(--color-primary); outline-offset:-2px; }
+@media(max-width:1279px) { .inventory-ledger-scroll-hint { display:inline; } }
+@media(max-width:640px) { .inventory-ledger-results-header { flex-wrap:wrap; } .inventory-ledger-scroll-hint { order:2; flex-basis:100%; } }

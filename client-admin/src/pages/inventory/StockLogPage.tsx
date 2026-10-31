@@ -545,12 +545,12 @@ export function StockLogPage() {
             <option value="">{t('inventory.allCategories')}</option><option value="raw_material">{t('inventory.rawMaterial')}</option><option value="packaging">{t('inventory.packaging')}</option><option value="semi_finished">{t('inventory.semiFinished')}</option>
           </select>
           <div className="inventory-ledger-periods" role="group" aria-label={copy.period}>
-            {[...QUERY_PERIODS.map(key=>({key,label:t('queryPeriods.'+key)})),{key:'all',label:t('common.all')},{key:'custom',label:t('inventory.customRange')}].map(preset=><button className="inventory-ledger-period" key={preset.key} type="button" aria-pressed={datePreset===preset.key} onClick={()=>{if(preset.key==='custom'&&!customStartDate){const date=new Intl.DateTimeFormat('en-CA',{timeZone:dateSettings.timezone}).format(new Date());setCustomStartDate(date);setCustomEndDate(date);setAppliedDates({start:date,end:date})}setDatePreset(preset.key as any)}}>{preset.label}</button>)}
+            {[...QUERY_PERIODS.map(key=>({key,label:t('queryPeriods.'+key)})),{key:'all',label:t('common.all')},{key:'custom',label:t('inventory.customRange')}].map(preset=><button className="inventory-ledger-period" key={preset.key} type="button" aria-pressed={datePreset===preset.key} onClick={()=>{if(preset.key!==datePreset)setDateInputInvalid(false);if(preset.key==='custom'&&!customStartDate){const date=new Intl.DateTimeFormat('en-CA',{timeZone:dateSettings.timezone}).format(new Date());setCustomStartDate(date);setCustomEndDate(date);setAppliedDates({start:date,end:date})}setDatePreset(preset.key as any)}}>{preset.label}</button>)}
           </div>
           {datePreset==='custom'&&<form className="inventory-ledger-date-form" onChange={e=>setDateInputInvalid(!e.currentTarget.checkValidity())} onInvalidCapture={()=>setDateInputInvalid(true)} onSubmit={e=>{e.preventDefault();if(validDraft&&e.currentTarget.checkValidity()){setDateInputInvalid(false);setAppliedDates({start:customStartDate,end:customEndDate})}}}>
-            <LocalizedDateTimeInput type="date" aria-label={copy.start} min="2000-01-01" max="2100-12-31" value={customStartDate} onChange={e=>setCustomStartDate(e.target.value)} className="input"/>
+            <LocalizedDateTimeInput type="date" aria-label={copy.start} min="2000-01-01" max="2100-12-31" value={customStartDate} onChange={e=>{setCustomStartDate(e.target.value);setDateInputInvalid(!(e.target.form?.checkValidity()??true))}} className="input"/>
             <span className="text-gray-400 text-sm">{t('inventory.to')}</span>
-            <LocalizedDateTimeInput type="date" aria-label={copy.end} min="2000-01-01" max="2100-12-31" value={customEndDate} onChange={e=>setCustomEndDate(e.target.value)} className="input"/>
+            <LocalizedDateTimeInput type="date" aria-label={copy.end} min="2000-01-01" max="2100-12-31" value={customEndDate} onChange={e=>{setCustomEndDate(e.target.value);setDateInputInvalid(!(e.target.form?.checkValidity()??true))}} className="input"/>
             <button type="submit" className="btn btn-primary" disabled={!validDraft||dateInputInvalid}>{copy.apply}</button>
           </form>}
         </div>
@@ -566,7 +566,7 @@ export function StockLogPage() {
           <summary><span>{copy.outbound}</span><strong>{copy.materials(materialTotals.length)}</strong><span className="inventory-ledger-summary-show">{copy.summary}</span><span className="inventory-ledger-summary-hide">{copy.hideSummary}</span><ChevronDown size={14}/></summary>
           <dl className="inventory-ledger-material-totals">{materialTotals.map(row=><div key={row.id}><dt>{row.name}</dt><dd>{row.quantity.toLocaleString(undefined,{maximumFractionDigits:6})} {row.unit}</dd></div>)}</dl>
         </details>}
-        <div className="inventory-ledger-results-header"><h2>{copy.ledger}</h2><span aria-live="polite">{isLoading?t('common.loading'):copy.entries(filteredLogs.length)}</span></div>
+        <div className="inventory-ledger-results-header"><h2>{copy.ledger}</h2><span className="inventory-ledger-scroll-hint">{copy.scroll}</span><span aria-live="polite">{isLoading?t('common.loading'):statsUnavailable?'—':copy.pageRange(filteredLogs.length?pageStart+1:0,Math.min(pageStart+pageSize,filteredLogs.length),filteredLogs.length)}</span></div>
       {/* Table Card */}
       <div className="inventory-ledger-table-wrap">
         {isLoading ? (
@@ -579,7 +579,7 @@ export function StockLogPage() {
             <button className="btn btn-secondary block mx-auto mt-3" onClick={clearFilters}>{copy.clear}</button>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" role="region" aria-label={copy.tableRegion} tabIndex={0}>
             <table className="w-full inventory-ledger-table">
               <thead>
                 <tr className="text-left text-sm text-gray-500 border-b">
