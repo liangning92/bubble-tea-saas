@@ -411,8 +411,8 @@ router.get('/recipe-usage',authenticate,authorize('admin','manager'),async(req:A
  catch(error:any){res.status(error.message==='USAGE_MATERIAL_NOT_FOUND'?404:400).json({code:400,message:error.message})}
 })
 
-router.get('/employee-consumption',authenticate,authorize('admin','manager'),describeNativeQuery(z.object({startDate:z.string(),endDate:z.string()}).describe('Employee consumption analysis for an explicit date range. Both startDate and endDate (YYYY-MM-DD) are required. Separate from physical stock-out registrations.')),async(req:AuthRequest,res)=>{
- try{if(typeof req.query.startDate!=='string'||typeof req.query.endDate!=='string')return res.status(400).json({code:400,message:'ANALYSIS_DATES_REQUIRED'});res.json({code:200,data:await employeeConsumption({storeId:getStoreId(req),startDate:req.query.startDate,endDate:req.query.endDate})})}
+router.get('/employee-consumption',authenticate,authorize('admin','manager'),describeNativeQuery(z.object({startDate:z.string(),endDate:z.string(),backfill:z.enum(['true','false']).optional()}).describe('Employee consumption analysis for an explicit date range. Both startDate and endDate (YYYY-MM-DD) are required. Separate from physical stock-out registrations.')),async(req:AuthRequest,res)=>{
+ try{if(typeof req.query.startDate!=='string'||typeof req.query.endDate!=='string')return res.status(400).json({code:400,message:'ANALYSIS_DATES_REQUIRED'});res.json({code:200,data:await employeeConsumption({storeId:getStoreId(req),startDate:req.query.startDate,endDate:req.query.endDate,backfill:req.query.backfill==='true'})})}
  catch(error:any){res.status(400).json({code:400,message:error.message})}
 })
 router.get('/consumption-alerts',authenticate,authorize('admin','manager'),async(req:AuthRequest,res)=>{

@@ -521,3 +521,48 @@ body {
 .inventory-ledger-financial[open]>.inventory-ledger-metrics { margin-top:8px; }
 .inventory-ledger-material-choice { display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:13px; }
 .inventory-ledger-material-choice select { width:auto; max-width:100%; }
+
+.inventory-ledger-basis { border:1px solid #e5e7eb; border-radius:10px; padding:10px 14px; background:#f9fafb; font-size:12px; color:#6b7280; }
+.inventory-ledger-basis dl { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px 16px; }
+.inventory-ledger-basis dd { color:#374151; font-weight:600; margin-top:2px; overflow-wrap:anywhere; }
+.inventory-ledger-basis p { margin-top:6px; }
+@media(max-width:900px){.inventory-ledger-basis dl {grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* Workbench: explanations are disclosed on demand; values and actions stay visible. */
+.workspace-disclosure { font-size:12px; color:#6b7280; min-width:0; }
+.workspace-disclosure>summary { cursor:pointer; width:fit-content; max-width:100%; min-height:28px; line-height:20px; padding:4px 0; }
+.workspace-disclosure-content { padding:8px 0; display:grid; gap:8px; overflow-wrap:anywhere; }
+.theory-backfill-details>summary { display:flex; flex-wrap:wrap; gap:8px; }
+.theory-backfill-details>summary::before { content:'▸'; }
+.theory-backfill-details[open]>summary::before { content:'▾'; }
+.inventory-ledger-basis.workspace-disclosure { padding:0; border:0; border-radius:0; background:none; }
+.inventory-ledger-basis.workspace-disclosure>summary strong { color:#374151; font-weight:500; }
+.inventory-ledger-material-metrics>.card { min-height:80px; }
+.inventory-ledger-material-metrics small { display:inline-block; margin-right:6px; }
+.inventory-ledger-material-context { margin-bottom:-4px; }
+.inventory-report-basis { padding:0; background:none; }
+.inventory-report-context { display:flex; flex-wrap:wrap; gap:2px 14px; font-size:12px; }
+.inventory-report-guidance.workspace-disclosure { padding:0 10px; background:#fffbeb; border:1px solid #fef3c7; border-radius:8px; }
+.inventory-report-basis p { margin:0; }
+
+.inventory-ledger-secondary { display:flex; align-items:flex-start; flex-wrap:wrap; gap:0 18px; }
+.inventory-ledger-secondary>details { min-width:0; }
+.inventory-ledger-secondary>details[open] { flex-basis:100%; }
+.inventory-ledger-secondary>details:not([open]) { max-width:100%; }
+.inventory-ledger-secondary>.inventory-ledger-correction { padding-top:4px; }
+.inventory-ledger-secondary>.inventory-ledger-financial>summary { min-height:28px; padding:4px 0; }
+
+.inventory-report-summary-four {grid-template-columns:repeat(4,minmax(0,1fr));}
+.admin-workspace .inventory-report-summary>button { display:flex; justify-content:space-between; align-items:center; gap:8px; min-width:0; border:1px solid #e5e7eb; background:white; border-radius:10px; padding:12px 16px; text-align:left; color:#374151; font-size:13px; }
+.admin-workspace .inventory-report-summary>button:hover { border-color:var(--color-primary); }
+.admin-workspace .inventory-report-summary>button[aria-pressed=true] { border-color:var(--color-primary); background:#fff5f7; }
+.inventory-report-secondary {display:flex; align-items:flex-start; flex-wrap:wrap; gap:0 18px;}
+.inventory-report-secondary>aside {padding:0;}
+.inventory-report-secondary>details[open],.inventory-report-secondary>aside:has(details[open]) {flex-basis:100%;}
+.inventory-report-context {align-items:baseline;gap:0 14px;}
+.inventory-report-context>details[open] {flex-basis:100%;}
+.admin-workspace .inventory-report-table:not(.inventory-reconciliation-table) {min-width:960px;}
+.admin-workspace .inventory-report-table .inventory-report-state {min-width:112px;max-width:170px;}
+.admin-workspace .inventory-report-table th,.admin-workspace .inventory-report-table td {padding-top:10px;padding-bottom:10px;}
+.inventory-report-row-period {font-size:11px;}
+@media(max-width:767px){.inventory-report-summary-four {grid-template-columns:repeat(2,minmax(0,1fr));}.admin-workspace .inventory-report-summary>button {padding:10px 12px;}}

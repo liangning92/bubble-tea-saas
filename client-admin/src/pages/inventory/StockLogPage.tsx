@@ -1,4 +1,5 @@
-import {stockLogDateRange,stockLogQueryCopy,physicalStockOutQuantity,materialComparison} from '../../utils/stockLogQuery'
+import {TheoryBackfillDetails,theoryBackfillCopy} from '../../components/TheoryBackfillDetails'
+import {stockLogDateRange,stockLogQueryCopy,physicalStockOutQuantity,registeredStockOutQuantity,stockEffectBasis,materialComparison} from '../../utils/stockLogQuery'
 import type {UsageResult} from '../../../../shared/inventoryUsageReport'
 import {StockPhotoEvidence} from '../../components/StockPhotoEvidence'
 import { ManualStockCorrection } from '../../components/ManualStockCorrection'
@@ -39,7 +40,7 @@ type LogTab = 'withdrawal' | 'other' | 'all' | 'in' | 'sold' | 'waste' | 'proces
 export function StockLogPage() {
   const dateSettings=useStoreDateSettings()
   const { t, i18n } = useTranslation()
-  const copy=stockLogQueryCopy(i18n.language)
+  const copy=stockLogQueryCopy(i18n.language),backfillCopy=theoryBackfillCopy(i18n.language)
   const queryClient = useQueryClient()
 
   const user=useAuthStore(state=>state.user)
@@ -147,7 +148,7 @@ export function StockLogPage() {
     refetchInterval: 30000
   })
 
-  const rawLogs: any[] = (logsData || []).map((log:any)=>({...inventoryLogDisplay(log),physicalQuantity:physicalStockOutQuantity(log)}))
+  const rawLogs: any[] = (logsData || []).map((log:any)=>({...inventoryLogDisplay(log),physicalQuantity:physicalStockOutQuantity(log),registeredQuantity:registeredStockOutQuantity(log),stockEffectBasis:stockEffectBasis(log)}))
 
   const statsUnavailable=isLoading||(isError&&!logsData)
 
@@ -220,10 +221,10 @@ export function StockLogPage() {
   }, [filteredLogs])
 
   const materialTotals=useMemo(()=>Object.values(filteredLogs.reduce((result:Record<string,{id:string,name:string,quantity:number,unit:string}>,log:any)=>{
-    if(log.physicalQuantity!==null){const key=log.inventoryId;result[key]??={id:key,name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.physicalQuantity}
+    if(log.registeredQuantity!==null){const key=log.inventoryId;result[key]??={id:key,name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.registeredQuantity}
     return result
   },{})).sort((a,b)=>a.name.localeCompare(b.name)),[filteredLogs,i18n.language])
-  const theoryParams={startDate:dateRange.startDate||'2000-01-01',endDate:dateRange.endDate||'2100-12-31'}
+  const theoryParams={backfill:true,startDate:dateRange.startDate||'2000-01-01',endDate:dateRange.endDate||'2100-12-31'}
   const theoryQuery=useQuery({queryKey:['ledger-material-theory',user?.id,user?.storeId,theoryParams],enabled:!!comparisonItem&&!statsUnavailable&&(datePreset!=='custom'||!!dateRange.startDate),queryFn:async():Promise<UsageResult>=>(await inventoryApi.employeeConsumption(theoryParams)).data.data,refetchInterval:30000})
   const theoryRow=theoryQuery.data?.list.find(row=>row.inventoryId===comparisonItem?.id)
   const comparison=materialComparison(filteredLogs,comparisonItem,theoryRow,theoryQuery.data?.legacyOnly)
@@ -396,6 +397,7 @@ export function StockLogPage() {
         [t('inventory.wasteReason')]: reasonText,
         [t('inventory.changeAmount')]: log.stockDelta === null ? '-' : `${log.stockDelta > 0 ? '+' : ''}${log.stockDelta}`,
         [t('inventory.unit')]: log.inventory?.unit || '-',
+        [copy.deduction]: log.registeredQuantity===null?'-':copy[log.stockEffectBasis as 'internal'|'explicit'|'unmarked'],
         [t('inventory.unitCost')]: log.unitCost || avgCost,
         [t('inventory.totalCostValue')]: costValue,
         [t('inventoryActors.operator')]: actorText(log.operator, log.staffId, t),
@@ -527,22 +529,33 @@ export function StockLogPage() {
         </div>
       </div>
 
-      {comparisonItem&&<><div className="inventory-ledger-material-context"><strong>{formatItemName(comparisonItem.name,i18n.language)}</strong><span>{copy.comparisonScope}</span></div>
+      {comparisonItem&&<><div className="inventory-ledger-material-context"><strong>{formatItemName(comparisonItem.name,i18n.language)}</strong></div>
       <div className="inventory-ledger-metrics inventory-ledger-material-metrics" aria-label={copy.comparison}>
-        <div className="card"><p>{copy.actualTotal}</p><strong>{statsUnavailable?'—':quantity(comparison.actual)}</strong><small>{copy.filteredActual}</small></div>
-        <div className="card"><p>{copy.theoryTotal}</p><strong>{theoryUnavailable?'—':quantity(comparison.theory)}</strong><small>{comparison.partial?copy.verifiedPart:copy.orderRecipe}</small></div>
-        <div className="card"><p>{copy.difference}</p><strong>{theoryUnavailable?'—':quantity(comparison.difference)}</strong><small>{copy.differenceFormula}</small></div>
-        <div className="card"><p>{t('inventory.totalMovements')}</p><strong>{statsUnavailable?'—':metrics.totalCount}</strong><small>{copy.allMatches}</small></div>
+        <div className="card"><p>{copy.actualTotal}</p><strong>{statsUnavailable?'—':quantity(comparison.actual)}</strong></div>
+        <div className="card"><p>{copy.theoryTotal}</p><strong>{theoryUnavailable?'—':quantity(comparison.theory)}</strong>{(theoryRow?.backfilledTheoreticalConsumption||0)>0&&<small className="text-primary">{backfillCopy.backfilled}</small>}{comparison.partial&&<small className="text-amber-800">{backfillCopy.pending}</small>}</div>
+        <div className="card"><p>{copy.difference}</p><strong>{theoryUnavailable?'—':quantity(comparison.difference)}</strong></div>
+        <div className="card"><p>{t('inventory.totalMovements')}</p><strong>{statsUnavailable?'—':metrics.totalCount}</strong></div>
       </div>
-      {theoryQuery.isError?<p role="alert" className="text-sm text-amber-800">{copy.theoryFailed} <button className="underline" onClick={()=>void theoryQuery.refetch()}>{copy.retry}</button></p>:!theoryQuery.isLoading&&(comparison.partial||!theoryRow)&&<p className="text-sm text-amber-800">{copy.incompleteTheory} <Link className="underline" to="/inventory/consumption">{copy.theoryDetails}</Link></p>}
       </>}
-      {comparisonItem?<details className="inventory-ledger-financial"><summary>{copy.financial}</summary>{financialMetrics}</details>:financialMetrics}
+      {!comparisonItem&&financialMetrics}
+      <div className="inventory-ledger-secondary">
+      {comparisonItem&&<>
+      <details className="inventory-ledger-basis workspace-disclosure" aria-label={copy.deduction}><summary>{copy.deduction}: <strong>{statsUnavailable?'—':quantity(comparison.deduction.quantity)}</strong> · {copy.internal}: <strong>{statsUnavailable?'—':quantity(comparison.internal.quantity)}</strong></summary><div className="workspace-disclosure-content">
+        <dl>{(['deduction','internal','explicit','unmarked'] as const).map(key=><div key={key}><dt>{copy[key]}</dt><dd>{statsUnavailable?'—':quantity(comparison[key].quantity)} · {statsUnavailable?'—':copy.entries(comparison[key].count)}</dd></div>)}</dl>
+        <p>{copy.historyHint}</p><p>{copy.comparisonScope} {copy.differenceFormula}</p></div>
+      </details>
+      <TheoryBackfillDetails data={theoryQuery.data} row={theoryRow}/>
+      {theoryQuery.isError?<p role="alert" className="text-sm text-amber-800">{copy.theoryFailed} <button className="underline" onClick={()=>void theoryQuery.refetch()}>{copy.retry}</button></p>:!theoryQuery.isLoading&&!theoryQuery.data?.theoryBackfill?.unresolved.length&&(comparison.partial||!theoryRow)&&<details className="workspace-disclosure text-amber-800"><summary>{backfillCopy.needsReview}</summary><div className="workspace-disclosure-content">{copy.incompleteTheory} <Link className="underline" to="/inventory/consumption">{copy.theoryDetails}</Link></div></details>}
+      </>}
+
+      {comparisonItem&&<details className="inventory-ledger-financial"><summary>{copy.financial}</summary>{financialMetrics}</details>}
 
       <details className="inventory-ledger-correction">
         <summary><span>{t('manualStockCorrection.consumptionDifference')}: <strong>{statsUnavailable?'—':formatCurrency(metrics.costAdjustments)}</strong></span><span className="text-gray-500">{copy.costInfo}</span><ChevronDown size={14}/></summary>
         <p>{t('manualStockCorrection.postingHint')}</p>
       </details>
 
+      </div>
       {comparisonItems.length>1&&<label className="inventory-ledger-material-choice">{copy.chooseMaterial}<select className="input" value={comparisonId} onChange={e=>setComparisonId(e.target.value)}><option value="">{copy.chooseMaterial}</option>{comparisonItems.map(item=><option key={item.id} value={item.id}>{formatItemName(item.name,i18n.language)}</option>)}</select></label>}
       <section className="inventory-ledger-panel" aria-label={copy.ledger}>
         <div className="inventory-ledger-types" role="group" aria-label={copy.type}>
@@ -632,7 +645,7 @@ export function StockLogPage() {
                         {getCategoryBadge(log.inventory?.category)}
                       </td>
                       <td className="py-3 text-sm px-4 whitespace-nowrap">
-                        {getReasonBadge(log)}
+                        {getReasonBadge(log)}{log.registeredQuantity!==null&&log.stockEffectBasis==='internal'&&<span className="block text-xs text-gray-500 mt-1">{copy[log.stockEffectBasis as 'internal'|'explicit'|'unmarked']}</span>}
                       </td>
                       <td className="py-3 text-sm text-right px-4 whitespace-nowrap font-medium">
                         <span className={log.stockDelta >= 0 ? 'text-green-600' : 'text-red-600'}>

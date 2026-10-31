@@ -28,8 +28,7 @@ export function InventoryEvidenceExport() {
       setStatus('success')
     } catch { setStatus('error') } finally { setBusy(false) }
   }
-  return <section className="rounded-xl border bg-white p-4 space-y-3" aria-label={c.title}>
-    <h2 className="font-semibold">{c.title}</h2>
+  return <section className="inventory-evidence-export" aria-label={c.title}><details className="workspace-disclosure"><summary>{c.title}</summary><div className="workspace-disclosure-content">
     <p className="text-sm text-gray-600">{c.hint} {c.unit}</p>
     <div className="flex flex-wrap items-end gap-3">
       <label className="text-sm flex flex-col gap-1">{c.start}<input className="input" type="date" value={startDate} max={endDate || undefined} onChange={e => setStartDate(e.target.value)} /></label>
@@ -37,5 +36,5 @@ export function InventoryEvidenceExport() {
       <button type="button" className="btn-primary" disabled={busy || !startDate || !endDate || !user?.storeId} onClick={download}>{busy ? c.loading : c.download}</button>
     </div>
     {status && <p role={status === 'error' ? 'alert' : 'status'} className={status === 'error' ? 'text-sm text-red-700' : 'text-sm text-amber-800'}>{c[status]}</p>}
-  </section>
+  </div></details></section>
 }

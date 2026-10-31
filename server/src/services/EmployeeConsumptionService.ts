@@ -1,3 +1,4 @@
+import {backfillMissingRecipeTheory} from './MissingRecipeTheoryService'
 import {correctedConsumptionSnapshots} from './ConsumptionEvidenceService'
 import {inventoryProductionComparison} from './InventoryProductionComparison';
 import {inventoryUsageMode} from '../utils/inventoryUsagePolicy';
@@ -16,6 +17,7 @@ export async function employeeConsumption(filter: {
     storeId: string;
     startDate: string;
     endDate: string;
+    backfill?: boolean;
 }, db: any = prisma) {
     const {boundary,startOfDay}=await inventoryBusinessCalendar(filter.storeId,db);
     const start = boundary(filter.startDate), end = boundary(filter.endDate, true);
@@ -28,7 +30,14 @@ export async function employeeConsumption(filter: {
         return { list: [], hasBusinessActivity:false, cutover: cutover?.toISOString() || null, legacyOnly: true, segments: [{ basis: 'legacy', start: start.toISOString(), end: end.toISOString() }] };
     const effectiveStart = new Date(Math.max(start.getTime(), cutover.getTime()));
     const inventory = await db.inventory.findMany({ where: { storeId: filter.storeId }, orderBy: { name: 'asc' } });
-    const snapshots = await correctedConsumptionSnapshots(db,{storeId:filter.storeId,createdAt:{gte:effectiveStart,lte:end}});
+    const originalSnapshots = await correctedConsumptionSnapshots(db,{storeId:filter.storeId,createdAt:{gte:effectiveStart,lte:end}});
+    const backfill=filter.backfill?await backfillMissingRecipeTheory(db,filter.storeId,originalSnapshots,inventory):{snapshots:originalSnapshots,totals:new Map<string,number>(),resolved:[],unresolved:[],calculatedAt:new Date().toISOString()}
+    const snapshots=backfill.snapshots
+    const originalTotals=new Map<string,number>(),originalInvalidUnits=new Set<string>()
+    for(const snapshot of originalSnapshots)if(!snapshot.reversedAt)for(const material of JSON.parse(snapshot.materials)){
+      const item=inventory.find((i:any)=>i.id===material.inventoryId)
+      if(item){if(item.unit!==material.unit||!Number.isFinite(material.quantity))originalInvalidUnits.add(item.id);else originalTotals.set(item.id,(originalTotals.get(item.id)||0)+material.quantity)}
+    }
     const logs = await db.stockOutLog.findMany({ where: { inventory: { storeId: filter.storeId }, createdAt: { gte: effectiveStart, lte: end }, reason: { in: ['withdrawal', 'loss', 'expired', 'other', 'transfer', 'process'] } } });
     const uncovered = await db.order.count({ where: { storeId: filter.storeId, status: { in: ['completed', 'paid'] }, createdAt: { gte: effectiveStart, lte: end }, id: { notIn: snapshots.map((s: any) => s.orderId) } } });
     const materials = new Map<string, {
@@ -76,9 +85,9 @@ export async function employeeConsumption(filter: {
         const classification = classifyEmployeeConsumption(theory?.quantity || 0, actual, setting.varianceWarningPercent, setting.varianceCriticalPercent, setting.enableConsumptionAlert, incomplete || !!theory && theory.unit !== item.unit);
         const usageMode=inventoryUsageMode(item),evidenceIncomplete=incomplete || !!theory && theory.unit!==item.unit;
         const comparison=evidenceIncomplete?{variance:null,variancePercent:null,varianceStatus:'unavailable',unavailableReason:'INCOMPLETE_RECIPE'}:{variance:usageMode==='self_produced'?null:Math.round((actual-(theory?.quantity||0))*1e9)/1e9,variancePercent:null,varianceStatus:'not_compared',unavailableReason:usageMode==='bulk'?'BULK_ISSUE':usageMode==='self_produced'?'SELF_PRODUCED':'BATCH_WITHDRAWAL'};
-        return { knownTheoreticalConsumption:activeSnapshotCount>0&&!mixedUnits.has(item.id)&&(!theory||theory.unit===item.unit)?theory?.quantity||0:null,theoryEvidence:{complete:!evidenceIncomplete,snapshotCount:activeSnapshotCount,uncoveredOrderCount:uncovered,issueCount}, usageMode, inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: evidenceIncomplete?null:theory?.quantity || 0, actualConsumption: actual, actualWithdrawal: actual, varianceAmountEstimate:comparison.variance===null?null:Math.round(comparison.variance*Number(item.avgCost)), production:production.get(item.id)||[], breakdown: totals, ...comparison, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
+        return { snapshotTheoreticalConsumption:originalInvalidUnits.has(item.id)?null:originalTotals.get(item.id)||0,backfilledTheoreticalConsumption:backfill.totals.get(item.id)||0,knownTheoreticalConsumption:activeSnapshotCount>0&&!mixedUnits.has(item.id)&&(!theory||theory.unit===item.unit)?theory?.quantity||0:null,theoryEvidence:{complete:!evidenceIncomplete,snapshotCount:activeSnapshotCount,uncoveredOrderCount:uncovered,issueCount}, usageMode, inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: evidenceIncomplete?null:theory?.quantity || 0, actualConsumption: actual, actualWithdrawal: actual, varianceAmountEstimate:comparison.variance===null?null:Math.round(comparison.variance*Number(item.avgCost)), production:production.get(item.id)||[], breakdown: totals, ...comparison, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
     });
-    return { list, recipeIssues, hasBusinessActivity:logs.length>0||snapshots.length>0||uncovered>0, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
+    return { list, recipeIssues,theoryBackfill:filter.backfill?{basis:'current_recipe_missing_bom' as const,calculatedAt:backfill.calculatedAt,resolved:backfill.resolved,unresolved:backfill.unresolved}:undefined, hasBusinessActivity:logs.length>0||snapshots.length>0||uncovered>0, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
 }
 export async function checkConsumptionDay(storeId: string, businessDate: string, now = new Date()) {
     const {boundary,startOfDay}=await inventoryBusinessCalendar(storeId);

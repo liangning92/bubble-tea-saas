@@ -1,3 +1,5 @@
+export interface TheoryBackfillProduct {productId:string;productName:string;orderCount:number;servings:number|null;recipeHash?:string;reason?:string;firstAt?:string;lastAt?:string}
+export interface TheoryBackfill {basis:'current_recipe_missing_bom';calculatedAt:string;resolved:TheoryBackfillProduct[];unresolved:TheoryBackfillProduct[]}
 /** Additive response contract shared by the two inventory reports. */
 export interface UsageProduction {
   recipeId: string; name: string; unit: string; theoreticalOutput: number | null;
@@ -5,6 +7,7 @@ export interface UsageProduction {
   products?: {productId: string; name: string; theoreticalQuantity: number | null}[]
 }
 export interface UsageRow {
+ snapshotTheoreticalConsumption?:number|null; backfilledTheoreticalConsumption?:number|null;
  knownTheoreticalConsumption?:number|null; theoryEvidence?:{complete:boolean;snapshotCount:number;uncoveredOrderCount:number;issueCount:number};
   inventoryId: string; inventoryName: string; unit: string;
   theoreticalConsumption: number | null; actualConsumption: number | null;
@@ -17,12 +20,13 @@ export interface UsageRow {
   breakdown?: Record<string, number>; production?: UsageProduction[]; partialPeriod?: boolean; provisional?: boolean
 }
 export interface UsageResult {
+ theoryBackfill?:TheoryBackfill;
  recipeIssues?:{productId:string;productName:string;code:string;count:number}[];
   list: UsageRow[]; hasBusinessActivity?: boolean;
   coverage?: {start: string | null; end: string | null; mixed: boolean};
   segments?: {basis: string; start: string; end: string}[]; legacyOnly?: boolean
 }
-export interface UsageParams {startDate: string; endDate: string; latest?: boolean}
+export interface UsageParams {startDate: string; endDate: string; latest?: boolean;backfill?:boolean}
 export function usageCoverage(rows: UsageRow[]) {
   const observed = rows.filter(r => r.observationCount === 2)
   return {start: observed.map(r => r.windowStart).sort()[0] || null,

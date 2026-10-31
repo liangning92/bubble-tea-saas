@@ -1,3 +1,4 @@
+import {PageHelp} from '../../components/PageHelp'
 import {consumptionQuantity} from '../../utils/consumptionQuantity'
 import { formatNumber } from '../../utils/numberDisplay'
 import { useState } from "react";
@@ -57,7 +58,7 @@ export function RestockSuggestionPage() {
           <option value={30}>30 {t("material.days") || "days"}</option>
         </select></label>
       </div>
-      <p className="text-sm text-gray-500">{t("inventoryUnified.forecast")}</p>
+      <PageHelp>{t("inventoryUnified.forecast")}</PageHelp>
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
