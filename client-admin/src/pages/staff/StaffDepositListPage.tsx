@@ -45,6 +45,9 @@ interface StaffDeposit {
   deductedAmount: number
   refundedAmount: number
   status: string
+  remainingAmount?: number
+  releasedAmount?: number
+  refundableAmount?: number
   startDate: string
   endDate?: string
   updatedAt: string
@@ -68,11 +71,13 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   active: 'bg-blue-100 text-blue-700',
   completed: 'bg-green-100 text-green-700',
-  refunded: 'bg-gray-100 text-gray-700'
+  refunded: 'bg-gray-100 text-gray-700',
+  released: 'bg-gray-100 text-gray-700'
 }
 
 export function StaffDepositListPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const release = i18n.language.startsWith('zh') ? {label:'离职已解除',amount:'已解除待收押金',refund:'待退还已收押金'} : i18n.language.startsWith('en') ? {label:'Released on leaving',amount:'Uncollected deposit released',refund:'Collected deposit awaiting refund'} : {label:'Dilepas saat keluar',amount:'Sisa deposit dibatalkan',refund:'Deposit terkumpul menunggu pengembalian'}
   const { user } = useAuthStore()
   const [deposits, setDeposits] = useState<StaffDeposit[]>([])
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
@@ -240,7 +245,7 @@ export function StaffDepositListPage() {
   }
 
   const getRemainingAmount = (deposit: StaffDeposit) => {
-    return Math.max(0, deposit.totalAmount - deposit.deductedAmount)
+    return deposit.remainingAmount ?? (deposit.status === 'released' ? 0 : Math.max(0, deposit.totalAmount - deposit.deductedAmount))
   }
 
   return (
@@ -282,6 +287,7 @@ export function StaffDepositListPage() {
           <option value="active">{t('staff.active')}</option>
           <option value="completed">{t('staff.completed')}</option>
           <option value="refunded">{t('staff.refunded')}</option>
+          <option value="released">{release.label}</option>
         </select>
       </div>
 
@@ -328,7 +334,7 @@ export function StaffDepositListPage() {
                   <p className="text-sm text-gray-500">{deposit.staff?.employeeNumber || '-'}</p>
                 </div>
                 <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_COLORS[deposit.status]}`}>
-                  {STATUS_LABELS[deposit.status] || deposit.status}
+                  {deposit.status === 'released' ? release.label : STATUS_LABELS[deposit.status] || deposit.status}
                 </span>
               </div>
 
@@ -352,6 +358,7 @@ export function StaffDepositListPage() {
                 </div>
               </div>
 
+              {deposit.status==='released'&&<div className="mb-4 rounded-lg bg-gray-50 p-3 text-sm space-y-1"><p>{release.amount}: {formatCurrency(deposit.releasedAmount||0)}</p>{(deposit.refundableAmount||0)>0&&<p className="text-green-700">{release.refund}: {formatCurrency(deposit.refundableAmount||0)}</p>}</div>}
               {/* Progress Bar */}
               <div className="mb-4">
                 <div className="flex justify-between text-sm mb-1">
@@ -387,20 +394,20 @@ export function StaffDepositListPage() {
               {/* Actions */}
               <div className="flex gap-2">
                 {deposit.status === 'active' && (
-                  <>
                     <button
                       onClick={() => handleOpenDeductModal(deposit)}
                       className="flex-1 py-2 text-sm text-primary border border-primary rounded-lg hover:bg-primary/5"
                     >
                       {t('staff.recordDeduction')}
                     </button>
+                )}
+                {deposit.deductedAmount > deposit.refundedAmount && (
                     <button
                       onClick={() => handleOpenRefundModal(deposit)}
                       className="flex-1 py-2 text-sm text-green-600 border border-green-200 rounded-lg hover:bg-green-50"
                     >
                       {t('staff.processRefund')}
                     </button>
-                  </>
                 )}
               </div>
             </div>

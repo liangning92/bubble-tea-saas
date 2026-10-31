@@ -27,18 +27,18 @@ test.each(['full_month','prorated','any_employment'])('partial month ignores old
  values.set('staff.payroll.rules',{paidRestDays:5,paidRestEligibility:mode,dailyRateDivisor:26})
  const employee={...staff,hireDate:date('2026-10-16')}
  const basis=await calculatePayrollBasis(db,employee,'2026-10',{regular:5.5,probation:0})
- expect(basis).toMatchObject({amount:550000,workedAmount:550000,workedDays:5.5,paidRestDays:0,fullMonthEligible:false,proration:'actual_workdays',dailyRateDivisor:26})
- expect(basis.segments.reduce((sum,s)=>sum+s.amount,0)).toBe(550000)
+ expect(basis).toMatchObject({amount:461290,workedAmount:461290,workedDays:5.5,paidRestDays:0,fullMonthEligible:false,proration:'actual_workdays',dailyRateDivisor:31})
+ expect(basis.segments.reduce((sum,s)=>sum+s.amount,0)).toBe(461290)
  expect(unpaidLeavePlan(employee,{enabled:false},basis,[leave('2026-10-19')],new Set(['unpaid']))).toMatchObject({deduction:0,source:'included_in_days'})
 })
-test('partial-month estimate uses actual deduplicated attendance within employment and never projected days',async()=>{
+test('partial-month attendance import uses deduplicated dates only when explicitly selected',async()=>{
  db.attendance.findMany.mockResolvedValue([{checkInTime:date('2026-10-05'),status:'normal'},{checkInTime:date('2026-10-19'),status:'normal'},{checkInTime:date('2026-10-19'),status:'late'},{checkInTime:date('2026-10-20'),status:'absence'}])
- const basis=await calculatePayrollBasis(db,{...staff,hireDate:date('2026-10-16')},'2026-10')
- expect(basis).toMatchObject({amount:100000,workedDays:1,paidRestDays:0})
+ const basis=await calculatePayrollBasis(db,{...staff,hireDate:date('2026-10-16')},'2026-10',undefined,'attendance')
+ expect(basis).toMatchObject({amount:83871,workedDays:1,paidRestDays:0})
 })
 test('partial-month probation and regular pay use their respective daily rates',async()=>{
  values.set('staff.probation.rule',{enabled:true,durationUnit:'days',duration:5,salaryMode:'percentage',salaryValue:50})
  const basis=await calculatePayrollBasis(db,{...staff,hireDate:date('2026-10-16')},'2026-10',{probation:3,regular:2})
- expect(basis).toMatchObject({amount:350000,paidRestDays:0})
- expect(basis.segments.map(s=>s.amount)).toEqual([150000,200000])
+ expect(basis).toMatchObject({amount:293548,paidRestDays:0})
+ expect(basis.segments.map(s=>s.amount)).toEqual([125806,167742])
 })

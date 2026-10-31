@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '../config/database'
 import { calculateMonthlyDeduction, DepositInputError } from './DepositService'
 import { businessDate } from './ProbationService'
+import { hasLeftEmployment } from './DepositLifecycle'
 import { isPayrollEmployee } from './StaffIdentityService'
 
 type Database = Prisma.TransactionClient
@@ -35,6 +36,7 @@ export async function salaryDepositPlan(staffId: string, period: string, db: Dat
   const [year, month] = period.split('-').map(Number)
   const end = new Date(Date.UTC(year, month, 1) - 7 * 3600000)
   const staff = await db.staff.findUnique({ where: { id: staffId } })
+  if (hasLeftEmployment(staff) || (staff?.terminationDate && businessDate(staff.terminationDate).slice(0,7) <= period)) return []
   const deposits: any[] = await db.staffDeposit.findMany({ where: { staffId, status: 'active', startDate: { lt: end } }, include: { depositRule: true, deductionLogs: true } })
   const existingOneTime = await db.staffDeposit.findFirst({ where: { staffId, depositRule: { deductionType: 'one_time' } } })
   if (!existingOneTime) { const draft = await onboardingDeposit(db, staff); if (draft && draft.startDate < end) deposits.push(draft) }
