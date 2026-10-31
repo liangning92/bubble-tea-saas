@@ -25,7 +25,7 @@ export async function employeeConsumption(filter: {
     const cutoverRecord = await db.config.findUnique({ where: { storeId_key: { storeId: filter.storeId, key: FLOW_CUTOVER_KEY } } });
     const cutover = cutoverRecord ? new Date(cutoverRecord.value) : null;
     if (!cutover || cutover > end)
-        return { list: [], cutover: cutover?.toISOString() || null, legacyOnly: true, segments: [{ basis: 'legacy', start: start.toISOString(), end: end.toISOString() }] };
+        return { list: [], hasBusinessActivity:false, cutover: cutover?.toISOString() || null, legacyOnly: true, segments: [{ basis: 'legacy', start: start.toISOString(), end: end.toISOString() }] };
     const effectiveStart = new Date(Math.max(start.getTime(), cutover.getTime()));
     const inventory = await db.inventory.findMany({ where: { storeId: filter.storeId }, orderBy: { name: 'asc' } });
     const snapshots = await correctedConsumptionSnapshots(db,{storeId:filter.storeId,createdAt:{gte:effectiveStart,lte:end}});
@@ -69,7 +69,7 @@ export async function employeeConsumption(filter: {
         const comparison=evidenceIncomplete?{variance:null,variancePercent:null,varianceStatus:'unavailable',unavailableReason:'INCOMPLETE_RECIPE'}:{variance:usageMode==='self_produced'?null:Math.round((actual-(theory?.quantity||0))*1e9)/1e9,variancePercent:null,varianceStatus:'not_compared',unavailableReason:usageMode==='bulk'?'BULK_ISSUE':usageMode==='self_produced'?'SELF_PRODUCED':'BATCH_WITHDRAWAL'};
         return { usageMode, inventoryId: item.id, inventoryName: item.name, unit: item.unit, theoreticalConsumption: evidenceIncomplete?null:theory?.quantity || 0, actualConsumption: actual, actualWithdrawal: actual, varianceAmountEstimate:comparison.variance===null?null:Math.round(comparison.variance*Number(item.avgCost)), production:production.get(item.id)||[], breakdown: totals, ...comparison, windowStart: effectiveStart.toISOString(), windowEnd: end.toISOString(), basis: 'employee_out_vs_sale_recipe', provisional: end >= startOfDay(new Date()), partialPeriod: start < cutover };
     });
-    return { list, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
+    return { list, hasBusinessActivity:logs.length>0||snapshots.length>0||uncovered>0, cutover: cutover.toISOString(), legacyOnly: false, segments: [...(start < cutover ? [{ basis: 'legacy', start: start.toISOString(), end: new Date(cutover.getTime() - 1).toISOString() }] : []), { basis: 'employee_out_vs_sale_recipe', start: effectiveStart.toISOString(), end: end.toISOString() }] };
 }
 export async function checkConsumptionDay(storeId: string, businessDate: string, now = new Date()) {
     const {boundary,startOfDay}=await inventoryBusinessCalendar(storeId);

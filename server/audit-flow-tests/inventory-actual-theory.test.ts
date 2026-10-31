@@ -120,3 +120,9 @@ test('report missing baseline metadata distinguishes no counts from one count wi
  let row=(await report())[0];expect(row.completedObservationCount).toBe(0);expect(row.latestObservationAt).toBeNull();expect(row.theoreticalConsumption).toBeNull();expect(row.receipts).toBeNull()
  await f.observe(1000);row=(await report())[0];expect(row.completedObservationCount).toBe(1);expect(row.usableObservationCount).toBe(1);expect(row.latestObservationAt).not.toBeNull();expect(row.theoreticalConsumption).toBeNull();expect(row.actualConsumption).toBeNull();expect(row.unavailableReason).toBe('TWO_PHYSICAL_OBSERVATIONS_REQUIRED')
 })
+
+test('registered report distinguishes no business activity from zero values while retaining materials',async()=>{
+ const f=await fixture(),date=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'}),report=()=>employeeConsumption({storeId:f.store.id,startDate:date,endDate:date})
+ const empty=await report();expect(empty.hasBusinessActivity).toBe(false);expect(empty.list).toHaveLength(1)
+ await f.issue(3);const active=await report();expect(active.hasBusinessActivity).toBe(true);expect(active.list[0].actualWithdrawal).toBe(3)
+})
