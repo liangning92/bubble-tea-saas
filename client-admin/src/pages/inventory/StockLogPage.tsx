@@ -605,7 +605,7 @@ export function StockLogPage() {
         <p>{copy.loaded}</p>
         {datePreset==='custom'&&!validDraft&&<p role="alert" className="text-red-700">{copy.invalid}</p>}
         {datePreset==='custom'&&dirtyDates&&<p role="status" className="text-amber-700">{copy.draft}</p>}
-        {isError&&<p role="alert" className="text-red-700">{copy.failed} <button className="underline" onClick={()=>refetch()}>{t('common.retry',{defaultValue:'Retry'})}</button></p>}
+        {isError&&<p role="alert" className="text-red-700">{copy.failed} <button className="underline" onClick={()=>refetch()}>{copy.retry}</button></p>}
       </div>
       {filteredLogs.some(log=>log.physicalQuantity!==null)&&<section className="card p-4" aria-label={copy.quantities}><p className="font-medium mb-2">{copy.quantities}</p><div className="flex flex-wrap gap-3">{Object.values(filteredLogs.reduce((result:Record<string,{name:string,quantity:number,unit:string}>,log:any)=>{if(log.physicalQuantity!==null){const key=log.inventoryId;result[key]??={name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.physicalQuantity}return result},{})).map(row=><span key={row.name} className="rounded bg-gray-50 px-3 py-2">{row.name}: <strong>{row.quantity.toLocaleString(undefined,{maximumFractionDigits:6})} {row.unit}</strong></span>)}</div></section>}
       {/* Table Card */}

@@ -6,7 +6,7 @@ export function stockLogDateRange(start:string,end:string,timezone:string){
  return {startDate:calendarStart(start,timezone).toISOString(),endDate:new Date(calendarStart(next,timezone).getTime()-1).toISOString()}
 }
 export function stockLogQueryCopy(language:string){const at=language.startsWith('zh')?0:language.startsWith('id')?2:1,c=(zh:string,en:string,id:string)=>[zh,en,id][at];return {
- apply:c('查询','Apply','Terapkan'),start:c('开始日期','Start date','Tanggal mulai'),end:c('结束日期','End date','Tanggal akhir'),
+ retry:c('重试','Retry','Coba lagi'),apply:c('查询','Apply','Terapkan'),start:c('开始日期','Start date','Tanggal mulai'),end:c('结束日期','End date','Tanggal akhir'),
  invalid:c('请选择完整日期（2000—2100 年），结束日期不能早于开始日期。编辑完成后点击查询。','Choose complete dates (2000–2100); end must be on or after start. Apply after editing.','Pilih tanggal lengkap (2000–2100); tanggal akhir tidak boleh sebelum awal. Terapkan setelah mengedit.'),
  draft:c('日期尚未应用，当前仍显示上次查询结果。','Date changes are not applied. Previous results remain visible.','Perubahan tanggal belum diterapkan. Hasil sebelumnya tetap ditampilkan.'),
  failed:c('流水更新失败，请重试；已有数据保留。','Ledger refresh failed. Retry; previous data is retained.','Pembaruan riwayat gagal. Coba lagi; data sebelumnya dipertahankan.'),
