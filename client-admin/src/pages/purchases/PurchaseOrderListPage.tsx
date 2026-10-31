@@ -1,3 +1,4 @@
+import {PageHelp} from '../../components/PageHelp'
 import { ExpensePaymentFields } from '../../../../shared/components/ExpensePaymentFields'
 import { Link } from 'react-router-dom'
 import { useStoreDateSettings } from '../../hooks/useStoreDateSettings'
@@ -266,7 +267,7 @@ export function PurchaseOrderListPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-4">
-        <div className="flex items-center justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-3"><h1>{t('inventoryFlow.purchaseReceive')}</h1>
           <button
             onClick={() => { setEditing(null);resetForm();setReason('');setActionError(''); setShowModal(true) }}
             disabled={isLoading} className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover text-sm font-medium flex items-center gap-1"
@@ -292,7 +293,7 @@ export function PurchaseOrderListPage() {
         <div className="bg-white border rounded-xl p-4 min-w-0"><p className="text-sm text-gray-500">{t('purchaseBoard.today')}</p><strong className="text-2xl tabular-nums break-words">{formatCurrency(summary.todayAmount)}</strong><p className="text-xs text-gray-500 mt-1">{today}</p></div>
         <div className="bg-white border rounded-xl p-4 min-w-0"><p className="text-sm text-gray-500">{t('purchaseBoard.month')}</p><strong className="text-2xl tabular-nums break-words">{formatCurrency(summary.monthAmount)}</strong><p className="text-xs text-gray-500 mt-1">{today.slice(0,7)}</p></div>
       </section>
-      <div className="px-4 pt-2 text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-1"><p>{t('purchaseBoard.basis')}</p><Link to="/finance/expenses" className="text-primary underline">{t('purchaseBoard.finance')}</Link></div>
+      <div className="px-4 pt-2 text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-1"><PageHelp>{t('purchaseBoard.basis')}</PageHelp><Link to="/finance/expenses" className="text-primary underline">{t('purchaseBoard.finance')}</Link></div>
       {/* Status describes the same order throughout its lifecycle; it never reserves a card column. */}
       <div className="px-4 pt-4 flex flex-wrap gap-2" role="group" aria-label={t('purchases.allStatus')}>
         {statusFilters.map(({ value, label }) => <button key={value} aria-pressed={filterStatus === value} onClick={() => setFilterStatus(value)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${filterStatus === value ? 'border-primary bg-primary-light text-primary font-semibold' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100'}`}>
