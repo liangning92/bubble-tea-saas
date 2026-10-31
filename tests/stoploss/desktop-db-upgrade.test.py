@@ -323,6 +323,27 @@ class UpgradeTests(unittest.TestCase):
             self.assertEqual(c.execute('SELECT totalDays FROM Leave').fetchone()[0], 2.5)
             self.assertEqual(c.execute('SELECT usedLeave,usedSick FROM LeaveBalance').fetchone(), (3.5, 4.5))
 
+    def test_inventory_operation_dates_upgrade_without_inventing_history(self):
+        fields = [('StockInLog', 'occurredOn'), ('StockOutLog', 'occurredOn'),
+                  ('PurchaseOrder', 'purchasedOn')]
+        with closing(sqlite3.connect(self.db)) as c, c:
+            for table, _ in fields:
+                c.execute('INSERT INTO '+U.quote(table)+' (id) VALUES (?)', ('historical-'+table,))
+        receipt = self.prepare()
+        self.assertTrue(U.verify_receipt(receipt, self.catalog, lambda: []))
+        with closing(sqlite3.connect(self.db)) as c, c:
+            for table, field in fields:
+                self.assertIn(table+'.'+field, receipt['columnsAdded'])
+                self.assertEqual(c.execute('SELECT id,'+U.quote(field)+' FROM '+U.quote(table)).fetchall(),
+                                 [('historical-'+table, None)])
+                c.execute('UPDATE '+U.quote(table)+' SET '+U.quote(field)+'=?', ('2026-10-30 12:00:00',))
+        # Repeated preparation retains dates already supplied by the business.
+        self.prepare()
+        with closing(sqlite3.connect(self.db)) as c:
+            for table, field in fields:
+                self.assertEqual(c.execute('SELECT '+U.quote(field)+' FROM '+U.quote(table)).fetchone()[0],
+                                 '2026-10-30 12:00:00')
+
     def test_historical_procurement_cost_affinity_and_new_nullable_columns(self):
         template = self.root / 'empty.db'
         with closing(sqlite3.connect(template)) as c, c:
