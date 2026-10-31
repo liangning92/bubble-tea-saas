@@ -1,3 +1,4 @@
+import {configuredEmployeeDeployment} from '../services/teamAgentBridge/employeeConfigured'
 import {STORE_OPERATIONS_GUIDES} from '../services/StoreOperationsGuides'
 import { operationsOwnerState, createOperationsDelegation, revokeOperationsDelegation } from '../services/StoreOperationsDelegationService'
 import { agentMemoryService } from '../services/AgentMemoryService'
@@ -115,7 +116,9 @@ router.post('/channels/:id/agent-continuations',describeNativeBody(agentContinua
 router.put('/channels/:id/members', run(async (req, res) => ok(res, await service.updateMembers(actor(req), req.params.id, req.body))))
 router.get('/channels/:id/messages', run(async (req, res) => {
   const after = z.coerce.number().int().min(0).max(999999999999).parse(req.query.after ?? 0)
-  return ok(res, await service.messages(actor(req), req.params.id, after, reason(req)))
+  const data=await service.messages(actor(req), req.params.id, after, reason(req))
+  if(!reason(req))void configuredEmployeeDeployment(prisma)?.prepareConversation(actor(req),req.params.id).catch(()=>{})
+  return ok(res,data)
 }))
 router.post('/channels/:id/messages', describeNativeBody(messageSchema), run(async (req, res) => messageCommitted(req, res, await service.send(actor(req), req.params.id, req.body))))
 router.put('/channels/:id/read', run(async (req, res) => {

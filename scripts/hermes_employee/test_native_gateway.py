@@ -19,6 +19,21 @@ class NativeProviderTests(unittest.TestCase):
         self.assertEqual(updated['tools']['unrelated'],previous['tools']['unrelated'])
         self.assertEqual(previous['tools']['tool_search']['enabled'],'auto')
         self.assertFalse(native_provider_config(updated,'strict-other-model')['model']['reasoning_echo'])
+    def test_preparation_configuration_keeps_memory_and_route_scope(self):
+        value={'memory':{'memory_enabled':True},'auxiliary':{'other':{'enabled':True}}}
+        url='http://host.docker.internal:3000/api/internal/employee-hermes/native/v1'
+        result=native_provider_config(value,'MiniMax-M3.1-Flash',url)
+        self.assertEqual(result['model']['context_length'],1000000)
+        self.assertEqual(result['model']['default'],'MiniMax-M3.1-Flash')
+        self.assertEqual(result['model']['base_url'],url)
+        self.assertEqual(result['model']['provider'],'custom')
+        self.assertFalse(result['auxiliary']['title_generation']['enabled'])
+        self.assertEqual(result['auxiliary']['other'],value['auxiliary']['other'])
+        self.assertEqual(result['memory'],value['memory'])
+        self.assertNotIn('context_length',native_provider_config({},'unknown-model',url)['model'])
+        with self.assertRaisesRegex(ValueError,'NATIVE_MODEL_CONFIG_INVALID'):
+            native_provider_config({'auxiliary':[]},'MiniMax-M3.1-Flash',url)
+
     def test_flash_uses_documented_effort_and_preserves_explicit_native_choices(self):
         value=native_provider_options('MiniMax-M3.1-Flash')
         self.assertEqual(value['request_overrides'],{'reasoning_effort':'low'})

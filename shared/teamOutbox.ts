@@ -1,5 +1,6 @@
 export interface TeamPending {
   id: string; scope: string; channelId: string; text: string; files: File[]; uploaded: string[]
+  language?: 'zh' | 'en' | 'id'
   expectedLastSeq?: number
   createdAt: string; error?: string; retryable?: boolean; attempts?: number; nextRetryAt?: number
 }

@@ -134,7 +134,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
             message.uploaded.push(id); await savePending(message)
             if (!client.current()) return
           }
-          await client.request('post', `/team/channels/${message.channelId}/messages`, { requestId: message.id, text: message.text, files: message.uploaded, ...(message.expectedLastSeq !== undefined ? {expectedLastSeq:message.expectedLastSeq} : {}) })
+          await client.request('post', `/team/channels/${message.channelId}/messages`, { requestId: message.id, text: message.text, files: message.uploaded, ...(message.language ? {language:message.language} : {}), ...(message.expectedLastSeq !== undefined ? {expectedLastSeq:message.expectedLastSeq} : {}) })
           await removePending(message.id)
           await pollRef.current?.()
         } catch (e: any) {
@@ -219,7 +219,7 @@ export function TeamCommunication({ client, scope, staffId, language, administra
       const preparedFiles = sendOriginal ? files : await prepareTeamPhotos(files)
       setPreparing(false)
       if (!client.current()) return
-      const value: TeamPending = { id: crypto.randomUUID(), scope, channelId: selectedId, text: text.trim(), files: preparedFiles, uploaded: [], expectedLastSeq: meta?.lastSeq, createdAt: new Date().toISOString() }
+      const value: TeamPending = { id: crypto.randomUUID(), scope, channelId: selectedId, text: text.trim(), language:language.startsWith('zh')?'zh':language.startsWith('en')?'en':'id', files: preparedFiles, uploaded: [], expectedLastSeq: meta?.lastSeq, createdAt: new Date().toISOString() }
       await savePending(value); setOutbox(await pendingMessages(scope)); drafts.current.delete(selectedId)
       if (selectedRef.current === selectedId) { setText(''); setFiles([]); if (compact) setSendOriginal(false) }
       void flush()

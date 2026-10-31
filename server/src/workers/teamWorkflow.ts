@@ -18,6 +18,7 @@ export async function runTeamWorkflowWorker(workflow = teamWorkflow(), db: any =
     if(employeeHermes)try{await employeeHermes.runBatch(10,'business')}catch{console.error('BUSINESS_TOPIC_BATCH_FAILED')}
     if(!controller.signal.aborted)await new Promise<void>(resolve=>{const done=()=>{clearTimeout(timer);controller.signal.removeEventListener('abort',done);resolve()},timer=setTimeout(done,intervalMs);controller.signal.addEventListener('abort',done,{once:true})})
   }}
+  if(employeeHermes)void employeeHermes.warmRecent().catch(()=>console.error('NATIVE_PREPARATION_FAILED'))
   const fastLoop=employeeHermes?fastReports():Promise.resolve()
   try {
     while (!controller.signal.aborted) {
