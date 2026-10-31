@@ -33,6 +33,8 @@ COLUMN_ADDITIONS = [('Order',name,'TEXT') for name in LOCAL_COLUMNS] + [
     ('RefundRequest','reasonCode',"TEXT NOT NULL DEFAULT 'legacy'"), ('RefundRequest','selectedItemIds',"TEXT NOT NULL DEFAULT '[]'"),
     ('StockInLog','operationId','TEXT'), ('StockInLog','purchaseOrderId','TEXT'),
     ('StockOutLog','operationId','TEXT'), ('StockOutLog','staffId','TEXT'),
+    ('StockInLog','occurredOn','DATETIME'), ('StockOutLog','occurredOn','DATETIME'),
+    ('PurchaseOrder','purchasedOn','DATETIME'),
     ('PurchaseOrder','requestId','TEXT'), ('PurchaseOrder','requestFingerprint','TEXT'),
     ('PurchaseOrder','source',"TEXT NOT NULL DEFAULT 'admin'"), ('PurchaseOrder','onlineOrderNumber','TEXT'),
     ('PurchaseOrder','createdBy','TEXT'), ('PurchaseOrder','receivedBy','TEXT'),
