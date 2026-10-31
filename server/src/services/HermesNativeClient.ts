@@ -18,13 +18,13 @@ export class HermesNativeClient {
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),Math.min(30000,deadline===undefined?30000:deadline-Date.now()))
   try{
    const response=await fetch(new URL((this.profileKey?'/profiles/'+this.profileKey:'')+path,this.origin),{method:body===undefined?'GET':'POST',redirect:'error',headers:{authorization:'Bearer '+this.key,...(body===undefined?{}:{'content-type':'application/json'}),...headers},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:controller.signal})
-   if(!response.ok){const error:any=Error('HERMES_NATIVE_HTTP_'+response.status);error.status=response.status;throw error}
+   if(!response.ok){const detail=await response.json().catch(()=>null),code=typeof detail?.error==='string'&&/^[A-Z][A-Z0-9_]{1,100}$/.test(detail.error)?detail.error:'HERMES_NATIVE_HTTP_'+response.status;const error:any=Error(code);error.status=response.status;throw error}
    return await response.json()
   }catch(error:any){if(controller.signal.aborted)throw Error('HERMES_NATIVE_TIMEOUT');throw error}finally{clearTimeout(timer)}
  }
  async configure(context:Record<string,unknown>,deadline?:number){return this.request('/native/context',context,{},deadline)}
- async admission(request:NativeHermesRequest,key:string){return this.request('/native/admission',{request,key})}
- async readiness(){return this.request('/native/readiness')}
+ async admission(request:NativeHermesRequest,key:string){return this.request('/native/admission',{request,key},{},Date.now()+3000)}
+ async readiness(){return this.request('/native/readiness',undefined,{},Date.now()+3000)}
  async gatewayHealth(){return this.request('/health')}
  async capabilities(){
   const value=await this.request('/v1/capabilities')
@@ -35,7 +35,7 @@ export class HermesNativeClient {
   if(!idempotencyKey||!/^[!-~]{1,255}$/.test(idempotencyKey)||!request.session_id)throw Error('HERMES_NATIVE_ADMISSION_INVALID')
   return this.request('/v1/runs',request,{'Idempotency-Key':idempotencyKey,'X-Hermes-Session-Key':request.session_id},deadline)
  }
- async status(runId:string){return this.request('/v1/runs/'+encodeURIComponent(runId))}
+ async status(runId:string){return this.request('/v1/runs/'+encodeURIComponent(runId),undefined,{},Date.now()+3000)}
  async cancel(runId:string){return this.request('/v1/runs/'+encodeURIComponent(runId)+'/stop',{})}
  async steer(runId:string,message:string){return this.request('/v1/runs/'+encodeURIComponent(runId)+'/steer',{message})}
  async *events(runId:string,signal?:AbortSignal):AsyncGenerator<unknown>{

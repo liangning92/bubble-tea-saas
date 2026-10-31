@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Employee runtime disposable PostgreSQL only; run through scripts/with-docker-test.py."""
 import os
+import argparse
 import pathlib
 import shutil
 import socket
@@ -8,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 
+parser=argparse.ArgumentParser();parser.add_argument('--suite',choices=['both','transport','controlled'],default='both');suite=parser.parse_args().suite
 root = pathlib.Path(__file__).resolve().parents[1]
 run = os.environ.get('BT_TEST_RUN', '')
 assert run.startswith('bt-test-') and os.environ.get('BT_TEST_LABEL') == 'com.bubbletea.test-run=' + run
@@ -26,8 +28,8 @@ try:
     env = dict(os.environ, NODE_ENV='production', DATABASE_URL=f'postgresql://team_test@127.0.0.1:{port}/team_test',
                JWT_SECRET='synthetic-team-work-item-fixture-only', CORS_ORIGIN='http://localhost', UPLOADS_PATH=str(base / 'uploads'))
     command([str(root / 'server/node_modules/.bin/prisma'), 'db', 'push', '--skip-generate', '--schema', str(root / 'server/prisma/schema.prisma')], env=env)
-    command(['node', 'tests/stoploss/management-backend-check.cjs'], env=env)
-    command(['node', 'tests/stoploss/hermes-controlled-access-check.cjs'], env=env)
+    if suite in ['both','transport']:command(['node', 'tests/stoploss/management-backend-check.cjs'], env=env)
+    if suite in ['both','controlled']:command(['node', 'tests/stoploss/hermes-controlled-access-check.cjs'], env=env)
 finally:
     try:
         if started:

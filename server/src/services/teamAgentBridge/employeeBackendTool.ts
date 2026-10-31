@@ -1,4 +1,4 @@
-import {agentOperationAccess} from '../ManagementAgentPolicy'
+import {agentOperationAccess,agentAdditionalPermissions} from '../ManagementAgentPolicy'
 import { nativeFileInput } from '../NativeBackendFiles'
 import { bindNativeBackendPublication, NativeBackendPublication } from '../ManagementBackendIdentity'
 import { z } from 'zod'
@@ -52,7 +52,15 @@ async function release(db:any,g:NativeBackendPrincipal,scope:CommunicationScope,
   if(row.compartmentKey!==scope.compartmentKey||row.requesterStaffId!==scope.requesterStaffId)return {ok:false,code:'BACKEND_RECEIPT_NOT_VISIBLE'}
   if(row.state==='blocked')return {ok:false,code:row.fault||'BACKEND_OPERATION_BLOCKED',...(row.requiredPermission?{requiredPermission:row.requiredPermission}:{}),receiptId:row.id,state:'blocked',mayHaveExecuted:false,retryAllowed:false}
   if(row.state!=='complete')return {ok:false,code:'BACKEND_OUTCOME_UNKNOWN',receiptId:row.id,state:row.state,mayHaveExecuted:true,retryAllowed:false,message:'Inspect this receipt and the native business records. Do not dispatch the operation again.'}
-  if(row.agentReviewVersion!==1)return {ok:row.result?.ok,code:'BACKEND_RECEIPT_POLICY_CHANGED',detailsWithheld:true,receiptId:row.id,state:row.state,executed:row.result?.executed,retryAllowed:false}
+  if(row.agentReviewVersion!==2)return {ok:row.result?.ok,code:'BACKEND_RECEIPT_POLICY_CHANGED',detailsWithheld:true,receiptId:row.id,state:row.state,executed:row.result?.executed,retryAllowed:false}
+  const person=await db.staff.findFirst({where:{id:scope.requesterStaffId,storeId:g.storeId,status:'active'},include:{user:true}})
+  if(!person?.user||person.user.storeId!==g.storeId)return {ok:false,code:'BACKEND_RESULT_ACCESS_CHANGED',detailsWithheld:true,receiptId:row.id,state:row.state}
+  const actor:any={id:person.user.id,role:person.user.role,storeId:g.storeId,staffId:person.id,nativeAgent:{agentId:g.agentId}}
+  actor.accessRole=await userAccessV2(actor,db)||await assignedStaffAccess(actor,db);actor.employeeApp=!hasManagementAccess(actor.role,actor.accessRole)
+  if(!backendAccountAccess(actor,row.operationId).allowed)return {ok:false,code:'BACKEND_RESULT_ACCESS_CHANGED',detailsWithheld:true,receiptId:row.id,state:row.state}
+  for(const permission of new Set([...agentAdditionalPermissions(row.operationId),...(row.requiredPermissions||[])])){
+   if(!await audienceAllows(db,g,scope,permission))return {ok:false,code:'BACKEND_RESULT_ACCESS_CHANGED',detailsWithheld:true,requiredPermission:permission,receiptId:row.id,state:row.state}
+  }
   if(agentOperationAccess(row.operationId))return {ok:false,code:'AGENT_OPERATION_NOT_REVIEWED',detailsWithheld:true,receiptId:row.id,state:row.state}
   if(!await audienceAllows(db,g,scope,backendOperation(row.operationId)?.permission||'__unclassified__'))return {ok:false,code:'BACKEND_RESULT_ACCESS_CHANGED',detailsWithheld:true,receiptId:row.id,state:row.state}
   const op=backendOperation(row.operationId),permission=op?.permission?.replace(/\.(write|create|cancel|status|manage|stockIn|stockOut|count)$/i,'.read')
@@ -112,10 +120,12 @@ export async function executeBackendTool(db:any,g:NativeBackendPrincipal,scope:C
     actor.employeeApp=!hasManagementAccess(actor.role,actor.accessRole)
     const op=backendOperation(v.operationId)
     if(!op)throw Error('BACKEND_OPERATION_NOT_FOUND')
-    const permission=backendAccountAccess(actor,v.operationId)
+    const permission=backendAccountAccess(actor,v.operationId,v)
     if(!permission.allowed){const blocked={...journal,state:'blocked',fault:permission.code,requiredPermission:permission.requiredPermission,updatedAt:new Date().toISOString()};await persist(blocked);return {ok:false,...permission,receiptId:reservation.id,state:'blocked',executed:false,mayHaveExecuted:false,retryAllowed:false}}
     if(!await audienceAllows(db,g,scope,op.permission||'__unclassified__')){await persist({...journal,state:'blocked',fault:'BACKEND_AUDIENCE_PERMISSION_DENIED'});return {ok:false,code:'BACKEND_AUDIENCE_PERMISSION_DENIED',executed:false,receiptId:reservation.id,state:'blocked'}}
-    const running={...journal,agentReviewVersion:1,state:'running',actorUserId:user.id,actorRole:user.role,storeId:g.storeId,contractVersion:v.contractVersion,startedAt:new Date().toISOString()}
+    const requiredPermissions=agentAdditionalPermissions(v.operationId,v)
+    for(const requiredPermission of requiredPermissions)if(!await audienceAllows(db,g,scope,requiredPermission)){await persist({...journal,state:'blocked',fault:'BACKEND_AUDIENCE_PERMISSION_DENIED'});return {ok:false,code:'BACKEND_AUDIENCE_PERMISSION_DENIED',requiredPermission,executed:false,receiptId:reservation.id,state:'blocked'}}
+    const running={...journal,requiredPermissions,agentReviewVersion:2,state:'running',actorUserId:user.id,actorRole:user.role,storeId:g.storeId,contractVersion:v.contractVersion,startedAt:new Date().toISOString()}
     const claimed=await db.config.updateMany({where:{id:record.id,value:record.value},data:{value:JSON.stringify(running)}})
     if(claimed.count!==1)throw Error('BACKEND_EXECUTION_ALREADY_CLAIMED')
     const result=await invokeManagementBackend(db,actor,{...v,operationId:v.operationId,contractVersion:v.contractVersion})
