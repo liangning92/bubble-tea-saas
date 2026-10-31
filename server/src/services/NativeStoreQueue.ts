@@ -45,8 +45,9 @@ export async function enqueueNativeStoreRequest(db:any,storeId:string,channel:an
  let topic=message.files?.length?undefined:storeBusinessTopic(message.text)
  const pending=!topic&&!message.files?.length&&/名称|名字|商品|价格|折扣|优惠|时间|草稿|发布|确认|name|product|price|discount|tanggal|nama|produk|harga|diskon/i.test(message.text)?await read(db,storeId,'team.communication.nativeAgent.activityQuestion.'+channel.id+'.'+message.authorId):null
  const activityContext=pending&&['needs_input','created'].includes(pending.state)&&pending.requesterStaffId===message.authorId&&pending.audienceHash===hash(channel.members)&&Date.now()-Date.parse(pending.createdAt)<1800000?pending:undefined
- if(activityContext)topic='marketing_setup'
- const backendHints=topic&&topic!=='marketing_setup'&&topic!=='management_query'&&topic!=='revenue_scope'&&topic!=='stock_out_scope'?undefined:backendQueryHints(activityContext?'创建活动 '+message.text:message.text)
+ // Prior activity context may clarify a follow-up; it never classifies a new
+ // question or inserts a creation command into the current human request.
+ const backendHints=topic&&topic!=='marketing_setup'&&topic!=='management_query'&&topic!=='revenue_scope'&&topic!=='stock_out_scope'?undefined:backendQueryHints(message.text)
  const value={...(activityContext?{activityContext}:{}),...(backendHints?{backendHints}:{}),budgetMs:/(?:深入|全面|详细|审计|多步|analisis mendalam|audit lengkap)/i.test(message.text)?600000:30000,...(topic?{businessTopic:topic,executor:'business_topic'}:{}),id,storeId,channelId:channel.id,sourceSeq:message.seq,messageId:message.id,requesterStaffId:message.authorId,sourceHash:hash({id:message.id,seq:message.seq,authorId:message.authorId,text:message.text,...(message.language?{language:message.language}:{}),files:message.files||[]}),audienceHash:hash(channel.members),state:uncertainLegacy?'blocked':'queued',...(uncertainLegacy?{fault:'NATIVE_LEGACY_RESULT_RECONCILIATION_REQUIRED'}:{}),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}
  await db.config.upsert({where:{storeId_key:{storeId,key}},create:{storeId,key,category:'native_agent',value:JSON.stringify(value)},update:{}})
  return true
