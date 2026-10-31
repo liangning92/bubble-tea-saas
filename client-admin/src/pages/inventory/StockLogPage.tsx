@@ -1,4 +1,4 @@
-import {stockLogDateRange,stockLogQueryCopy,physicalStockOutQuantity,materialComparison} from '../../utils/stockLogQuery'
+import {stockLogDateRange,stockLogQueryCopy,physicalStockOutQuantity,registeredStockOutQuantity,stockEffectBasis,materialComparison} from '../../utils/stockLogQuery'
 import type {UsageResult} from '../../../../shared/inventoryUsageReport'
 import {StockPhotoEvidence} from '../../components/StockPhotoEvidence'
 import { ManualStockCorrection } from '../../components/ManualStockCorrection'
@@ -147,7 +147,7 @@ export function StockLogPage() {
     refetchInterval: 30000
   })
 
-  const rawLogs: any[] = (logsData || []).map((log:any)=>({...inventoryLogDisplay(log),physicalQuantity:physicalStockOutQuantity(log)}))
+  const rawLogs: any[] = (logsData || []).map((log:any)=>({...inventoryLogDisplay(log),physicalQuantity:physicalStockOutQuantity(log),registeredQuantity:registeredStockOutQuantity(log),stockEffectBasis:stockEffectBasis(log)}))
 
   const statsUnavailable=isLoading||(isError&&!logsData)
 
@@ -220,7 +220,7 @@ export function StockLogPage() {
   }, [filteredLogs])
 
   const materialTotals=useMemo(()=>Object.values(filteredLogs.reduce((result:Record<string,{id:string,name:string,quantity:number,unit:string}>,log:any)=>{
-    if(log.physicalQuantity!==null){const key=log.inventoryId;result[key]??={id:key,name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.physicalQuantity}
+    if(log.registeredQuantity!==null){const key=log.inventoryId;result[key]??={id:key,name:formatItemName(log.inventory?.name||'-',i18n.language),quantity:0,unit:log.inventory?.unit||''};result[key].quantity+=log.registeredQuantity}
     return result
   },{})).sort((a,b)=>a.name.localeCompare(b.name)),[filteredLogs,i18n.language])
   const theoryParams={startDate:dateRange.startDate||'2000-01-01',endDate:dateRange.endDate||'2100-12-31'}
@@ -396,6 +396,7 @@ export function StockLogPage() {
         [t('inventory.wasteReason')]: reasonText,
         [t('inventory.changeAmount')]: log.stockDelta === null ? '-' : `${log.stockDelta > 0 ? '+' : ''}${log.stockDelta}`,
         [t('inventory.unit')]: log.inventory?.unit || '-',
+        [copy.deduction]: log.registeredQuantity===null?'-':copy[log.stockEffectBasis as 'internal'|'explicit'|'unmarked'],
         [t('inventory.unitCost')]: log.unitCost || avgCost,
         [t('inventory.totalCostValue')]: costValue,
         [t('inventoryActors.operator')]: actorText(log.operator, log.staffId, t),
@@ -534,6 +535,10 @@ export function StockLogPage() {
         <div className="card"><p>{copy.difference}</p><strong>{theoryUnavailable?'—':quantity(comparison.difference)}</strong><small>{copy.differenceFormula}</small></div>
         <div className="card"><p>{t('inventory.totalMovements')}</p><strong>{statsUnavailable?'—':metrics.totalCount}</strong><small>{copy.allMatches}</small></div>
       </div>
+      <section className="inventory-ledger-basis" aria-label={copy.deduction}>
+        <dl>{(['deduction','internal','explicit','unmarked'] as const).map(key=><div key={key}><dt>{copy[key]}</dt><dd>{statsUnavailable?'—':quantity(comparison[key].quantity)} · {statsUnavailable?'—':copy.entries(comparison[key].count)}</dd></div>)}</dl>
+        <p>{copy.historyHint}</p>
+      </section>
       {theoryQuery.isError?<p role="alert" className="text-sm text-amber-800">{copy.theoryFailed} <button className="underline" onClick={()=>void theoryQuery.refetch()}>{copy.retry}</button></p>:!theoryQuery.isLoading&&(comparison.partial||!theoryRow)&&<p className="text-sm text-amber-800">{copy.incompleteTheory} <Link className="underline" to="/inventory/consumption">{copy.theoryDetails}</Link></p>}
       </>}
       {comparisonItem?<details className="inventory-ledger-financial"><summary>{copy.financial}</summary>{financialMetrics}</details>:financialMetrics}
@@ -632,7 +637,7 @@ export function StockLogPage() {
                         {getCategoryBadge(log.inventory?.category)}
                       </td>
                       <td className="py-3 text-sm px-4 whitespace-nowrap">
-                        {getReasonBadge(log)}
+                        {getReasonBadge(log)}{log.registeredQuantity!==null&&<span className="block text-xs text-gray-500 mt-1">{copy[log.stockEffectBasis as 'internal'|'explicit'|'unmarked']}</span>}
                       </td>
                       <td className="py-3 text-sm text-right px-4 whitespace-nowrap font-medium">
                         <span className={log.stockDelta >= 0 ? 'text-green-600' : 'text-red-600'}>

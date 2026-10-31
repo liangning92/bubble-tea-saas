@@ -10,8 +10,15 @@ test('ledger draft dates reject partial, reversed and invalid years; Jakarta bou
 
 test('material query comparison uses all matching physical issues, signed corrections and complete recipe evidence',()=>{
  const item={id:'vanilla',unit:'kg'},logs=[{inventoryId:'vanilla',type:'stock_out',reason:'withdrawal',quantity:3},{inventoryId:'vanilla',type:'stock_out',reason:'withdrawal',quantity:-1},{inventoryId:'other',type:'stock_out',reason:'withdrawal',quantity:99},{inventoryId:'vanilla',type:'stock_out',reason:'sale',quantity:2},{inventoryId:'vanilla',type:'stock_out',reason:'process',quantity:5,physicalQuantity:null}];
- const row={unit:'kg',theoreticalConsumption:1.5};let result=materialComparison(logs,item,row);assert.equal(result.actual,2);assert.equal(result.theory,1.5);assert.equal(result.difference,0.5);
- result=materialComparison(logs,item,{...row,theoreticalConsumption:0});assert.equal(result.theory,0);assert.equal(result.difference,2);
+ const row={unit:'kg',theoreticalConsumption:1.5};let result=materialComparison(logs,item,row);assert.equal(result.actual,7);assert.equal(result.theory,1.5);assert.equal(result.difference,5.5);
+ result=materialComparison(logs,item,{...row,theoreticalConsumption:0});assert.equal(result.theory,0);assert.equal(result.difference,7);
  for(const incomplete of [{...row,partialPeriod:true},{...row,theoreticalConsumption:null,knownTheoreticalConsumption:0.75,theoryEvidence:{complete:false}},{...row,unit:'g'},undefined]){result=materialComparison(logs,item,incomplete);assert.equal(result.difference,null);assert.equal(result.partial,true)}
  assert.equal(materialComparison([],item,row).actual,0);assert.equal(materialComparison([],item,row).difference,-1.5);
+});
+
+test('registered issues include internal history while deduction basis stays separate',()=>{
+ const item={id:'x',unit:'kg'},make=(q,n,e)=>Array.from({length:n},()=>({inventoryId:'x',type:'stock_out',reason:'withdrawal',quantity:q,note:JSON.stringify(e?{stockEffect:e}:{})}));
+ const logs=[...make(1,8),...make(1,27,'internal_transfer'),...make(2,1,'internal_transfer'),...make(3,2,'internal_transfer'),...make(0,1,'internal_transfer'),...make(1,12,'physical_out')];
+ // Synthetic counts and quantities test all buckets independently of production data.
+ const result=materialComparison(logs,item,{unit:'kg',theoreticalConsumption:10});assert.equal(result.actual,55);assert.equal(result.registeredCount,51);assert.equal(result.internal.quantity,35);assert.equal(result.internal.count,31);assert.equal(result.deduction.quantity,20);assert.equal(result.deduction.count,20);assert.equal(result.unmarked.quantity,8);assert.equal(result.explicit.quantity,12);assert.equal(result.difference,45);
 });
