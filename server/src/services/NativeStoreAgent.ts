@@ -1,7 +1,8 @@
-import {explicitlyPublishesActivity,agentAdditionalPermissions,activityRequestIntent} from './ManagementAgentPolicy'
+import {explicitlyPublishesActivity,agentAdditionalPermissions,activityRequestIntent,activityExecutionBody,activityReceiptText} from './ManagementAgentPolicy'
 import {executeBusinessTopic,topicDefinition,BusinessTopic,storeBusinessTopic} from './StoreBusinessTopic'
 import {audienceAllows} from './teamAgentBridge/employeeAccess'
 import {backendAccountAccess} from './ManagementBackendRegistry'
+import {listActivities} from './ActivityService'
 import {storeOperationsGuide} from './StoreOperationsGuides'
 import {backendAccountSummary,backendOperation} from './ManagementBackendRegistry'
 import {nativeChannelAdmission} from './NativeStoreQueue'
@@ -28,7 +29,7 @@ import type {CommunicationScope} from './teamAgentBridge/contract'
 const digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex')
 const prefix='nativeAgent.job.'
 export interface NativeStoreConfig {storeId:string;agentId:string;gatewayOrigin:string;gatewayKey:string;backendOrigin:string}
-type NativeJob={activityContext?:any;backendHints?:any;routedNative?:boolean;budgetMs?:number;businessTopic?:BusinessTopic;executor?:'business_topic'|'hermes_native';topicPermission?:string;topicReceipt?:any;id:string;storeId:string;channelId:string;sourceSeq:number;messageId:string;requesterStaffId:string;sourceHash:string;publicObjective?:any;authorizationChannelId?:string;sourceAudienceHash?:string;parentJobId?:string;audienceHash?:string;profileKey?:string;scope?:CommunicationScope;principal?:NativeBackendPrincipal;state:string;startedAt?:string;createdAt:string;updatedAt:string;sessionId?:string;runId?:string;input?:any;callbackCredentialHash?:string;providerCredentialHash?:string;credentials?:never;fault?:string;outputMessageId?:string;outputFileId?:string;model?:string;pollLeaseUntil?:number;pollToken?:string;nextAttemptAt?:number;failureMessageId?:string;statusMessageId?:string;lastPollFault?:string;firstPollFaultAt?:string;pollFaultCount?:number}
+type NativeJob={receiptMessageId?:string;completionSource?:string;activityReceiptId?:string;activityContext?:any;backendHints?:any;routedNative?:boolean;budgetMs?:number;businessTopic?:BusinessTopic;executor?:'business_topic'|'hermes_native';topicPermission?:string;topicReceipt?:any;id:string;storeId:string;channelId:string;sourceSeq:number;messageId:string;requesterStaffId:string;sourceHash:string;publicObjective?:any;authorizationChannelId?:string;sourceAudienceHash?:string;parentJobId?:string;audienceHash?:string;profileKey?:string;scope?:CommunicationScope;principal?:NativeBackendPrincipal;state:string;startedAt?:string;createdAt:string;updatedAt:string;sessionId?:string;runId?:string;input?:any;callbackCredentialHash?:string;providerCredentialHash?:string;credentials?:never;fault?:string;outputMessageId?:string;outputFileId?:string;model?:string;pollLeaseUntil?:number;pollToken?:string;nextAttemptAt?:number;failureMessageId?:string;statusMessageId?:string;lastPollFault?:string;firstPollFaultAt?:string;pollFaultCount?:number}
 const atomic=(tx:any)=>new Proxy(tx,{get(target,key){return key==='$transaction'?async(fn:any)=>fn(atomic(target)):typeof target[key]==='function'?target[key].bind(target):target[key]}})
 const channelLease=(id:string)=>'nativeAgent.channel.'+id
 const stamp=()=>new Date().toISOString()
@@ -114,8 +115,8 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   const result=await client.submit(job.input,job.id,jobDeadline(job))
   job.runId=result.id||result.run_id;if(!job.runId)throw Error('NATIVE_RUN_ID_MISSING');job.state='running';await save(job)
  }
- async function deliver(job:NativeJob,text:string,kind:'result'|'status'='result'){
-  const field=kind==='result'?'outputMessageId':'statusMessageId',deliveryId=kind==='result'?job.id:digest([job.id,'status'])
+ async function deliver(job:NativeJob,text:string,kind:'result'|'status'|'receipt'='result'){
+  const field=kind==='receipt'?'receiptMessageId':kind==='result'?'outputMessageId':'statusMessageId',deliveryId=kind==='result'?job.id:digest([job.id,kind])
   await db.$transaction(async(tx:any)=>{
    await lockTeam(tx,cfg.storeId,'native-agent-delivery.'+job.id)
    const saved=await read(job.id,tx);if(saved?.[field]){job[field]=saved[field];return}
@@ -125,10 +126,11 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
    if(native){const message=await readTeam<any>(tx,cfg.storeId,'message.'+job.channelId+'.'+String(native.seq).padStart(12,'0'));if(message?.text===text){job[field]=native.messageId;await save(job,tx);return}}
    const dataPermissions=new Set<string>()
    if(kind==='result'&&job.topicReceipt&&job.topicPermission)dataPermissions.add(job.topicPermission)
-   if(kind==='result'&&job.executor==='hermes_native'){
+   if(kind!=='status'&&job.executor==='hermes_native'){
     const receipts=await tx.config.findMany({where:{storeId:cfg.storeId,key:{startsWith:'team.communication.employeeRuntime.backendOperation.'},value:{contains:JSON.stringify('executionId')+':'+JSON.stringify(job.id)}},select:{value:true}})
     for(const row of receipts){const receipt=JSON.parse(row.value);if(receipt.state!=='complete'||!receipt.result?.executed)continue;const permission=backendOperation(receipt.operationId)?.permission?.replace(/\.(write|create|cancel|status|manage|stockIn|stockOut|count)$/i,'.read');if(permission)dataPermissions.add(permission);for(const required of receipt.requiredPermissions||agentAdditionalPermissions(receipt.operationId))dataPermissions.add(required)}
    }
+   for(const permission of dataPermissions)if(!await audienceAllows(tx,c.principal,c.scope,permission))throw Error('NATIVE_OUTPUT_ACCESS_CHANGED')
    const actor:any={...c.actor};bindNativeBackendAgent(actor,{dataPermissions:[...dataPermissions],agentId:cfg.agentId,grantVersion:c.principal.version,clientRevision:1,executionId:deliveryId,name:c.principal.displayName||'Hermes',...(!job.authorizationChannelId?{replyToSeq:job.sourceSeq}:{})})
    bindNativeBackendPublication(actor,{check:async(_tx,target)=>{if(target.channelId!==job.channelId||digest(target.members)!==digest(c.channel.members))throw Error('NATIVE_OUTPUT_CONTEXT_CHANGED')}})
    const requestId=taskId('native-output:'+deliveryId)
@@ -140,6 +142,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   const match=/^([a-f0-9]{64})\.([A-Za-z0-9_-]{64})$/.exec(token)
   if(!match)throw Error('NATIVE_INGRESS_UNAUTHORIZED')
   const job=await read(match[1]);if(!job||!['admitting','running','waiting_children'].includes(job.state)||digest(match[2])!==job[purpose==='callback'?'callbackCredentialHash':'providerCredentialHash'])throw Error('NATIVE_INGRESS_UNAUTHORIZED')
+  if(job.receiptMessageId)throw Error('NATIVE_ACTIVITY_ALREADY_SAVED')
   if(Date.now()>=jobDeadline(job))throw Error('NATIVE_RUN_DEADLINE')
   return {job,...await current(job)}
  }
@@ -150,6 +153,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
   const c=await access(token(req),'callback'),v=z.object({jobId:z.string(),sessionId:z.string().min(1),toolCallId:z.string().min(1),args:z.unknown()}).strict().parse(req.body)
   if(v.jobId!==c.job.id)throw Error('NATIVE_JOB_MISMATCH')
   const raw=v.args as any
+  if(raw?.action==='execute'&&['POST /api/marketing/activities','PUT /api/marketing/activities/:id'].includes(raw.operationId))raw.body=activityExecutionBody(c.source.text,raw.body)
   if(raw?.action==='execute'&&['POST /api/marketing/activities','PUT /api/marketing/activities/:id'].includes(raw.operationId)&&!activityRequestIntent(c.source.text)&&!c.activityContext)throw Error('ACTIVITY_REQUEST_INTENT_REQUIRED')
   if(['file_read','file_write'].includes(raw?.action))throw Error('AGENT_OPERATION_NOT_REVIEWED')
   if(raw?.action==='handoff'){
@@ -241,7 +245,33 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
  async function finish(job:NativeJob){
   await db.$transaction(async(tx:any)=>{await lockTeam(tx,cfg.storeId,'native-admission.'+job.channelId);await save(job,tx);const lease=await readTeam<any>(tx,cfg.storeId,channelLease(job.channelId));if(lease?.jobId===job.id)await writeTeam(tx,cfg.storeId,channelLease(job.channelId),{jobId:null,updatedAt:stamp()})})
  }
- return {router,gatewayHealth:()=>gateway().gatewayHealth(),async runBatch(limit=10,lane:'all'|'business'|'native'='all'){
+ async function savedActivity(job:NativeJob){
+  const c=await current(job)
+  if(!activityRequestIntent(c.source.text)&&!c.activityContext)return null
+  if(/同时|然后|分别|各建|每个|并(?:查询|分析|创建|新建)|[两二三四五六七八九十2-9]个活动|multiple|each|masing/i.test(c.source.text))return null
+  const rows=await db.config.findMany({where:{storeId:cfg.storeId,key:{startsWith:'team.communication.employeeRuntime.backendOperation.'},value:{contains:JSON.stringify('executionId')+':'+JSON.stringify(job.id)}},select:{value:true}})
+  const writes=rows.map((row:any)=>JSON.parse(row.value)).filter((row:any)=>['POST /api/marketing/activities','PUT /api/marketing/activities/:id'].includes(row.operationId))
+  // Never turn an unknown write into a success or dispatch it again.
+  if(writes.some((row:any)=>!['complete','blocked'].includes(row.state)))return null
+  const saved=writes.filter((row:any)=>row.state==='complete'&&row.result?.ok&&row.result?.executed&&row.result?.data?.data?.id)
+  if(new Set(saved.map((row:any)=>row.result.data.data.id)).size!==1)return null
+  const receipt=saved[saved.length-1]
+  const released=await executeBackendTool(db,c.principal,c.scope,c.source.id,{action:'status',receiptId:receipt.id})
+  if(!released.ok||released.detailsWithheld||!released.data?.data?.id)return null
+  const activity=(await listActivities(cfg.storeId,db)).find(a=>a.id===released.data.data.id)
+  if(!activity)return null
+  // The original write receipt proves the operation, the live record proves
+  // current status/display fields after a human edit. Both stay store scoped.
+  return {receiptId:receipt.id,text:activityReceiptText(activity,/[\u3400-\u9fff]/u.test(c.source.text))}
+ }
+ async function reconcileActivity(id:string){
+  const job=await read(id);if(!job)throw Error('NATIVE_JOB_NOT_FOUND')
+  if(!['failed','unknown','cancelled','interrupted','completed'].includes(job.state))return {reconciled:false}
+  const saved=await savedActivity(job);if(!saved)return {reconciled:false}
+  await deliver(job,saved.text,'receipt');job.activityReceiptId=saved.receiptId;job.completionSource='native_activity_receipt';job.outputMessageId=job.receiptMessageId;job.state='completed';delete job.fault;await finish(job)
+  return {reconciled:true,messageId:job.receiptMessageId,receiptId:saved.receiptId}
+ }
+ return {router,reconcileActivity,gatewayHealth:()=>gateway().gatewayHealth(),async runBatch(limit=10,lane:'all'|'business'|'native'='all'){
   const laneFilter=lane==='all'?{}:lane==='business'?{AND:[{value:{contains:'\"executor\":\"business_topic\"'}}]}:{NOT:{value:{contains:'\"executor\":\"business_topic\"'}}}
   const rows=await db.config.findMany({where:{...laneFilter,storeId:cfg.storeId,key:{startsWith:'team.communication.'+prefix},OR:['queued','preparing','admitting','running','waiting_children'].map(state=>({value:{contains:JSON.stringify('state')+':'+JSON.stringify(state)}}))},orderBy:{createdAt:'asc'},take:1000})
   let processed=0
@@ -276,6 +306,16 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
     }else if(job.runId){
      const context=await current(job),client=gateway(job.profileKey)
      const deadline=jobDeadline(job)
+     const saved=await savedActivity(job)
+     if(saved){
+      await deliver(job,saved.text,'receipt');job.activityReceiptId=saved.receiptId;job.completionSource='native_activity_receipt'
+      // No further model/tool calls are needed after the native save receipt.
+      await client.cancel(job.runId).catch(()=>{})
+      const ready=await client.readiness()
+      if(ready.activeRuns||ready.activeDelegations||(ready.blockingProcesses??ready.activeProcesses)){job.state='waiting_children';await save(job);continue}
+      job.outputMessageId=job.receiptMessageId;job.state='completed';delete job.fault;await finish(job);continue
+     }
+     if(!job.statusMessageId&&nativeReplyDelayed(job))await deliver(job,'正在处理本次后台请求；尚未确认修改完成。 / Permintaan backend sedang diproses; perubahan belum dikonfirmasi.','status')
      let result
      try{result=await client.status(job.runId)}catch(error){if(Date.now()<deadline)throw error;result={status:'unconfirmed'}}
      const terminal=['completed','failed','cancelled','interrupted','unknown'].includes(result.status)
@@ -306,9 +346,11 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
       if(output.length>4000){const c=await current(job);if(!job.outputFileId){const file=await storeNativeDownload(db,c.actor,Buffer.from(output),'text/plain',job.id,'team');job.outputFileId=file.id;await save(job)}output=output.slice(0,3800)+'\n\n完整回复见附件 / Jawaban lengkap ada di lampiran.'}
       await deliver(job,output);job.state='completed';await finish(job)
      }else if(['failed','cancelled','interrupted','unknown'].includes(result.status)){
+      const committed=await savedActivity(job)
+      if(committed){await deliver(job,committed.text,'receipt');job.activityReceiptId=committed.receiptId;job.completionSource='native_activity_receipt';job.outputMessageId=job.receiptMessageId;job.state='completed';delete job.fault;await finish(job);continue}
       const ready=await client.readiness()
       if(ready.activeRuns||ready.activeDelegations||(ready.blockingProcesses??ready.activeProcesses)){job.state='waiting_children';await save(job);continue}
-      await deliver(job,'Maaf, pekerjaan ini belum selesai. Hasil yang sudah tersimpan tidak akan diulang otomatis. Pengelola dapat melihat kendalanya di tugas ini.')
+      await deliver(job,/[\u3400-\u9fff]/u.test(context.source.text)?'本次请求未完成。已保存的操作记录会保留，不会自动重复提交；请核对任务结果。':'Maaf, pekerjaan ini belum selesai. Hasil yang sudah tersimpan tidak akan diulang otomatis. Pengelola dapat melihat kendalanya di tugas ini.')
       job.state=result.status;job.fault='NATIVE_RUN_'+result.status.toUpperCase();await finish(job)
      }else await save(job)
     }
@@ -319,7 +361,7 @@ export function createNativeStoreAgent(db:any,cfg:NativeStoreConfig){
     job.lastPollFault=code;job.nextAttemptAt=Date.now()+(Date.now()>=jobDeadline(job)?3000:5000)
     // Transport failures are read/reconciled, never a reason to replay a business call.
     // Invalid source/account context is terminal and cannot publish private output.
-    if(/NATIVE_(AGENT_DISABLED|ACCOUNT_UNAVAILABLE|CHANNEL_UNAVAILABLE|SOURCE_CHANGED|CONTEXT_CHANGED)|BUSINESS_TOPIC_ACCESS_CHANGED/.test(code)){
+    if(/NATIVE_(AGENT_DISABLED|ACCOUNT_UNAVAILABLE|CHANNEL_UNAVAILABLE|SOURCE_CHANGED|CONTEXT_CHANGED|OUTPUT_ACCESS_CHANGED)|BUSINESS_TOPIC_ACCESS_CHANGED/.test(code)){
      job.state='blocked';job.fault=code;await finish(job)
     }else if(job.executor==='business_topic'){
      job.fault=code;await deliver(job,/[\u3400-\u9fff]/u.test((await current(job)).source.text)?'查询未完成，请稍后重试。没有执行数据修改。':'Permintaan belum selesai. Coba lagi nanti. Tidak ada data yang diubah.');job.state='failed';await finish(job)

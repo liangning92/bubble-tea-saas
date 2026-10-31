@@ -46,3 +46,16 @@ export function activityRequestIntent(text:string):boolean {
  if(/截图|文件|附件|文档|引用|示例|例如|为什么|为何|如何|怎么|how to|why|example/i.test(text))return false
  return /(?:设置|创建|新建|安排|发布|修改|调整|更新|编辑).{0,30}(?:活动|促销)|(?:活动|促销).{0,30}(?:设置|创建|新建|发布|修改|调整|更新|编辑)|(?:create|publish|edit|update|buat|atur|terbitkan|ubah).{0,30}(?:campaign|promotion|promosi|kampanye)/i.test(text)
 }
+
+/** Display choices come from the human source, never from an agent title or an
+ * invented publish flag. Explicit no-display instructions override model defaults. */
+export function activityExecutionBody(source:string,body:any):any {
+ if(!body||typeof body!=='object'||Array.isArray(body))return body
+ const command=unquotedActivityCommand(source)
+ const hidden=/不(?:在)?[^。.!\n]{0,18}(?:电视|大屏|展示)|不要[^。.!\n]{0,18}(?:电视|大屏|展示)|关闭[^。.!\n]{0,12}(?:电视|大屏)|(?:do not|don.t|never)[^.!\n]{0,30}(?:display|show|tv|signage)|jangan[^.!\n]{0,30}(?:tampil|tv|layar)/i.test(command)
+ return hidden?{...body,showOnTv:false}:body
+}
+export function activityReceiptText(activity:any,chinese:boolean):string {
+ const states:any={draft:'草稿',published:'已发布',paused:'已暂停',ended:'已结束'}
+ return chinese?`活动已保存：${activity.name}。\n活动 ID：${activity.id}\n实际状态：${states[activity.status]||activity.status}${activity.status==='draft'?'（未发布）':''}\n大屏展示：${activity.showOnTv?'开启':'关闭'}。`:`Kampanye tersimpan: ${activity.name}.\nID: ${activity.id}\nStatus: ${activity.status}.\nTampil di layar: ${activity.showOnTv?'ya':'tidak'}.`
+}
