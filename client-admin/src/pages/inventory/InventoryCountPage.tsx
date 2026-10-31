@@ -307,9 +307,7 @@ export function InventoryCountPage() {
           <h1 className="text-2xl font-bold text-gray-900">
             {t("inventoryCountWorkspace.title")}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {t("inventoryCountWorkspace.hint")}
-          </p>
+          <PageHelp>{t("inventoryCountWorkspace.hint")}</PageHelp>
         </div>
         {canCreate && (
           <button
@@ -466,7 +464,7 @@ export function InventoryCountPage() {
 
     return (
       <div className="space-y-6" data-notice-object={selectedCount.id} data-notice-status={selectedCount.status}>
-        <PageHelp>{inventoryCountLabels(i18n.language).hint}</PageHelp><p className="text-sm text-amber-800">{t("inventoryUnified.count")}</p>
+        <PageHelp><p>{inventoryCountLabels(i18n.language).hint}</p><p>{t("inventoryUnified.count")}</p></PageHelp>
         <button disabled={draftDirty || busy} onClick={refreshCounts}>{t("countFlow.refresh")}</button>
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

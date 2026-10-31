@@ -1,3 +1,4 @@
+import {PageHelp} from '../../components/PageHelp'
 import { formatNumber } from '../../utils/numberDisplay'
 import { formatDisplayQuantity } from '../../utils/itemDisplayName'
 import { confirmAdmin } from '../../components/AdminFeedback'
@@ -72,7 +73,7 @@ export function ProcessingListPage() {
         </Link>
       </div>
 
-      <p className="text-sm bg-blue-50 p-3 rounded-lg">{t('inventoryUnified.hint')}</p>
+      <PageHelp>{t('inventoryUnified.hint')}</PageHelp>
       {isError&&<p role="alert" className="text-red-700">{t('inventoryProcessing.failed')} <button className="underline" onClick={()=>refetch()}>{t('common.refresh')}</button></p>}
       {/* Quick Execute */}
       <div className="card">
@@ -213,6 +214,7 @@ function ProcessingHistory() {
         {history.map((log: any) => {
           const inputs = safeParse(log.inputItems, [])
           const outputs = safeParse(log.outputItems, [])
+          const note=(()=>{try{return JSON.parse(log.note||'null')?.note||''}catch{return log.note||''}})()
 
           return (
             <div key={log.id} className="border border-border rounded-lg p-4">
@@ -244,7 +246,7 @@ function ProcessingHistory() {
                   )) : <div className="text-gray-400">-</div>}
                 </div>
               </div>
-              {log.note&&<p className="text-sm text-gray-500">{(()=>{try{return JSON.parse(log.note).note||''}catch{return log.note}})()}</p>}<p className="mt-2 text-sm">{t('inventoryActors.operator')}: <ActorName actor={log.operator} id={log.staffId}/></p>
+              {note&&<details className="workspace-disclosure"><summary>{t('inventory.notes')}</summary><p>{note}</p></details>}<p className="mt-2 text-sm">{t('inventoryActors.operator')}: <ActorName actor={log.operator} id={log.staffId}/></p>
             </div>
           )
         })}
