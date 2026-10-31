@@ -81,10 +81,26 @@ export function backendAccountAccess(actor:any,id:string,input?:any){
  }
  return {allowed:true,mode:'allow'}
 }
+/** Current capability metadata comes from the same reviewed native routes and
+ * account checks as execution. It is neither a permission grant nor a list of
+ * operations previously seen in this conversation. No business records are read. */
+export function backendCapabilityIndex(actor:any){
+ const groups=new Map<string,{permission:string;allowedCount:number;deniedCount:number;examples:string[]}>()
+ const writes:any[]=[]
+ for(const [operationId,permission] of agentOperations){
+  const accountAccess=backendAccountAccess(actor,operationId)
+  if(!operationId.startsWith('GET ')){writes.push({operationId,permission,accountAccess});continue}
+  const key=permission||'owner.only',group=groups.get(key)||{permission:key,allowedCount:0,deniedCount:0,examples:[]}
+  if(accountAccess.allowed){group.allowedCount++;group.examples.push(operationId)}else group.deniedCount++
+  groups.set(key,group)
+ }
+ return {source:'current_backend_route_policy',reads:[...groups.values()].sort((a,b)=>a.permission.localeCompare(b.permission)).map(group=>({...group,examples:group.examples.sort((a,b)=>a.length-b.length||a.localeCompare(b)).slice(0,2)})),writes,
+  contractDiscovery:'Discover live input contracts before execution. Resource, field and audience checks still apply.'}
+}
 export function backendAccountSummary(actor:any){
  const access=actor.employeeApp?employeeAppAccess(actor.role):actor.accessRole
  return {financialRecordScope:actor.staffId?ownFinancialRecords(actor):{scope:'unresolved'},storeId:actor.storeId,role:actor.role,employeeApp:!!actor.employeeApp,accessRole:access?{id:access.id,version:access.version,permissions:access.permissions,modes:access.modes}:null,
-  authority:'current_requesting_account',resourceChecks:'native_handlers',instructions:'Check accountAccess before requesting business details or changes. If denied, explain the missing permission and stop that operation; do not try alternative endpoints. Approval is not allow. Catalog discovery does not grant access.'}
+  capabilities:backendCapabilityIndex(actor),authority:'current_requesting_account',resourceChecks:'native_handlers',instructions:'Check accountAccess before requesting business details or changes. If denied, explain the missing permission and stop that operation; do not try alternative endpoints. Approval is not allow. Catalog discovery does not grant access.'}
 }
 export function backendCatalog(query = '', offset = 0, limit = 25, actor?:any) {
   const terms=query.toLowerCase().split(/[\s/]+/).filter(Boolean)
