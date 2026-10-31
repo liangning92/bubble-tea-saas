@@ -160,6 +160,7 @@ export const inventoryApi = {
   logsStockOut: (params?: any) => api.get('/inventory/logs/stock-out', { params }),
   alerts: () => api.get('/inventory/alerts/low-stock'),
   stats: () => api.get('/inventory/stats/summary'),
+  countReconciliation: (params:UsageParams) => api.get<{code:number;data:UsageResult}>('/inventory/count-reconciliation',{params}),
   consumptionAnalysis: (params: UsageParams) => api.get<{code:number;data:UsageResult}>('/inventory/consumption-analysis', { params }),
   anomalySummary: (params: any) => api.get('/inventory/anomaly-summary', { params }),
   // Alert config

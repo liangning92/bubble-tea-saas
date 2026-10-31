@@ -14,7 +14,7 @@ export function validReportDates(start:string,end:string) {
   return valid(start)&&valid(end)&&start<=end
 }
 export const hasComparison=(r:UsageRow)=>r.variance!==null&&Number.isFinite(r.variance)
-export const missingData=(r:UsageRow)=>r.varianceStatus==='unavailable'&&!(r.unavailableReason==='ZERO_THEORETICAL_BASELINE'&&hasComparison(r))
+export const missingData=(r:UsageRow)=>r.varianceStatus==='awaiting_count'||r.varianceStatus==='unavailable'&&!(r.unavailableReason==='ZERO_THEORETICAL_BASELINE'&&hasComparison(r))
 export const hasDifference=(r:UsageRow)=>hasComparison(r)&&r.variance!==0
 export function reportSummary(rows:UsageRow[]) {
   return {comparable:rows.filter(hasComparison).length,missing:rows.filter(missingData).length,difference:rows.filter(hasDifference).length}

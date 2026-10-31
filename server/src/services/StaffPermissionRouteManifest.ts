@@ -1,5 +1,6 @@
 // Explicit route declarations. Regenerate and review when adding business routes.
 export const ACCESS_ROUTE_MANIFEST:Record<string,{permission:string|null;ownerOnly:boolean;export:boolean;personal:boolean;legacyRoles?:string[];legacyPermission?:string|null;resource?:{model:string;param:string}|null;publicationAudience?:{publicOutput?:boolean;allStaff?:boolean;staffField?:string;resourceModel?:string;resourceParam?:string}}> = {
+  "GET /api/inventory/count-reconciliation":{permission:"inventory.read",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"inventory.read"},
   "GET /api/inventory/logs/stock-out-report":{permission:"inventory.read",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager","cashier","staff"],legacyPermission:"inventory.read"},
   "GET /api/team/agent-work-guides":{permission:"personal.messages",ownerOnly:false,export:false,personal:true},
   "GET /api/team/agent-jobs":{permission:"team.audit",ownerOnly:false,export:false,personal:false,legacyRoles:["admin","manager"],legacyPermission:"team.audit"},

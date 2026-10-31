@@ -1,3 +1,4 @@
+import {inventoryReconciliationCopy} from '../../utils/inventoryReconciliationCopy'
 import {Fragment,useEffect,useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import {Link,useLocation} from 'react-router-dom'
@@ -21,20 +22,21 @@ const save=(key:string,value:unknown)=>{try{sessionStorage.setItem(key,JSON.stri
 export function InventoryUsageReport({countsOnly=false}:{countsOnly?:boolean}) {
  const {pathname}=useLocation(),user=useAuthStore(s=>s.user)
  const identity=JSON.stringify([user?.id,user?.storeId,pathname])
- return <ReportSession key={identity} storageKey={'inventory-report:v1:'+identity} countsOnly={countsOnly}/>
+ return <ReportSession key={identity} storageKey={'inventory-report:v2:'+identity} countsOnly={countsOnly}/>
 }
 function ReportSession({storageKey,countsOnly}:{storageKey:string;countsOnly:boolean}) {
- const {i18n}=useTranslation(),c=inventoryReportCopy(i18n.language),l=inventoryComparisonCopy(i18n.language)
- const [mode,setMode]=useState<ReportMode>(()=>{try{return !countsOnly&&JSON.parse(sessionStorage.getItem(storageKey+':mode')||'null')==='registered'?'registered':'counts'}catch{return 'counts'}})
+ const {i18n}=useTranslation()
+ const mode:ReportMode=countsOnly?'counts':'registered',rc=inventoryReconciliationCopy(i18n.language)
  const allowed=useEmployeeNavigation()
  return <section className="inventory-usage-report space-y-4">
-  <header className="flex flex-wrap justify-between items-center gap-3"><h1 className="text-2xl font-bold">{countsOnly?c.counts:l.title}</h1>{allowed(permissionForPage('/inventory/alerts'))&&<Link className="text-primary" to="/inventory/alerts">{i18n.t('operations.alerts')} →</Link>}</header>
-  {!countsOnly&&<div className="inventory-report-mode" role="group" aria-label={c.mode}><span className="font-medium">{c.mode}</span>{(['counts','registered'] as const).map(m=><button type="button" key={m} aria-pressed={mode===m} className={mode===m?'btn-primary':'btn-secondary'} onClick={()=>{setMode(m);save(storageKey+':mode',m)}}>{c[m]}</button>)}</div>}
+  <header className="flex flex-wrap justify-between items-center gap-3"><h1 className="text-2xl font-bold">{countsOnly?rc.countTitle:rc.dailyTitle}</h1>{allowed(permissionForPage('/inventory/alerts'))&&<Link className="text-primary" to="/inventory/alerts">{i18n.t('operations.alerts')} →</Link>}</header>
+  <p className="text-sm text-gray-600">{countsOnly?rc.countHint:rc.dailyHint}</p>
+  <Link className="text-primary text-sm underline" to={countsOnly?'/inventory/consumption':'/inventory/physical-analysis'}>{countsOnly?rc.dailyTitle:rc.countTitle} →</Link>
   <ReportBody key={mode} mode={mode} storageKey={storageKey+':'+mode}/>
  </section>
 }
 function ReportBody({mode,storageKey}:{mode:ReportMode;storageKey:string}) {
- const {t,i18n}=useTranslation(),l=inventoryComparisonCopy(i18n.language),c=inventoryReportCopy(i18n.language)
+ const {t,i18n}=useTranslation(),l=inventoryComparisonCopy(i18n.language),rc=inventoryReconciliationCopy(i18n.language),baseCopy=inventoryReportCopy(i18n.language),c=mode==='counts'?{...baseCopy,limits:rc.limits,formula:rc.formula,comparable:rc.comparable,missing:rc.missing,normal:rc.normal,noInterval:rc.noBaseline,latest:rc.latest}:baseCopy
  const dates=useStoreDateSettings(),today=storeCalendarDate(new Date(),dates.timezone),user=useAuthStore(s=>s.user)
  const [state,setState]=useState(()=>readReportState(storageKey,mode,today))
  const [draft,setDraft]=useState({startDate:state.startDate,endDate:state.endDate})
@@ -43,16 +45,16 @@ function ReportBody({mode,storageKey}:{mode:ReportMode;storageKey:string}) {
  useEffect(()=>{setDraft({startDate:state.startDate,endDate:state.endDate})},[state.startDate,state.endDate])
  const params={startDate:state.period==='latest'?'2000-01-01':state.period==='today'?today:state.startDate,endDate:state.period==='custom'?state.endDate:today,...(mode==='counts'?{latest:state.period==='latest'}:{})}
  const query=useQuery({queryKey:['inventory-usage-report',user?.id,user?.storeId,mode,params,dates.timezone],queryFn:async():Promise<UsageResult>=>{
-   const response=await (mode==='counts'?inventoryApi.consumptionAnalysis(params):inventoryApi.employeeConsumption(params));return response.data.data
+   const response=await (mode==='counts'?inventoryApi.countReconciliation(params):inventoryApi.employeeConsumption(params));return response.data.data
  },enabled:!!user&&validReportDates(params.startDate,params.endDate),refetchInterval:60000})
  const all=query.data?.list||[],summary=reportSummary(all),name=(r:UsageRow)=>formatItemName(r.inventoryName,i18n.language)
  const rows=selectReportRows(all,state,name),coverage=mode==='counts'?query.data?.coverage||usageCoverage(all):null
- const qty=(v:unknown)=>consumptionQuantity(v,i18n.language,3)
+ const qty=(v:unknown)=>consumptionQuantity(v,i18n.language,mode==='counts'?6:3)
  const instant=(v?:string|null)=>v?formatStoreDate(v,dates,true):'—'
- const period=(r:UsageRow)=>mode==='counts'&&r.observationCount!==2?c.noInterval:`${instant(r.windowStart)} — ${instant(r.windowEnd)}`
- const actionFor=(reason:string)=>reason==='TWO_PHYSICAL_OBSERVATIONS_REQUIRED'||reason==='UNCERTIFIED_OBSERVATION_BOUNDARY'?{path:'/inventory/count',label:c.countAction}:reason==='INCOMPLETE_RECIPE'?{path:'/products/recipes',label:c.recipeAction}:reason==='ZERO_THEORETICAL_BASELINE'?{path:'/inventory/recipe-usage',label:c.recipeAction}:{path:'/inventory/logs',label:c.logAction}
+ const period=(r:UsageRow)=>mode==='counts'&&r.observationCount===0?c.noInterval:`${instant(r.windowStart)} — ${instant(r.windowEnd)}`
+ const actionFor=(reason:string)=>['TWO_PHYSICAL_OBSERVATIONS_REQUIRED','COMPLETED_BASELINE_REQUIRED','NEXT_PHYSICAL_OBSERVATION_REQUIRED','UNCERTIFIED_OBSERVATION_BOUNDARY'].includes(reason)?{path:'/inventory/count',label:c.countAction}:reason==='INCOMPLETE_RECIPE'?{path:'/products/recipes',label:c.recipeAction}:reason==='ZERO_THEORETICAL_BASELINE'?{path:'/inventory/recipe-usage',label:c.recipeAction}:{path:'/inventory/logs',label:c.logAction}
  const allowed=useEmployeeNavigation()
- const reasonText=(reason?:string|null)=>reason==='TWO_PHYSICAL_OBSERVATIONS_REQUIRED'?c.countReason:reason==='UNCERTIFIED_OBSERVATION_BOUNDARY'?c.boundaryReason:reason==='INCOMPLETE_RECIPE'?c.recipeReason:reason==='UNCLASSIFIED_MOVEMENTS'||reason==='NEGATIVE_INFERRED_DEPLETION'||reason==='AMBIGUOUS_OBSERVATION_BOUNDARY'?c.movementReason:reason==='ZERO_THEORETICAL_BASELINE'?c.zeroReason:reason&&['BULK_ISSUE','SELF_PRODUCED','BATCH_WITHDRAWAL'].includes(reason)?t('inventoryFlow.'+reason):c.unknownReason
+ const reasonText=(reason?:string|null)=>reason==='COMPLETED_BASELINE_REQUIRED'?rc.baselineHint:reason==='NEXT_PHYSICAL_OBSERVATION_REQUIRED'?rc.nextHint:reason==='TWO_PHYSICAL_OBSERVATIONS_REQUIRED'?c.countReason:reason==='UNCERTIFIED_OBSERVATION_BOUNDARY'?c.boundaryReason:reason==='INCOMPLETE_RECIPE'?c.recipeReason:reason==='UNCLASSIFIED_MOVEMENTS'||reason==='NEGATIVE_INFERRED_DEPLETION'||reason==='AMBIGUOUS_OBSERVATION_BOUNDARY'?c.movementReason:reason==='ZERO_THEORETICAL_BASELINE'?c.zeroReason:reason&&['BULK_ISSUE','SELF_PRODUCED','BATCH_WITHDRAWAL'].includes(reason)?t('inventoryFlow.'+reason):c.unknownReason
  const repair=(reason:string)=>{const action=actionFor(reason);return allowed(permissionForPage(action.path))?<Link className="text-primary underline" to={action.path}>{action.label}</Link>:<span>{c.noAccess}</span>}
  const reasons=new Map<string,number>()
  for(const row of all)if(missingData(row))reasons.set(row.unavailableReason||'UNKNOWN',(reasons.get(row.unavailableReason||'UNKNOWN')||0)+1)
@@ -65,7 +67,7 @@ function ReportBody({mode,storageKey}:{mode:ReportMode;storageKey:string}) {
   </form>
   {dateError&&<p role="alert" className="text-red-700">{c.invalid}</p>}
   <div className="inventory-report-context text-sm text-gray-600"><p>{c.query}：{state.period==='latest'?c.latest:`${formatStoreDate(params.startDate,dates)} — ${formatStoreDate(params.endDate,dates)}`} · {dates.timezone}</p>
-   {mode==='counts'?<p>{c.coverage}：{coverage?.start?`${instant(coverage.start)} — ${instant(coverage.end)}`:c.noInterval}</p>:query.data?.segments?.filter(s=>s.basis!=='legacy').map(s=><p key={s.start}>{c.coverage}：{instant(s.start)} — {instant(s.end)}</p>)}
+   {mode==='counts'?<p>{c.coverage}：{coverage?.start?`${instant(coverage.start)} — ${instant(coverage.end)}`:all.some(r=>(r.observationCount||0)>0)?rc.nextHint:c.noInterval}</p>:query.data?.segments?.filter(s=>s.basis!=='legacy').map(s=><p key={s.start}>{c.coverage}：{instant(s.start)} — {instant(s.end)}</p>)}
    {coverage?.mixed&&<p className="text-amber-800">{c.mixed}</p>}
    <p>{c.updated}：{query.dataUpdatedAt?instant(new Date(query.dataUpdatedAt).toISOString()):'—'} · {c.auto}{query.isFetching?' · '+c.refreshing:''}</p>
   </div>
@@ -83,11 +85,11 @@ function ReportBody({mode,storageKey}:{mode:ReportMode;storageKey:string}) {
   {state.sort==='quantity'&&<p className="text-sm text-amber-800">{c.unitWarning}</p>}
   <p className="inventory-report-scroll-hint text-xs text-gray-500">{c.scroll}</p>
   <div className="admin-table-scroll inventory-report-scroll border rounded-xl bg-white" role="region" aria-label={l.title} tabIndex={0}>
-   <table className="inventory-report-table w-full text-sm"><thead><tr><th>{l.material}</th><th>{l.unit}</th><th>{mode==='counts'?c.counts:c.registered}</th><th>{l.theory}</th><th>{l.difference}</th><th>{l.percent}</th><th>{c.value}</th><th className="inventory-report-state">{l.state}</th></tr></thead>
-   <tbody>{rows.map(r=><Fragment key={r.inventoryId}><tr><td><button type="button" className="inventory-report-material" aria-expanded={state.expanded===r.inventoryId} onClick={()=>change({expanded:state.expanded===r.inventoryId?null:r.inventoryId})}><strong>{name(r)}</strong><span className="text-primary text-xs">{state.expanded===r.inventoryId?c.hide:c.details} {state.expanded===r.inventoryId?'▾':'▸'}</span></button><p className="inventory-report-row-period">{period(r)}</p></td><td title={r.unit}>{c.unit(r.unit)}</td><td>{qty(r.actualWithdrawal??r.actualConsumption)}</td><td>{qty(r.theoreticalConsumption)}</td><td>{qty(r.variance)}</td><td>{r.variancePercent==null||r.theoreticalConsumption===0?'—':qty(r.variancePercent)+'%'}</td><td>{r.varianceAmountEstimate==null?'—':formatExactCurrency(r.varianceAmountEstimate)}</td><td className="inventory-report-state"><span className={missingData(r)?'text-amber-800':hasDifference(r)?'text-primary':'text-gray-600'}>{missingData(r)?c.missing:['critical','warning'].includes(r.varianceStatus)?t('varianceFlow.'+r.varianceStatus):hasDifference(r)?c.reference:hasComparison(r)?c.normal:l.reference}</span>{(r.unavailableReason||missingData(r))&&<p>{reasonText(r.unavailableReason)}</p>}{missingData(r)&&repair(r.unavailableReason||'UNKNOWN')}</td></tr>
-    {state.expanded===r.inventoryId&&<tr className="inventory-detail-row"><td colSpan={8}><div className="inventory-expanded-data"><p>{c.interval}：{period(r)}</p>{mode==='counts'?<>
-     <p>{c.observations}：{r.completedObservationCount??r.observationCount??'—'} · {c.usable}：{r.usableObservationCount??'—'} · {c.lastCount}：{instant(r.latestObservationAt)}</p>
-     <dl className="inventory-movement-grid">{([['openingPhysical',l.opening],['closingPhysical',l.closing],['receipts',t('varianceFlow.receipts')],['knownNonSaleOut',t('varianceFlow.nonSale')]] as const).map(([key,label])=><div key={key}><dt>{label}</dt><dd>{qty(r[key])} {c.unit(r.unit)}</dd></div>)}</dl>
+   <table className={`inventory-report-table w-full text-sm ${mode==='counts'?'inventory-reconciliation-table':''}`}><thead><tr><th>{l.material}</th><th>{l.unit}</th>{mode==='counts'?<><th>{rc.opening}</th><th>{rc.incoming}</th><th>{rc.outgoing}</th><th>{rc.expected}</th><th>{rc.closing}</th><th>{rc.difference}</th></>:<><th>{l.actualOut}</th><th>{l.theory}</th><th>{l.difference}</th></>}<th>{l.percent}</th><th>{c.value}</th><th className="inventory-report-state">{l.state}</th></tr></thead>
+   <tbody>{rows.map(r=><Fragment key={r.inventoryId}><tr><td><button type="button" className="inventory-report-material" aria-expanded={state.expanded===r.inventoryId} onClick={()=>change({expanded:state.expanded===r.inventoryId?null:r.inventoryId})}><strong>{name(r)}</strong><span className="text-primary text-xs">{state.expanded===r.inventoryId?c.hide:c.details} {state.expanded===r.inventoryId?'▾':'▸'}</span></button><p className="inventory-report-row-period">{period(r)}</p></td><td title={r.unit}>{c.unit(r.unit)}</td>{mode==='counts'?<><td>{qty(r.openingPhysical)}</td><td>{qty(r.receipts)}</td><td>{qty(r.actualOut)}</td><td className="font-semibold">{qty(r.expectedClosing)}</td><td>{qty(r.closingPhysical)}</td><td>{qty(r.variance)}</td></>:<><td>{qty(r.actualWithdrawal??r.actualConsumption)}</td><td>{qty(r.theoreticalConsumption)}</td><td>{qty(r.variance)}</td></>}<td>{r.variancePercent==null||r.theoreticalConsumption===0?'—':qty(r.variancePercent)+'%'}</td><td>{r.varianceAmountEstimate==null?'—':formatExactCurrency(r.varianceAmountEstimate)}</td><td className="inventory-report-state"><span className={missingData(r)?'text-amber-800':hasDifference(r)?'text-primary':'text-gray-600'}>{r.varianceStatus==='awaiting_count'?rc.awaiting:missingData(r)?c.missing:['critical','warning'].includes(r.varianceStatus)?t('varianceFlow.'+r.varianceStatus):hasDifference(r)?c.reference:hasComparison(r)?c.normal:l.reference}</span>{(r.unavailableReason||missingData(r))&&<p>{reasonText(r.unavailableReason)}</p>}{missingData(r)&&repair(r.unavailableReason||'UNKNOWN')}</td></tr>
+    {state.expanded===r.inventoryId&&<tr className="inventory-detail-row"><td colSpan={mode==='counts'?11:8}><div className="inventory-expanded-data"><p>{c.interval}：{period(r)}</p>{r.closingStatus==='pending_review'&&<p className="text-amber-800">{rc.pending}</p>}{mode==='counts'?<>
+     <p>{rc.before}：{r.completedObservationCount??r.observationCount??'—'} · {c.usable}：{r.usableObservationCount??'—'} · {c.lastCount}：{instant(r.latestObservationAt)}</p>
+     <dl className="inventory-movement-grid">{([['openingPhysical',rc.opening],['receipts',rc.incoming],['actualOut',rc.outgoing],['expectedClosing',rc.expected],['closingPhysical',rc.closing]] as const).map(([key,label])=><div key={key}><dt>{label}</dt><dd>{qty(r[key])} {c.unit(r.unit)}</dd></div>)}</dl>
     </>:<><section><h3>{l.recorded}</h3><dl className="inventory-movement-grid">{['withdrawal','process','loss','expired','other','transfer'].map(key=><div key={key}><dt>{t('inventoryFlow.'+key)}</dt><dd>{qty(r.breakdown?.[key])} {c.unit(r.unit)}</dd></div>)}</dl></section>
     {!!r.production?.length&&<section><h3>{l.production}</h3><div className="admin-table-scroll"><table className="inventory-production-table"><thead><tr>{[l.output,l.unit,l.capacity,l.registered,l.difference].map((v,j)=><th key={j}>{v}</th>)}</tr></thead><tbody>{r.production.map(p=><tr key={p.recipeId}><td>{formatItemName(p.name,i18n.language)}</td><td>{c.unit(p.unit)}</td><td>{qty(p.theoreticalOutput)}</td><td>{qty(p.registeredOutput)}</td><td>{qty(p.difference)}</td></tr>)}</tbody></table></div>{r.production.map(p=>!!p.products?.length&&<div key={p.recipeId}><h4>{l.productCapacity}</h4><dl className="inventory-movement-grid">{p.products.map(product=><div key={product.productId}><dt>{formatItemName(product.name,i18n.language)}</dt><dd>{qty(product.theoreticalQuantity)}</dd></div>)}</dl></div>)}</section>}</>}
     {r.unavailableReason&&<p className="text-amber-800">{reasonText(r.unavailableReason)}</p>}</div></td></tr>}
