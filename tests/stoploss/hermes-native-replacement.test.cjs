@@ -38,3 +38,10 @@ test('workbench connection cannot execute the retired per-activity business prox
  const ui=fs.readFileSync(path.join(root,'client-admin/src/pages/settings/StoreOperationsDelegation.tsx'),'utf8');
  assert(!ui.includes('selected.includes'));assert(!ui.includes('state.activities.map'));assert(!ui.includes('daily_member_specials_and_single_paid_order_30000'));
 });
+
+test('activity authorization follows the human command, not quoted names or draft nouns',()=>{
+ const vm=require('node:vm'),ts=require('typescript'),exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'server/src/services/ManagementAgentPolicy.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:()=>({ACCESS_ROUTE_MANIFEST:{}})});
+ for(const text of ['创建活动并立即发布','请把这个草稿活动发布','创建“周年庆”活动并立即发布','Please publish the draft campaign'])assert.equal(exports.explicitlyPublishesActivity(text),true,text);
+ for(const text of ['创建草稿，不要发布活动','创建活动：名称新品发布会，仅保存草稿','文档说“发布活动”','他说“立即发布活动”','create a draft campaign'])assert.equal(exports.explicitlyPublishesActivity(text),false,text);
+ assert.equal(exports.activityRequestIntent('请创建“周年庆”活动'),true);assert.equal(exports.activityRequestIntent('文档说“创建活动”'),false);
+});

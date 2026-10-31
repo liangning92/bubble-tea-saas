@@ -34,10 +34,15 @@ export function agentAdditionalPermissions(id:string,input?:any):string[]{
 }
 
 /** Human source text is read by the server, never an allow flag in tool JSON. */
+function unquotedActivityCommand(text:string){return text.replace(/“[^”]*”|「[^」]*」|‘[^’]*’|"[^"]*"/g,'')}
 export function explicitlyPublishesActivity(text:string):boolean {
- return !/附件|文档|引用|示例|例如|截图|["“”「」]|不要发布|不发布|先不|仅.*草稿|保存.*草稿|草稿|未发布|do not publish|don.t publish|draft|jangan.*(?:terbit|aktif)|draf/i.test(text)&&/发布|上线|立即生效|publish|terbitkan|aktifkan/i.test(text)
+ const command=unquotedActivityCommand(text)
+ if(/附件|文档|引用|示例|例如|截图|为什么|如何|怎么|不要发布|不发布|先不|(?:仅|只|保存|暂存).*草稿|do not publish|don.t publish|only.*draft|save.*draft|draft only|jangan.*(?:terbit|aktif)/i.test(command))return false
+ const imperative=command.replace(/(?:尚未|未|已)发布|unpublished/gi,'')
+ return /^(?:请)?(?:立即)?(?:发布|上线)|(?:立即|现在|确认|请|并|重新)\s*(?:发布|上线)|把.{0,80}(?:发布|上线)|(?:发布|上线)(?:这个|该|本次|这次|上述)?(?:活动|促销)|立即生效|\b(?:please|and|then|now)\s+publish\b|^publish\b|\bpublish (?:it|this|the|now|campaign|promotion)\b|\b(?:terbitkan|aktifkan)\b/i.test(imperative)
 }
 export function activityRequestIntent(text:string):boolean {
- if(/截图|文件|附件|文档|引用|示例|例如|为什么|为何|如何|怎么|how to|why|example|["“”「」]/i.test(text))return false
+ text=unquotedActivityCommand(text)
+ if(/截图|文件|附件|文档|引用|示例|例如|为什么|为何|如何|怎么|how to|why|example/i.test(text))return false
  return /(?:设置|创建|新建|安排|发布|修改|调整|更新|编辑).{0,30}(?:活动|促销)|(?:活动|促销).{0,30}(?:设置|创建|新建|发布|修改|调整|更新|编辑)|(?:create|publish|edit|update|buat|atur|terbitkan|ubah).{0,30}(?:campaign|promotion|promosi|kampanye)/i.test(text)
 }
