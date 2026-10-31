@@ -562,7 +562,7 @@ body {
 .inventory-report-context {align-items:baseline;gap:0 14px;}
 .inventory-report-context>details[open] {flex-basis:100%;}
 .admin-workspace .inventory-report-table:not(.inventory-reconciliation-table) {min-width:960px;}
-.admin-workspace .inventory-report-table .inventory-report-state {min-width:112px;max-width:170px;}
+.admin-workspace .inventory-report-table .inventory-report-state {position:relative;min-width:112px;max-width:170px;}
 .admin-workspace .inventory-report-table th,.admin-workspace .inventory-report-table td {padding-top:10px;padding-bottom:10px;}
 .inventory-report-row-period {font-size:11px;}
 @media(max-width:767px){.inventory-report-summary-four {grid-template-columns:repeat(2,minmax(0,1fr));}.admin-workspace .inventory-report-summary>button {padding:10px 12px;}}
