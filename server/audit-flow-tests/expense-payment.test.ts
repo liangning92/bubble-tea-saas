@@ -75,7 +75,8 @@ test('POS personal advance and drawer payment coexist, only drawer portion deduc
 })
 test('store purchase in revenue query has no artificial entry-time shift and no unassigned warning',async()=>{
  const f=await fixture();await createPurchaseOrder({storeId:f.store.id,paymentSource:'owner_transfer',items:[{inventoryId:f.inv.id,quantity:1,paidAmount:100}]})
- const q=await revenueQuery(prisma,f.store.id,{period:'today',dataset:'expense'},true,f.now(),async()=>{})
+ const q=await revenueQuery(prisma,f.store.id,{period:'today',dataset:'expense',view:'detail'},true,f.now(),async()=>{})
+ if(!('rows' in q))throw new Error('Expected expense detail rows')
  expect(q.rows).toHaveLength(1);expect(q.rows[0].sessionId).toBeNull();expect(q.unassignedCount).toBe(0);expect(q.storePaymentCount).toBe(1)
 })
 test('confirmed online purchase is removed from legacy cash even with other unverified operating expenses',async()=>{
