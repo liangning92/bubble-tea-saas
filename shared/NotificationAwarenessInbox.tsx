@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Bell } from 'lucide-react'
 import { useAwareness, type AwarenessItem } from './NotificationAwareness'
@@ -31,9 +31,10 @@ export function AwarenessEntry({ administration = false }: { administration?: bo
 }
 export function NotificationAwarenessInbox({ administration = false }: { administration?: boolean }) {
   const { data, loading, failed, refresh, markRead, isCurrent } = useAwareness(), { i18n } = useTranslation(), navigate = useNavigate()
+  const location = useLocation()
   const [params] = useSearchParams(), notice = params.get('notice') || '', requestedFilter = params.get('filter')
   const w = notificationAwarenessCopy(i18n.language), [filter, setFilter] = useState('unread'), [opening, setOpening] = useState('')
-  useEffect(() => { setOpening(''); setFilter(requestedFilter === 'approval' ? 'approval' : 'unread') }, [isCurrent, requestedFilter])
+  useEffect(() => { setOpening(''); setFilter(requestedFilter === 'approval' ? 'approval' : 'unread') }, [isCurrent, requestedFilter, location.key])
   useEffect(() => {
     if (!notice || loading) return
     const row = data.items.find(item => item.id === notice)
