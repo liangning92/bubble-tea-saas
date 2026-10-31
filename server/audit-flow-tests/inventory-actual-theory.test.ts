@@ -53,6 +53,7 @@ test('three 1kg bags yield 10.5kg by recipe; registered processing is separate a
 test('latest two warehouse observations are used, not the first lifetime count; difference remains a reference',async()=>{
  const f=await fixture('g');await f.observe(1200);await f.observe(1000);await f.issue(1000);await f.sale(100);await f.observe(0)
  const row=(await physicalInventoryVariance({storeId:f.store.id,startDate:'2026-01-01',endDate:'2027-01-01',latest:true}))[0]
+ expect(row.completedObservationCount).toBe(3);expect(row.usableObservationCount).toBe(2);expect(row.latestObservationAt).toBe(row.windowEnd);
  expect(row.openingPhysical).toBe(1000);expect(row.closingPhysical).toBe(0);expect(row.actualConsumption).toBe(1000);expect(row.theoreticalConsumption).toBe(100);expect(row.variance).toBe(900);expect(row.varianceStatus).toBe('not_compared')
 })
 test('historical estimates remain unchanged when reversed after physical policy cutover',async()=>{
@@ -112,4 +113,10 @@ test('expiry alerts ignore historical nanounit FIFO residue but retain real expi
  expect(rows.some(a=>a.type==='expiry_batch'&&a.resourceId===real.id)).toBe(true)
  expect(await f.balance()).toBe(1000)
  expect((await prisma.batch.findUniqueOrThrow({where:{id:missing.id}})).quantity).toBe(1.4e-9)
+})
+
+test('report missing baseline metadata distinguishes no counts from one count without fabricated zero usage',async()=>{
+ const f=await fixture('g'),report=()=>physicalInventoryVariance({storeId:f.store.id,startDate:'2026-01-01',endDate:'2027-01-01',latest:true})
+ let row=(await report())[0];expect(row.completedObservationCount).toBe(0);expect(row.latestObservationAt).toBeNull();expect(row.theoreticalConsumption).toBeNull();expect(row.receipts).toBeNull()
+ await f.observe(1000);row=(await report())[0];expect(row.completedObservationCount).toBe(1);expect(row.usableObservationCount).toBe(1);expect(row.latestObservationAt).not.toBeNull();expect(row.theoreticalConsumption).toBeNull();expect(row.actualConsumption).toBeNull();expect(row.unavailableReason).toBe('TWO_PHYSICAL_OBSERVATIONS_REQUIRED')
 })

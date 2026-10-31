@@ -1,3 +1,4 @@
+import type {UsageParams, UsageResult} from '../../../shared/inventoryUsageReport'
 import { COST_SYNC_EVENT, isCostMutation } from '../utils/costSync'
 import {requestStaffApproval} from '../../../shared/StaffApprovalDialog'
 import axios from 'axios'
@@ -144,7 +145,7 @@ export const inventoryApi = {
   correction: (type:string,id:string) => api.get(`/inventory/manual-logs/${type}/${id}/corrections`),
   correctManual: (type:string,id:string,data:any) => api.post(`/inventory/manual-logs/${type}/${id}/corrections`,data),
   recipeUsage: (params:{inventoryId:string;startDate:string;endDate:string}) => api.get('/inventory/recipe-usage',{params}),
-  employeeConsumption: (params:any) => api.get('/inventory/employee-consumption',{params}),
+  employeeConsumption: (params:UsageParams) => api.get<{code:number;data:UsageResult}>('/inventory/employee-consumption',{params}),
   consumptionAlerts: () => api.get('/inventory/consumption-alerts'),
   list: (params?: any) => api.get('/inventory', { params }),
   get: (id: string) => api.get('/inventory/' + id),
@@ -159,7 +160,7 @@ export const inventoryApi = {
   logsStockOut: (params?: any) => api.get('/inventory/logs/stock-out', { params }),
   alerts: () => api.get('/inventory/alerts/low-stock'),
   stats: () => api.get('/inventory/stats/summary'),
-  consumptionAnalysis: (params: any) => api.get('/inventory/consumption-analysis', { params }),
+  consumptionAnalysis: (params: UsageParams) => api.get<{code:number;data:UsageResult}>('/inventory/consumption-analysis', { params }),
   anomalySummary: (params: any) => api.get('/inventory/anomaly-summary', { params }),
   // Alert config
   getAlertConfig: () => api.get('/inventory/alert-config'),
