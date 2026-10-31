@@ -540,7 +540,7 @@ export function StockLogPage() {
       {!comparisonItem&&financialMetrics}
       <div className="inventory-ledger-secondary">
       {comparisonItem&&<>
-      <details className="inventory-ledger-basis workspace-disclosure" aria-label={copy.deduction}><summary>{copy.deduction}: <strong>{statsUnavailable?'—':quantity(comparison.deduction.quantity)}</strong> · {copy.internal}: <strong>{statsUnavailable?'—':quantity(comparison.internal.quantity)}</strong></summary><div className="workspace-disclosure-content">
+      <details className="inventory-ledger-basis workspace-disclosure" aria-label={copy.historyDetails}><summary>{copy.historyDetails}</summary><div className="workspace-disclosure-content">
         <dl>{(['deduction','internal','explicit','unmarked'] as const).map(key=><div key={key}><dt>{copy[key]}</dt><dd>{statsUnavailable?'—':quantity(comparison[key].quantity)} · {statsUnavailable?'—':copy.entries(comparison[key].count)}</dd></div>)}</dl>
         <p>{copy.historyHint}</p><p>{copy.comparisonScope} {copy.differenceFormula}</p></div>
       </details>
